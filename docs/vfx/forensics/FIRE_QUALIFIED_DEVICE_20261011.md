@@ -77,3 +77,9 @@ PYTHONPATH=tools/retail_runtime:tools/retail_asm "$PY" tools/retail_runtime/fire
 Natural map/caller/audio, animated-fire expectations, original software span
 behavior, period-device implementation and general material lighting remain
 outside this exact static qualified-device scope. Root acceptance is separate.
+
+## Root independent qualified approval
+
+Exact Fire 0x119f01e3 installed oldbody staticquad/key/defaultowner/textureselector0, no invented33frame clock. Fourgenuine constructionfacings0/64/128/192 execute268originalupdates/actualhardwareDrawIndexedPrimitive FVF112/COMmaterial+ARGB4444texture0, allframe0/selector0/RNG0. Captured all-white diffuse/ambient/specular/emissive material proves fixedfunctiondiffuse saturation; strictmaterial rejects unrelated lighting inputs. IndependentRGBA4444 MODULATE/SRCALPHA-INVSRCALPHA qualifiedRGB8linearUNORM device uses explicitlydeclaredmodernhalfcenters/pointfilter; legacyinteger/point andbothlinear controls retained, no periodGPUclaim. Foursemanticunits pass786432blendchannels, materials/zeroalpha/sharededge/centertranslation controls. Rootfreshoriginal12packets/state/48samplerimages repeatexact, source268renderedupdates/4288worldmatrixfields max1.825e-8, all12sampledRGBframes exact toqualifieddevice. All13whole/detailpanels byteidentical,88pins verified, independentlyinspected. Actualsource unchanged fromexactFireadapter, no color/geometry/UV/phasefit. Originalsoftware span/UVdiffers, naturalscene/caller/audio/animated-fire expectations/generalmateriallighting/filter/perioddevice/exactunchanged-retailfidelity remainopen. qualified_reference=true,semantic_device_reference=true,device_identical=false; exactRGBclaim onlydeclaredmoderncenter/point device configuration.
+
+Report: `recon/retail_asm/runtime/effects/current-fire-qualified-device-20261011/root-approval.json`. Scoped visual passes173/176 include3modified-retail and2qualifiedsemantic-device configurations.

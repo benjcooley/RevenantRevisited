@@ -32,14 +32,14 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 172,
+    "visual_fidelity_confirmed_rows": 173,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 172,
-    "remaining_visual_review_rows": 4,
+    "reviewed_visual_pass_rows": 173,
+    "remaining_visual_review_rows": 3,
     "qualified_modified_reference_visual_rows": 3,
-    "qualified_semantic_device_visual_rows": 1,
-    "qualified_reference_visual_rows": 4
+    "qualified_semantic_device_visual_rows": 2,
+    "qualified_reference_visual_rows": 5
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -6791,7 +6791,8 @@
       ],
       "source_fixes": [
         "Archive lookup now preserves full asset paths instead of selecting the first basename collision; requested Misc\\Fire.I3D is distinguished from Imagery/Magic/fire.i3d.",
-        "2026-10-11: Exact shipped default staticFire resource/key/material/controller adapter; strictbodyguards/9nativepose/192actualGPUmatrixfields andadjacentlegacyregressionspass. Viewerreplacesunrelatedproceduralscatter withpartialstatic; onepixelrastergateopen."
+        "2026-10-11: Exact shipped default staticFire resource/key/material/controller adapter; strictbodyguards/9nativepose/192actualGPUmatrixfields andadjacentlegacyregressionspass. Viewerreplacesunrelatedproceduralscatter withpartialstatic; onepixelrastergateopen.",
+        "2026-10-11: ExactinstalledstaticFire fourcardinals approvedagainstqualifiedhardwarepacket modern-center/pointsemanticdevice;268original/sourceupdates,4288matrices and12RGBimages repeatexact. Originalsoftware/perioddevice andanimatedexpectations remainopen."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -6804,13 +6805,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Resolve original integer span/UV/alpha source raster vs GPU one-pixel cardinal residual; keep exactdefaultframe0, reject proceduralscatter/atlasclock as retailproof.",
+      "next_action": "Preserveapprovedinstalledstaticquad/selector0 underqualifiedmoderndevice; verify naturalcaller/softwareinteger span/periodhardware/filter/general lighting, never invent33framecontroller.",
       "notes": [
         "VFS collision corrected. Earlier port evidence must be checked against the requested asset before certifying visual fidelity; old bytes differ.",
         "2026-10-05: No useful animated visible reference in bounded standalone recipe. No accurate-reference or visual-acceptance credit.",
@@ -6830,7 +6831,21 @@
         "restored_ground_mean_error": 0.0,
         "reason": "No useful animated visible reference in bounded standalone recipe"
       },
-      "work_queue_status": "deferred_no_useful_visible_reference"
+      "work_queue_status": "deferred_no_useful_visible_reference",
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent semantic-device replay and cardinal whole/detail inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "qualified_reference": true,
+        "semantic_device_reference": true,
+        "modified_retail": false,
+        "device_identical": false,
+        "scope": "Exact Fire 0x119f01e3 installed oldbody staticquad/key/defaultowner/textureselector0, no invented33frame clock. Fourgenuine constructionfacings0/64/128/192 execute268originalupdates/actualhardwareDrawIndexedPrimitive FVF112/COMmaterial+ARGB4444texture0, allframe0/selector0/RNG0. Captured all-white diffuse/ambient/specular/emissive material proves fixedfunctiondiffuse saturation; strictmaterial rejects unrelated lighting inputs. IndependentRGBA4444 MODULATE/SRCALPHA-INVSRCALPHA qualifiedRGB8linearUNORM device uses explicitlydeclaredmodernhalfcenters/pointfilter; legacyinteger/point andbothlinear controls retained, no periodGPUclaim. Foursemanticunits pass786432blendchannels, materials/zeroalpha/sharededge/centertranslation controls. Rootfreshoriginal12packets/state/48samplerimages repeatexact, source268renderedupdates/4288worldmatrixfields max1.825e-8, all12sampledRGBframes exact toqualifieddevice. All13whole/detailpanels byteidentical,88pins verified, independentlyinspected. Actualsource unchanged fromexactFireadapter, no color/geometry/UV/phasefit. Originalsoftware span/UVdiffers, naturalscene/caller/audio/animated-fire expectations/generalmateriallighting/filter/perioddevice/exactunchanged-retailfidelity remainopen. qualified_reference=true,semantic_device_reference=true,device_identical=false; exactRGBclaim onlydeclaredmoderncenter/point device configuration.",
+        "report": "recon/retail_asm/runtime/effects/current-fire-qualified-device-20261011/root-approval.json",
+        "sha256": "6e66e0d1af88cbe834085eb72f8a564f1fb6e5f1539be941fe5425d9af8933c5",
+        "note": "docs/vfx/forensics/FIRE_QUALIFIED_DEVICE_20261011.md"
+      }
     },
     {
       "index": 4,
