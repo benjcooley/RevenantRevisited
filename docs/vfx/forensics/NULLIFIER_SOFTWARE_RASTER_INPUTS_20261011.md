@@ -11,3 +11,13 @@ Tests compile all three actual shader clauses, actual queue packing and all poli
 Private evidence: `research/vfx-wide-20261010/hard-alpha/static-rgb8-correction/nullifier/`, specifically `sw-packet-proof`, `software-grid`, `modern-grid`, `common-before`, `common-grid`, and `sw-controls`.
 
 The candidate actual Metal films complete cleanly. All 75 hardware and 75 common/native-off images are pixel-identical to their prior binaries. Across 13 fixed software phases, RGB8 absolute error decreases from 755,567 to 390,846; every phase improves. Phase 25 changes from 113,374 to 54,257 and phase 30 from 37,687 to 19,128. `software-grid-review/pair-manifest.json` freezes original/floating/integer-input triples and five detail pages. These are causal candidate results, not an independent appearance approval. Ten focused unit tests and the actual quad-packing capacity/metadata controls pass.
+
+Root independent integrated reproduction `research/vfx-nullifier-software-root-20261011/first` passes10focusedunits/actualpacking, fresh77originalrasters/states/5546integertriangles/44368RGBA5channels,225actualGPUimages exactto candidate and75hardware+75common unchanged. Rootreviewedall13whole/fixed phases andapprovescurrentconfiguredSWappearance. Softwareerror755567→390846 repeats; no exactpixel/fullnatural/devicecredit. This supersedes thependingcurrentSWreview aftertransition.
+
+The independent metadata impact audit compiles old/new actual shader clauses
+under ASan/UBSan:10,800 metadata0/1 cases are bit-identical across Metal/GLSL/HLSL,
+including Fog's independent flat depth. Only exact admitted nullifier can write
+the new flag, and packed value2 also requires native projection/software policy.
+Actual GPU execution remains Metal-only; compiled clauses are not a GLSL/HLSL
+GPU validation claim. Private audit SHA256:
+`0c85b20752d75104776d59f6f94e0caf5978052579b5eeedc09479ebc9863f81`.

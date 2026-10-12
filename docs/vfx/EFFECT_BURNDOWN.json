@@ -32,11 +32,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 175,
+    "visual_fidelity_confirmed_rows": 176,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 175,
-    "remaining_visual_review_rows": 1,
+    "reviewed_visual_pass_rows": 176,
+    "remaining_visual_review_rows": 0,
     "qualified_modified_reference_visual_rows": 6,
     "qualified_semantic_device_visual_rows": 2,
     "qualified_reference_visual_rows": 8
@@ -20510,7 +20510,8 @@
         "2026-10-10: exact quoted authored particle profile; original numeric integer view, pinned prototype slot, independent compiled emitter matrices and runtime controller admission verified.",
         "2026-10-10: exact admitted static emitter keys use actual cached animator frame; original full draw caller/cull/FVF and render-stride3 verified. No generic animation or shader changes.",
         "2026-10-11: exact admitted hardware RGB8 carrier correction independentlyverified original77HW/SW and150 sourceimages;75software imagesunchanged.",
-        "2026-10-11: exact original fiveframe cached emitterkey transition restored; root77native/150sourceimagerepeat and2773actualquads validated. Currentsoftwarebrightness reviewopen."
+        "2026-10-11: exact original fiveframe cached emitterkey transition restored; root77native/150sourceimagerepeat and2773actualquads validated. Currentsoftwarebrightness reviewopen.",
+        "2026-10-11: originalintegerXYZ/UV andsamplelattice onlyexactnativeSWnullifier; fresh77native/225source comparison, scopedcurrentSWreview passes."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -20523,13 +20524,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Resolve originalSW/currentMetalSW brightness arithmetic difference; transition state/geometry and qualifiedhardwarecore shape now independentlyverified.",
+      "next_action": "Preservecurrentstate0/nativeSW andqualifiedHWform pass; fixedpointraster/exactpixels/naturalcaller/additionalconfigurations remainopen.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -20571,9 +20572,13 @@
       },
       "visual_review": {
         "date": "2026-10-11",
-        "result": "pending_after_behavior_fix",
-        "visual_pass": false,
-        "scope": "Original fiveframe emitter key transition restored for exactnullifier. Previous software pass retainedhistorically; currentbothpolicy appearance requiresindependentrootreview."
+        "reviewer": "root independent integrated review",
+        "result": "pass",
+        "visual_pass": true,
+        "scope": "Exactnullifier state0/seed1/source0,0,16/full24Hzowner anddefaultRender: correctedfiveframe cachedemittertransition andexecutedoriginalintegerXYZ/UV rasterinputs. Root77original states/selectedPNGs/5546triangles/44368RGBA5channels repeatexact;225currentGPUimages repeatcandidate,75hardware+75common unchanged. All13whole/fixed phases reviewed forauthoredform/core distribution/color/evolution/25frameloop. CurrentSWscopedappearance passes; originalfixedpointscanconversion/destination rounding/texels/device/naturalcaller remainopen. No position/color/scale/timefit.",
+        "report": "recon/retail_asm/runtime/effects/current-nullifier-software-grid-20261011/root-approval.json",
+        "sha256": "457dc956b952fe803d60c0127e23543f4c3f2b8b23acd927f06c94afc2a477b9",
+        "note": "docs/vfx/forensics/NULLIFIER_SOFTWARE_RASTER_INPUTS_20261011.md"
       },
       "additional_visual_reviews": [
         {
@@ -20600,6 +20605,12 @@
           "report": "recon/retail_asm/runtime/effects/rgb565-nullifier-visual-20261010/review-approved.json",
           "sha256": "fc5eef8b2fceae38cbd7d58050c342e53830a8d0f4c09a1c4e0dcdc638b988b1",
           "note": "docs/vfx/forensics/RGB565_PARTICLE_MODULATION.md"
+        },
+        {
+          "date": "2026-10-11",
+          "result": "pending_after_behavior_fix",
+          "visual_pass": false,
+          "scope": "Original fiveframe emitter key transition restored for exactnullifier. Previous software pass retainedhistorically; currentbothpolicy appearance requiresindependentrootreview."
         }
       ]
     },

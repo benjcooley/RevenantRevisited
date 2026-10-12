@@ -2,7 +2,7 @@
 
 ## Current VFX progress (2026-10-11)
 
-**175 / 176 effects have reviewed visual passes for their recorded test configuration; nullifier is reopened after a behavior correction.** This is the primary VFX progress measure. Three Watchers, Rift, Labyrinth and restored Sandswirl use explicitly modified retail code to repair demonstrated renderer/parser/selector or missing legacy binding issues; Dust and static Fire use qualified semantic-device fixtures. These eight do not establish unchanged-device fidelity. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
+**176 / 176 effects have reviewed visual passes for their recorded test configuration; 0 remain without a scoped visual pass.** This is the primary VFX progress measure. Three Watchers, Rift, Labyrinth and restored Sandswirl use explicitly modified retail code to repair demonstrated renderer/parser/selector or missing legacy binding issues; Dust and static Fire use qualified semantic-device fixtures. These eight do not establish unchanged-device fidelity. The separate 77 bounded rendered frontend comparisons help diagnose correctness; they measure a different gate. These counts overlap and must not be added.
 
 **YTelekinesis (2026-10-11):** four moving/rotating chunks match through actual owner completion across six fixed supported capture views; all 39,600 triangles covered and 24 root-repeated Metal frames identical. Corrected exact-ID mapping displays and restarts it in the gallery. Natural actor/spell/audio and raster overlap limits remain open. [Evidence and scope](forensics/YTELEKINESIS_ORIGINAL.md).
 
@@ -1156,4 +1156,6 @@ Audited `class.def`: 233,484 bytes; SHA-256 `bf46eaa4e25a43fa9828e1e8737114d63b9
 
 **Sandswirl (2026-10-11):** explicit evidenced legacy Sand binding restores its own shipped asset, not a Sparks substitution. Root repeated310sourceimages/fullmapruntime and reviewed18phases through contraction/drain/kill. This closes scoped visual row176; naturalcaller, movedtarget/device/audio followups remain separate. [Evidence](forensics/SANDSWIRL_LEGACY_SAND_RESTORATION_20261011.md).
 
-**Nullifier current review reopened:** exactoriginalfiveframeemittertransition restored after fullhardwarepackets exposedup to1.72pixeltranslation error. HistoricSWreview retained; newbothpolicyrootappearance reviewpending. Sandswirl’s scopedpassremainsclosed.
+**Nullifier transition review (superseded pending status):** exactoriginalfiveframeemittertransition restored after fullhardwarepackets exposedup to1.72pixeltranslation error. HistoricSWreview retained; newbothpolicyrootappearance reviewpending. Sandswirl’s scopedpassremainsclosed.
+
+**Nullifier current re-review passed (2026-10-11):** correctedrealemittertransition plusoriginalintegerXYZ/UV inputs restore software core distribution without tint/scale/time fitting. Root77original/225source replay and13phase review pass; fixedpointscanline/destination precision remainexplicit. Primary scoped count returns176/176. [Evidence](forensics/NULLIFIER_SOFTWARE_RASTER_INPUTS_20261011.md).

@@ -17,11 +17,11 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 175,
+    "visual_fidelity_confirmed_rows": 176,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 175,
-    "remaining_visual_review_rows": 1,
+    "reviewed_visual_pass_rows": 176,
+    "remaining_visual_review_rows": 0,
     "qualified_modified_reference_visual_rows": 6,
     "qualified_semantic_device_visual_rows": 2,
     "qualified_reference_visual_rows": 8
@@ -2220,6 +2220,13 @@
       "check": "historical_review_evidence",
       "status": "verified_existing_pin",
       "scope": "Existing scoped review evidence link reconciled; no new visual/runtime/full approval."
+    },
+    "recon/retail_asm/runtime/effects/current-nullifier-software-grid-20261011/root-approval.json": {
+      "sha256": "457dc956b952fe803d60c0127e23543f4c3f2b8b23acd927f06c94afc2a477b9",
+      "retail_row": "nullifier:0xad92bd38",
+      "check": "current_nullifier_software_raster_visual",
+      "status": "pass",
+      "scope": "Exactnullifier state0/seed1/source0,0,16/full24Hzowner anddefaultRender: correctedfiveframe cachedemittertransition andexecutedoriginalintegerXYZ/UV rasterinputs. Root77original states/selectedPNGs/5546triangles/44368RGBA5channels repeatexact;225currentGPUimages repeatcandidate,75hardware+75common unchanged. All13whole/fixed phases reviewed forauthoredform/core distribution/color/evolution/25frameloop. CurrentSWscopedappearance passes; originalfixedpointscanconversion/destination rounding/texels/device/naturalcaller remainopen. No position/color/scale/timefit."
     }
   }
 }
