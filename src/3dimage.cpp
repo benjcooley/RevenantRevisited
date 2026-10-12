@@ -4330,8 +4330,13 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             item.retail_rgb565_additive = (combat_native || static_particles || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) && sample.blendmode == 16;
             item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
             item.light_mode = EFxLightMode::Unlit;
+            // Dust's actual hardware FVF1e2 packet retains all eight diffuse
+            // bits. Only the original software transform truncates it to RGB5.
+            // Preserve all other admitted profiles' existing color policy.
+            const bool retail_rgb5_color = (combat_native || might || immortalmight || fmastery || speed || static_particles || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) &&
+                (!dust || renderer.UsesRetailSoftwareMeshLighting());
             for (int c = 0; c < 3; ++c)
-                item.color_rgba[c] = (combat_native || might || immortalmight || fmastery || speed || static_particles || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
+                item.color_rgba[c] = retail_rgb5_color ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
             // Actual SW LV prelit channels are5bit; canonicalDEST_ONE ignores
             // alpha in its8wordXYZ/UV/RGB packet. Keep literal alpha metadata,
             // no premultiplication/alternateblend. PixelLSB-table raster gate open.
