@@ -52,6 +52,15 @@ def run(trace,output,baseline=None):
    assert r[offset:offset+16]==native,(rec['tick'],packet);offset+=16;packets+=1
  assert offset==len(r)
  unchanged=None
+ moved=None
+ if a.get('actor_moves'):
+  assert [m['tick'] for m in a['actor_moves']]==[60,85]
+  sampled=a['records'][74]['actors'][1]['position'];source=a['source']
+  expected_target=(sampled[0]-source[0],sampled[1]-source[1],sampled[2]-source[2]-32)
+  for row in a['records'][74:]:
+   assert struct.unpack_from('<3f',bytes.fromhex(row['state']['parameters_hex']),100)==expected_target
+  assert a['records'][84]['actors'][1]['position']!=sampled
+  moved=dict(public_actor_moves=a['actor_moves'],sampled_tick=75,target=expected_target,post85_actor_move_does_not_retarget=True)
  if baseline:
   old=json.loads(baseline.read_text());assert len(old['records'])==310
   for oldrow,newrow in zip(old['records'],a['records']):
@@ -59,7 +68,7 @@ def run(trace,output,baseline=None):
   unchanged=dict(frames=310,all_original_record_fields_identical=True,baseline_sha256=sha(baseline),pngs=sum('image' in x for x in old['records']))
  test=output/'guards';subprocess.run(['clang++','-std=c++17','-O2','-ffp-contract=off','-Wall','-Wextra','-Werror','-iquote',str(ROOT/'src'),str(ROOT/'tools/test_seeking_particles.cpp'),'-o',str(test)],check=True,capture_output=True,text=True)
  guards=subprocess.run([str(test)],check=True,capture_output=True,text=True).stdout.strip()
- report=dict(status='pass',accepted=False,visual_pass=False,frames=310,pool_and_rng_fields_exact=fields,render_packets_exact=packets,max_float_error=0,guards=guards,observer_negative_control=unchanged,trace_sha256=sha(trace),source_sha256=sha(ROOT/'src/effects/seekingparticles.h'),test_sha256=sha(ROOT/'tools/test_seeking_particles.cpp'),probe_sha256=sha(__file__),driver_sha256=sha(driver),result_sha256=sha(output/'result.bin'),compile_command=cmd,scope=__doc__,limits='No runtime factory/admission, missing intended sand imagery, no natural Sandswirl variant. Original seekz=41 is retained only as this control input. External real MapPane allocation seed/call-count event at75 is injected and declared; all other Init/Reset/Animate/Render RNG remains independently source-derived. Source x87 float-store boundaries are explicit; tested ABI/compiler only. Moving actors and multi-target scenarios remain unproven.')
+ report=dict(status='pass',accepted=False,visual_pass=False,frames=310,pool_and_rng_fields_exact=fields,render_packets_exact=packets,max_float_error=0,guards=guards,observer_negative_control=unchanged,moving_target_control=moved,trace_sha256=sha(trace),source_sha256=sha(ROOT/'src/effects/seekingparticles.h'),test_sha256=sha(ROOT/'tools/test_seeking_particles.cpp'),probe_sha256=sha(__file__),driver_sha256=sha(driver),result_sha256=sha(output/'result.bin'),compile_command=cmd,scope=__doc__,limits='No runtime factory/admission, missing intended sand imagery, no natural Sandswirl variant. Original seekz=41 is retained only as this control input. External real MapPane allocation seed/call-count event at75 is injected and declared; all other Init/Reset/Animate/Render RNG remains independently source-derived. Source x87 float-store boundaries are explicit; tested ABI/compiler only. Moving actors are proven only when a moving_target_control record is present; multi-target scenarios remain unproven.')
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report));return report
 if __name__=='__main__':
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--trace',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--baseline',type=Path);a=p.parse_args();run(a.trace,a.output,a.baseline)

@@ -45,3 +45,27 @@ source with contraction disabled, compares raw float bytes and integer fields,
 checks original render submissions, runs independent guards and freezes hashes.
 
 Root independently reran the current integrated source:264,430 fields and5,697 packets pass bit-exact, with all guards and baseline observer controls passing. Retained report: `recon/retail_asm/runtime/effects/current-sandswirl-parent-20261011/seeking-source/manifest.json`. Visual count remains171/176.
+
+## Public moving-target control
+
+A separate full310 replay invokes actual TCharacter SetPos46ed70 at60 to
+(3265,3233,16), then85 to(3249,3265,16). The actual tick75 map query samples target
+(80,48,-32); the later actor move does not retarget the particles. Both genuine
+characters retain health and flags. The child completes at96 in this scenario.
+No direct position-field writes or query-return replacements are used.
+
+Compiled source again matches **264,430 fields bit-exact** and **5,679 original
+RenderObject packets**. The parent also matches all4,340 fields, using genuine
+actor positions at the query rather than their creation positions. This proves
+sampled target acquisition; it does not claim continuous actor tracking.
+
+- `sandswirl-moving-target-native/manifest.json` SHA256
+  `3e00fb0d475ab30d520fd3557298714effa925e7eec85cfd2042843c851f6e3a`.
+- `sandswirl-moving-particle-proof/manifest.json` SHA256
+  `40d8e2412aa65b882c0abbc09698446bc7e0729e43eab9ea10555b86c718f57a`.
+- `sandswirl-moving-parent-proof/manifest.json` SHA256
+  `549698442282fda8b4554829c24ad91a6553b1329d28364c796690979b614f17`.
+
+Use `sandswirl_qualified_child_probe.py --substitute-sparks
+--quicksand-spell-control --move-target` with the same executable and boot image,
+then both compiled probes. The two actual SetPos calls are separately logged.

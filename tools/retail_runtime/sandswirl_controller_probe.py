@@ -12,7 +12,9 @@ def run(trace,output):
  output.mkdir(parents=True,exist_ok=False);native=json.loads(trace.read_text())
  assert native['named_spell_control']=='Quicksand' and native['guest_code_modified']
  assert len(native['records'])==310 and len(native['queries'])==1
- actors={index:(i+1,a) for i,(index,a) in enumerate(zip(native['actor_map_indices'],native['actors_before']))}
+ # The parent samples positions at its actual tick75 query, not creation.
+ query_actors=native['records'][74]['actors']
+ actors={index:(i+1,a) for i,(index,a) in enumerate(zip(native['actor_map_indices'],query_actors))}
  query=[actors[index] for index in native['queries'][0]['indices']]
  origin=native['source'];assign=[]
  for i,(identity,a) in enumerate(query):

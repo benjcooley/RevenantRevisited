@@ -20,7 +20,8 @@ from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_ESP
 SAMPLES = (1, 2, 5, 10, 20, 35, 50, 65, 74)
 
 
-def run(executable, boot, output, substitute=False, spell_control=False):
+def run(executable, boot, output, substitute=False, spell_control=False, move_target=False):
+    assert not move_target or spell_control
     assert not spell_control or substitute
     output.mkdir(parents=True, exist_ok=False)
     f = AuthenticCharacters(executable, boot)
@@ -42,6 +43,7 @@ def run(executable, boot, output, substitute=False, spell_control=False):
     spell_inventory = []
     actors = []
     actors_before = []
+    actor_moves = []
     if spell_control:
         # Public map allocation makes the characters visible to the original
         # tick75 FindObjectsInRange. No query or actor result is replaced.
@@ -180,6 +182,14 @@ def run(executable, boot, output, substitute=False, spell_control=False):
                         child_flags=v.u32(child+8))
         for tick in range(1,311 if spell_control else 75):
             v.put_u32(0x65cb38,tick)
+            if move_target and tick in (60,85):
+                destination=(3265,3233,16) if tick==60 else (3249,3265,16)
+                point=v.allocate(12);v.write(point,struct.pack('<3i',*destination))
+                setter=v.u32(v.u32(actors[1])+8)
+                result=call(setter,(point,0xffffffff,0),this=actors[1],instruction_limit=100000000)
+                actual=f.dump(actors[1])['position']
+                assert actual==list(destination),(tick,result,actual,destination)
+                actor_moves.append(dict(tick=tick,address=hex(setter),position=actual,result=result))
             for obj in (owner,child,*quicksands):
                 if not v.u32(obj+8)&4096:
                     call(0x470cc0,this=obj)
@@ -230,7 +240,9 @@ def run(executable, boot, output, substitute=False, spell_control=False):
         assert all(v.u32(q+8)&4096 for q in quicksands)
         for before,actor in zip(actors_before,actors):
             after=f.dump(actor)
-            assert all(before[key]==after[key] for key in ('position','health','flags'))
+            assert all(before[key]==after[key] for key in ('health','flags'))
+            expected=actor_moves[-1]['position'] if move_target and actor==actors[1] else before['position']
+            assert after['position']==expected
     fault=None
     if not spell_control:
         tick=75 if substitute else 1
@@ -255,7 +267,7 @@ def run(executable, boot, output, substitute=False, spell_control=False):
                 records=rows,fault=fault,resource_sha256=resources,
                 named_spell_control="Quicksand" if spell_control else None,
                 loaded_spell_variants=spell_inventory,queries=queries,actors_before=actors_before,
-                particle_calls=particle_calls,
+                particle_calls=particle_calls,actor_moves=actor_moves,
                 actors_after=[f.dump(a) for a in actors],
                 actor_map_indices=[v.u32(a+0x40) for a in actors],
                 viewport=[1280,960],center=[640,480],source=[3185,3185,16],camera=[3185,3185,0],
@@ -272,5 +284,6 @@ if __name__=='__main__':
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--substitute-sparks',action='store_true')
     p.add_argument('--quicksand-spell-control',action='store_true')
+    p.add_argument('--move-target',action='store_true',help='Public actual actor SetPos at60 and85; explicit caller control')
     a=p.parse_args()
-    run(a.executable,a.boot_image,a.output,a.substitute_sparks,a.quicksand_spell_control)
+    run(a.executable,a.boot_image,a.output,a.substitute_sparks,a.quicksand_spell_control,a.move_target)
