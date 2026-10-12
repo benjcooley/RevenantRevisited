@@ -5357,12 +5357,29 @@ ACTION TCharacter::GetLeapAction(ACTION action)
     return ACTION_NONE;
 }
 
+// REVSYNC: TCharacter::BeginFighting @ 0x004d3b90 -- into the combat (or
+// bow) root, on `target` or the nearest enemy ahead. Refused while running
+// or sneaking or invoking; only then are the characters seen marked as
+// fought (no auto-combat on them). Already in that root: SetFighting. The
+// new root is a fight in the walk root for a walk fighter (charflags
+// 0x4000), and it needs its state; a step stops first; it takes priority
+// only with a transition into it, and lets the walk root (or the other
+// fighting root) go. It faces the target unless retreating; its move angle
+// is the step's while stepping, else that facing. A refused root is freed.
 bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
 {
     if (beginFightingSeam)
         return beginFightingSeam(this, target, action);
-  // Prevent auto combat from being called again for 
-  // all currently visible characters.
+    if (root)
+    {
+        if ((root->action == ACTION_COMBAT && (root->Is("combatrun") || root->Is("handrun"))) ||
+            (root->action == ACTION_BOW && root->Is("bowrun")) || root->Is("run") || root->Is("sneak"))
+            return false;
+    }
+    if (doing && doing->action == ACTION_INVOKE)
+        return false;
+
+  // Every character seen is now one fought: auto-combat leaves them be.
     SetHasSeenAutoCombat(false);
 
   // Don't target dead guys
@@ -5370,15 +5387,11 @@ bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
         target = nullptr;
 
   // If player doesn't have bow, escape out
-    if (action == ACTION_BOW && ObjClass() == OBJCLASS_PLAYER)
-    {
-            TPlayer* player = (TPlayer*)this;
-            if (player->RangedWeapon() == nullptr)
-                return false;
-    }
+    if (action == ACTION_BOW && ObjClass() == OBJCLASS_PLAYER && !static_cast<TPlayer*>(this)->RangedWeapon())
+        return false;
 
     if (!target)
-        target = FindClosestEnemy(GetFace(), 32);
+        target = FindCharacter(-1, GetFace(), 32, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE);
 
   // REVSYNC: 0x004d3d2d -- a fight starting commits the player's typed line.
     TextBar.CommitInput();
@@ -5386,47 +5399,49 @@ bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
     if (root->action == action)
         return SetFighting(target);
 
-    char *rootname;
-    if (action == ACTION_BOW)
+    const char* rootname = nullptr;
+    if (charflags & kCharFlagWalkFighter)
+        rootname = GetWalkRoot();
+    else if (action == ACTION_BOW)
         rootname = GetBowRoot();
     else if (action == ACTION_COMBAT)
         rootname = GetCombatRoot();
     else
-        Error("Invalid fighting action");
+        FatalError("Invalid fighting action");
 
   // Doesn't have a combat state.. don't keep calling this function!
     if (FindState(rootname) < 0)
         return false;
 
-    if (IsMoving())
+    const bool stepping = doing && (doing->action == ACTION_MOVE || doing->action == ACTION_COMBATMOVE ||
+                                    doing->action == ACTION_BOWMOVE);
+    if (stepping)
         Stop();
 
-    TActionBlock* ab = new TActionBlock(rootname, action);
+    auto* ab = new TActionBlock(rootname, action);
     ab->obj = target;
+  // Priority only with a transition into it; else it goes to its state at
+  // once, with nothing to wait out.
     ab->priority = (FindTransitionState(doing->name, ab->name) >= 0);
-        // Priority if has transition only, otherwise it will go immediately
-        // to correct state without possibility of being interrupted
-    ab->interrupt = true;     // Interrupt whatever I'm doing now
-    if (doing->Is("walk"))
-        doing->priority = false; // Allow him to override an EndCombat() action
+    ab->interrupt = true;
+    if (doing->Is(GetWalkRoot()) || (action == ACTION_BOW && (doing->action == ACTION_COMBAT ||
+                                                              doing->action == ACTION_IMPACT)) ||
+        (action == ACTION_COMBAT && doing->action == ACTION_BOW))
+        doing->priority = false;
 
-    if (target)
-    {
-        int32_t newangle = AngleTo(target);
-        ab->angle = newangle;
-    }
-    else
-        ab->angle = GetFace();
-    ab->moveangle = GetMoveAngle();
+    ab->angle = (target && !retreating) ? AngleTo(target) : GetFace();
+    ab->moveangle = stepping ? GetMoveAngle() : ab->angle;
 
-    SetDesired(ab);
+    if (!SetDesired(ab))
+        delete ab;
 
   // REVSYNC: 0x004d3f8b -- the opponent is both the block's user and its
-  // enemy.
+  // enemy; a trigger that ran turns the incidentals off.
     if (GetScript())
     {
         TCharacter* enemy = Fighting();
-        GetScript()->Trigger(TRIGGER_COMBAT, nullptr, nullptr, enemy, kAliasUser, enemy, kAliasEnemy);
+        if (GetScript()->Trigger(TRIGGER_COMBAT, nullptr, nullptr, enemy, kAliasUser, enemy, kAliasEnemy))
+            charflags |= kCharFlagNoIncidentals;
     }
 
     nextattack = -1;
@@ -5434,29 +5449,47 @@ bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
     return true;
 }
 
+// REVSYNC: TCharacter::EndFighting @ 0x004d3fd0 -- out of the combat or bow
+// root into the walk root (slot 0x30c: the player's "torch" with a light in
+// hand). Done already outside them; refused when dead, in an interactive
+// attack or impact (unless charflags 0x80000), or with no walk root. A step
+// stops first. Through a transition the walk takes priority and is marked
+// a transition (0x004d4164); the root as doing lets go of its priority. A
+// refused block is freed. The move angle follows the facing again unless
+// it doesn't turn (charflags 4), and the characters seen are marked fought.
 bool TCharacter::EndFighting()
 {
     if (!IsFighting())
         return true;
-
-    if (FindState("walk") < 0)      // Avoid trying to set walk state in the future
+    if (Health() <= 0)
+        return false;
+    if (!(charflags & kCharFlagInteractive) &&
+        ((doing->attack && (doing->attack->flags & CA_INTERACTIVE)) ||
+         (doing->impact && (doing->impact->flags & CAI_INTERACTIVE))))
         return false;
 
-    if (IsMoving())
+    const char* walkroot = GetWalkRoot();
+    if (FindState(walkroot) < 0)      // Avoid trying to set walk state in the future
+        return false;
+
+    if (doing && (doing->action == ACTION_MOVE || doing->action == ACTION_COMBATMOVE ||
+                  doing->action == ACTION_BOWMOVE))
         Stop();
 
-    TActionBlock* ab = new TActionBlock("walk");
-    ab->priority = (FindTransitionState(doing->name, ab->name) >= 0);
-        // Priority if has transition only, otherwise it will go immediately
-        // to correct state without possibility of being interrupted
+    auto* ab = new TActionBlock(walkroot, ACTION_ANIMATE);
+    const bool transition = FindTransitionState(doing->name, ab->name) >= 0;
+    ab->priority = transition;
+    ab->transition = transition;
     if (doing == root)
         doing->priority = false; // Allow him to override a BeginCombat() action
-    SetDesired(ab);
+    if (!SetDesired(ab))
+        delete ab;
 
   // Make sure moving angle equals face (it doesn't during a combat move)
-    SetMoveAngle(GetFace());
+    if (!(charflags & kCharFlagNoTurn))
+        SetMoveAngle(GetFace());
 
-  // Clear autocombat fields for all currently visible characters
+  // Every character seen is now one fought: auto-combat leaves them be.
     SetHasSeenAutoCombat(false);
 
     return true;

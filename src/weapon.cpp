@@ -18,6 +18,9 @@ DEFSTAT(Weapon, Damage,             DMG,  2, 0, 0, 10000)
 DEFSTAT(Weapon, Combining,          COMB, 3, 0, 0, 16)
 DEFSTAT(Weapon, Poison,             PSN,  4, 0, 0, 32)
 DEFSTAT(Weapon, Value,              VAL,  5, 0, 0, 1000000)
+// REVSYNC: the weapon class's stats as retail registers them (0x00528b90..),
+// DamageType the seventh (0x00528cb0)
+DEFSTAT(Weapon, DamageType,         DTYP, 6, -1, -1, 9)
 
 #define VIAL_STATE_FULL     0
 #define VIAL_STATE_EMPTY    1

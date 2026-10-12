@@ -216,6 +216,9 @@ class TPlayScreen : public TScreen
       // Frames of play in this game, its earlier sessions' included (retail
       // +0x688 - +0x684 + +0x680): what the staggered checks and the frame
       // stamps a character keeps are measured in
+    void AdvanceGameFrame();
+      // The tick's frame: the count, the game time and the time of day that
+      // follow it (retail's TPlayScreen::Animate; the scenario kata ticks it)
     void SetFixtureState(int32_t frame, bool control, bool demo)
         { gameframes = frame; sessionstart = 0; sessionframes = 0; controlon = control; demomode = demo; }
       // Retail A/B fixtures only (retailab_combat.cpp): the frame count and

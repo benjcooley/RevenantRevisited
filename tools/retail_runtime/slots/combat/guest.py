@@ -14,7 +14,9 @@ katas share (docs/gameplay/COMBAT_DOJO.md on feature/combat, §1 and §6).
 Seams (each call recorded in `world.seams`, in order):
 - FindState `0x477c10` (name, pcnt) and FindTransitionState `0x477c30`
   (from, to, pcnt): from the character's state table, case-blind names,
-  "<from> to <to>" for a transition. Index in the table, or -1.
+  "<from> to <to>" for a transition. Index in the table, or -1. With
+  `real_imagery` (the scenario kata) they and the imagery's state queries
+  run as original over the stand-in's header (IMAGERY_ORIGINAL_SLOTS).
 - GetObjStat `0x4d7520` (TCharacter) / `0x51ae30` (TPlayer), slot 0xdc:
   the object's own stats (class.def OBJSTATS: Health, Fatigue, Mana, ...),
   from the case's `stats`. Their ids come from globals that static init
@@ -168,6 +170,16 @@ O_STATE, O_IMAGERY, O_FRAME = 0x0c, 0x54, 0x5c   # state (short), imagery, frame
 IMAGERY_SLOTS = 0x80
 IMAGERY_SIZE, IM_MESHINIT, IM_MOTION, HDR_NUMSTATES = 0x100, 0x0c, 0x98, 0x04
 IM_SLOT_SET_OBJECT_MOTION, SET_OBJECT_MOTION_3D = 0x4c, 0x40cd20   # T3DImagery::SetObjectMotion
+# The scenario kata's imagery (`real_imagery`): the state queries are
+# T3DImagery's own over the header (vtable 0x5a35ac): NumStates 0x4101f0,
+# FindState 0x446d70 (the "NN:" frequency variants, random(1, 100) when no
+# percentage is given), FindTransitionState 0x446f20, GetAniFlags /
+# GetAniLength 0x410470 / 0x4104a0 and their inventory forms 0x4104d0 /
+# 0x410500. Each state record (0x4c bytes from header +8): the name
+# (char[32]) at +0, aniflags +0x28, frames +0x2a.
+IMAGERY_ORIGINAL_SLOTS = {0x3c: 0x4101f0, 0x40: 0x446d70, 0x44: 0x446f20, 0x8c: 0x410470, 0x90: 0x4104a0,
+                          0x94: 0x4104d0, 0x98: 0x410500}
+HDR_FIRST_STATE, ST_NAME, ST_ANIFLAGS = 0x08, 0x00, 0x28
 ANIMATOR_SLOTS = 0x40
 # Kata M8, the animation layer as original code: SetState 0x46f250 itself
 # (with ResetState 0x46f1e0), SetObjectMotion 0x470bb0 -> imagery slot 0x4c,
@@ -328,6 +340,7 @@ class CombatWorld:
         self.animators.clear()
         self.needs_animator = {}   # character -> imagery NeedsAnimator answer
         self.real_setstate = False # kata M8: SetState runs as original
+        self.real_imagery = False  # the scenario kata: the imagery's state queries as original
         self.blocks = {}           # guest address -> label of a block built by the fixture
         self.seams = []
         self.quiet = False         # stat reads unrecorded (the tick's katas)
@@ -422,6 +435,8 @@ class CombatWorld:
         return self.objects.get(address, f'{address:#x}')
 
     def _find_state(self, args, ecx):
+        if self.real_imagery:
+            return Boundaries.ORIGINAL
         name = self.vm.string(args[0])
         table = [s['name'].lower() for s in self.states.get(ecx, [])]
         index = table.index(name.lower()) if name.lower() in table else -1
@@ -429,6 +444,8 @@ class CombatWorld:
         return index
 
     def _find_transition(self, args, ecx):
+        if self.real_imagery:
+            return Boundaries.ORIGINAL
         frm, to = self.vm.string(args[0]), self.vm.string(args[1])
         table = [s['name'].lower() for s in self.states.get(ecx, [])]
         key = f'{frm} to {to}'.lower()
@@ -480,11 +497,12 @@ class CombatWorld:
         self.seams.append(dict(seam='SetState', who=self._name(ecx), state=index, name=name))
         return 1
 
-    def _stub_table(self, slots, answers, owner_of, kind):
+    def _stub_table(self, slots, answers, owner_of, kind, record=True):
         """A vtable of `ret` stubs answered by the host, one hook over all of
         it; `answers`: slot -> (name, argument bytes, fn(owner, args)). The
         owner is `owner_of(ECX)`. A slot not answered fails the case. Each
-        call is recorded as `<kind>.<name>`."""
+        call is recorded as `<kind>.<name>` (unless `record` is false: pure
+        reads)."""
         from unicorn import UC_HOOK_CODE
         from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_ECX, UC_X86_REG_EIP, UC_X86_REG_ESP
         vm = self.vm
@@ -508,8 +526,9 @@ class CombatWorld:
                 vm.error = error
                 uc.emu_stop()
                 return
-            self.seams.append(dict(seam=f'{kind}.{name}', who=self._name(owner),
-                                   args=[s32(a) for a in args[:pop // 4]], result=result))
+            if record:
+                self.seams.append(dict(seam=f'{kind}.{name}', who=self._name(owner),
+                                       args=[s32(a) for a in args[:pop // 4]], result=result))
             uc.reg_write(UC_X86_REG_EAX, (result or 0) & 0xffffffff)
             uc.reg_write(UC_X86_REG_EIP, vm.u32(sp))
             uc.reg_write(UC_X86_REG_ESP, sp + 4 + pop)
@@ -530,6 +549,11 @@ class CombatWorld:
             0x38: ('NeedsAnimator', 4, lambda owner, args: int(self.needs_animator.get(owner, 1)))},
             lambda ecx: self.imagery.get(ecx), 'imagery')
         self.vm.put_u32(self.imagery_vtable + IM_SLOT_SET_OBJECT_MOTION, SET_OBJECT_MOTION_3D)
+        # The scenario kata's: the same, the state queries T3DImagery's own.
+        self.real_imagery_vtable = self.vm.allocate(IMAGERY_SLOTS * 4)
+        self.vm.write(self.real_imagery_vtable, bytes(self.vm.uc.mem_read(self.imagery_vtable, IMAGERY_SLOTS * 4)))
+        for slot, original in IMAGERY_ORIGINAL_SLOTS.items():
+            self.vm.put_u32(self.real_imagery_vtable + slot, original)
 
     def _animator_stubs(self):
         """The stand-in animator's vtable: what the object layer tells an
@@ -550,14 +574,16 @@ class CombatWorld:
 
     def _new_imagery(self, obj, table):
         """T3DImagery's layout as far as the code reads it: the header's
-        state table (count at +4, frames at state * 0x4c + 0x32), the mesh
-        marked initialized (+0x0c), and per state the case's motion, one
-        8-byte SMotionData a frame (+0x98; GetMotion 0x40cc40)."""
+        state table (count at +4; per state from +8, 0x4c bytes: the name,
+        aniflags +0x28, frames +0x2a), the mesh marked initialized (+0x0c),
+        and per state the case's motion, one 8-byte SMotionData a frame
+        (+0x98; GetMotion 0x40cc40). With `real_imagery` its state queries
+        are T3DImagery's own (IMAGERY_ORIGINAL_SLOTS)."""
         vm = self.vm
         imagery = vm.allocate(IMAGERY_SIZE)
         header = vm.allocate(0x60)
-        states = vm.allocate(max(1, len(table)) * STATE_SIZE)
-        vm.put_u32(imagery, self.imagery_vtable)
+        states = vm.allocate(HDR_FIRST_STATE + max(1, len(table)) * STATE_SIZE)
+        vm.put_u32(imagery, self.real_imagery_vtable if self.real_imagery else self.imagery_vtable)
         vm.put_u32(imagery + IM_HEADER, header)
         vm.put_u32(imagery + IM_MESHINIT, 1)
         vm.put_u32(header + HDR_STATES, states)
@@ -565,6 +591,9 @@ class CombatWorld:
         motion = vm.allocate(max(1, len(table)) * 4)
         vm.put_u32(imagery + IM_MOTION, motion)
         for i, st in enumerate(table):
+            record = states + HDR_FIRST_STATE + i * STATE_SIZE
+            write_text(vm, record + ST_NAME, 32, st['name'])
+            vm.write(record + ST_ANIFLAGS, struct.pack('<H', st['aniflags'] & 0xffff))
             vm.write(states + i * STATE_SIZE + ST_FRAMES, struct.pack('<h', st['frames']))
             if st.get('motion'):
                 data = vm.allocate(len(st['motion']) * 8)

@@ -937,13 +937,7 @@ void TPlayScreen::Update()
 
     // Advance fixed-tick counters. CurrentMode()->Tick() owns gameplay frame
     // advancement; the renderer only samples/interpolates the current pose.
-    // REVSYNC: TPlayScreen::Animate @ 0x0047c2c0 -- the frame count, then
-    // game time in hundredths of a second at 24 frames a second from the
-    // game's whole frame count (GameFrame() * 100 / 24, 0x0047c36b..
-    // 0x0047c3af; the regen, poison and recovery timers read it).
-    ++gameframes;
-    gametime = (int32_t)((int64_t)GameFrame() * 100 / 24);
-    timeofday = TimeOfDayMinutes(gametime);
+    AdvanceGameFrame();
 
     // REVSYNC: screen slot 0x24 (0x004902c0) -> NextFrameObjects 0x00457ef0:
     // animation frames advance last in the tick, after Pulse and Move and
@@ -1881,15 +1875,24 @@ void TPlayScreen::Command(GAMECOMMAND command)
         return;
     switch (command)
     {
-    case GAMECMD_COMBAT:            // 1: BeginFighting(0, ACTION_COMBAT) / EndFighting
+    // REVSYNC: 0x0047d066 (case 1) -- in the combat root the key ends the
+    // fight and turns the player's auto-combat off (until it next finds no
+    // one); anywhere else, the bow root too, it starts one on whoever is
+    // ahead and turns auto-combat on. Whether the fight starts or ends or
+    // not, the switch follows the key.
+    case GAMECMD_COMBAT:
         if (Player)
         {
             if (Player->IsCombat())
-                Player->EndCombat();
+            {
+                Player->EndFighting();
+                Player->SetAutoCombat(false);
+            }
             else
             {
                 TextBar.CommitInput();      // 0x0047d0d5
-                Player->BeginCombat();
+                Player->BeginFighting(nullptr, ACTION_COMBAT);
+                Player->SetAutoCombat(true);
             }
         }
         break;
@@ -2119,6 +2122,17 @@ void TPlayScreen::ShowLowerPanes()
 int32_t TPlayScreen::GameFrame() const
 {
     return sessionframes - sessionstart + gameframes;
+}
+
+// REVSYNC: TPlayScreen::Animate @ 0x0047c2c0 -- the frame count, then game
+// time in hundredths of a second at 24 frames a second from the game's
+// whole frame count (GameFrame() * 100 / 24, 0x0047c36b..0x0047c3af; the
+// regen, poison and recovery timers read it), then the time of day.
+void TPlayScreen::AdvanceGameFrame()
+{
+    ++gameframes;
+    gametime = (int32_t)((int64_t)GameFrame() * 100 / 24);
+    timeofday = TimeOfDayMinutes(gametime);
 }
 
 // REVSYNC: TPlayScreen::SetGameTime @ 0x0047e950 -- a game's time (a load's

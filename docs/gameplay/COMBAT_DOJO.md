@@ -99,6 +99,12 @@ only).
 | S5 | spell lifetimes and effects: TSpell Timer / Pulse / Kill / ObjectRemoved, TStrikeSpell, TEffect Pulse / KillThisEffect / Follow, the Iced effect | `0x53f410` `0x53f800` `0x53f860` `0x540d70` `0x540eb0` `0x542340` `0x4de800` `0x4ec930` | `TSpell`, `TStrikeSpell`, `TEffect`, `TIcedEffect` | [x] `spell-life` 229, `spell-strike` 413, `effect-pulse` 53, `effect-iced` 5 (22 mutations caught); the Iced shatter and the LIGHT fade-out are the VFX track's |
 | S5 | spell lifetimes and effects | TSpell `0x53f410` `0x53f800` `0x53f860`, Strike `0x540eb0` `0x540d70` `0x542340`, TEffect::Pulse `0x4de800`, Iced `0x4ec890` | `TSpell`, `TStrikeSpell`, `TEffect`, `TIcedEffect` | [x] `spell-life` 229, `spell-strike` 413, `effect-pulse` 53, `effect-iced` 5 |
 
+### W — the whole tick
+
+| # | Kata | Retail | Port | Status |
+|---|---|---|---|---|
+| W1 | scenarios: the whole tick over a small world, hundreds of ticks -- the keys, UpdateMove, PulseObjects, MoveObjects, the frame count and game time, NextFrameObjects, and all they reach (Pulse, UpdateAction, AI, the senses, BeginFighting, the attacks, hits, Damage, Block, Move, SetState, the imagery's state queries), every tick compared ([forensics/SCENARIO_KATA.md](forensics/SCENARIO_KATA.md)) | `0x490bd0` order: `0x47de30` `0x4580f0` `0x458390` `0x47c37d` `0x457ef0` | `TPlayScreen::UpdateMove`, `TMapPane::PulseObjects` / `MoveObjects` / `NextFrameObjects`, `TPlayScreen::AdvanceGameFrame` | [x] 18/18 (`combat-scenario`): arena A1b (4 seeds, and 900 ticks to Locke's death), A1, A3 (block), A4 (sword, three buttons; club), A6 (the orbit, four directions), A7 (two Araknids), A8 (the combat key); ~6,100 ticks; found BeginFighting, EndFighting and the combat key 1998's, the armed player's damage type, PulseObjects' killed player (§5.16) |
+
 ### D — data
 
 | # | Kata | Retail | Port | Status |
@@ -372,6 +378,39 @@ Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.
     TPlayScreen (the fixtures set the game time apart: SetFixtureGameTime).
     Retail's time of day is (game time × 1440 / DAYLENGTH) mod 1440
     (`+0x690`); the port's is a stand-in (the gameflow / lighting track's).
+16. **The whole tick (kata W1, 2026-10-11).** The emulator now runs
+    retail's tick for a small world, hundreds of ticks, against the port's
+    (forensics/SCENARIO_KATA.md). On arena A1b the two agree tick for
+    tick: the Araknid finds Locke on its 32-frame window (tick 9), turns 8
+    a tick, walks in, jumps (tick 38), bites (tick 54), and Locke falls
+    into combat on his own window (tick 30) -- so retail does auto-combat
+    there too, with the option on; the lab's Locke, still in his walk
+    stance after ~100 ticks, most likely had it off (COMBAT_ARENA.md).
+    What it found:
+    - **BeginFighting `0x4d3b90` was the 1998 version**: the new root's
+      move angle is the facing it takes, not the character's move angle,
+      unless it was stepping; it refuses while running, sneaking or
+      invoking (and only then marks the characters seen as fought); a walk
+      fighter (charflags `0x4000`) fights in its walk root; a step stops,
+      not any move; the doing block lets go of its priority as the walk
+      root or the other fighting root; a retreating character keeps its
+      facing; a refused root is freed; a script trigger that ran turns the
+      incidentals off. Ported.
+    - **An armed player deals misc damage.** TPlayer::GetDamageType
+      `0x51b2f0` returns the weapon's DamageType (TWeapon `0x529060`)
+      unless it is −1, and WEAPON.DEF gives every shipped weapon 0
+      (DT_MISC): a sword's blows aren't cuts or thrusts, a club's aren't
+      bludgeoning (the Araknid's bludgeon resistance of 20 doesn't apply).
+      Ported (`TWeapon::DamageType`, GetDamageType virtual).
+    - **PulseObjects keeps a killed player** pulsing (`0x45815b`). Ported.
+    - **The combat key turns auto-combat off** on the way out (Command
+      case 1, `0x47d066`: the switch `+0xe8`, back on only when a look
+      finds no one) and on on the way in; in the bow root it starts a
+      fight rather than ending one. **EndFighting `0x4d3fd0`** was 1998's:
+      retail refuses when dead or in an interactive attack or impact,
+      walks in the class's walk root ("torch" with a light), marks the walk
+      block a transition when there is one into it, frees a refused block
+      and keeps a non-turner's move angle. Ported.
 
 ## 6. Layouts used by the fixtures
 
@@ -468,6 +507,8 @@ python3 tools/retail_ab/retail_ab.py spell-cast         # S2 (spell-data D1s; sp
                                                         # -quick S1; spell-new, -damage S3)
 python3 tools/retail_ab/retail_ab.py missile-bow        # S4 (missile-area, -arrow, -fireball)
 python3 tools/retail_ab/retail_ab.py spell-strike       # S5 (spell-life, effect-pulse, effect-iced)
+python3 tools/retail_ab/retail_ab.py combat-scenario --jobs 8   # W1, the whole tick (minutes: the attack
+                                                               # search over Locke's 352 states is slow emulated)
 tools/walktest/walktest.py "<slot dir>" [--pattern sweep|walks|both|none] [--exec "player.goto X Y; ..."]
 python3 tools/retail_ab/retail_ab.py combat-data        # D1, every record field by field
 python3 tools/combatarena/arena.py run tools/combatarena/scenarios/locke_vs_araknid.json --repeat 2

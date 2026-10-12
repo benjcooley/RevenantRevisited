@@ -3756,50 +3756,64 @@ void TMapPane::AnimateSelectedObjects()
     Display.ResetClipRect();
 }
 
+template <typename Visit>
+void TMapPane::ForEachTickObject(int32_t objset, Visit&& visit)
+{
+    if (tickObjectsSeam)
+    {
+        for (TObjectInstance* inst : tickObjectsSeam(objset))
+            visit(inst, nullptr);
+        return;
+    }
+    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+        visit(i.Item(), &i);
+}
+
+// REVSYNC: TMapPane::NextFrameObjects @ 0x00457ef0 -- the animate set's
+// NextFrame (slot 0x120), last in the tick (screen slot 0x24, 0x004902c0).
 void TMapPane::NextFrameObjects()
 {
     if (NoAnimateObjs)
         return;
 
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, OBJSET_ANIMATE); i; i++)
-    {
-        TObjectInstance* inst = i.Item();
-        inst->NextFrame();
-    }
+    ForEachTickObject(OBJSET_ANIMATE, [](TObjectInstance* inst, TMapIterator*) { inst->NextFrame(); });
 }
 
+// REVSYNC: TMapPane::PulseObjects @ 0x004580f0 -- each object of the pulse
+// set Pulses (slot 0x110), but a killed one (OF_KILL) is taken out of the
+// map: not a player, which keeps its tick (0x0045815b).
 void TMapPane::PulseObjects()
 {
     if (NoPulseObjs)
         return;
 
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, OBJSET_PULSE); i; i++)
-    {
-        if (i->GetFlags() & OF_KILL)
-            i.Nuke();
+    ForEachTickObject(OBJSET_PULSE, [](TObjectInstance* inst, TMapIterator* i) {
+        if ((inst->GetFlags() & OF_KILL) && inst->ObjClass() != OBJCLASS_PLAYER)
+        {
+            if (i)
+                i->Nuke();
+            else
+                removeObjectSeam(inst);
+        }
         else
-            i->Pulse();
-    }
+            inst->Pulse();
+    });
 }
 
+// REVSYNC: TMapPane::MoveObjects @ 0x00458390 -- every object of the moving
+// set Moves (slot 0x114, its bits kept at +0xbc for the next tick's
+// UpdateAction), then every one takes the motion of the frame it is on
+// (SetObjectMotion, slot 0x118).
 void TMapPane::MoveObjects()
 {
     if (NoPulseObjs)
         return;
 
-  // Move objects based on previous frame movement, and results of Pulse()
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, OBJSET_MOVING); i; i++)
-    {
-        i->SetMoveBits(i->Move());  // Call to move object and get blocked/hit bits
-    }
+    ForEachTickObject(OBJSET_MOVING, [](TObjectInstance* inst, TMapIterator*) { inst->SetMoveBits(inst->Move()); });
 
-  // Set next movement for next frame based on current state/frame
-    for (TMapIterator j(nullptr, CHECK_NOINVENT, OBJSET_MOVING); j; j++)
-    {
-        j->SetObjectMotion();       // Call to get imagery/object's next position
-        // NOTE: after SetObjectMotion() is called, any calls to SetNextMove() or
-        // SetMoveAngle() will OVERIDE the movement in the animation!
-    }
+    // NOTE: after SetObjectMotion() is called, any calls to SetNextMove() or
+    // SetMoveAngle() will OVERIDE the movement in the animation!
+    ForEachTickObject(OBJSET_MOVING, [](TObjectInstance* inst, TMapIterator*) { inst->SetObjectMotion(); });
 }
 
 void TMapPane::AnimateObjects(bool draw)

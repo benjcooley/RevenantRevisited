@@ -444,6 +444,9 @@ class TPlayer : public TCharacter
       // Returns the type of weapon being used
     int32_t WeaponDamage() override;
       // REVSYNC: 0x00520830 -- the held item's Damage, else the character data's
+    int32_t GetDamageType(int32_t weapontype, int32_t attackflags) override;
+      // REVSYNC: 0x0051b2f0 -- the weapon in hand's own damage type, when it
+      // has one, else the attack's
     int32_t AttackModifier() override;
       // REVSYNC: 0x0051a480 -- ATTACKMOD, Agility's STATLEVEL, the spells' offense,
       // the skill of the weapon held
@@ -475,8 +478,10 @@ class TPlayer : public TCharacter
       // NOTE: Not all armor or clothing needs to fit all body types.
     char *GetCombatRoot(TObjectInstance* oi = nullptr) override;
       // Returns combat root given the weapon oi or current weapon if oi is nullptr
-    char *GetBowRoot(TObjectInstance* oi = nullptr) override; 
+    char *GetBowRoot(TObjectInstance* oi = nullptr) override;
       // Returns bow root given the bow 'oi' or current bow if oi is nullptr
+    const char *GetWalkRoot() override { return HoldsLight() ? "torch" : "walk"; }
+      // REVSYNC: 0x0051b3f0 -- "torch" with the light in hand (+0x2b8), else "walk"
 
   private:
     // A STATLINE in force (retail +0x358 count, +0x35c {line, expiry} pairs).

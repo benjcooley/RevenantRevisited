@@ -57,6 +57,9 @@ class TWeapon : public TObjectInstance
     STATFUNC(Combining)
     STATFUNC(Poison)
     STATFUNC(Value)
+    STATFUNC(DamageType)
+      // REVSYNC: slot 0x210, 0x00529060 -- the damage the weapon deals
+      // whatever the attack (DT_XXX), -1 for the attack's own
 
   protected:
     int32_t poison;             // how much posion is currently on the blade

@@ -507,11 +507,30 @@ void TapeRange(int32_t lo, int32_t hi, int32_t result)
 
 void ClearDraws() { g_draws.clear(); }
 
+SUntapedDraws::SUntapedDraws() : tapeAt(g_tapeAt), seed(g_tapeSeed), draws(g_draws.size()) {}
+
+SUntapedDraws::~SUntapedDraws()
+{
+    g_tapeAt = tapeAt;
+    g_tapeSeed = seed;
+    g_draws.resize(draws);
+}
+
 void WriteDraws(JsonOut& j)
 {
+    WriteDrawsSince(j, 0);
+}
+
+size_t DrawCount()
+{
+    return g_draws.size();
+}
+
+void WriteDrawsSince(JsonOut& j, size_t first)
+{
     j.Key("draws").Begin('[');
-    for (const std::string& d : g_draws)
-        j.Raw(d);
+    for (size_t i = first; i < g_draws.size(); ++i)
+        j.Raw(g_draws[i]);
     j.End(']');
 }
 
