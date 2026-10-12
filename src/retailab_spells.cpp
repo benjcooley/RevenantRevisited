@@ -317,7 +317,7 @@ class SSpellScope
         g_spellWorld = &world;
         if (seamCasts)
         {
-            TCharacter::castSeam = CaseCastByName;
+            TCharacter::castByNameSeam = CaseCastByName;
             TCharacter::castByTalismansSeam = CaseCastByTalismans;
         }
         g_around.clear();
@@ -341,7 +341,7 @@ class SSpellScope
         TPlayer::playerStateSeam = nullptr;
         TPlayer::statEffectSeam = nullptr;
         TPlayer::skillExpSeam = nullptr;
-        TCharacter::castSeam = nullptr;
+        TCharacter::castByNameSeam = nullptr;
         TCharacter::castByTalismansSeam = nullptr;
         g_spellWorld = nullptr;
         Player = savedPlayer;

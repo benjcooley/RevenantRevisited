@@ -21,6 +21,8 @@
 #include "revenant.h"             // CheatNahkranoth, CheatAlreadyDead, AutoBeginCombat
 #include "sound.h"
 
+#include <optional>
+
 namespace RetailAB
 {
 namespace
@@ -478,7 +480,8 @@ std::string LowerName(const char* name)
     return s;
 }
 
-int32_t CaseNewObject(SObjectDef* def, int32_t imagery)
+// The def NewObject is given, as the retail fixture records it.
+void RecordNewObject(const SObjectDef* def, int32_t imagery)
 {
     TObjectClass* cl = TObjectClass::GetClass(def->objclass);
     SObjectInfo* info = cl ? cl->GetObjType(def->objtype) : nullptr;
@@ -493,6 +496,11 @@ int32_t CaseNewObject(SObjectDef* def, int32_t imagery)
     j.Key("vel").Begin('[').Value(def->vel.x).Value(def->vel.y).Value(def->vel.z).End(']');
     j.Field("facing", def->facing).Field("imagery", imagery).End('}');
     Seam(j.str());
+}
+
+int32_t CaseNewObject(SObjectDef* def, int32_t imagery)
+{
+    RecordNewObject(def, imagery);
     if (g_madeUsed == g_made.size())
         throw std::runtime_error("more objects made than the fixture holds");
     const int32_t index = kMadeIndex + (int32_t)g_madeUsed;
@@ -588,6 +596,362 @@ TPlayer* AsPlayer(TCharacter* c)
         throw std::runtime_error("the experience calls need a player");
     return p;
 }
+
+// ---- The bosses (kata C3c, docs/gameplay/forensics/BOSS_AI.md) -------------------
+
+// A map object of the case's that isn't a character (`props`: the ring wall,
+// the table, waypoints): an object of its class.def type with the case's
+// name, position and id; its SetState recorded as the retail fixture's
+// shared seam records it.
+class TFixtureProp : public TObjectInstance
+{
+  public:
+    TFixtureProp(SObjectDef* def, std::string label, std::vector<std::string> statenames)
+        : TObjectInstance(def, new TFixtureImagery(TFixtureImagery::Register({}), label, {}, false)),
+          who(std::move(label)), states(std::move(statenames))
+    {
+        this->name = strdup(who.c_str());
+    }
+
+    bool SetState(int32_t index) override
+    {
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "SetState").FieldString("who", who).Field("state", index).Key("name");
+        if (index >= 0 && (size_t)index < states.size())
+            j.String(states[index]);
+        else
+            j.Null();
+        j.End('}');
+        Seam(j.str());
+        this->state = (uint16_t)index;
+        return true;
+    }
+
+    [[nodiscard]] const std::string& Who() const { return who; }
+
+  private:
+    std::string who;
+    std::vector<std::string> states;
+};
+
+// A boss's state by the retail fixture's names (melee_attack.py BOSS_FIELDS):
+// its whole-number fields and points by member; the arrays by hand.
+template <typename S>
+struct SBossField
+{
+    const char* name;
+    int32_t S::*value = nullptr;
+    S3DPoint S::*point = nullptr;
+};
+
+constexpr std::array<SBossField<SBaezState>, 16> kBaezFields{{
+    {"stunned", &SBaezState::stunned}, {"stunticks", &SBaezState::stunticks},
+    {"stunlevel", &SBaezState::stunlevel}, {"stage", &SBaezState::stage},
+    {"baezspot", nullptr, &SBaezState::baezspot}, {"playerspot", nullptr, &SBaezState::playerspot},
+    {"table", &SBaezState::table}, {"frame", &SBaezState::frame}, {"throwlength", &SBaezState::throwlength},
+    {"watchersfound", &SBaezState::watchersfound}, {"playerhealth", &SBaezState::playerhealth},
+    {"health", &SBaezState::health}, {"falling", &SBaezState::falling},
+    {"firstspot", nullptr, &SBaezState::firstspot}, {"playerarrived", &SBaezState::playerarrived},
+    {"waitticks", &SBaezState::waitticks}}};
+constexpr std::array<SBossField<SSolifugeState>, 10> kSolifugeFields{{
+    {"skytimer", &SSolifugeState::skytimer}, {"skyphase", &SSolifugeState::skyphase},
+    {"skyticks", &SSolifugeState::skyticks}, {"band", &SSolifugeState::band},
+    {"stunticks", &SSolifugeState::stunticks}, {"stunned", &SSolifugeState::stunned},
+    {"tinted", &SSolifugeState::tinted}, {"landing", &SSolifugeState::landing},
+    {"pissedoff", &SSolifugeState::pissedoff}, {"slam", &SSolifugeState::slam}}};
+constexpr std::array<SBossField<SJhagaState>, 6> kJhagaFields{{
+    {"mode", &SJhagaState::mode}, {"resttimer", &SJhagaState::resttimer}, {"draw", &SJhagaState::draw},
+    {"hop", &SJhagaState::hop}, {"dest", nullptr, &SJhagaState::dest}, {"frame", &SJhagaState::frame}}};
+constexpr std::array<SBossField<SYhagoroState>, 3> kYhagoroFields{{
+    {"mode", &SYhagoroState::mode}, {"towalk", &SYhagoroState::towalk}, {"tocombat", &SYhagoroState::tocombat}}};
+
+S3DPoint PointOf(const JsonValue& v)
+{
+    return S3DPoint((int32_t)v[0].Int(), (int32_t)v[1].Int(), (int32_t)v[2].Int());
+}
+
+void WritePoint(JsonOut& j, const S3DPoint& p)
+{
+    j.Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']');
+}
+
+template <typename S, size_t N>
+void ReadBossFields(const std::array<SBossField<S>, N>& fields, const JsonValue& b, S& s)
+{
+    for (const SBossField<S>& f : fields)
+    {
+        if (!b.Has(f.name))
+            continue;
+        if (f.value)
+            s.*f.value = (int32_t)b[f.name].Int();
+        else
+            s.*f.point = PointOf(b[f.name]);
+    }
+}
+
+template <typename S, size_t N>
+void WriteBossFields(const std::array<SBossField<S>, N>& fields, JsonOut& j, const S& s)
+{
+    for (const SBossField<S>& f : fields)
+    {
+        if (f.value)
+            j.Field(f.name, s.*f.value);
+        else
+        {
+            j.Key(f.name);
+            WritePoint(j, s.*f.point);
+        }
+    }
+}
+
+// The case's `boss` as the character's state (its kind is `monsterkind`).
+void ReadBossState(const TFixtureWorld& world, IFixtureChar* fx, const JsonValue& b)
+{
+    TBossState& state = fx->Boss();
+    switch (fx->MonsterKind())
+    {
+        case 1:
+        {
+            auto& s = state.emplace<SBaezState>();
+            ReadBossFields(kBaezFields, b, s);
+            const auto& names = b["watchers"].Items();
+            for (size_t i = 0; i < names.size() && i < s.watchers.size(); ++i)
+                if (!names[i].IsNull())
+                    s.watchers[i] = world.Get(names[i].Str());
+            break;
+        }
+        case 2:
+        {
+            auto& s = state.emplace<SSolifugeState>();
+            ReadBossFields(kSolifugeFields, b, s);
+            const auto& brood = b["brood"].Items();
+            for (size_t i = 0; i < brood.size() && i < s.brood.size(); ++i)
+                s.brood[i] = (int32_t)brood[i].Int();
+            break;
+        }
+        case 3:
+        {
+            auto& s = state.emplace<SJhagaState>();
+            ReadBossFields(kJhagaFields, b, s);
+            const auto& points = b["points"].Items();
+            for (size_t i = 0; i < points.size() && i < s.points.size(); ++i)
+                s.points[i] = PointOf(points[i]);
+            break;
+        }
+        case 4:
+            ReadBossFields(kYhagoroFields, b, state.emplace<SYhagoroState>());
+            break;
+        default:
+            throw std::runtime_error("a `boss` needs a boss's monsterkind");
+    }
+}
+
+// A character's boss as compared (melee_attack.py _boss_dump): the kind,
+// where a MoveTo heads, and a boss's state by name.
+void WriteBoss(const TFixtureWorld& world, JsonOut& j, IFixtureChar* fx)
+{
+    j.Begin('{').Field("kind", fx->MonsterKind());
+    fx->WriteMoveTo(j);
+    const TBossState& state = fx->Boss();
+    const int32_t kind = fx->MonsterKind();
+    if (const auto* s = std::get_if<SBaezState>(&state); s && kind == 1)
+    {
+        j.Key("state").Begin('{');
+        WriteBossFields(kBaezFields, j, *s);
+        j.Key("watchers").Begin('[');
+        for (const TSafeRef<TComplexObject>& ref : s->watchers)
+        {
+            if (const TComplexObject* watcher = ref.Get())
+                j.String(world.NameOf(watcher));
+            else
+                j.Null();
+        }
+        j.End(']').End('}');
+    }
+    else if (const auto* s = std::get_if<SSolifugeState>(&state); s && kind == 2)
+    {
+        j.Key("state").Begin('{');
+        WriteBossFields(kSolifugeFields, j, *s);
+        j.Key("brood").Begin('[');
+        for (const int32_t index : s->brood)
+            j.Value(index);
+        j.End(']').End('}');
+    }
+    else if (const auto* s = std::get_if<SJhagaState>(&state); s && kind == 3)
+    {
+        j.Key("state").Begin('{');
+        WriteBossFields(kJhagaFields, j, *s);
+        j.Key("points").Begin('[');
+        for (const S3DPoint& p : s->points)
+            WritePoint(j, p);
+        j.End(']').End('}');
+    }
+    else if (const auto* s = std::get_if<SYhagoroState>(&state); s && kind == 4)
+    {
+        j.Key("state").Begin('{');
+        WriteBossFields(kYhagoroFields, j, *s);
+        j.End('}');
+    }
+    j.End('}');
+}
+
+// What the boss case answers beyond the melee seams.
+struct SBossAnswers
+{
+    const TFixtureWorld* world = nullptr;
+    const JsonValue* cs = nullptr;
+    std::vector<std::unique_ptr<TFixtureProp>> props;
+    size_t madeHandedOut = 0;
+};
+SBossAnswers g_boss;
+constexpr int32_t kBossMadeIndex = 0x7200;     // an id no object has (melee_attack.py MADE_INDEX)
+
+// The registry GetInstance answers from: a fixture character keeps its case
+// id without registering it.
+void RegisterId(TObjectInstance* o, int32_t id)
+{
+    o->SetMapIndex(-1);
+    o->SetMapIndex(id);
+}
+
+TObjectInstance* BossObject(const std::string& name)
+{
+    for (const auto& prop : g_boss.props)
+        if (prop->Who() == name)
+            return prop.get();
+    return g_boss.world->Get(name);
+}
+
+void RecordWho(const char* seam, const TObjectInstance* who)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", seam).FieldString("who", g_boss.world->NameOf(who)).End('}');
+    Seam(j.str());
+}
+
+// The walk of the pane's sectors: the case's `paneobjects`, in order.
+std::vector<TObjectInstance*> CasePaneObjects(TCharacter* self)
+{
+    RecordWho("PaneObjects", self);
+    std::vector<TObjectInstance*> objects;
+    for (const JsonValue& n : (*g_boss.cs)["paneobjects"].Items())
+        objects.push_back(BossObject(n.Str()));
+    return objects;
+}
+
+// NewObject: the def recorded; the case's next `made` character, now in
+// the map; none left, an id no object has.
+int32_t CaseBossNewObject(SObjectDef* def, int32_t imagery)
+{
+    RecordNewObject(def, imagery);
+    const auto& made = (*g_boss.cs)["made"].Items();
+    const size_t n = g_boss.madeHandedOut++;
+    if (n >= made.size())
+        return kBossMadeIndex + (int32_t)n;
+    TCharacter* chr = g_boss.world->Get(made[n].Str());
+    const int32_t id = chr->GetMapIndex();
+    RegisterId(chr, id);
+    return id;
+}
+
+// The boss case's world: the props, the ids GetInstance answers (the case's
+// characters but the `made` ones not yet handed out, and the props), the
+// boss states; the seams above and EndFighting, the tint, the control, the
+// animator. All taken back when the scope ends.
+class SBossScope
+{
+  public:
+    SBossScope(const JsonValue& cs, const TFixtureWorld& world)
+    {
+        g_boss = SBossAnswers{};
+        g_boss.world = &world;
+        g_boss.cs = &cs;
+        for (const JsonValue& p : cs["props"].Items())
+        {
+            SObjectDef def{};
+            def.objclass = (short)p["class"].Int(OBJCLASS_TILE);
+            const TObjectClass* cl = TObjectClass::GetClass(def.objclass);
+            if (!cl)
+                throw std::runtime_error("no class " + std::to_string(def.objclass) + " loaded");
+            def.objtype = (short)cl->FindObjType(p["type"].Str().c_str());
+            if (def.objtype < 0)
+                throw std::runtime_error("class.def has no type '" + p["type"].Str() + "'");
+            def.pos = PointOf(p["pos"]);
+            def.flags = (uint32_t)p["flags"].Int(0);
+            std::vector<std::string> states;
+            for (const JsonValue& st : p["states"].Items())
+                states.push_back(st.Str());
+            g_boss.props.push_back(std::make_unique<TFixtureProp>(&def, p["name"].Str(), std::move(states)));
+            if (const int32_t id = (int32_t)p["id"].Int(0))
+                RegisterId(g_boss.props.back().get(), id);
+        }
+        std::vector<std::string> made;
+        for (const JsonValue& n : cs["made"].Items())
+            made.push_back(n.Str());
+        for (const JsonValue& spec : cs["chars"].Items())
+        {
+            TCharacter* chr = world.Get(spec["name"].Str());
+            const int32_t id = (int32_t)spec["id"].Int(0);
+            if (id && std::find(made.begin(), made.end(), spec["name"].Str()) == made.end())
+                RegisterId(chr, id);
+            if (spec.Has("boss"))
+                ReadBossState(world, world.Fixture(chr), spec["boss"]);
+        }
+        TCharacter::paneObjectsSeam = CasePaneObjects;
+        TCharacter::endFightingSeam = [](TCharacter* self) { RecordWho("EndFighting", self); };
+        TCharacter::tintSeam = [](TCharacter* self, bool tint) { RecordWho(tint ? "Tint" : "Untint", self); };
+        TPlayScreen::controlSeam = [](bool on) {
+            JsonOut j;
+            j.Begin('{').FieldString("seam", "SetControl").Field("on", on ? 1 : 0).End('}');
+            Seam(j.str());
+        };
+        TMapPane::newObjectSeam = CaseBossNewObject;
+        seamCreateAnimator = true;
+        MapPane.CenterOnObj(nullptr);       // no camera object, as the retail fixture's fresh MapPane
+        ClearSeams();       // making the props asks their imagery
+    }
+    ~SBossScope()
+    {
+        MapPane.CenterOnObj(nullptr);       // the case's objects outlive the case (the world keeps them)
+        TCharacter::paneObjectsSeam = nullptr;
+        TCharacter::endFightingSeam = nullptr;
+        TCharacter::tintSeam = nullptr;
+        TPlayScreen::controlSeam = nullptr;
+        TMapPane::newObjectSeam = nullptr;
+        seamCreateAnimator = false;
+        g_boss = SBossAnswers{};
+    }
+    SBossScope(const SBossScope&) = delete;
+    SBossScope& operator=(const SBossScope&) = delete;
+
+    // The dumps: each character's boss, the props, the camera.
+    static void Write(JsonOut& j, const TFixtureWorld& world, const JsonValue& cs)
+    {
+        j.Key("boss").Begin('{');
+        for (const JsonValue& spec : cs["chars"].Items())
+        {
+            j.Key(spec["name"].Str().c_str());
+            WriteBoss(world, j, world.Fixture(world.Get(spec["name"].Str())));
+        }
+        j.End('}');
+        j.Key("props").Begin('{');
+        for (const auto& prop : g_boss.props)
+        {
+            j.Key(prop->Who().c_str()).Begin('{').Field("nowalk", (prop->GetFlags() & OF_NOWALK) ? 1 : 0);
+            j.Field("state", (int32_t)(int16_t)prop->TObjectInstance::GetState()).End('}');
+        }
+        j.End('}');
+        j.Key("camera");
+        if (const TObjectInstance* camera = MapPane.GetCenterOnObj())
+        {
+            const auto* prop = dynamic_cast<const TFixtureProp*>(camera);
+            j.Begin('{').FieldString("obj", prop ? prop->Who() : world.NameOf(camera));
+            j.Field("flags", (int64_t)MapPane.CenterOnFlags()).End('}');
+        }
+        else
+            j.Null();
+    }
+};
 
 // ---- Dumps -------------------------------------------------------------------
 
@@ -717,7 +1081,8 @@ void SetBlockFields(const TFixtureWorld& world, const JsonValue& cs)
 // "button-attack", "button-action", "random-attack", "specific-attack",
 // "resolve-attack", "resolve-hit", "on-attacked", "damage", "resolve-impact",
 // "resolve-block", "resolve-dead", "block", "stop-block", "dodge", "ai",
-// "pulse", "kill-exp", "exp-kill", "exp-skill", "exp-stealth", "add-skill-exp".
+// "per-monster", "pulse", "kill-exp", "exp-kill", "exp-skill", "exp-stealth",
+// "add-skill-exp".
 std::string MeleeCall(const Case& c, std::string& error)
 {
     try
@@ -743,6 +1108,9 @@ std::string MeleeCall(const Case& c, std::string& error)
                 world.Fixture(world.Get(spec["name"].Str()))->ReadAIState(spec["aistate"], look.IsNull() ? nullptr
                                                                          : HelperOrCharacter(world, look.Str()));
             }
+        std::optional<SBossScope> bossScope;
+        if (call == "per-monster" || cs["bossworld"].Bool(false))
+            bossScope.emplace(cs, world);
         TCharacter* me = world.Get(cs["self"].Str());
         const JsonValue& a = cs["args"];
 
@@ -796,6 +1164,22 @@ std::string MeleeCall(const Case& c, std::string& error)
         else if (call == "ai")
         {
             me->AI();
+            j.Field("returned", 0);
+        }
+        else if (call == "per-monster")
+        {
+          // Tick k on game frame `frame` + k, then a Tick record.
+            const JsonValue& g = cs["globals"];
+            const int32_t frame = (int32_t)g["frame"].Int(0);
+            IFixtureChar* fx = world.Fixture(me);
+            for (int32_t k = 0; k < (int32_t)a["ticks"].Int(1); ++k)
+            {
+                PlayScreen.SetFixtureState(frame + k, g["control"].Bool(true), g["ps_5d8"].Bool(false));
+                fx->RunPerMonster();
+                JsonOut t;
+                t.Begin('{').FieldString("seam", "Tick").Field("n", k).End('}');
+                Seam(t.str());
+            }
             j.Field("returned", 0);
         }
         else if (call == "resolve-hit")
@@ -896,6 +1280,8 @@ std::string MeleeCall(const Case& c, std::string& error)
             j.End('}');
         }
         j.End('}');
+        if (bossScope)
+            SBossScope::Write(j, world, cs);
         if (ticking)
         {
             j.Key("pulse").Begin('{');
@@ -927,6 +1313,7 @@ static const bool registered = RegisterTarget("melee-attack-choice", MeleeCall) 
                                RegisterTarget("melee-damage", MeleeCall) &&
                                RegisterTarget("melee-resolvers", MeleeCall) &&
                                RegisterTarget("melee-ai", MeleeCall) &&
+                               RegisterTarget("melee-boss", MeleeCall) &&
                                RegisterTarget("melee-pulse", MeleeCall) &&
                                RegisterTarget("melee-exp", MeleeCall);
 

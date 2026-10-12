@@ -84,7 +84,8 @@ only).
 | C3 | attack choice: ButtonAttack / IsValidAttack / FindButtonAttack / FindPcntAttack / RandomAttack | `0x4d2480` `0x4d1120` `0x4d1ff0` `0x4d1eb0` `0x4d2900` | same | [x] 5206/5206 (`melee-attack-choice`) |
 | C4 | hit resolution: ResolveAttack → ResolveHit (to-hit, tiers), OnAttacked | `0x4c6dd0` `0x4c62b0` | same | [x] 7855/7855 (`melee-hit`) |
 | C5 | block / dodge / impact / dead resolvers, EffectCombatFlash | `0x4d2e30` `0x4d30f0` `0x4d3150` `0x4c74b0` `0x4c7810` `0x4c77a0` `0x4c8500` | same | [x] 2100/2100 (`melee-resolvers`); retail's eight dodge controls (commands 0x30-0x37) in the control table |
-| C3b | the AI as a whole: acquisition, the attack branch, the move branch, the waypoint, AI_PerMonster (non-boss) | `0x4c8b60` `0x4c9b70` | `TCharacter::AI`, `AIAttack`, `AIMove`, `NearestWaypoint`, `AIPerMonster` | [x] 925/925 (`melee-ai`); bosses (Baez, Solifuge, Jhaga, Yhagoro) are BURNDOWN phase H; Wander `0x4c9790` open (M9) |
+| C3b | the AI as a whole: acquisition, the attack branch, the move branch, the waypoint, AI_PerMonster (non-boss) | `0x4c8b60` `0x4c9b70` | `TCharacter::AI`, `AIAttack`, `AIMove`, `NearestWaypoint`, `AIPerMonster` | [x] 925/925 (`melee-ai`); the bosses are C3c; Wander `0x4c9790` open (M9) |
+| C3c | the four bosses: AI_PerMonster's cases, Baez (the crowd, the stuns, the fake death and the throw), Solifuge (the stun, the sky walk, the brood, the slam), Jhaga (the teleports and casts), Yhagoro (walking or fighting) | `0x4c9b70`: `0x4c9ce8` `0x4cbb1d` `0x4ccaa4` `0x4cd07d` | `TCharacter::AIPerMonster`, src/bossai.cpp | [x] 1925/1925 (`melee-boss`; every reachable block of the four reached, the rest explained; 19 of 20 mutations caught, the survivor equivalent; forensics/BOSS_AI.md). Seam left: retail's EndFighting `0x4d3fd0` (the port's is 1998's) |
 | C6 | Pulse: regen, fatigue, poison, chains, death | `0x4c1bb0`, TPlayer `0x518aa0` | `TCharacter::Pulse`, `TPlayer::Pulse` | [x] 1364/1364 (`melee-pulse`; 14 of 15 mutations caught, the survivor a no-op; CHARACTER_PULSE.md) |
 | C7 | experience and level-up | `0x51a630` | `AwardKillExp` / `AwardSkillExp` | [x] 285/285 (`melee-exp`; five mutations caught; EXPERIENCE.md) |
 
@@ -372,6 +373,18 @@ Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.
     TPlayScreen (the fixtures set the game time apart: SetFixtureGameTime).
     Retail's time of day is (game time × 1440 / DAYLENGTH) mod 1440
     (`+0x690`); the port's is a stand-in (the gameflow / lighting track's).
+16. **The bosses (kata C3c, 2026-10-11; forensics/BOSS_AI.md).** The port
+    had only AI_PerMonster's kind; now all four cases are retail's. They are
+    where the charflags the combat code reads get set: Baez is unkillable
+    and can't kill (`0x88`), Solifuge takes a seventh of the damage on the
+    ground and can't be hurt or targeted in the air, Yhagoro halves physical
+    damage walking and magic fighting, and a sword can't kill him (the
+    player's `0x80`). TComplexObject's Try / Force are retail's `0x4111a0` /
+    `0x429990` (the script's `try` / `force` too): Try drops a refused
+    block, Force waits while the doing block holds priority over a desired
+    one. CastByName (`0x4d5b90`) now gates before the spell lookup, which
+    DoAttack's MAGICATTACK calls without the gates (CastVariant), as retail
+    does; the seams follow (castByNameSeam whole, castSeam past the gates).
 
 ## 6. Layouts used by the fixtures
 
@@ -464,6 +477,7 @@ python3 tools/retail_ab/retail_ab.py combat-perceive    # M9b
 python3 tools/retail_ab/retail_ab.py combat-go-world    # M4
 python3 tools/retail_ab/retail_ab.py melee-attack-choice   # C3 (melee-hit C4, melee-damage C2,
                                                            # melee-resolvers C5, melee-ai C3b)
+python3 tools/retail_ab/retail_ab.py melee-boss         # C3c, the four bosses (--case baez. etc.)
 python3 tools/retail_ab/retail_ab.py spell-cast         # S2 (spell-data D1s; spell-lookup, -talismans,
                                                         # -quick S1; spell-new, -damage S3)
 python3 tools/retail_ab/retail_ab.py missile-bow        # S4 (missile-area, -arrow, -fireball)
@@ -477,7 +491,8 @@ python3 tools/retail_ab/retail_ab.py combat-go --all --case go.player.cf1.f0.b64
 - Cases: `tools/retail_ab/combat_targets.py` (generators and the compare);
   `targets_data.py` for D1 (cases are install folders written under the
   output directory; the edge case's files are in
-  `tools/retail_ab/cases/combat_data/`).
+  `tools/retail_ab/cases/combat_data/`); `targets_melee.py` for C, and
+  `targets_boss.py` for C3c (the bosses).
 - Retail: `tools/retail_runtime/slots/combat/` (versioned with the emulator;
   `fixturekit.py` holds the shared fixture helpers):
   `guest.py` (layouts, shared seams, fault reports with the callers on the

@@ -27,6 +27,9 @@
 #include "spell.h"
 #endif
 
+#include "bossai.h"
+
+#include <array>
 #include <vector>
 
 // FindChar flags
@@ -89,10 +92,12 @@ class TCharacter : public TComplexObject
     using CastSeam = bool (*)(TCharacter* self, const char* spell, TObjectInstance** targets, int32_t numtargs,
         const S3DPoint* source);
     static inline CastSeam castSeam = nullptr;
-      // CastByName (retail SpellList::Find 0x0053f010 + Cast 0x004d5c20),
-      // which DoAttack calls for a MAGICATTACK
+      // CastVariant (retail SpellList::Find 0x0053f010 + Cast 0x004d5c20),
+      // which DoAttack calls for a MAGICATTACK and CastByName past its gates
+    static inline CastSeam castByNameSeam = nullptr;
+      // CastByName whole (retail 0x004d5b90), gates and all
     static inline CastSeam castByTalismansSeam = nullptr;
-      // CastByTalismans (retail 0x004d5c20), as castSeam for CastByName
+      // CastByTalismans (retail 0x004d5c20), as castByNameSeam for CastByName
     using IsEnemySeam = bool (*)(TCharacter* self, TCharacter* other);
     static inline IsEnemySeam isEnemySeam = nullptr;
       // IsEnemy (retail 0x004c89c0)
@@ -123,6 +128,17 @@ class TCharacter : public TComplexObject
     static inline NearbyCharactersSeam nearbyCharactersSeam = nullptr;
       // The characters near a point that CharBlocking and FindCharacters
       // walk (retail's map iterator 0x0044ceb0 / 0x0044d080), in map order
+    using PaneObjectsSeam = std::vector<TObjectInstance*> (*)(TCharacter* self);
+    static inline PaneObjectsSeam paneObjectsSeam = nullptr;
+      // The objects a walk of the pane's sector window gives (retail's map
+      // iterator 0x0044cf80 with no rect, then 0x0044d080), in map order
+    using EndFightingSeam = void (*)(TCharacter* self);
+    static inline EndFightingSeam endFightingSeam = nullptr;
+      // EndFighting (retail 0x004d3fd0; the port's is still 1998's), which
+      // Baez's fall calls on the player
+    using TintSeam = void (*)(TCharacter* self, bool tint);
+    static inline TintSeam tintSeam = nullptr;
+      // TintMaterials / UntintMaterials (retail 0x004d6a30 / 0x004d6b40)
 
     bool IsAnimatorPermanent() const override { return true; }
         // Characters always own a TObjectAnimator from construction. See
@@ -245,9 +261,13 @@ class TCharacter : public TComplexObject
       // The gates every cast opens with (retail inline in 0x004d5c20, 0x004d5b90,
       // 0x004d5ae0): alive, not locked in an interactive move, not immobile,
       // iced or paralyzed
-    bool CastByName(char* name, TObjectInstance* *target = nullptr, int32_t numtargs = 0, S3DPoint* sourcepos = nullptr);
-      // REVSYNC: TCharacter::CastByName @ 0x004d5b90 -- the variant of that
-      // name, cast by its talismans
+    bool CastByName(const char* name, TObjectInstance* *target = nullptr, int32_t numtargs = 0, S3DPoint* sourcepos = nullptr);
+      // REVSYNC: TCharacter::CastByName @ 0x004d5b90 -- the gates, then
+      // CastVariant
+    bool CastVariant(const char* name, TObjectInstance* *target = nullptr, int32_t numtargs = 0, S3DPoint* sourcepos = nullptr);
+      // The variant of that name (TSpellList::GetVariantDataByName 0x0053f010),
+      // cast by its talismans: CastByName past its gates, and DoAttack's
+      // MAGICATTACK (0x004d2286), which gates for itself
     bool CastByTalismans(char* talismans, TObjectInstance* *target = nullptr, int32_t numtargs = 0, S3DPoint* sourcepos = nullptr);
       // REVSYNC: TCharacter::CastByTalismans @ 0x004d5c20 -- the manager's
       // cast; a player's failed cast of a spell with a cost fizzles
@@ -432,20 +452,25 @@ class TCharacter : public TComplexObject
     // Retail charflags (+0x110) bits the combat code reads:
     static constexpr uint32_t kCharFlagNoTurn        = 0x4;       // DoAttack / Block / EndFighting leave the move
                                                                   // angle alone; the AI doesn't acquire (name unknown)
-    static constexpr uint32_t kCharFlagUnkillable    = 0x8;       // Damage leaves at least 1 health (setter unidentified)
+    static constexpr uint32_t kCharFlagUnkillable    = 0x8;       // Damage leaves at least 1 health (Baez; Solifuge
+                                                                  // in the air: BOSS_AI.md)
+    static constexpr uint32_t kCharFlagSkyWalkf      = 0x40;      // Solifuge's "skywalkf" plays (no reader found)
     static constexpr uint32_t kCharFlagNoKill        = 0x80;      // IsValidAttack refuses a killing blow but an
-                                                                  // interactive death (setter unidentified)
+                                                                  // interactive death (Baez, Solifuge; the player
+                                                                  // with a sword against Yhagoro)
     static constexpr uint32_t kCharFlagBuffed        = 0x20;      // a spell's stat effect was put on (TSpell ctor
                                                                   // 0x0053f190); a buff cast ends his others
-    static constexpr uint32_t kCharFlagDamageSeventh = 0x10;      // CalculateDamage /7 (not freeze); setter unidentified
-    static constexpr uint32_t kCharFlagHalfPhysical  = 0x100;     // CalculateDamage halves physical; setter unidentified
-    static constexpr uint32_t kCharFlagHalfMagic     = 0x200;     // CalculateDamage halves magic (6-9); setter unidentified
+    static constexpr uint32_t kCharFlagDamageSeventh = 0x10;      // CalculateDamage /7 (not freeze); Solifuge on the ground
+    static constexpr uint32_t kCharFlagHalfPhysical  = 0x100;     // CalculateDamage halves physical; Yhagoro walking
+    static constexpr uint32_t kCharFlagHalfMagic     = 0x200;     // CalculateDamage halves magic (6-9); Yhagoro fighting
+    static constexpr uint32_t kCharFlagWalking       = 0x400;     // Yhagoro walking (no reader found)
+    static constexpr uint32_t kCharFlagFighting      = 0x800;     // Yhagoro fighting (no reader found)
     static constexpr uint32_t kCharFlagWalkPrefix    = 0x2000;    // CombatAnimName tries a "w" name in the walk root
     static constexpr uint32_t kCharFlagWalkFighter   = 0x4000;    // fights in its walk root (BeginFighting, AI)
-    static constexpr uint32_t kCharFlagNotTargetable = 0x8000;    // IsValidTarget refuses (setter unidentified)
+    static constexpr uint32_t kCharFlagNotTargetable = 0x8000;    // IsValidTarget refuses (the bosses, BOSS_AI.md)
     static constexpr uint32_t kCharFlagPlayAnimRoots = 0x10000;   // a PLAYANIM "c..." / "w..." needs that root
     static constexpr uint32_t kCharFlagDeathHold     = 0x1000;    // the player's death screen waits (TPlayer::Pulse
-                                                                  // 0x00518b46; setter unidentified)
+                                                                  // 0x00518b46); Solifuge holds it while he fights
     static constexpr uint32_t kCharFlagImpaleRelease = 0x20000;   // Yhagoro's impale let go of the player (Pulse
                                                                   // 0x004c200c): his next pulse walks him on
     static constexpr uint32_t kCharFlagDead          = 0x40000;   // Died has been told (Damage; retail's Pulse
@@ -696,7 +721,46 @@ class TCharacter : public TComplexObject
     TObjectInstance* NearestWaypoint(const S3DPoint& centre);
       // The waypoint in sight nearest `centre`, or none
     void AIPerMonster();
-      // The boss kind (retail AI_PerMonster's first part)
+      // A boss's own behaviour, before the AI's: the kind (once), then its
+      // case (retail AI_PerMonster 0x004c9b70; BOSS_AI.md)
+
+    // The bosses (src/bossai.cpp; BOSS_AI.md §2-§5)
+    void BossBaez(SBaezState& s);
+      // The crowd, then the stuns above 1 health or the fall at 1
+    void BaezCrowd(SBaezState& s);
+      // The crowd faces the fight and cheers or boos it
+    void BaezStuns(SBaezState& s);
+      // Above 1 health: a stun pause at each 20% lost
+    void BaezFall(SBaezState& s);
+      // At 1 health: the fake death, the walk to the table, the throw
+    bool BaezSetUpFall(SBaezState& s);
+      // Its first tick: the ring opens, the crowd leaves, the table is found
+      // (false: there is none, and Baez is no boss any more)
+    void BaezWalk(SBaezState& s, const S3DPoint& me);
+      // The player and Baez walk to their spots
+    void BaezWalkOn(SBaezState& s, const S3DPoint& me, bool playerthere);
+      // Baez gets up and walks to his spot
+    void BaezThrow(SBaezState& s);
+      // The player throws him into the table
+    void BossSolifuge(SSolifugeState& s);
+      // The bands, the paralysis, the stun, the landing slam, the sky walk
+    void SolifugeSkyWalk(SSolifugeState& s, const S3DPoint& me, const S3DPoint& playerpos);
+      // Up into the roof, the brood called, back down
+    void SolifugeBrood(SSolifugeState& s);
+      // A spider for each of the three slots whose one is gone or dead
+    void BossJhaga(SJhagaState& s);
+      // The rest, then five teleports casting at the player
+    bool JhagaSetUp(SJhagaState& s);
+      // The four waypoints round him (false: fewer, and Jhaga is no boss)
+    void BossYhagoro(SYhagoroState& s);
+      // Walking or fighting, by the band of health he is in
+    std::vector<TObjectInstance*> PaneObjects();
+      // Every object of the pane's sector window, in map order (retail's
+      // map iterator 0x0044cf80 with no rect)
+    void TintMaterials();
+    void UntintMaterials();
+      // The paralysed Solifuge's blue: the imagery's materials saved and
+      // tinted, then put back (retail 0x004d6a30 / 0x004d6b40)
 
     // Pulse's steps (retail 0x004c1bb0, CHARACTER_PULSE.md §2)
     void PulseCorpse();
@@ -881,13 +945,18 @@ protected:
   // when no visible target overrides it: the waypoint AI 0x004c8b60 heads
   // for (Wander 0x004c9790 writes it too, not ported).
     TObjectInstance* ai_lookat = nullptr;
+  // Retail +0x280: the boss kind AI_PerMonster 0x004c9b70 gives, once (1
+  // Baez, whom magic can't hurt, 2 Solifuge, 3 Jhaga, 4 Yhagoro, -1 any
+  // other); +0x284 the boss's own state (bossai.h).
+    static constexpr int32_t kMonsterBaez = 1, kMonsterSolifuge = 2, kMonsterJhaga = 3, kMonsterYhagoro = 4;
+    int32_t monsterkind = 0;
+    TBossState bossstate;
+  // Retail +0x298 / +0x29c: what TintMaterials saved, each material's
+  // diffuse then emissive red, green and blue; empty when nothing is.
+    std::vector<std::array<float, 6>> savedmaterials;
   // Retail +0x28c / +0x290: the player's last attack button and how many
   // times running it was pressed (ButtonAttack 0x004d2480's same-button
   // rule); SetFighting resets them.
-  // Retail +0x280: the boss kind AI_PerMonster 0x004c9b70 gives, once (1
-  // Baez, whom magic can't hurt, 2 Solifuge, 3 Jhaga, 4 Yhagoro, -1 any other).
-    static constexpr int32_t kMonsterBaez = 1, kMonsterYhagoro = 4;
-    int32_t monsterkind  = 0;
     int32_t lastbutton   = -1;
     int32_t buttonrepeat = 0;
 };

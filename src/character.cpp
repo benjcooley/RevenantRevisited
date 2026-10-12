@@ -324,6 +324,11 @@ void TCharacter::ClearChar()
     glimpse = noise = -1;         // Reset glimpse and noise values
     snapticks = -1;               // No snapping
     lastbowshot = 0;              // Reset bow shot time so we can shoot bow immediately
+  // REVSYNC: 0x004c1ab8 -- no boss kind yet (AI_PerMonster looks again),
+  // no boss state, no materials saved.
+    monsterkind = 0;
+    bossstate = std::monostate{};
+    savedmaterials.clear();
 
   // Reset hasseen list
     memset(&hasseen, 0, sizeof(SHasSeen) * MAXHASSEEN);
@@ -3301,19 +3306,55 @@ TObjectInstance* TCharacter::NearestWaypoint(const S3DPoint& centre)
     return waypoints[best];
 }
 
-// REVSYNC: AI_PerMonster @ 0x004c9b70, its first part: the boss kind, by
-// type name, once (+0x280: Baez 1, Solifuge 2, Jhaga 3, Yhagoro 4, any other
-// -1). The bosses' behaviours (cases 1-4, 0x004c9ce8-0x004cd491, each with
-// its state at +0x284) aren't ported: docs/gameplay/BURNDOWN.md phase H.
+// REVSYNC: AI_PerMonster @ 0x004c9b70 -- the boss kind, by type name, once
+// (+0x280: Baez 1, Solifuge 2, Jhaga 3, Yhagoro 4, any other -1), a boss
+// with a fresh state (+0x284); then the boss's own tick (the switch at
+// 0x004c9ce1; src/bossai.cpp, docs/gameplay/forensics/BOSS_AI.md). AI
+// ignores what retail returns (1 for a boss).
 void TCharacter::AIPerMonster()
 {
-    if (monsterkind != 0)
-        return;
-    constexpr const char* kBosses[] = {"Baez", "Solifuge", "Jhaga", "Yhagoro"};
-    monsterkind = -1;
-    for (int32_t k = 0; k < 4; ++k)
-        if (!stricmp(GetTypeName(), kBosses[k]))
-            monsterkind = k + 1;
+    if (monsterkind == 0)
+    {
+        const char* type = GetTypeName();
+        monsterkind = -1;
+        if (!stricmp(type, "Baez"))
+        {
+            monsterkind = kMonsterBaez;
+            bossstate.emplace<SBaezState>();
+        }
+        else if (!stricmp(type, "Solifuge"))
+        {
+            monsterkind = kMonsterSolifuge;
+            bossstate.emplace<SSolifugeState>();
+        }
+        else if (!stricmp(type, "Jhaga"))
+        {
+            monsterkind = kMonsterJhaga;
+            bossstate.emplace<SJhagaState>();
+        }
+        else if (!stricmp(type, "Yhagoro"))
+        {
+            monsterkind = kMonsterYhagoro;
+            bossstate.emplace<SYhagoroState>();
+        }
+    }
+    switch (monsterkind)
+    {
+        case kMonsterBaez:
+            BossBaez(BossStateOf<SBaezState>(bossstate));
+            break;
+        case kMonsterSolifuge:
+            BossSolifuge(BossStateOf<SSolifugeState>(bossstate));
+            break;
+        case kMonsterJhaga:
+            BossJhaga(BossStateOf<SJhagaState>(bossstate));
+            break;
+        case kMonsterYhagoro:
+            BossYhagoro(BossStateOf<SYhagoroState>(bossstate));
+            break;
+        default:
+            break;
+    }
 }
 
 bool TCharacter::CanHearCharacter(TCharacter* chr)
@@ -4807,7 +4848,7 @@ bool TCharacter::DoAttack(int32_t attacknum, int32_t impactnum, int32_t damage, 
         CombatTrace::Event(this, "cast", "spell=%s\ttarget=%s", ad->spellname,
                            targ && targ->GetName() ? targ->GetName() : "-");
         TObjectInstance* target = targ;
-        return CastByName(ad->spellname, &target, targ ? 1 : 0, &ad->spellsource);
+        return CastVariant(ad->spellname, &target, targ ? 1 : 0, &ad->spellsource);
     }
     CombatTrace::Event(this, "attack", "attack=%s\ttarget=%s\tdamage=%d", ad->attackname,
                        targ && targ->GetName() ? targ->GetName() : "-", damage);
@@ -5434,6 +5475,11 @@ bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
 
 bool TCharacter::EndFighting()
 {
+    if (endFightingSeam)
+    {
+        endFightingSeam(this);
+        return true;
+    }
     if (!IsFighting())
         return true;
 
@@ -5929,12 +5975,19 @@ bool TCharacter::Cast(char* talismans, S3DPoint* sourcepos)
     return CastByTalismans(talismans, &targ, targ ? 1 : 0, sourcepos);
 }
 
-bool TCharacter::CastByName(char* name, TObjectInstance* *target, int32_t numtargs, S3DPoint* sourcepos)
+bool TCharacter::CastByName(const char* name, TObjectInstance* *target, int32_t numtargs, S3DPoint* sourcepos)
+{
+    if (castByNameSeam)
+        return castByNameSeam(this, name, target, numtargs, sourcepos);
+    if (!MayCast())
+        return false;
+    return CastVariant(name, target, numtargs, sourcepos);
+}
+
+bool TCharacter::CastVariant(const char* name, TObjectInstance* *target, int32_t numtargs, S3DPoint* sourcepos)
 {
     if (castSeam)
         return castSeam(this, name, target, numtargs, sourcepos);
-    if (!MayCast())
-        return false;
     SSpellVariant* variant = SpellList.GetVariantDataByName(name);
     if (!variant)
         return false;

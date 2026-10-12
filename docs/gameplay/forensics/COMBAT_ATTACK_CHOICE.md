@@ -1150,8 +1150,8 @@ the target, a PLAYANIM under way, chase seen or heard, lost: the target's
 own fight in sight, the waypoint search over case helpers in sight or
 walled, of another type, near and far, more than ten, the committed one
 reached or not), the retreat state, bow and walk roots. Coverage: AI
-202/203 blocks; AI_PerMonster 11/27 (the bosses' state allocations: the
-bosses aren't ported). The fixture's helpers are real helper objects of the
+202/203 blocks; AI_PerMonster's dispatch 11/27 here (the bosses' kata,
+C3c, reaches all of it). The fixture's helpers are real helper objects of the
 case's type (class.def's "Waypoint", "Axis") on both sides; their line of
 sight is the case's `walls`.
 
@@ -1160,8 +1160,8 @@ Corrections to §3.10:
 - AI_PerMonster, for anyone but the four bosses, only sets `+0x280` to −1
   once. Baez 1, Solifuge 2, Jhaga 3, Yhagoro 4 each get a zeroed state at
   `+0x284` (0x58 / 0x34 / 0x5c / 0xc bytes) and their behaviour
-  (`0x4c9ce8`–`0x4cd491`; Baez's sets charflags `0x88` every tick).
-  **Not ported**: the bosses (BURNDOWN phase H).
+  (`0x4c9ce8`–`0x4cd491`; Baez's sets charflags `0x88` every tick):
+  ported, kata C3c (`melee-boss`, [BOSS_AI.md](BOSS_AI.md)).
 - `0x668110` is the "dummies" cheat (the port's NoAI), `0x668154` the
   editor flag (Editor).
 - NetOwner (slot `0x178`, `0x4d6020`): `[0x676838]` unless `+0x264` is set
@@ -1178,4 +1178,4 @@ Corrections to §3.10:
   WanderToWaypoint and its fields are gone.
 
 Left: Wander `0x4c9790` (Pulse runs it before AI for a character with
-charflags `0x100000`, the player AI) and the four bosses' behaviours.
+charflags `0x100000`, the player AI). The four bosses: [BOSS_AI.md](BOSS_AI.md).

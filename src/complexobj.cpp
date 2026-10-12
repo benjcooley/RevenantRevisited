@@ -292,6 +292,31 @@ void TComplexObject::SetDoing(PTActionBlock ab)
     root->interrupt = false;    // Now that we're doing, don't interrupt
 }
 
+// REVSYNC: 0x004111a0 (the script's `try`, the bosses' wants) -- an ANIMATE
+// block of `state` facing the facing, desired; refused, it is dropped.
+void TComplexObject::Try(const char *state)
+{
+    auto* ab = new TActionBlock(state, ACTION_ANIMATE);
+    ab->angle = GetFace();
+    if (!SetDesired(ab, 0))
+        DropUnheld(ab);
+}
+
+// REVSYNC: 0x00429990 (the script's `force`, the bosses) -- nothing while the
+// doing block has priority over a desired one waiting (COM_EXECUTING); else
+// an ANIMATE block of `state` facing the facing, forced. A refused block is
+// dropped, where retail leaks it.
+int32_t TComplexObject::Force(const char *state)
+{
+    if (doing && doing->priority && desired != doing)
+        return COM_EXECUTING;
+    auto* ab = new TActionBlock(state, ACTION_ANIMATE);
+    ab->angle = GetFace();
+    const int32_t result = ForceCommand(ab, 0, 0);
+    DropUnheld(ab);
+    return result;
+}
+
 // REVSYNC: SetDesired @ 0x004db3a0 -- a block already waiting stays while
 // the one being done has priority (retail tests doing's priority; the 1998
 // code tested the waiting block's); false then, and the caller keeps `ab`.

@@ -24,8 +24,10 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(REPO / 'tools' / 'retail_runtime' / 'slots' / 'combat'))
 MAIN = Path('/Users/benjamincooley/projects/RevenantRevisited/RevenantRevisited')
 
-# Switch tables inside the covered functions: (table, entries).
-JUMP_TABLES = [(0x4d1db8, 4)]
+# Switch tables of the covered functions: (table, entries); a target in a
+# function's range starts a block there, wherever the table lies (AI_PerMonster's
+# boss switch and Jhaga's hop switch sit past the function's end).
+JUMP_TABLES = [(0x4d1db8, 4), (0x4cd4ac, 4), (0x4cd4bc, 6)]
 
 
 def image():
@@ -59,9 +61,10 @@ def blocks(read, lo, hi):
     insns = {i.address: i for i in md.disasm(read(lo, hi - lo), lo)}
     starts = {lo}
     for table, n in JUMP_TABLES:
-        if lo <= table < hi:
-            for k in range(n):
-                starts.add(struct.unpack('<I', read(table + 4 * k, 4))[0])
+        for k in range(n):
+            target = struct.unpack('<I', read(table + 4 * k, 4))[0]
+            if lo <= target < hi:
+                starts.add(target)
     for a, ins in insns.items():
         m = ins.mnemonic
         if m.startswith('j') or m == 'call' or m.startswith('ret'):
