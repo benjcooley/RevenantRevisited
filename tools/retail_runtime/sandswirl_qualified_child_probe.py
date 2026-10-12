@@ -110,9 +110,24 @@ def run(executable, boot, output, substitute=False, spell_control=False):
     events, draws, rng = [], [], [0]
     quicksands = []
     queries = []
+    particle_calls = []
+    particle_packets = []
+    child_render = [False]
+    particle_object = [None]
     def observe(uc,address,*_):
         sp=uc.reg_read(UC_X86_REG_ESP)
-        if address == 0x58c582:
+        if address == 0x40eef0:
+            if child_render[0]: particle_object[0] = v.u32(sp+4)
+        elif address == 0x40a8f0:
+            if child_render[0]:
+                obj=v.u32(sp+4)
+                particle_packets.append(dict(variant=particle_object[0],position_hex=bytes(uc.mem_read(obj+0x10,12)).hex()))
+        elif address in (0x4e55b0,0x4e54b0):
+            parameters=v.u32(sp+4) if address==0x4e55b0 else sp+4
+            particle_calls.append(dict(address=hex(address),tick=v.u32(0x65cb38),
+                                       seed=v.u32(call_tls[0]+0x14),rng_calls=rng[0],
+                                       parameters_hex=bytes(uc.mem_read(parameters,176)).hex()))
+        elif address == 0x58c582:
             rng[0] += 1
         elif address == 0x4ee248:
             quicksands.append(uc.reg_read(UC_X86_REG_EAX))
@@ -130,7 +145,8 @@ def run(executable, boot, output, substitute=False, spell_control=False):
             events.append(dict(address=hex(address),definition_hex=bytes(uc.mem_read(v.u32(sp+4),52)).hex()))
         else:
             events.append(dict(address=hex(address),result=hex(uc.reg_read(UC_X86_REG_EAX))))
-    for address in (0x58c582,0x56eb30,0x450e40,0x4ede62,0x4edeb1,0x4edebc,0x4ee248,0x4ee169):
+    call_tls=[call(0x58fbf1)]
+    for address in (0x40eef0,0x40a8f0,0x4e55b0,0x4e54b0,0x58c582,0x56eb30,0x450e40,0x4ede62,0x4edeb1,0x4edebc,0x4ee248,0x4ee169):
         v.uc.hook_add(UC_HOOK_CODE,observe,begin=address,end=address)
     call(0x58c575,(1,))
     tls=call(0x58fbf1)
@@ -170,6 +186,7 @@ def run(executable, boot, output, substitute=False, spell_control=False):
                     call(v.u32(v.u32(obj)+0x110),this=obj)
             assert v.u32(parent+0xfc)==min(tick,300)
             draws.clear()
+            particle_packets.clear()
             sw.clear()
             call(0x416f70,this=0x65a57c)
             split=[]
@@ -184,13 +201,15 @@ def run(executable, boot, output, substitute=False, spell_control=False):
                 call(0x54dd70,(0,1279,0,959,1280),this=sw.camera)
                 v.put_u32(0x675fc0,640)
                 v.put_u32(0x675fc4,480)
+                child_render[0] = animator == childanim
                 call(v.u32(v.u32(animator)+52),this=animator,instruction_limit=100000000)
+                child_render[0] = False
                 call(0x40eb00,this=animator)
                 split.append(len(draws)-start)
             call(0x416fb0,this=0x65a57c)
             assert split[0]==0
             raw=v.surface_bytes('screen')
-            row=dict(tick=tick,state=state(),draw_counts=split,
+            row=dict(tick=tick,state=state(),draw_counts=split,particle_packets=list(particle_packets),
                      draws_sha256=hashlib.sha256(json.dumps(draws,sort_keys=True).encode()).hexdigest(),
                      rgb565_sha256=hashlib.sha256(raw).hexdigest(),
                      nonzero_pixels=sum(x[0]!=0 for x in struct.iter_unpack('<H',raw)))
@@ -236,6 +255,7 @@ def run(executable, boot, output, substitute=False, spell_control=False):
                 records=rows,fault=fault,resource_sha256=resources,
                 named_spell_control="Quicksand" if spell_control else None,
                 loaded_spell_variants=spell_inventory,queries=queries,actors_before=actors_before,
+                particle_calls=particle_calls,
                 actors_after=[f.dump(a) for a in actors],
                 actor_map_indices=[v.u32(a+0x40) for a in actors],
                 viewport=[1280,960],center=[640,480],source=[3185,3185,16],camera=[3185,3185,0],

@@ -1,0 +1,24 @@
+#include "effects/seekingparticles.h"
+#include <cassert>
+#include <cstring>
+#include <cstdio>
+using namespace retail_seeking_particles;
+int main() {
+    Params p;p.count=1;p.minlife=p.maxlife=3;p.trails=3;p.dir={1,2,3};p.gravity=.5f;
+    Random r{7,0};State s;assert(s.Init(p,4,r));assert(r.calls==6);
+    const auto before=s.pool;const auto seed=r.seed;unsigned draws=0;
+    s.Render([&](int variant,Vec pos){assert(variant==0);if(draws==2)assert(pos.x==2&&pos.y==4&&pos.z==5.5f);++draws;});
+    assert(draws==3 && r.seed==seed && std::memcmp(before.data(),s.pool.data(),sizeof(Particle))==0);
+    Params target=p;target.target_count=1;assert(!s.ResetTargets(target,r));
+    p.target_count=1;p.seeking=1;p.seekz=41;p.speed=5;p.turn=.5f;p.targets[0]={20,10,100};p.killobj=1;
+    assert(s.Init(p,4,r));target=p;target.seekz=0;target.targets[0]={-20,10,100};
+    const auto resetseed=r.seed;assert(s.ResetTargets(target,r));assert(s.params.seekz==41 && r.seed==resetseed);
+    s.Advance();assert(s.pool[0].vel.x!=1);s.Advance();s.Advance();assert(!s.killed);s.Advance();assert(s.killed);
+    auto stopped=s.pool;s.Advance();assert(std::memcmp(stopped.data(),s.pool.data(),sizeof(Particle))==0);
+    draws=0;s.Render([&](int,Vec){++draws;});assert(draws==0);
+    p.count=0;assert(!s.Init(p,4,r));p.count=1;p.target_count=6;assert(!s.Init(p,4,r));
+    p.target_count=1;p.bounce=1;p.seeking=0;p.pos={0,0,-2};p.dir={0,0,-2};p.gravity=0;p.trails=8;
+    assert(s.Init(p,4,r));draws=0;s.Render([&](int,Vec){++draws;});assert(draws==1);
+    s.Advance();assert(s.pool[0].life==0);s.Advance();assert(s.killed);
+    std::puts("PASS: render immutability/order/bounce, equal-range RNG, target reset/seekz, completion and invalid allocation guards");
+}
