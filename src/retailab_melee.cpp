@@ -210,16 +210,19 @@ bool CaseSeesMelee(TCharacter* self, TCharacter* chr, int32_t angle)
     return seen;
 }
 
-// The helpers near a point: the case's `waypoints` ({name, pos, type}, in
-// the order the map gives them), each a helper object of that type (with a
-// fixture imagery of no states, kept as the world's characters' are: nothing
-// here draws). Made before the case's seams are cleared.
+// The helpers near a point: the case's `waypoints` ({name, pos, type,
+// level}, in the order the map gives them), each a helper object of that
+// type (with a fixture imagery of no states, kept as the world's
+// characters' are: nothing here draws) at map index kHelperIndex + k. Made
+// before the case's seams are cleared.
 struct SCaseHelper
 {
     std::string name;
     std::unique_ptr<TObjectInstance> object;
+    int32_t level = 0;
 };
 std::vector<SCaseHelper> g_helpers;
+constexpr int32_t kHelperIndex = 0x7000;        // map indices the helpers take (retail HELPER_INDEX)
 
 void MakeHelpers(const JsonValue& cs)
 {
@@ -234,8 +237,11 @@ void MakeHelpers(const JsonValue& cs)
         if (def.objtype < 0)
             throw std::runtime_error("no helper type " + type);
         def.pos = S3DPoint((int32_t)w["pos"][0].Int(), (int32_t)w["pos"][1].Int(), (int32_t)w["pos"][2].Int());
+        def.level = (uint16_t)w["level"].Int(0);
         auto* imagery = new TFixtureImagery(TFixtureImagery::Register({}), w["name"].Str(), {}, false);
-        g_helpers.push_back({w["name"].Str(), std::make_unique<TObjectInstance>(&def, imagery)});
+        auto object = std::make_unique<TObjectInstance>(&def, imagery);
+        object->SetMapIndex(kHelperIndex + (int32_t)g_helpers.size());
+        g_helpers.push_back({w["name"].Str(), std::move(object), (int32_t)def.level});
     }
 }
 
@@ -292,6 +298,17 @@ bool CaseHelperSight(const S3DPoint& from, const S3DPoint& to)
     j.Field("result", clear ? 1 : 0).End('}');
     Seam(j.str());
     return clear;
+}
+
+// SetWalkMode / SetRunMode / EndFighting (melee_attack.py WANDER_SEAMS):
+// recorded, done.
+bool CaseModeCall(const char* seam, TCharacter* self)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", seam).FieldString("who", g_answers.world->NameOf(self)).Field("result", 1);
+    j.End('}');
+    Seam(j.str());
+    return true;
 }
 
 void CaseEffectBurst(TCharacter* self, const char* name, int32_t height)
@@ -395,9 +412,29 @@ class SMeleeScope
         TCharacter::damageSeam = cs["seam_damage"].Bool(true) ? CaseDamage : nullptr;
         TCharacter::effectBurstSeam = CaseEffectBurst;
         TCharacter::effectCombatFlashSeam = CaseCombatFlash;
-        TCharacter::waypointsSeam = CaseWaypoints;
-        if (!g_helpers.empty())
-            TMapPane::lineOfSightSeam = CaseHelperSight;
+        // With `real_map` the waypoint search and its line of sight run as
+        // the port's own (FindObjectsInRange over the helpers, LineOfSight
+        // over the case's ground); otherwise the case answers them.
+        if (cs["real_map"].Bool(false))
+        {
+            std::vector<SMapObject> walked;
+            for (const SCaseHelper& h : g_helpers)
+                walked.push_back(SMapObject{h.object.get(), h.level});
+            SetMapObjects(std::move(walked));
+        }
+        else
+        {
+            TCharacter::waypointsSeam = CaseWaypoints;
+            if (!g_helpers.empty())
+                TMapPane::lineOfSightSeam = CaseHelperSight;
+        }
+        // Wander's callees (kata M9's `seam_wander`): recorded.
+        if (cs["seam_wander"].Bool(false))
+        {
+            TCharacter::setWalkModeSeam = [](TCharacter* self) { return CaseModeCall("SetWalkMode", self); };
+            TCharacter::setRunModeSeam = [](TCharacter* self) { return CaseModeCall("SetRunMode", self); };
+            TCharacter::endFightingSeam = [](TCharacter* self) { return CaseModeCall("EndFighting", self); };
+        }
         Editor = cs["globals"]["editor"].Bool(false);
         NoAI = cs["globals"]["ai_off"].Bool(false);       // retail 0x00668110, the dummies cheat
         TSoundPlayer::findSeam = CaseSound;
@@ -420,6 +457,9 @@ class SMeleeScope
         TCharacter::effectBurstSeam = nullptr;
         TCharacter::effectCombatFlashSeam = nullptr;
         TCharacter::waypointsSeam = nullptr;
+        TCharacter::setWalkModeSeam = nullptr;
+        TCharacter::setRunModeSeam = nullptr;
+        TCharacter::endFightingSeam = nullptr;
         if (!g_helpers.empty())
             TMapPane::lineOfSightSeam = nullptr;
         g_helpers.clear();
@@ -907,7 +947,10 @@ class SBossScope
                 ReadBossState(world, world.Fixture(chr), spec["boss"]);
         }
         TCharacter::paneObjectsSeam = CasePaneObjects;
-        TCharacter::endFightingSeam = [](TCharacter* self) { RecordWho("EndFighting", self); };
+        TCharacter::endFightingSeam = [](TCharacter* self) {
+            RecordWho("EndFighting", self);
+            return true;
+        };
         TCharacter::tintSeam = [](TCharacter* self, bool tint) { RecordWho(tint ? "Tint" : "Untint", self); };
         TPlayScreen::controlSeam = [](bool on) {
             JsonOut j;
@@ -1320,9 +1363,9 @@ TMeleeWorld::TMeleeWorld(const JsonValue& c) : cs(&c), world(std::make_unique<TF
     for (const JsonValue& spec : c["chars"].Items())
         if (spec.Has("aistate"))
         {
-            const JsonValue& look = spec["aistate"]["lookat"];
-            world->Fixture(world->Get(spec["name"].Str()))
-                ->ReadAIState(spec["aistate"], look.IsNull() ? nullptr : HelperOrCharacter(*world, look.Str()));
+            const JsonValue& a = spec["aistate"];
+            auto named = [&](const JsonValue& n) { return n.IsNull() ? nullptr : HelperOrCharacter(*world, n.Str()); };
+            world->Fixture(world->Get(spec["name"].Str()))->ReadAIState(a, named(a["lookat"]), named(a["lastwaypoint"]));
         }
 }
 
@@ -1339,11 +1382,14 @@ void TMeleeWorld::WriteEnd(JsonOut& j) const
     {
         const IFixtureChar* fx = world->Fixture(world->Get(spec["name"].Str()));
         j.Key(spec["name"].Str().c_str()).Begin('{');
-        j.Key("lookat");
-        if (const TObjectInstance* look = fx->AILookAt())
-            j.String(HelperName(look));
-        else
-            j.Null();
+        for (const auto& [key, o] : {std::pair{"lookat", fx->AILookAt()}, std::pair{"lastwaypoint", fx->LastWaypoint()}})
+        {
+            j.Key(key);
+            if (o)
+                j.String(HelperName(o));
+            else
+                j.Null();
+        }
         fx->WriteAIState(j);
         j.End('}');
     }
@@ -1370,6 +1416,7 @@ static const bool registered = RegisterTarget("melee-attack-choice", MeleeCall) 
                                RegisterTarget("melee-ai", MeleeCall) &&
                                RegisterTarget("melee-boss", MeleeCall) &&
                                RegisterTarget("melee-pulse", MeleeCall) &&
+                               RegisterTarget("melee-wander", MeleeCall) &&
                                RegisterTarget("melee-exp", MeleeCall) &&
                                RegisterTarget("melee-tagsound", MeleeCall);
 

@@ -37,6 +37,7 @@
 #include "gameoptions.h"
 
 #include <algorithm>
+#include <array>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1762,73 +1763,122 @@ TObjectInstance* TMapPane::FindClosestObject(const char *name, TObjectInstance* 
     return FindClosestObject(name, frompos, from ? from->GetLevel() : level, partial, objset);
 }
 
-int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height, int32_t objclass, int32_t maxnum, int32_t objset)
+namespace
+{
+// A square in 32 bits, wrapping as retail's imul does (sums of them wrap
+// the same way in uint32_t).
+constexpr uint32_t Square32(int32_t v)
+{
+    return static_cast<uint32_t>(v) * static_cast<uint32_t>(v);
+}
+
+// The objects FindObjectsInRange looks at: `level`'s loaded sectors that
+// meet the map rect, and their objects of `objset` in it, faces included,
+// no inventories (retail's iterator flags 0x6e0).
+template <class Visit>
+void ForObjectsIn(int32_t level, SRect rect, int32_t objset, Visit&& visit)
+{
+    if (TMapPane::mapObjectsSeam)
+    {
+        for (TObjectInstance* o : TMapPane::mapObjectsSeam(level, rect, objset))
+            visit(o);
+        return;
+    }
+    for (TMapIterator i(level, &rect, CHECK_NOINVENT, objset); i; i++)
+        visit(i.Item());
+}
+}  // namespace
+
+// REVSYNC: TMapPane::FindObjectsInRange @ 0x00452060 (MAP_QUERIES.md §2.1)
+// -- an insertion sort by distance: a newcomer goes before the first entry
+// not nearer than it, so between equals the later found comes first, and a
+// full list drops its farthest. The distances and the ids move together;
+// the 1998 code moved bytes of the one and never the other (with two in
+// range, Use found "nothing to use" beside a chest).
+int32_t TMapPane::FindObjectsInRange(const S3DPoint& pos, int32_t lvl, int32_t* array, int32_t width,
+    int32_t height, int32_t objclass, int32_t maxnum, int32_t objset)
 {
     if (findObjectsSeam)
         return findObjectsSeam(pos, array, width, height, objclass, maxnum, objset);
     if (maxnum < 1)
         return 0;
+    if (lvl < 0)
+        lvl = level;
 
-  // REVSYNC: 0x00452060 -- the nearest `maxnum`, nearest first: one goes in
-  // before the first as far or farther, the ones after it moving up (retail
-  // memmoves the distances and the ids alike; the 1998 code copied bytes,
-  // not entries, and left the ids where they were).
-    std::vector<int32_t> dist(static_cast<size_t>(maxnum));
-    int32_t found = 0;
-    const auto keep = [&](int32_t d, int32_t id) {
-        int32_t j = 0;
-        while (j < found && d > dist[size_t(j)])
-            j++;
-        if (j >= maxnum)
-            return;
-        const int32_t last = (std::min)(found, maxnum - 1);
-        std::copy_backward(dist.begin() + j, dist.begin() + last, dist.begin() + last + 1);
-        std::copy_backward(array + j, array + last, array + last + 1);
-        dist[size_t(j)] = d;
-        array[j] = id;
-        if (found < maxnum)
-            found++;
-    };
-
-    const int32_t sqrwidth = sqr(width);
-    S3DPoint itempos;
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+    const bool sphere = height < 1;
+    SRect rect;
+    if (sphere)
     {
-        TObjectInstance* inst = i;
+        rect.left = pos.x - width;
+        rect.top = pos.y - width;
+        rect.right = rect.left + 2 * width - 1;
+        rect.bottom = rect.top + 2 * width - 1;
+    }
+    else
+    {
+        rect.left = pos.x - (width >> 1);
+        rect.top = pos.y - (height >> 1);
+        rect.right = rect.left + width - 1;
+        rect.bottom = rect.top + height - 1;
+    }
+    const int32_t sqrwidth = static_cast<int32_t>(Square32(width));
+    // Retail takes the radius off only in a search for characters or
+    // players by class: (Radius * 0.4f) squared on the x87, truncated.
+    const bool radii = objclass == OBJCLASS_CHARACTER || objclass == OBJCLASS_PLAYER;
+    constexpr double kRadiusScale = 0.4f;
 
+    // The distances found so far: on the stack up to 64, as retail's.
+    std::array<int32_t, 64> local{};
+    std::vector<int32_t> heap;
+    int32_t* dist = local.data();
+    if (maxnum > static_cast<int32_t>(local.size()))
+    {
+        heap.resize(static_cast<size_t>(maxnum));
+        dist = heap.data();
+    }
+    int32_t found = 0;
+    ForObjectsIn(lvl, rect, objset, [&](TObjectInstance* inst) {
         if (inst->IsInInventory() || (objclass != -1 && inst->ObjClass() != objclass))
-            continue;
-
-        inst->GetPos(itempos);
-
-        if (height < 1) // This is a radius check
+            return;
+        const S3DPoint& at = inst->Pos();
+        const int32_t dx = abs(pos.x - at.x);
+        const int32_t dy = abs(pos.y - at.y);
+        int32_t d;
+        if (sphere)
         {
-            int32_t r;
-
-            // if we're looking for a character or player, take into account radius
-            if (objclass != OBJCLASS_CHARACTER && objclass != OBJCLASS_PLAYER)
-                r = 0;
-            else
+            uint32_t r2 = 0;
+            if (radii)
             {
-                float tr = ((PTCharacter)inst)->Radius() / 2.5f;
-                r = (int32_t)(tr * tr);
+                const double r = static_cast<TCharacter*>(inst)->Radius() * kRadiusScale;
+                r2 = static_cast<uint32_t>(static_cast<int32_t>(r * r));
             }
-
-            const int32_t d = SQRDIST(pos, itempos) - r;
-            if (d < sqrwidth)
-                keep(d, inst->GetMapIndex());
+            d = static_cast<int32_t>(Square32(dx) + Square32(dy) + Square32(abs(pos.z - at.z)) - r2);
+            if (d >= sqrwidth)
+                return;
         }
-
         else
         {
-            int32_t dx = absval(pos.x - itempos.x);
-            int32_t dy = absval(pos.y - itempos.y);
-
-            if (dx <= (width >> 1) && dy <= (height >> 1))
-                keep(sqr(dx) + sqr(dy), inst->GetMapIndex());
+            if (dx > (width >> 1) || dy > (height >> 1))
+                return;
+            d = static_cast<int32_t>(Square32(dx) + Square32(dy));
         }
-    }
 
+        int32_t i = 0;
+        while (i < found && d > dist[i])
+            ++i;
+        if (i >= maxnum)
+            return;
+        const int32_t kept = (std::min)(maxnum - 1, found);
+        for (int32_t k = kept; k > i; --k)
+        {
+            dist[k] = dist[k - 1];
+            array[k] = array[k - 1];
+        }
+        array[i] = inst->GetMapIndex();
+        dist[i] = d;
+        if (found < maxnum)
+            ++found;
+    });
     return found;
 }
 
@@ -2110,32 +2160,41 @@ void TMapPane::RedrawWalkmapRect(TObjectInstance* oi, int32_t x, int32_t y, int3
 
 // REVSYNC: GetWalkHeight @ 0x00452e10 -- the walk cell under pos: 0, 0 is
 // the centre of a walk cell, not its edge, so offset by half a cell.
-int32_t TMapPane::GetWalkHeight(const S3DPoint& pos)
+int32_t TMapPane::GetWalkHeight(const S3DPoint& pos, int32_t lvl)
 {
-    return GetWalkGridHeight((pos.x + GRIDSIZE / 2) >> WALKMAPSHIFT, (pos.y + GRIDSIZE / 2) >> WALKMAPSHIFT);
+    return GetWalkGridHeight(lvl, (pos.x + GRIDSIZE / 2) >> WALKMAPSHIFT, (pos.y + GRIDSIZE / 2) >> WALKMAPSHIFT);
 }
 
-int32_t TMapPane::GetWalkGridHeight(int32_t x, int32_t y)
+// Retail looks a cell's sector up among every loaded one by (level, x, y)
+// (0x00499e10); the port keeps a level's sectors in its cached map, the
+// current level's also in the pane's window.
+int32_t TMapPane::GetWalkGridHeight(int32_t lvl, int32_t x, int32_t y)
 {
     if (walkGridSeam)
-        return walkGridSeam(x, y);
+        return walkGridSeam(lvl, x, y);
 
     const int32_t world_sx = x >> (SECTORWSHIFT - WALKMAPSHIFT);
     const int32_t world_sy = y >> (SECTORHSHIFT - WALKMAPSHIFT);
     const int32_t wx = x & ((1 << (SECTORWSHIFT - WALKMAPSHIFT)) - 1);
     const int32_t wy = y & ((1 << (SECTORHSHIFT - WALKMAPSHIFT)) - 1);
 
-    const int32_t sx = world_sx - sectorx;
-    const int32_t sy = world_sy - sectory;
+    if (lvl == level)
+    {
+        const int32_t sx = world_sx - sectorx;
+        const int32_t sy = world_sy - sectory;
+        if (sx >= 0 && sx < SECTORWINDOWX && sy >= 0 && sy < SECTORWINDOWY && sectors[sx][sy])
+            return sectors[sx][sy]->ReturnWalkmap(wx, wy);
 
-    if (sx >= 0 && sx < SECTORWINDOWX && sy >= 0 && sy < SECTORWINDOWY && sectors[sx][sy])
-        return sectors[sx][sy]->ReturnWalkmap(wx, wy);
+        // MapManager-canonical fallback (see GetWalkHeight comment).
+        if (TGameMap* m = MapManager.CurrentMap())
+            if (TSector* sec = m->FindSector(world_sx, world_sy))
+                return sec->ReturnWalkmap(wx, wy);
+        return 0;
+    }
 
-    // MapManager-canonical fallback (see GetWalkHeight comment).
-    if (TGameMap* m = MapManager.CurrentMap())
+    if (TGameMap* m = MapManager.GetCached(lvl))
         if (TSector* sec = m->FindSector(world_sx, world_sy))
             return sec->ReturnWalkmap(wx, wy);
-
     return 0;
 }
 
@@ -2264,66 +2323,72 @@ void TMapPane::ClearWalkmaps()
     }
 }
 
-bool TMapPane::LineOfSight(S3DPoint& pos, S3DPoint& to, S3DPoint* obst)
+namespace
+{
+// 16.16 fixed point as retail's shl / sar: the wrap and the sign's shift are
+// the x86's, not undefined behaviour.
+constexpr int32_t ToFixed(int32_t v) { return static_cast<int32_t>(static_cast<uint32_t>(v) << 16); }
+constexpr int32_t FromFixed(int32_t v) { return v >> 16; }
+
+// One fixed-point step along a line `loop` cells long, nudged one unit toward
+// its sign on all but the major axis (0x00453445..0x004534ed).
+constexpr int32_t LineStep(int32_t delta, int32_t loop, bool major)
+{
+    return ToFixed(delta) / loop + (major ? 0 : (delta >= 0 ? 1 : -1));
+}
+}  // namespace
+
+// REVSYNC: TMapPane::LineOfSight @ 0x004533d0 -- a DDA over the walk cells
+// from `from`'s cell to `to`'s, both ends included, the line's height
+// interpolated alongside (MAP_QUERIES.md §1.1). A cell blocks when its
+// level's sector isn't loaded, it has no walkmap (height 0), or its walk
+// height is above the line there.
+bool TMapPane::LineOfSight(const S3DPoint& from, const S3DPoint& to, int32_t lvl, S3DPoint* blockedat,
+    S3DPoint* laststep)
 {
     if (lineOfSightSeam)
-        return lineOfSightSeam(pos, to);
-    int32_t sx, sy, sz, ex, ey, ez, dx, dy, dz;
+        return lineOfSightSeam(from, to);
 
-  // Get starting values in grid coordinates
-    PosToWalkGrid(pos, sx, sy);
-    PosToWalkGrid(to, ex, ey);
-    sz = pos.z;
-    ez = to.z;
+    const int32_t sx = (from.x + GRIDSIZE / 2) >> WALKMAPSHIFT;
+    const int32_t sy = (from.y + GRIDSIZE / 2) >> WALKMAPSHIFT;
+    int32_t dx = ((to.x + GRIDSIZE / 2) >> WALKMAPSHIFT) - sx;
+    int32_t dy = ((to.y + GRIDSIZE / 2) >> WALKMAPSHIFT) - sy;
+    int32_t dz = to.z - from.z;
 
-    dx = ex - sx;
-    dy = ey - sy;
-    dz = ez - sz;
-
-  // Make fixed point increment values for drawing line, and set loop to bigest value   
-    int32_t loop;
-    if (abs(dx) >= abs(dy))
+    const bool xmajor = abs(dx) >= abs(dy);         // ties go to x
+    const int32_t loop = xmajor ? abs(dx) : abs(dy);
+    if (loop > 0)
     {
-        loop = abs(dx);
-        if (loop > 0)
-        {
-          dx = (dx << 16) / loop;
-          dy = (dy << 16) / loop + ((dy >= 0)?1:-1);  
-          dz = (dz << 16) / loop + ((dz >= 0)?1:-1);
-        }
-    }
-    else
-    {
-        loop = abs(dy);
-        if (loop > 0)
-        {
-          dx = (dx << 16) / loop + ((dx >= 0)?1:-1);
-          dy = (dy << 16) / loop;  
-          dz = (dz << 16) / loop + ((dz >= 0)?1:-1);
-        }
+        dx = LineStep(dx, loop, xmajor);
+        dy = LineStep(dy, loop, !xmajor);
+        dz = LineStep(dz, loop, false);
     }
 
-    int32_t x = sx << 16; 
-    int32_t y = sy << 16;
-    int32_t z = sz << 16;
-
-    for (int32_t c = 0; c <= loop; c++)
+    int32_t x = ToFixed(sx);
+    int32_t y = ToFixed(sy);
+    int32_t z = ToFixed(from.z);
+    for (int32_t c = 0; c <= loop; ++c)
     {
-        int32_t gridheight = GetWalkGridHeight(x >> 16, y >> 16);
-        if (gridheight == 0 || gridheight > (z >> 16))
+        const int32_t h = GetWalkGridHeight(lvl, FromFixed(x), FromFixed(y));
+        if (h == 0 || h > FromFixed(z))
         {
-            if (obst)
+            if (blockedat)
             {
-                WalkGridToPos(x >> 16, y >> 16, *obst);
-                obst->z = z >> 16;
+                WalkGridToPos(FromFixed(x), FromFixed(y), *blockedat);
+                blockedat->z = FromFixed(z);
+            }
+            if (laststep)
+            {
+                laststep->x = FromFixed(x) - FromFixed(x - dx);
+                laststep->y = FromFixed(y) - FromFixed(y - dy);
+                laststep->z = FromFixed(z) - FromFixed(z - dz);
             }
             return false;
-        } 
+        }
         x += dx;
         y += dy;
         z += dz;
     }
-                        
     return true;
 }
 

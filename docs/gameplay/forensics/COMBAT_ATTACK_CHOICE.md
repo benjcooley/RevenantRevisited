@@ -801,14 +801,124 @@ return 0
 
 ### 3.15 Wander `0x4c9790` (slot `0x234`, `charflags & 0x100000` only)
 
-Combat-relevant parts (asm checked at the cited lines, rest from the
-decompile): `+0x24c` idle countdown returns early; in a COMBAT root with
-**no target** → EndFighting, `+0x24c = 100` (`0x4c9a7a`); running in a
-combat/bow root with a target → SetWalkMode + `BeginFighting(target, 3)`
-(`0x4c9899`); while retreating, `random(1,100) > 30` →
-`+0x250 = random(800, 2000)` and SetRunMode, counting down to SetWalkMode.
-Out of combat it patrols waypoints with run bursts (`random(1,100) ==
-100` → `random(100, 800)` frames). Not needed for the monster katas.
+Read whole from the asm (2026-10-11; the decompile in
+`recon/discovered/cls_0x5b4f30_TPlayer_Pulse_4c9790.cpp` misnames it).
+Thiscall, no arguments, no result. Slot `0x234` of both TCharacter
+(`0x5a7a7c`) and TPlayer (`0x5b5164`); no direct callers. Pulse
+(`0x4c29a2`) runs it, then the AI, for a character with charflags
+`0x100000`, which retail sets only on the player of a network client with
+`[0x668128]` set (`0x51efc4`): an automatic network player. The arena's
+`--playerai` sets the same flag.
+
+Its fields: `+0x234` the waypoint it walks to (the AI's look-at, the same
+field), `+0x238` the one before, `+0x24c` ticks left doing nothing,
+`+0x250` ticks left running. ClearChar `0x4c18a0` zeroes `+0x234` /
+`+0x238`; the others start at zero with the object. When an object goes
+(`0x4c3874`..`0x4c38ba`) a character drops it from `+0x234`, `+0x238` and
+its Goto item `+0x288`.
+
+```
+if idle (+0x24c): idle--; return                                 // 0x4c979c
+
+// A run in a fighting root turns into a walk, and the fight goes on.
+if root:                                                          // 0x4c97a8
+    running = (root COMBAT and root Is "combatrun" or "handrun")
+              or (root BOW and Is "bowrun") or root Is "run"
+    if running and root is COMBAT or BOW and root->obj:          // 0x4c9825
+        SetWalkMode()                                             // 0x4cf000
+        BeginFighting(root COMBAT or BOW ? root->obj : 0, COMBAT) // 0x4d3b90, action 3 even from a bow root
+
+if root COMBAT:                                                   // 0x4c98b4 -> 0x4c9a71
+    if !root->obj: EndFighting(); idle = 100; return              // 0x4d3fd0
+    if !retreating (+0x254): return
+    if !runticks:
+        if random(1, 100) > 30:                                   // 0x4c9aa4
+            runticks = random(800, 2000); SetRunMode()            // 0x4c9abb, 0x4cf490
+        return
+    if !--runticks: SetWalkMode()
+    return
+
+// Out of a combat root: run bursts.
+if !runticks:                                                     // 0x4c98c0
+    if Fatigue() == MaxFatigue():                                 // slots 0x1c8, 0x1e0 (MaxFatigue asked first)
+        if random(1, 100) == 100:                                 // 0x4c98e6
+            runticks = random(100, 800); SetRunMode()             // 0x4c98fd
+else:
+    runticks--
+    if Fatigue() < MaxFatigue() / 2 and random(1, 100) > 50:      // C division; 0x4c9941
+        runticks = 0
+    elif root BOW and root->obj and random(1, 100) > 15:          // 0x4c9986
+        runticks = 0
+    if !runticks: SetWalkMode()
+
+// The patrol.
+if !waypoint (+0x234):                                            // 0x4c99b6
+    waypoint = PickWanderWaypoint()
+    if waypoint: Goto(waypoint x, y, 0)                           // 0x4cedb0
+    else: idle = 1000
+    return
+Goto(waypoint x, y, 0)
+if dist(x, y, z to the waypoint's) < 25:                          // 0x45f730 twice: the port's 3D dist()
+    previous (+0x238) = waypoint; waypoint = PickWanderWaypoint() // the pick reads the old previous
+```
+
+Goto's own result is ignored. `dist` is the octagonal estimate
+`|dx| + |dy| - min(|dx|, |dy|) / 2`, applied to (x, y) and then to that and
+z. The "COMBAT or BOW" tests are IsRoot (`0x45f770`, `root &&
+root->action == a`).
+
+**PickWanderWaypoint `0x4c95e0`:**
+
+```
+n = min(FindObjectsInRange(pos, level, ids, 2000, 0, helpers (0xf), 10, all), 10)
+for each id: o = GetInstance(id)                                  // 0x452690
+    keep o if its type name is "waypoint" (stricmp), it is neither the
+    previous waypoint nor the current one, WaypointReachable(o, me)   // 0x528850
+    (the line of sight from (o.x, o.y, my z) to me, on o's level)
+    and ProbeLedge(o's position)                                  // 0x4c9460
+if none kept: return the previous waypoint (+0x238)
+best = the first kept with the least |FacingDiff| (0x46ead0) under 0x80, else the first
+return random(1, 100) < 60 ? best : kept[random(0, kept - 1)]     // 0x4c974c, 0x4c9771
+```
+
+The draws happen only with a waypoint kept; the second only on 60 or more,
+and not with one kept (`random(0, 0)` returns without drawing).
+
+**ProbeLedge `0x4c9460`** (thiscall `(S3DPoint* to)`, ret 4): steps from
+the character **away from** `to`, an eighth of the way between them a
+step, `dist(me, to) / Radius()` steps (slot `0x258`; integer division), and
+returns 1 when two walk heights in a row (GetWalkHeight `0x452e10` on the
+character's level, the first under the character itself) differ by 32 or
+more:
+
+```
+step = ((me.x - to.x) / 8, (me.y - to.y) / 8)                     // C division
+n = dist(me.x, me.y, to.x, to.y) / Radius()
+a = me.pos; b = a + step
+ha = GetWalkHeight(a); hb = GetWalkHeight(b)
+repeat n times:
+    if |ha - hb| >= 32: return 1
+    a = b; ha = hb; b += step; hb = GetWalkHeight(b)
+return |ha - hb| >= 32
+```
+
+PickWanderWaypoint keeps a waypoint only when this finds such a step.
+Read as the source surely meant it (a clear path toward the waypoint),
+both the direction and the test are reversed; on open ground no waypoint
+passes, and Wander, finding none, waits 1000 ticks. It is retail's
+behaviour and the port keeps it.
+
+**Draws** (all `random` `0x483300`): run burst (1,100) then (100,800); a
+run's end (1,100) for fatigue, (1,100) for a bow fight; retreat (1,100)
+then (800,2000); the pick (1,100) then (0, kept − 1).
+
+**The port before:** none of it; Pulse ran the AI alone for the player-AI
+flag (`character.cpp`, `0x4c29a2`), and the AI's waypoint field was the
+only one. Ported 2026-10-11 as `TCharacter::Wander`, `PickWanderWaypoint`,
+`ProbeLedge` (fields `lastwaypoint`, `wanderidle`, `runticks`); kata
+`melee-wander` (COMBAT_DOJO.md M9). Its callees SetWalkMode `0x4cf000`,
+SetRunMode `0x4cf490` and EndFighting `0x4d3fd0` are the 1998 versions in
+the port (their own katas), seamed in the kata as BeginFighting is.
 
 ## 4. RNG draws
 
@@ -1177,5 +1287,9 @@ Corrections to §3.10:
   wander_target" was it (`param_1[0x8d]` is `+0x234`). The port's
   WanderToWaypoint and its fields are gone.
 
-Left: Wander `0x4c9790` (Pulse runs it before AI for a character with
-charflags `0x100000`, the player AI). The four bosses: [BOSS_AI.md](BOSS_AI.md).
+Wander `0x4c9790` (Pulse runs it before AI for a character with charflags
+`0x100000`, the player AI) is ported and kata'd (§3.15, `melee-wander`); with
+it, the AI's waypoint search runs over the real map queries in
+`melee-wander`'s `aiwaypoint.*` cases (FindObjectsInRange and
+WaypointReachable's line of sight, MAP_QUERIES.md). The four bosses:
+[BOSS_AI.md](BOSS_AI.md).

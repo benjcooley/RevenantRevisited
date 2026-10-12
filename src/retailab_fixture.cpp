@@ -424,20 +424,61 @@ struct SGround
     int32_t z = 0;
     std::vector<SGroundBox> cells;
     std::vector<std::pair<int32_t, int32_t>> nosector;
+    bool haslevel = false;              // its sectors are on `level` alone
+    int32_t level = 0;
+    bool record = false;                // each cell read is a Cell seam
 };
 SGround g_ground;
 std::vector<TCharacter*> g_nearby;
 
-int32_t CaseWalkCell(int32_t gx, int32_t gy)
+// A walk cell: no sector off the ground's level or in `nosector` (retail's
+// FindSector answering none), else its height; recorded as the retail
+// fixture records the sector lookup and the walkmap read.
+int32_t CaseWalkCell(int32_t level, int32_t gx, int32_t gy)
 {
     const std::pair<int32_t, int32_t> sector(gx >> 6, gy >> 6);
-    if (std::find(g_ground.nosector.begin(), g_ground.nosector.end(), sector) != g_ground.nosector.end())
-        return 0;
-    int32_t h = g_ground.z;
-    for (const SGroundBox& b : g_ground.cells)
-        if (b.gx0 <= gx && gx <= b.gx1 && b.gy0 <= gy && gy <= b.gy1)
-            h = b.height;
+    const auto& gone = g_ground.nosector;
+    const bool missing = (g_ground.haslevel && level != g_ground.level) ||
+                         std::find(gone.begin(), gone.end(), sector) != gone.end();
+    int32_t h = 0;
+    if (!missing)
+    {
+        h = g_ground.z;
+        for (const SGroundBox& b : g_ground.cells)
+            if (b.gx0 <= gx && gx <= b.gx1 && b.gy0 <= gy && gy <= b.gy1)
+                h = b.height;
+    }
+    if (g_ground.record)
+    {
+        JsonOut j;
+        j.Begin('{').FieldString("seam", "Cell").Field("level", level);
+        if (missing)
+            j.Key("sector").Begin('[').Value(sector.first).Value(sector.second).End(']');
+        else
+            j.Key("cell").Begin('[').Value(gx).Value(gy).End(']').Field("height", h);
+        j.End('}');
+        Seam(j.str());
+    }
     return h;
+}
+
+std::vector<SMapObject> g_mapObjects;
+
+// The map pane's iterator for FindObjectsInRange (retail's seam at
+// 0x0044cf80): the case's objects on that level (any, below 0) whose
+// position is in the rect, faces included.
+std::vector<TObjectInstance*> CaseMapObjects(int32_t level, const SRect& r, int32_t objset)
+{
+    JsonOut j;
+    j.Begin('{').FieldString("seam", "MapIterator");
+    j.Key("rect").Begin('[').Value(r.left).Value(r.top).Value(r.right).Value(r.bottom).End(']');
+    j.Field("objset", objset).Field("level", level).End('}');
+    Seam(j.str());
+    std::vector<TObjectInstance*> items;
+    for (const SMapObject& m : g_mapObjects)
+        if ((level < 0 || m.level == level) && r.In(m.object->Pos().x, m.object->Pos().y))
+            items.push_back(m.object);
+    return items;
 }
 
 std::vector<TCharacter*> CaseNearby(const S3DPoint& pos, int32_t range)
@@ -455,6 +496,12 @@ std::vector<TCharacter*> CaseNearby(const S3DPoint& pos, int32_t range)
 void WriteSeams(JsonOut& j)
 {
     WriteSeamsSince(j, 0);
+}
+
+void SetMapObjects(std::vector<SMapObject> objects)
+{
+    g_mapObjects = std::move(objects);
+    TMapPane::mapObjectsSeam = CaseMapObjects;
 }
 
 size_t SeamCount()
@@ -563,15 +610,16 @@ SCaseScope::SCaseScope(const JsonValue& cs, const TFixtureWorld& world)
     g_blocked = cs["blocked"].Bool(false);
     g_sees = cs["sees"].Bool(true);
     // With `perception`, the characters find and see each other as the
-    // game's own code (kata M9b), only the line of sight the case's;
-    // otherwise FindCharacters finds no one and CanSeeCharacter answers
-    // `sees`.
+    // game's own code (kata M9b), only the line of sight the case's (with
+    // a `ground`, the game's own over it too); otherwise FindCharacters
+    // finds no one and CanSeeCharacter answers `sees`.
     if (cs["perception"].Bool())
     {
         g_walls.clear();
         for (const JsonValue& w : cs["walls"].Items())
             g_walls.emplace_back(w[0].Str(), w[1].Str());
-        TMapPane::lineOfSightSeam = CaseLineOfSight;
+        if (!cs.Has("ground"))
+            TMapPane::lineOfSightSeam = CaseLineOfSight;
     }
     else
     {
@@ -610,6 +658,9 @@ SCaseScope::SCaseScope(const JsonValue& cs, const TFixtureWorld& world)
                                                 (int32_t)b[3].Int(), (int32_t)b[4].Int()});
         for (const JsonValue& sc : gr["nosector"].Items())
             g_ground.nosector.emplace_back((int32_t)sc[0].Int(), (int32_t)sc[1].Int());
+        g_ground.haslevel = gr.Has("level");
+        g_ground.level = (int32_t)gr["level"].Int();
+        g_ground.record = gr["record"].Bool(false);
         TMapPane::walkGridSeam = CaseWalkCell;
     }
     else
@@ -631,6 +682,8 @@ SCaseScope::~SCaseScope()
     TCharacter::nearbyCharactersSeam = nullptr;
     TMapPane::walkGridSeam = nullptr;
     TMapPane::lineOfSightSeam = nullptr;
+    TMapPane::mapObjectsSeam = nullptr;
+    g_mapObjects.clear();
     Player = savedPlayer;
     g_world = nullptr;
 }

@@ -104,6 +104,13 @@ class TCharacter : public TComplexObject
     using BeginFightingSeam = bool (*)(TCharacter* self, TCharacter* target, ACTION action);
     static inline BeginFightingSeam beginFightingSeam = nullptr;
       // BeginFighting (retail 0x004d3b90)
+    using ModeSeam = bool (*)(TCharacter* self);
+    static inline ModeSeam setWalkModeSeam = nullptr;
+      // SetWalkMode (retail 0x004cf000)
+    static inline ModeSeam setRunModeSeam = nullptr;
+      // SetRunMode (retail 0x004cf490)
+    static inline ModeSeam endFightingSeam = nullptr;
+      // EndFighting (retail 0x004d3fd0), which Wander and Baez's fall call
     using DamageSeam = void (*)(TCharacter* self, int32_t damage, int32_t damagetype, int32_t modifier,
         TActionBlock* action, TCharacter* attacker);
     static inline DamageSeam damageSeam = nullptr;
@@ -132,10 +139,6 @@ class TCharacter : public TComplexObject
     static inline PaneObjectsSeam paneObjectsSeam = nullptr;
       // The objects a walk of the pane's sector window gives (retail's map
       // iterator 0x0044cf80 with no rect, then 0x0044d080), in map order
-    using EndFightingSeam = void (*)(TCharacter* self);
-    static inline EndFightingSeam endFightingSeam = nullptr;
-      // EndFighting (retail 0x004d3fd0; the port's is still 1998's), which
-      // Baez's fall calls on the player
     using TintSeam = void (*)(TCharacter* self, bool tint);
     static inline TintSeam tintSeam = nullptr;
       // TintMaterials / UntintMaterials (retail 0x004d6a30 / 0x004d6b40)
@@ -189,6 +192,12 @@ class TCharacter : public TComplexObject
 
     virtual void AI();
         // Causes the object to perform its A.I. routines
+    void Wander();
+        // REVSYNC: Wander @ 0x004c9790 (slot 0x234) -- what an AI-driven
+        // character (charflags 0x100000) does before its AI each tick: an
+        // idle count down; a run in a fighting root turned to a walk; run
+        // bursts and their ends; out of combat, a patrol from waypoint to
+        // waypoint (COMBAT_ATTACK_CHOICE.md §3.15)
 
     virtual const char *DefaultRootState() { return (Sleeping() ? "sleep" : Aggressive() ? "combat" : IsDead() ? "dead" : "walk"); }
       // Returns the default root state for this char
@@ -778,6 +787,18 @@ class TCharacter : public TComplexObject
       // The paralysed Solifuge's blue: the imagery's materials saved and
       // tinted, then put back (retail 0x004d6a30 / 0x004d6b40)
 
+    // Wander's steps (retail 0x004c9790, COMBAT_ATTACK_CHOICE.md §3.15)
+    void WanderRunning();
+      // Out of a combat root: a run burst at full fatigue, a run's end
+    void WanderPatrol();
+      // Walk to the waypoint; on arrival pick the next
+    TObjectInstance* PickWanderWaypoint();
+      // REVSYNC: 0x004c95e0 -- one of the waypoints within 2000 for the
+      // next leg, else the previous one
+    bool ProbeLedge(const S3DPoint& to);
+      // REVSYNC: 0x004c9460 -- a step of 32 or more between the walk heights
+      // met stepping from here away from `to`
+
     // Pulse's steps (retail 0x004c1bb0, CHARACTER_PULSE.md §2)
     void PulseCorpse();
       // A dead character's tick: its death played and rooted, the script
@@ -961,7 +982,7 @@ protected:
     int32_t  retreatframes = 0;
   // Retail +0x234: an object the AI walks toward and ResolveCombat faces
   // when no visible target overrides it: the waypoint AI 0x004c8b60 heads
-  // for (Wander 0x004c9790 writes it too, not ported).
+  // for, and the one Wander 0x004c9790 patrols to.
     TObjectInstance* ai_lookat = nullptr;
   // Retail +0x280: the boss kind AI_PerMonster 0x004c9b70 gives, once (1
   // Baez, whom magic can't hurt, 2 Solifuge, 3 Jhaga, 4 Yhagoro, -1 any
@@ -972,6 +993,13 @@ protected:
   // Retail +0x298 / +0x29c: what TintMaterials saved, each material's
   // diffuse then emissive red, green and blue; empty when nothing is.
     std::vector<std::array<float, 6>> savedmaterials;
+  // Retail +0x238 / +0x24c / +0x250, Wander's: the waypoint before the
+  // current one (its pick passes over both; with none to pick it goes
+  // back; retail drops it when its object goes, 0x004c38a6), the ticks it
+  // still does nothing, the ticks a run has left.
+    TSafeRef<TObjectInstance> lastwaypoint;
+    int32_t wanderidle = 0;
+    int32_t runticks = 0;
   // Retail +0x28c / +0x290: the player's last attack button and how many
   // times running it was pressed (ButtonAttack 0x004d2480's same-button
   // rule); SetFighting resets them.

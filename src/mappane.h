@@ -459,12 +459,30 @@ class TMapPane : public TPane
         // reach (sqrt 0x800000), in that level's loaded sectors
     TObjectInstance* FindClosestObject(const char *name, TObjectInstance* from = nullptr, bool partial = false, int32_t objset = OBJSET_ALL);
         // As above, from an object's position and level (else the camera's)
-    int32_t FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height = 0, int32_t objclass = -1, int32_t maxnum = MAXFOUNDOBJS, int32_t objset = OBJSET_ALL);
-      // Finds objects within given range. If height not given uses width as radius
+    int32_t FindObjectsInRange(const S3DPoint& pos, int32_t lvl, int32_t* array, int32_t width, int32_t height,
+        int32_t objclass, int32_t maxnum, int32_t objset);
+      // REVSYNC: TMapPane::FindObjectsInRange @ 0x00452060 -- the map
+      // indices of the objects of `objclass` (-1: any) on level `lvl` (-1: the
+      // pane's) near pos, nearest first, at most maxnum: within a sphere of
+      // radius `width` (centre to centre, height too; a search for
+      // characters or players takes (0.4 Radius)^2 off), or with a height
+      // given, within the flat width x height box. Only the loaded sectors'
+      // objects in the half-open square pos +- width (the box's own
+      // half-open rect) are looked at (docs/gameplay/forensics/MAP_QUERIES.md §2)
+    int32_t FindObjectsInRange(const S3DPoint& pos, int32_t* array, int32_t width, int32_t height = 0,
+        int32_t objclass = -1, int32_t maxnum = MAXFOUNDOBJS, int32_t objset = OBJSET_ALL)
+        { return FindObjectsInRange(pos, -1, array, width, height, objclass, maxnum, objset); }
+      // The same on the pane's level
     using FindObjectsSeam = int32_t (*)(const S3DPoint& pos, int32_t* array, int32_t width, int32_t height,
         int32_t objclass, int32_t maxnum, int32_t objset);
     static inline FindObjectsSeam findObjectsSeam = nullptr;
       // Likewise for FindObjectsInRange (retail 0x00452060)
+    using MapObjectsSeam = std::vector<TObjectInstance*> (*)(int32_t level, const SRect& maprect, int32_t objset);
+    static inline MapObjectsSeam mapObjectsSeam = nullptr;
+      // Retail A/B fixtures only: when set, it hands FindObjectsInRange the
+      // objects its map iterator would (retail's seam at the iterator,
+      // 0x0044cf80 / 0x0044d080): `level`'s loaded objects of `objset`
+      // in the map rect, in walk order
     TObjectInstance* ObjectInCube(PS3DRect cube, int32_t level, int32_t objset = OBJSET_ALL);
         // The first object on level inside the cube, faces included, from
         // the level's loaded sectors (a CUBE trigger's search)
@@ -504,21 +522,28 @@ class TMapPane : public TPane
         // Clear out area of walkmap that object resides in
     void ExtractWalkmap(TObjectInstance* inst) { WalkmapHandler(inst, WALK_EXTRACT); }
         // Remove object's walkmap from the sector walkmap (by redrawing its rect)
-    int32_t GetWalkHeight(const S3DPoint& pos);
+    int32_t GetWalkHeight(const S3DPoint& pos) { return GetWalkHeight(pos, level); }
         // Gets walk height for a given walk map
-    int32_t GetWalkGridHeight(int32_t x, int32_t y);
+    int32_t GetWalkHeight(const S3DPoint& pos, int32_t lvl);
+        // REVSYNC: GetWalkHeight @ 0x00452e10 -- the walk cell under pos on
+        // that level (0: none)
+    int32_t GetWalkGridHeight(int32_t x, int32_t y) { return GetWalkGridHeight(level, x, y); }
         // Gets walk height given walk grid x and y
+    int32_t GetWalkGridHeight(int32_t lvl, int32_t x, int32_t y);
+        // The walk cell (x, y) of level `lvl`: its loaded sector's walkmap
+        // (retail's FindSector 0x00499e10 + ReturnWalkmap 0x00499720); 0
+        // when that sector isn't loaded
     [[nodiscard]] bool WalkCellKnown(int32_t x, int32_t y);
         // Whether GetWalkGridHeight's answer for the cell is the map's: the
         // window holds its sector, or the current map is loaded (it holds
         // every sector of the level, so a sector it lacks is no floor).
         // False only with no map to ask. For the playtest director's map.
-    using WalkGridSeam = int32_t (*)(int32_t x, int32_t y);
+    using WalkGridSeam = int32_t (*)(int32_t level, int32_t x, int32_t y);
     static inline WalkGridSeam walkGridSeam = nullptr;
         // Retail A/B fixtures only: when set, it answers every walk cell's
-        // height (GetWalkGridHeight, so GetWalkHeight and
-        // GetWalkHeightRadius too), as the retail fixture's seam at the
-        // sector walkmap read does (docs/gameplay/COMBAT_DOJO.md §6.3)
+        // height (GetWalkGridHeight, so GetWalkHeight, GetWalkHeightRadius
+        // and LineOfSight too), as the retail fixture's seam at the sector
+        // walkmap read does (docs/gameplay/COMBAT_DOJO.md §6.3)
     int32_t GetWalkHeightArea(S3DPoint& pos, int32_t width = 0, int32_t height = 0);
         // Gets walk height for a given walk map CENTERED on pos with given with and height
         // If width == 0, pos is treated as a point
@@ -529,8 +554,15 @@ class TMapPane : public TPane
         // point lies within radius of pos: the largest height step between
         // two such cells side by side (maxdelta: walls, ledges) and whether
         // any of them has no walkmap (hole)
-    bool LineOfSight(S3DPoint& pos, S3DPoint& to, S3DPoint* obst = nullptr);
-        // Returns line of sight flags for line between positions
+    bool LineOfSight(const S3DPoint& from, const S3DPoint& to, int32_t lvl, S3DPoint* blockedat = nullptr,
+        S3DPoint* laststep = nullptr);
+        // REVSYNC: TMapPane::LineOfSight @ 0x004533d0 -- is the straight
+        // line from `from` to `to` clear over level lvl's walk cells: every
+        // cell it crosses, both ends included, loaded, with a walkmap, and
+        // no higher than the line there. Blocked, `blockedat` gets the
+        // blocking cell's corner and the line's height there, `laststep` the
+        // last step taken in cells (and height units)
+        // (docs/gameplay/forensics/MAP_QUERIES.md §1)
     using LineOfSightSeam = bool (*)(const S3DPoint& from, const S3DPoint& to);
     static inline LineOfSightSeam lineOfSightSeam = nullptr;
         // Retail A/B fixtures only: when set, it answers LineOfSight, as the

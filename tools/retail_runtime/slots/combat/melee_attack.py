@@ -33,7 +33,9 @@ field names (data_parse.py's layouts) -- and their attack bookkeeping
   `stop-block` StopBlock `0x4d30f0`, `dodge` Dodge `0x4d3150` (dir).
 - `ai` AI `0x4c8b60` (one tick). A character's `aistate` gives its AI
   state: `lookat` (+0x234, a name), `lastpos` (+0x23c), `waypointticks`
-  (+0x248); NetOwner reads 1 (`0x676838`, single player).
+  (+0x248), and Wander's: `lastwaypoint` (+0x238, a name), `wanderidle`
+  (+0x24c), `runticks` (+0x250); NetOwner reads 1 (`0x676838`, single
+  player).
 - `per-monster` (kata C3c, BOSS_AI.md): `ticks` ticks of AI_PerMonster
   `0x4c9b70` (tick k on game frame `frame` + k), each followed by a `Tick`
   record. A character's `boss` gives its state (+0x284, by BOSS_FIELDS'
@@ -86,10 +88,16 @@ Seams (guest.py's, and these), recorded in order:
   `block_result` (1); the original runs with the case's `seam_block` false.
 - EffectCombatFlash `0x4c8500`: recorded (it spawns an effect).
 - TMapPane::FindObjectsInRange `0x452060` (AI's waypoint search): the
-  case's `waypoints` ({name, pos, type}), in order, recorded; GetInstance
-  `0x452690` gives each (a helper: class 0xf, its type's name at +0x4c);
-  LineOfSight `0x4533d0` from one (to a character) clear unless the case's
-  `walls` name the pair -- only in a case with waypoints.
+  case's `waypoints` ({name, pos, type, level}), in order, recorded;
+  GetInstance `0x452690` gives each (a helper: class 0xf, its type's name
+  at +0x4c, map index HELPER_INDEX + k at +0x40, level +0xe, out of any
+  inventory, IsInInventory its only virtual); LineOfSight `0x4533d0` from
+  one (to a character) clear unless the case's `walls` name the pair --
+  only in a case with waypoints. With `real_map`, both run as original
+  instead: the search over the helpers (guest.py's map iterator seam), the
+  line of sight over the case's `ground`.
+- Wander's (kata M9, the case's `seam_wander`): SetWalkMode `0x4cf000`,
+  SetRunMode `0x4cf490`, EndFighting `0x4d3fd0`, each recorded (result 1).
 - CanSeeCharacter `0x4cd540` (target, angle): the case's `sees` (1; or
   the names seen), recorded.
 - IsEnemy `0x4c89c0`: an enemy unless the case's `friends` hold the pair,
@@ -151,8 +159,12 @@ EFFECT_COMBAT_FLASH = 0x4c8500
 AI, FIND_OBJECTS_IN_RANGE, CAN_SEE = 0x4c8b60, 0x452060, 0x4cd540
 GET_INSTANCE, LINE_OF_SIGHT = 0x452690, 0x4533d0
 HELPER_INDEX = 0x7000                           # map indices the case's helpers take
+IS_IN_INVENTORY, SLOT_IS_IN_INVENTORY = 0x477a10, 0xb4
 G_NETOWNER, G_EDITOR = 0x676838, 0x668154
 O_LOOKAT, O_LASTPOS, O_WAYPOINTTICKS, O_MONSTERKIND = 0x234, 0x23c, 0x248, 0x280
+O_LASTWAYPOINT, O_WANDERIDLE, O_RUNTICKS = 0x238, 0x24c, 0x250
+# Wander's callees the port has as 1998 code (their own katas): thiscall, no arguments.
+WANDER_SEAMS = ((0x4cf000, 'SetWalkMode'), (0x4cf490, 'SetRunMode'), (0x4d3fd0, 'EndFighting'))
 SPELL_FIND, CAST = 0x53f010, 0x4d5c20
 PLAYER_WEAPONTYPE, PLAYER_WEAPONDAMAGE, SET_PLAYER_STATE = 0x520810, 0x520830, 0x51d680
 # Hit resolution (COMBAT_HIT.md): original ResolveAttack / ResolveHit /
@@ -244,7 +256,9 @@ COVERED = {'AnimPrefix': (0x4cdf60, 0x4ce1b0), 'CombatAnimName': (0x4ce1b0, 0x4c
            'Pulse': (0x4c1bb0, 0x4c3256), 'PlayerPulse': (0x518aa0, 0x518dea),
            'TComplexObject::Pulse': (0x4db190, 0x4db1c5), 'KillExp': (0x51a5b0, 0x51a625),
            'AwardKillExp': (0x51a630, 0x51abdb), 'AwardSkillExp': (0x51abe0, 0x51ac8e),
-           'AddSkillExp': (0x51ac90, 0x51ad7e), 'AwardStealthExp': (0x51ad80, 0x51ada8)}
+           'AddSkillExp': (0x51ac90, 0x51ad7e), 'AwardStealthExp': (0x51ad80, 0x51ada8),
+           'Wander': (0x4c9790, 0x4c9ae8), 'PickWanderWaypoint': (0x4c95e0, 0x4c9785),
+           'ProbeLedge': (0x4c9460, 0x4c95d9)}
 
 ATTACK_SIZE = 0x320
 RULES = 0x65d7a8
@@ -333,6 +347,16 @@ class MeleeFixture:
         self.protections = {}
         self._conditional(DAMAGE, 0x14, self._damage, lambda: self.case.get('seam_damage', True))
         self._conditional(BLOCK, 4, self._block, lambda: self.case.get('seam_block', True))
+        for address, name in WANDER_SEAMS:
+            self._conditional(address, 0, (lambda n: lambda a, c: self._wander_seam(n, c))(name),
+                              lambda: self.case.get('seam_wander', False))
+        # The helpers' vtable: IsInInventory as original (a map search asks
+        # it), every other slot one stub that fails the case.
+        self.helper_vtable = self.vm.allocate(0x400)
+        unexpected = b.add_stub('helper.unexpected', 0, self._helper_unexpected)
+        for slot in range(0, 0x400, 4):
+            self.vm.put_u32(self.helper_vtable + slot, unexpected)
+        self.vm.put_u32(self.helper_vtable + SLOT_IS_IN_INVENTORY, IS_IN_INVENTORY)
         self._emulator_fixes()
         self._coverage()
         self.vm.checkpoint()
@@ -412,7 +436,17 @@ class MeleeFixture:
         self.world.seams.append(dict(seam='CanSeeCharacter', who=self.world._name(ecx), target=them, result=seen))
         return seen
 
+    def _wander_seam(self, name, ecx):
+        self.world.seams.append(dict(seam=name, who=self.world._name(ecx), result=1))
+        return 1
+
+    @staticmethod
+    def _helper_unexpected(args, ecx):
+        raise RuntimeError('a helper was asked a virtual it does not model')
+
     def _find_objects(self, args, ecx):
+        if self.case.get('real_map'):
+            return Boundaries.ORIGINAL
         centre = list(struct.unpack('<3i', self.vm.uc.mem_read(args[0], 12)))
         n = len(self.helpers)
         for i in range(min(n, s32(args[6]))):
@@ -432,6 +466,8 @@ class MeleeFixture:
         return self.helpers[i][1]
 
     def _helper_sight(self, args, ecx):
+        if self.case.get('real_map'):
+            return Boundaries.ORIGINAL          # over the case's `ground`
         if not self.helpers:
             if self.case.get('perception'):
                 return self._eyes_sight(args)
@@ -464,19 +500,27 @@ class MeleeFixture:
 
     def _make_helpers(self, case):
         """The case's helpers: class 0xf, a type record whose first word
-        names the type, the position."""
+        names the type, the position, the level, the map index HELPER_INDEX
+        + k, no inventory slot; with `real_map`, what a map search walks."""
         vm = self.vm
         self.helpers = []
-        for w in case.get('waypoints', []):
+        for k, w in enumerate(case.get('waypoints', [])):
             obj = vm.allocate(0x200)
             name = vm.allocate(32)
             vm.write(name, w.get('type', 'Waypoint').encode(TEXT) + b'\0')
             info = vm.allocate(16)
             vm.put_u32(info, name)
+            vm.put_u32(obj, self.helper_vtable)
             vm.write(obj + 4, struct.pack('<h', 0xf))
+            vm.write(obj + 0xe, struct.pack('<h', w.get('level', 0)))
             vm.write(obj + 0x10, struct.pack('<3i', *w['pos']))
+            vm.put_u32(obj + 0x40, HELPER_INDEX + k)
             vm.put_u32(obj + 0x4c, info)
+            vm.write(obj + 0x7c, struct.pack('<h', -1))
             self.helpers.append((w['name'], obj))
+        if case.get('real_map'):
+            self.world.set_map_objects((name, obj, w.get('level', 0))
+                                       for (name, obj), w in zip(self.helpers, case.get('waypoints', [])))
 
     def _combat_flash(self, args, ecx):
         self.world.seams.append(dict(seam='EffectCombatFlash', who=self.world._name(ecx)))
@@ -863,21 +907,30 @@ class MeleeFixture:
             if key in b:
                 vm.put_u32(ab + off2, b[key] & 0xffffffff)
 
+    def _helper_or_char(self, name):
+        return next((o for n, o in self.helpers if n == name), None) or self._obj(name)
+
+    def _helper_or_char_name(self, address):
+        if not address:
+            return None
+        return next((n for n, o in self.helpers if o == address), None) or self.world._name(address)
+
     def _aistate(self, obj, a):
         vm = self.vm
-        look = a.get('lookat')
-        helper = next((o for name, o in self.helpers if name == look), None)
-        vm.put_u32(obj + O_LOOKAT, helper or self._obj(look))
+        vm.put_u32(obj + O_LOOKAT, self._helper_or_char(a.get('lookat')))
         vm.write(obj + O_LASTPOS, struct.pack('<3i', *a.get('lastpos', [0, 0, 0])))
         vm.put_u32(obj + O_WAYPOINTTICKS, a.get('waypointticks', 0) & 0xffffffff)
+        vm.put_u32(obj + O_LASTWAYPOINT, self._helper_or_char(a.get('lastwaypoint')))
+        vm.put_u32(obj + O_WANDERIDLE, a.get('wanderidle', 0) & 0xffffffff)
+        vm.put_u32(obj + O_RUNTICKS, a.get('runticks', 0) & 0xffffffff)
 
     def _ai_dump(self, obj):
         vm = self.vm
-        look = vm.u32(obj + O_LOOKAT)
-        helper = next((name for name, o in self.helpers if o == look), None)
-        return dict(lookat=helper or (self.world._name(look) if look else None),
+        return dict(lookat=self._helper_or_char_name(vm.u32(obj + O_LOOKAT)),
                     lastpos=list(struct.unpack('<3i', vm.uc.mem_read(obj + O_LASTPOS, 12))),
-                    waypointticks=s32(vm.u32(obj + O_WAYPOINTTICKS)), monsterkind=s32(vm.u32(obj + O_MONSTERKIND)))
+                    waypointticks=s32(vm.u32(obj + O_WAYPOINTTICKS)), monsterkind=s32(vm.u32(obj + O_MONSTERKIND)),
+                    lastwaypoint=self._helper_or_char_name(vm.u32(obj + O_LASTWAYPOINT)),
+                    wanderidle=s32(vm.u32(obj + O_WANDERIDLE)), runticks=s32(vm.u32(obj + O_RUNTICKS)))
 
     def _block_fields(self, obj, spec):
         for role, off in (('root', 0xe0), ('doing', 0xd8), ('desired', 0xdc)):

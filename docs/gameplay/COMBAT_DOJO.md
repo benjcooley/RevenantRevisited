@@ -71,9 +71,11 @@ only).
 | M6 | player input per tick: UpdateMove → Go / Stop / Leap (Block and the bow aim seamed: their tracks), and Stop | `0x47de30`, `0x4cee70` | `TPlayScreen::UpdateMove`, `TCharacter::Stop` | [x] 280/280 (`combat-input`; two mutations caught) |
 | M7 | displacement: Move / MoveStep (velocity, blocking, shove), FindClearPath, CharBlocking, GetWalkHeight / GetWalkHeightRadius | `0x4c46d0` `0x4c3bc0`, TPlayer `0x518df0`, `0x4c39d0` `0x4d4db0` `0x452e10` `0x4530a0` | `TCharacter::Move`, `MoveStep`, `Blocked`, `CharBlocking`, `TMapPane::GetWalkHeight*` | [x] 786/786 (`combat-move`; six mutations caught) |
 | M8 | orbit sequence: N ticks of Go → Pulse (UpdateAction) → Move → SetObjectMotion → frame → NextFrame, with SetState / ResetState / T3DImagery::SetObjectMotion / NextFrame as original over motion tables; walking, strafing round a target, a monster curving, walls, loop / ping-pong / reverse roots | `0x490bd0` order; `0x46f250` `0x46f1e0` `0x40cd20` `0x40cc40` `0x470cc0` | the tick, `TObjectInstance::SetState` / `NextFrame`, `T3DImagery::SetObjectMotion` | [~] 32/32 sequences, ~1,500 ticks (`combat-sequence`); motion tables synthetic, real I3D motion next |
-| M9 | AI combat movement: approach, combat range, retreat, wander | `0x4c8b60`, `0x4c9790` | `TCharacter::AI` | [ ] |
-| M9b | perception: IsEnemy, CanSeeCharacter, FindCharacters (hearing inlined), Hearing, Sight, HasSeenMe / SetHasSeen, the map iterator's characters | `0x4c89c0` `0x4cd540` `0x4cd690` `0x4cda80` `0x4cdb30` `0x4c58f0` `0x4c5940` | same | [x] 1007/1007 (`combat-perceive`; nine mutations caught); the line of sight `0x4533d0` is the case's on both sides (its own kata open) |
+| M9 | AI combat movement: approach, combat range, retreat (C3b), wander: Wander with its waypoint pick and ledge probe | `0x4c8b60`, `0x4c9790` `0x4c95e0` `0x4c9460` | `TCharacter::AI`, `Wander`, `PickWanderWaypoint`, `ProbeLedge` | [x] 432/432 (`melee-wander`: Wander in the tick, 404, and the AI's waypoint search over the real map queries, 28; thirteen mutations caught; every reachable block); the AI's movement is C3b's |
+| M9b | perception: IsEnemy, CanSeeCharacter, FindCharacters (hearing inlined), Hearing, Sight, HasSeenMe / SetHasSeen, the map iterator's characters | `0x4c89c0` `0x4cd540` `0x4cd690` `0x4cda80` `0x4cdb30` `0x4c58f0` `0x4c5940` | same | [x] 1007/1007 (`combat-perceive`; nine mutations caught), where the line of sight `0x4533d0` is the case's; with the real one over a floor (walls round eye height, ledges, holes, another level), 178/178 (`combat-sight`) |
 | M10 | leap, side step, knock back, pivot, stop | `0x4d2be0` `0x4d6220` `0x4d3750` `0x4c8470` `0x4cee70` | same | [~] SideStep, Leap, StartRetreat `0x4d5fc0`, KnockBack: 482/482 (`combat-steps`; five mutations caught); Stop in M6; ResolvePivot `0x4c8470` in M1u |
+| M11 | line of sight: the walk over the walk cells, both ends, the line's height, holes, unloaded sectors, the caller's level, both out-points | `0x4533d0` (FindSector `0x499e10`, ReturnWalkmap `0x499720`) | `TMapPane::LineOfSight`, `GetWalkGridHeight(level, x, y)` | [x] 1893/1893 (`map-los`, every cell read compared; five mutations caught; every reachable block) |
+| M12 | objects in range: the rect iterator, the sphere (3D, the radius term) and the box, classes, inventories, levels, the order | `0x452060` (iterator `0x44cf80` / `0x44d080`) | `TMapPane::FindObjectsInRange` | [x] 577/577 (`map-find-objects`; seven mutations caught; every block) |
 
 ### C — melee
 
@@ -84,7 +86,7 @@ only).
 | C3 | attack choice: ButtonAttack / IsValidAttack / FindButtonAttack / FindPcntAttack / RandomAttack | `0x4d2480` `0x4d1120` `0x4d1ff0` `0x4d1eb0` `0x4d2900` | same | [x] 5206/5206 (`melee-attack-choice`) |
 | C4 | hit resolution: ResolveAttack → ResolveHit (to-hit, tiers), OnAttacked | `0x4c6dd0` `0x4c62b0` | same | [x] 7855/7855 (`melee-hit`) |
 | C5 | block / dodge / impact / dead resolvers, EffectCombatFlash | `0x4d2e30` `0x4d30f0` `0x4d3150` `0x4c74b0` `0x4c7810` `0x4c77a0` `0x4c8500` | same | [x] 2100/2100 (`melee-resolvers`); retail's eight dodge controls (commands 0x30-0x37) in the control table |
-| C3b | the AI as a whole: acquisition, the attack branch, the move branch, the waypoint, AI_PerMonster (non-boss) | `0x4c8b60` `0x4c9b70` | `TCharacter::AI`, `AIAttack`, `AIMove`, `NearestWaypoint`, `AIPerMonster` | [x] 925/925 (`melee-ai`); the bosses are C3c; Wander `0x4c9790` open (M9) |
+| C3b | the AI as a whole: acquisition, the attack branch, the move branch, the waypoint, AI_PerMonster (non-boss) | `0x4c8b60` `0x4c9b70` | `TCharacter::AI`, `AIAttack`, `AIMove`, `NearestWaypoint`, `AIPerMonster` | [x] 925/925 (`melee-ai`); the bosses are C3c; Wander `0x4c9790` in M9 |
 | C3c | the four bosses: AI_PerMonster's cases, Baez (the crowd, the stuns, the fake death and the throw), Solifuge (the stun, the sky walk, the brood, the slam), Jhaga (the teleports and casts), Yhagoro (walking or fighting) | `0x4c9b70`: `0x4c9ce8` `0x4cbb1d` `0x4ccaa4` `0x4cd07d` | `TCharacter::AIPerMonster`, src/bossai.cpp | [x] 1925/1925 (`melee-boss`; every reachable block of the four reached, the rest explained; 19 of 20 mutations caught, the survivor equivalent; forensics/BOSS_AI.md). Seam left: retail's EndFighting `0x4d3fd0` (the port's is 1998's) |
 | C6 | Pulse: regen, fatigue, poison, chains, death | `0x4c1bb0`, TPlayer `0x518aa0` | `TCharacter::Pulse`, `TPlayer::Pulse` | [x] 1364/1364 (`melee-pulse`; 14 of 15 mutations caught, the survivor a no-op; CHARACTER_PULSE.md) |
 | C7 | experience and level-up | `0x51a630` | `AwardKillExp` / `AwardSkillExp` | [x] 285/285 (`melee-exp`; five mutations caught; EXPERIENCE.md) |
@@ -425,6 +427,43 @@ Detail and evidence in [forensics/COMBAT_MOVEMENT.md](forensics/COMBAT_MOVEMENT.
     one. CastByName (`0x4d5b90`) now gates before the spell lookup, which
     DoAttack's MAGICATTACK calls without the gates (CastVariant), as retail
     does; the seams follow (castByNameSeam whole, castSeam past the gates).
+18. **The map queries (katas M11, M12, 2026-10-11;
+    forensics/MAP_QUERIES.md).** The line of sight (`0x4533d0`) is a DDA
+    over the walk cells, both ends included, the line's height carried in
+    16.16; a cell blocks when it has no sector on the caller's level, no
+    walkmap, or stands above the line (level with it passes). Only sight and
+    the waypoint searches use it (eye to eye; waypoint at the character's
+    height, the waypoint's level); spells and missiles don't. The port's
+    walk was already the same; it now takes the caller's level and has
+    retail's outputs. FindObjectsInRange (`0x452060`) walks only the loaded
+    sectors of one level and their objects in a half-open square round the
+    point (`+width - 1` on the far sides: an object exactly `width` east or
+    south is never found, nor the `+width/2` edge of an even box); its sphere
+    is 3D, centre to centre, less `(0.4 Radius)²` only in a search for
+    characters or players by class; the list is nearest first, the later of
+    equals in front. The port's searched the pane's window with no rect,
+    and its insertion moved `n` bytes of the distances and never the
+    indices, so any search that found a nearer object after a farther one
+    returned slots of the caller's garbage (the AI's waypoints, pickups, the
+    arrow's and the spells' victims all go through it). The playtest track
+    found the same insertion through Use (`2455a015`); the merge keeps this
+    one, the kata'd one, for both.
+19. **Wander (kata M9, 2026-10-11; COMBAT_ATTACK_CHOICE.md §3.15).** What
+    an AI-driven character (charflags `0x100000`: retail's automatic network
+    player, the arena's `--playerai`) does before its AI each tick: an idle
+    count; a run in a fighting root turned into a walk with the fight
+    restarted in the combat root; with no opponent, EndFighting and 100
+    ticks' rest; retreating, runs of 800-2000 ticks (a draw over 30); out of
+    combat, a run burst at full fatigue one tick in a hundred (100-800
+    ticks), ended early half the times it's tired and most times in a bow
+    fight; and a patrol: the next waypoint within 2000 that isn't this leg's
+    or the last, can see the character, and passes a ledge probe, the one
+    most nearly ahead six times in ten, else any; none, back to the last;
+    nothing at all, 1000 ticks' rest. The probe steps **away** from the
+    waypoint and keeps it only where it finds a step of 32 or more, so on
+    open ground no waypoint passes (retail's; ported as is). The port had
+    none of it: Pulse ran the AI alone. Arena runs with `--playerai` now
+    wander between fights.
 
 ## 6. Layouts used by the fixtures
 
@@ -468,7 +507,9 @@ flag bits (§5.4): dumps name the flags, each side mapping its own bits.
 | clear path | FindClearPath `0x4c39d0` (cases without a `ground`) | `TCharacter::blockedSeam` | the case's `blocked` |
 | sight | CanSeeCharacter `0x4cd540` | `TCharacter::canSeeSeam` | the case's `sees` |
 | world | FindCharacters `0x4cd690` (M3/M5: empty world) | `TCharacter::findCharactersSeam` | the case's characters |
-| walkmap | sector lookup `0x499e10` + ReturnWalkmap `0x499720` (not recorded) | `TMapPane::walkGridSeam` (GetWalkGridHeight) | the case's `ground`: `z`, `cells` boxes, `nosector` |
+| walkmap | sector lookup `0x499e10` + ReturnWalkmap `0x499720` (recorded as `Cell` only with the ground's `record`) | `TMapPane::walkGridSeam` (GetWalkGridHeight, with the level) | the case's `ground`: `z`, `cells` boxes, `nosector`, `level` (its sectors' only level), `record` |
+| map search | the rect iterator `0x44cf80` / `0x44d080` that FindObjectsInRange walks (flags `0x6e0`; recorded `MapIterator`: rect, objset, level) | `TMapPane::mapObjectsSeam` (`Fixture::SetMapObjects`) | the case's objects in order (`objects`; the melee fixture's `waypoints` with `real_map`), those in the rect on that level |
+| Wander's callees | SetWalkMode `0x4cf000`, SetRunMode `0x4cf490`, EndFighting `0x4d3fd0` (with `seam_wander`) | `TCharacter::setWalkModeSeam` / `setRunModeSeam` / `endFightingSeam` | recorded, result 1 |
 | characters near a point | map iterator `0x44ceb0` / `0x44d080` (CharBlocking) | `TCharacter::nearbyCharactersSeam` | the case's `nearby`, else every character |
 | position | SetPos `0x46ed70` (slot 8) | SetPos override | recorded, position stored |
 | random draws | random `0x483300`, rand `0x58c582` | revutils `SetRandomSource` / `SetRandomRangeObserver` | the case's `tape`, then retail's generator from `seed`; every draw in `draws` |
@@ -513,9 +554,11 @@ python3 tools/retail_ab/retail_ab.py combat-update      # M1u
 python3 tools/retail_ab/retail_ab.py combat-sequence    # M8
 python3 tools/retail_ab/retail_ab.py combat-input       # M6
 python3 tools/retail_ab/retail_ab.py combat-steps       # M10
-python3 tools/retail_ab/retail_ab.py combat-perceive    # M9b
+python3 tools/retail_ab/retail_ab.py combat-perceive    # M9b (combat-sight: over a real map)
 python3 tools/retail_ab/retail_ab.py combat-go-world    # M4
 python3 tools/retail_ab/retail_ab.py melee-tagsound     # T1, the tag sounds' samples
+python3 tools/retail_ab/retail_ab.py melee-wander       # M9 (Wander, in the tick)
+python3 tools/retail_ab/retail_ab.py map-los            # M11 (map-find-objects M12)
 python3 tools/retail_ab/retail_ab.py melee-attack-choice   # C3 (melee-hit C4, melee-damage C2,
                                                            # melee-resolvers C5, melee-ai C3b)
 python3 tools/retail_ab/retail_ab.py melee-boss         # C3c, the four bosses (--case baez. etc.)
@@ -539,7 +582,12 @@ python3 tools/retail_ab/retail_ab.py combat-go --all --case go.player.cf1.f0.b64
 - Retail: `tools/retail_runtime/slots/combat/` (versioned with the emulator;
   `fixturekit.py` holds the shared fixture helpers):
   `guest.py` (layouts, shared seams, fault reports with the callers on the
-  stack), `combat_call.py` (the method per case), `data_parse.py` (D1).
+  stack), `combat_call.py` (the method per case), `data_parse.py` (D1),
+  `map_query.py` (M11, M12).
+- Coverage: `MELEE_COVERAGE=<dir>` (melee fixture) or `MAP_COVERAGE=<dir>`
+  (map fixture) on a run, then `tools/retail_ab/melee_coverage.py <dir>
+  [--fixture map_query] [--show]` under the retail venv: the blocks of the
+  functions under test no case reached.
 - Port: `src/retailab_combat.cpp` (`--retail-ab=combat-*`), loading the
   install's class.def once (`REVENANT_DATA_PATH`, set from `--data`);
   `src/retailab_data.cpp` (`combat-data`).

@@ -3,12 +3,14 @@
 
     MELEE_COVERAGE=<dir> python3 tools/retail_ab/retail_ab.py melee-attack-choice
     <retail-asm venv python> tools/retail_ab/melee_coverage.py <dir> [--show]
+    MAP_COVERAGE=<dir> python3 tools/retail_ab/retail_ab.py map-los
+    <retail-asm venv python> tools/retail_ab/melee_coverage.py <dir> --fixture map_query
 
-The retail fixture (slots/combat/melee_attack.py) writes the code blocks
-it executed to <dir>/<pid>.json; this lists, per function in its COVERED
-table, the block starts the asm has (the entry, every branch target, the
-instruction after every branch or call) whose first byte no case ran. `--show`
-prints each unreached block's first instructions.
+The retail fixture (slots/combat/melee_attack.py, or the one `--fixture`
+names) writes the code blocks it executed to <dir>/<pid>.json; this lists,
+per function in its COVERED table, the block starts the asm has (the entry,
+every branch target, the instruction after every branch or call) whose first
+byte no case ran. `--show` prints each unreached block's first instructions.
 """
 from __future__ import annotations
 
@@ -79,7 +81,9 @@ def blocks(read, lo, hi):
 
 
 def main():
-    from melee_attack import COVERED
+    import importlib
+    fixture = sys.argv[sys.argv.index('--fixture') + 1] if '--fixture' in sys.argv else 'melee_attack'
+    COVERED = importlib.import_module(fixture).COVERED
     folder = Path(sys.argv[1])
     show = '--show' in sys.argv
     reached = set()

@@ -74,7 +74,9 @@ Seams (guest.py for the shared ones), recorded in order:
   (default yes), recorded -- original with `perception`;
 - TMapPane LineOfSight `0x4533d0` (thiscall (from, to, level, 0, 0), ret
   0x14): clear unless the case's `walls` holds the pair of characters whose
-  eyes (LIGHTINGCHARHEIGHT above their positions) the points are, recorded.
+  eyes (LIGHTINGCHARHEIGHT above their positions) the points are, recorded
+  -- original over the case's walkmap in a case with a `ground` (kata
+  M11's function in sight's own calls, `combat-sight`).
 
 The case's characters also take their `chardata` whole (data_parse's
 layout), the type name (`type`, else the name), `invisiblespell`, a
@@ -173,6 +175,8 @@ class CallFixture:
         return sees
 
     def _line_of_sight(self, args, ecx):
+        if 'ground' in self.case:
+            return Boundaries.ORIGINAL
         line = [self._eyes_of(args[0]), self._eyes_of(args[1])]
         clear = int(line not in self.case.get('walls', []))
         self.world.seams.append(dict(seam='LineOfSight', **{'from': line[0]}, to=line[1], result=clear))

@@ -274,6 +274,7 @@ static const bool registered = RegisterTarget("combat-go", CombatCall) &&
                                RegisterTarget("combat-steps", CombatCall) &&
                                RegisterTarget("combat-perceive", CombatCall) &&
                                RegisterTarget("combat-go-world", CombatCall) &&
+                               RegisterTarget("combat-sight", CombatCall) &&
                                RegisterTarget("combat-kernels", CombatKernels);
 
 }  // namespace RetailAB
