@@ -20461,7 +20461,8 @@
       "source_fixes": [
         "2026-10-10: exact quoted authored particle profile; original numeric integer view, pinned prototype slot, independent compiled emitter matrices and runtime controller admission verified.",
         "2026-10-10: exact admitted static emitter keys use actual cached animator frame; original full draw caller/cull/FVF and render-stride3 verified. No generic animation or shader changes.",
-        "2026-10-11: exact admitted hardware RGB8 carrier correction independentlyverified original77HW/SW and150 sourceimages;75software imagesunchanged."
+        "2026-10-11: exact admitted hardware RGB8 carrier correction independentlyverified original77HW/SW and150 sourceimages;75software imagesunchanged.",
+        "2026-10-11: exact original fiveframe cached emitterkey transition restored; root77native/150sourceimagerepeat and2773actualquads validated. Currentsoftwarebrightness reviewopen."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -20480,7 +20481,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Independentlyreproduce original75frame emittertransition, actualGPUcorners and bothpolicyfilms; reviewcurrentoutputs toclose reopensoftware/hardwareappearance.",
+      "next_action": "Resolve originalSW/currentMetalSW brightness arithmetic difference; transition state/geometry and qualifiedhardwarecore shape now independentlyverified.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
@@ -20498,6 +20499,15 @@
             "actual full native caller/Metal appearance",
             "natural scene and caller clocks"
           ]
+        },
+        {
+          "name": "nullifier_original_emitter_transition",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/current-nullifier-transition-20261011/root-check.json",
+          "sha256": "9b1f4bd7eaa99fa9559ee815a649aef6f9ae677c96e026631f79db1e445089af",
+          "scope": "Independent fresh77original fullstate/pools/RNG/keys/packets,150sourceimagesexactrepeat and2773 actualsubmittedquads validate omittedfiveframe emittertransition correction. Qualifiedhardwarecore notchremoved andgeometrymatches; originalSWreference remains visiblydimmer than bothprior/currentMetalSWpolicy. Primarycurrentsoftwareappearance remainsopen pendingcausalcolorarithmeticaudit. Historicalprimaryreviewretained; no neweffectcredit.",
+          "modern_gpu_backend_compared": true,
+          "full_acceptance_granted": false
         }
       ],
       "command_lifecycle_validation": {
