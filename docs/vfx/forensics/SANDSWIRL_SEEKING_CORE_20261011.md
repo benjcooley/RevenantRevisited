@@ -69,3 +69,5 @@ sampled target acquisition; it does not claim continuous actor tracking.
 Use `sandswirl_qualified_child_probe.py --substitute-sparks
 --quicksand-spell-control --move-target` with the same executable and boot image,
 then both compiled probes. The two actual SetPos calls are separately logged.
+
+Root independently reran both moving-target source probes:4,340 parent fields,264,430 particle/RNG/kill fields and5,679 render packets pass exactly. Both reports are pinned under `current-sandswirl-parent-20261011`.

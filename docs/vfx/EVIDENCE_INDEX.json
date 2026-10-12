@@ -2044,6 +2044,20 @@
       "check": "qualified_seeking_pool_render_source",
       "status": "pass",
       "scope": "264430pool/RNG/kill fields and5697renderpackets bitexact through310ticks, newobserver preservesbaseline state/pixels18PNGs; qualifiedmodifiedSparkschild/Quicksandspell, externalmapallocation75, no intendedSandimagery/runtimefactory/appearancecredit."
+    },
+    "recon/retail_asm/runtime/effects/current-sandswirl-parent-20261011/parent-moving-source/manifest.json": {
+      "sha256": "dc0dc2eeaf6056efca6982a3cd3981468693ad8afaa0d8d3069eb2336e5b8cca",
+      "retail_row": "Sandswirl:0xbecefeda",
+      "check": "parent-moving-source",
+      "status": "pass",
+      "scope": "Actual SetPos targetmoves at60/85; originalquery75 samples80/48/-32, no latercontinuous retarget. QualifiedSparkschild+realQuicksandspellcontrol, currentcore matchesoriginal310ticks. Missingintendedimagery/runtimeGPU remainsopen."
+    },
+    "recon/retail_asm/runtime/effects/current-sandswirl-parent-20261011/seeking-moving-source/manifest.json": {
+      "sha256": "44460b7f98dc0aa06928f36e66a88501d116a9a9aacc4c195b636073cfb8e009",
+      "retail_row": "Sandswirl:0xbecefeda",
+      "check": "seeking-moving-source",
+      "status": "pass",
+      "scope": "Actual SetPos targetmoves at60/85; originalquery75 samples80/48/-32, no latercontinuous retarget. QualifiedSparkschild+realQuicksandspellcontrol, currentcore matchesoriginal310ticks. Missingintendedimagery/runtimeGPU remainsopen."
     }
   }
 }
