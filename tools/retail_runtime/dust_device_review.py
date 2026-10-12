@@ -6,7 +6,7 @@ from PIL import Image, ImageDraw
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def review(reference,repeat,metal,software,control,out):
  out.mkdir(parents=True,exist_ok=False);r=json.loads(reference.read_text());again=json.loads(repeat.read_text());m=json.loads(metal.read_text());s=json.loads(software.read_text());c=json.loads(control.read_text());assert m['status']=='pass'
- assert s['status']=='fail' and s['error']=='No visible effect pixels in the black-background capture'
+ assert (s['status']=='fail' and s.get('error')=='No visible effect pixels in the black-background capture') or (s['status']=='pass' and s['scenario'].get('expect_visible') is False)
  assert s['exit_code']==0 and not s['forced_owned_shutdown'] and len(s['frames'])==25
  assert s['pixel_summary']['nonblack_frames']==0 and c['states_exact']==25 and c['software_blank']==25
  assert m['scenario']['resolution']==[640,480]

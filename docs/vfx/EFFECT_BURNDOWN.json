@@ -32,12 +32,14 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 171,
+    "visual_fidelity_confirmed_rows": 172,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 171,
-    "remaining_visual_review_rows": 5,
-    "qualified_modified_reference_visual_rows": 3
+    "reviewed_visual_pass_rows": 172,
+    "remaining_visual_review_rows": 4,
+    "qualified_modified_reference_visual_rows": 3,
+    "qualified_semantic_device_visual_rows": 1,
+    "qualified_reference_visual_rows": 4
   },
   "lab_root": "/Users/benjamincooley/RevenantRetailLab",
   "evidence": {
@@ -23079,7 +23081,8 @@
       ],
       "source_fixes": [
         "Removed invented600ms warm-brown puff; authored Dustcloud partsys reports unsupported until posjitter/scljitter and exact-type binding are implemented.",
-        "2026-10-10: Actual20-frame Dust controller with four cached emitters and real OF_KILL replaces null preview.87,350 state fields/100 poses and exact zero-posjitter equivalence. Native software and matched software policy quantize to blank; modern-policy visible diagnostic gives no visual credit."
+        "2026-10-10: Actual20-frame Dust controller with four cached emitters and real OF_KILL replaces null preview.87,350 state fields/100 poses and exact zero-posjitter equivalence. Native software and matched software policy quantize to blank; modern-policy visible diagnostic gives no visual credit.",
+        "2026-10-11: DustmodernRGB8policyfixed fromactualhardwarepackets;root25native+25modernrepeats,blanksoftwarecontrols andcompletephaseappearance approvedagainstexplicitqualifiedsemanticdevice. Periodhardware/naturalcontextremainopen."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -23092,13 +23095,13 @@
         "port_smoke": false,
         "accurate_software_reference": false,
         "repeatable_ab": false,
-        "visual_fidelity": false,
+        "visual_fidelity": true,
         "runtime_trigger_integration": false,
         "map_or_character_context": false,
         "accepted": false
       },
       "runtime_dispatch": "unsupported_authored_partsys_requires_jitter_and_exact_type_binding",
-      "next_action": "Converted source behavior is legitimately blank in four genuine software caller/light/quality/position controls,331 packets each. Preserve authored colors; seek actual alternate caller mutation or supported device reference before visual credit.",
+      "next_action": "Verify natural Dustcaller/map/audio and actualperioddevice/filter/targetprecision; retain approvedmodernRGB8 qualifieddevice and originalsoftwareblank controls.",
       "notes": [
         "2026-10-05: bounded recording-before-spawn software diagnostic retained. Final five seconds are static residue, also present after delete; camera nudge restores exact ground. Unsupported preview verified with12 empty-floor frames; no accurate-reference credit."
       ],
@@ -23145,6 +23148,20 @@
           "scljitter"
         ],
         "forensics": "docs/vfx/forensics/DUST_FOG.md"
+      },
+      "visual_review": {
+        "date": "2026-10-11",
+        "reviewer": "root independent semantic-device proof/repeat and complete phase inspection",
+        "result": "pass",
+        "visual_pass": true,
+        "qualified_reference": true,
+        "semantic_device_reference": true,
+        "modified_retail": false,
+        "device_identical": false,
+        "scope": "Exact Dust 0x0c052637 own Dustcloud resource/controller and original hardwareFVF1e2 packets, RGB8 diffuse, RGB565 COM texture, MODULATE/ONE-ONE/cullnone/Ztest/noZwrite. Explicit independentsemanticdevice raster uses originalsoftwaretransform positions with declared integer-center/top-left coverage, RGB8linearUNORM target/round-nearest perfragment and point+linear sampler alternatives; not periodGPU/unmodifieddevice fidelity. Dust-only modernRGB8 sourcecorrection, softwareRGB5 andallotherprofiles includingCombatFlash unchanged; root23040 compiledpolicycontrols+3arithmetic/raster controls pass. Fresh25originaldeviceframes state/RNG/pool/orderedpackets/bothsamplerimages exact; original25software state/pool/RNG equal andallblank. Actualroot25modern frames decodedpixelidentical to frozenport,18visible;25softwarepolicy sourceframes blank andclean. All23matchedphases2..24/28whole-detail panels byteidentical,129pins verified, independentlyreviewed; directsimulation_seconds*24 phase pairing, extra blanktail retained, originalkill20. Root40gallerysamples visible andclean using explicitmodernpolicy; galleryliveness only. No seed/color/geometry/UV/phasefit. Naturalcaller/map/audio/hardwareinitialization/samplerselection/coverage/interpolation/targetrounding/perioddevice/exactpixels remainopen. qualified_reference=true, semantic_device_reference=true, device_identical=false; no originalsoftwarekernel patch.",
+        "report": "recon/retail_asm/runtime/effects/current-dust-qualified-device-20261011/root-approval.json",
+        "sha256": "a669e964d981fa2b9f31bfbfb47e99794e47db92354de2896f1e586b071d4ed3",
+        "note": "docs/vfx/forensics/DUST_QUALIFIED_DEVICE_20261011.md"
       }
     },
     {

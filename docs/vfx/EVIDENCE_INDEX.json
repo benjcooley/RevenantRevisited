@@ -17,12 +17,14 @@
     "fully_accepted_rows": 0,
     "remaining_acceptance_rows": 176,
     "actual_runtime_verified_rows": 90,
-    "visual_fidelity_confirmed_rows": 171,
+    "visual_fidelity_confirmed_rows": 172,
     "repeatable_ab_rows": 7,
     "thin_bounded_render_frontend_rows": 77,
-    "reviewed_visual_pass_rows": 171,
-    "remaining_visual_review_rows": 5,
-    "qualified_modified_reference_visual_rows": 3
+    "reviewed_visual_pass_rows": 172,
+    "remaining_visual_review_rows": 4,
+    "qualified_modified_reference_visual_rows": 3,
+    "qualified_semantic_device_visual_rows": 1,
+    "qualified_reference_visual_rows": 4
   },
   "reports": {
     "recon/retail_asm/runtime/effects/fountain-frontend-ab/manifest.json": {
@@ -2058,6 +2060,16 @@
       "check": "seeking-moving-source",
       "status": "pass",
       "scope": "Actual SetPos targetmoves at60/85; originalquery75 samples80/48/-32, no latercontinuous retarget. QualifiedSparkschild+realQuicksandspellcontrol, currentcore matchesoriginal310ticks. Missingintendedimagery/runtimeGPU remainsopen."
+    },
+    "recon/retail_asm/runtime/effects/current-dust-qualified-device-20261011/root-approval.json": {
+      "sha256": "a669e964d981fa2b9f31bfbfb47e99794e47db92354de2896f1e586b071d4ed3",
+      "retail_row": "Dust:0x0c052637",
+      "check": "root_qualified_semantic_device_appearance",
+      "status": "approved_qualified_scoped_appearance",
+      "qualified_reference": true,
+      "semantic_device_reference": true,
+      "device_identical": false,
+      "scope": "Exact Dust 0x0c052637 own Dustcloud resource/controller and original hardwareFVF1e2 packets, RGB8 diffuse, RGB565 COM texture, MODULATE/ONE-ONE/cullnone/Ztest/noZwrite. Explicit independentsemanticdevice raster uses originalsoftwaretransform positions with declared integer-center/top-left coverage, RGB8linearUNORM target/round-nearest perfragment and point+linear sampler alternatives; not periodGPU/unmodifieddevice fidelity. Dust-only modernRGB8 sourcecorrection, softwareRGB5 andallotherprofiles includingCombatFlash unchanged; root23040 compiledpolicycontrols+3arithmetic/raster controls pass. Fresh25originaldeviceframes state/RNG/pool/orderedpackets/bothsamplerimages exact; original25software state/pool/RNG equal andallblank. Actualroot25modern frames decodedpixelidentical to frozenport,18visible;25softwarepolicy sourceframes blank andclean. All23matchedphases2..24/28whole-detail panels byteidentical,129pins verified, independentlyreviewed; directsimulation_seconds*24 phase pairing, extra blanktail retained, originalkill20. Root40gallerysamples visible andclean using explicitmodernpolicy; galleryliveness only. No seed/color/geometry/UV/phasefit. Naturalcaller/map/audio/hardwareinitialization/samplerselection/coverage/interpolation/targetrounding/perioddevice/exactpixels remainopen. qualified_reference=true, semantic_device_reference=true, device_identical=false; no originalsoftwarekernel patch."
     }
   }
 }
