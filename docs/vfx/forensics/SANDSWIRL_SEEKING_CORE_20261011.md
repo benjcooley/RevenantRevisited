@@ -43,3 +43,5 @@ Reproduce with `seeking_particles_probe.py --trace <new-native-manifest>
 --baseline <prior-manifest> --output <fresh-directory>`. It compiles current
 source with contraction disabled, compares raw float bytes and integer fields,
 checks original render submissions, runs independent guards and freezes hashes.
+
+Root independently reran the current integrated source:264,430 fields and5,697 packets pass bit-exact, with all guards and baseline observer controls passing. Retained report: `recon/retail_asm/runtime/effects/current-sandswirl-parent-20261011/seeking-source/manifest.json`. Visual count remains171/176.

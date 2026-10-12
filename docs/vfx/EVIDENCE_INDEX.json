@@ -2037,6 +2037,13 @@
       "check": "original_cardinal_texel_sampling",
       "status": "pass",
       "scope": "Fourliteralpacket replays through completeoriginalsoftwarekernel reproduce everyoriginalpixel; read-onlytexel observations identifyUVspan sampling difference. No sourcebrightness/UV/geometry/clockfit or visualcredit."
+    },
+    "recon/retail_asm/runtime/effects/current-sandswirl-parent-20261011/seeking-source/manifest.json": {
+      "sha256": "27fb37a268bef72cb96826ffe952f745b614acf4b9ca7c26091ede5610d803ad",
+      "retail_row": "Sandswirl:0xbecefeda",
+      "check": "qualified_seeking_pool_render_source",
+      "status": "pass",
+      "scope": "264430pool/RNG/kill fields and5697renderpackets bitexact through310ticks, newobserver preservesbaseline state/pixels18PNGs; qualifiedmodifiedSparkschild/Quicksandspell, externalmapallocation75, no intendedSandimagery/runtimefactory/appearancecredit."
     }
   }
 }
