@@ -38,7 +38,9 @@ namespace VfxReview {
 namespace {
 constexpr int kLevel = 250;
 constexpr int kFloor = 16;
+constexpr uint32_t kBrazierFire = 0x70dc006au;
 struct Entry {
+    int object_class = OBJCLASS_EFFECT;
     int type = -1;
     uint32_t id = 0;
     std::string name, asset, status = "Approaching";
@@ -86,7 +88,7 @@ S3DPoint At(double distance, int z = kFloor) {
 }
 TObjectInstance* Resolve(Entry& e) {
     auto* object = MapPane.GetInstance(e.map_index);
-    return object && object->ObjId() == e.id ? object : nullptr;
+    return object && object->ObjClass() == e.object_class && object->ObjId() == e.id ? object : nullptr;
 }
 void Remove(Entry& e) {
     e.preview.reset();
@@ -118,7 +120,13 @@ bool SelectCatalogue() {
     for (int type=0; type<EffectClass.NumTypes(); ++type) {
         const auto* info = EffectClass.GetObjType(type);
         if (!info || !info->name) continue;
-        bool selected = selectors.empty();
+        // Audited unused shipped prototypes remain explicit diagnostics:
+        // Worm is separate from the named spell, cfire has disabled callers
+        // and missing presets, Vortex's old animator is commented out, and
+        // Fire has no discovered caller and only a static default binding.
+        bool selected = selectors.empty() && info->uniqueid!=0xdefeca7eu &&
+            info->uniqueid!=0xad92bd27u && info->uniqueid!=0x452dade0u &&
+            info->uniqueid!=0x119f01e3u;
         for (size_t i=0; i<selectors.size(); ++i) {
             char* end = nullptr; const auto id = strtoul(selectors[i].c_str(), &end, 0);
             if (Lower(info->name)==selectors[i] ||
@@ -127,11 +135,30 @@ bool SelectCatalogue() {
         }
         if (!selected) continue;
         Entry entry; entry.type=type; entry.id=info->uniqueid; entry.name=info->name;
-        if(entry.id==0xdefeca7eu) entry.name="Essencedrain (Worm prototype)";
-        if(entry.id==0x119f01e3u) entry.name="Fire (retail default)";
+        if(entry.id==0xdefeca7eu) entry.name="Worm (static prototype)";
+        if(entry.id==0xad92bd27u) entry.name="cfire (unused prototype)";
+        if(entry.id==0x452dade0u) entry.name="Vortex (unused static prototype)";
+        if(entry.id==0x119f01e3u) entry.name="Fire (unused retail default)";
         if (auto* imagery = TObjectImagery::GetImageryEntry(info->imageryid))
             entry.asset = imagery->filename;
         entries.push_back(std::move(entry));
+    }
+    // The large dungeon sconce fire is an animated TILE, not an EFFECT.
+    // Keep its exact normal-map owner and asset available for VFX inspection.
+    bool select_brazier = selectors.empty();
+    for (size_t i=0; i<selectors.size(); ++i) {
+        if (selectors[i]=="twnbrazier" || selectors[i]=="brazier fire" ||
+            selectors[i]=="0x70dc006a")
+            select_brazier = found[i] = true;
+    }
+    if (select_brazier) {
+        Entry brazier;
+        brazier.object_class = OBJCLASS_TILE;
+        brazier.id = kBrazierFire;
+        brazier.type = TileClass.FindObjType(kBrazierFire);
+        brazier.name = "TwnBrazier";
+        brazier.asset = "Town\\TwnBrazier.I2D";
+        entries.push_back(std::move(brazier));
     }
     bool select_essence_spell=selectors.empty();
     for(size_t i=0;i<selectors.size();++i)
@@ -184,11 +211,13 @@ bool LayoutStations() {
         const auto support=DescribeVfxReviewSpawn(e.id);
         // An unavailable entry still has a named slot. With no drawable, it
         // needs the minimum slot rather than its asset's oversized bounds.
-        if(!support.safe_factory && e.id!=0x98974eabu && e.id!=0x98974ea7u) continue;
+        if(!support.safe_factory && e.id!=0x98974eabu && e.id!=0x98974ea7u &&
+            !(e.object_class==OBJCLASS_TILE && e.id==kBrazierFire)) continue;
         // These are padded culling/refresh bounds, not measured visible size.
         // Bound their layout contribution; explicit large-effect hints below
         // reserve space for genuinely broad trajectories.
-        const auto* info=EffectClass.GetObjType(e.type);
+        const auto* cls=TObjectClass::GetClass(e.object_class);
+        const auto* info=cls?cls->GetObjType(e.type):nullptr;
         const auto* image=info?TObjectImagery::GetImageryEntry(info->imageryid):nullptr;
         if(image && image->header) {
             for(int i=0;i<image->header->numstates;++i) {
@@ -290,6 +319,32 @@ S3DPoint PathEndpoint(size_t index,bool target) {
     return {origin.x+int(std::lround(point.x)),origin.y+int(std::lround(point.y)),kFloor+128};
 }
 void Spawn(Entry& e, size_t index) {
+    if (e.object_class==OBJCLASS_TILE) {
+        const auto* info=TileClass.GetObjType(e.type);
+        const auto* image=info?TObjectImagery::GetImageryEntry(info->imageryid):nullptr;
+        std::string path=image?Lower(image->filename):"";
+        std::replace(path.begin(),path.end(),'/','\\');
+        const bool exact=e.id==kBrazierFire && info && info->uniqueid==kBrazierFire &&
+            info->name && stricmp(info->name,"TwnBrazier")==0 &&
+            image && path=="town\\twnbrazier.i2d" &&
+            image->header && image->header->imageryid==OBJIMAGE_ANIMATION;
+        if (!exact) {
+            e.failed=true; e.missing_visual=true;
+            e.status="Exact TwnBrazier TILE/imagery mapping unavailable";
+            return;
+        }
+        SObjectDef def{}; def.objclass=OBJCLASS_TILE; def.objtype=e.type;
+        def.level=kLevel; def.pos=e.station;
+        e.map_index=MapPane.NewObject(&def);
+        auto* object=Resolve(e);
+        if (!object) { e.failed=true; e.missing_visual=true; e.status="TwnBrazier factory failed"; return; }
+        object->OnScreen(); object->Animate(false);
+        e.status="Original TILE still + authored animation layer";
+        ++e.cycles;
+        log_info("[vfx-review] spawn name=TwnBrazier class=TILE type=%08x cycle=%u source=%d,%d,%d status=%s",
+            e.id,e.cycles,e.station.x,e.station.y,e.station.z,e.status.c_str());
+        return;
+    }
     if(!e.spell_preview.empty()) {
         const auto recipes=VfxTest::ReviewCatalogue();
         const auto recipe=std::find_if(recipes.begin(),recipes.end(),[&](const auto& r){return r.id==e.spell_preview;});
@@ -599,6 +654,9 @@ bool Initialize() {
         } });
     renderer.SetDaylightCycle(false); renderer.SetSunShadowEnabled(false);
     renderer.SetGroundTilesVisible(false);
+    if (std::any_of(entries.begin(),entries.end(),[](const Entry& e) {
+        return e.object_class==OBJCLASS_TILE && e.id==kBrazierFire;
+    })) renderer.SetReviewVisibleTileTypes({kBrazierFire});
     renderer.SetLightingMode(StartupVfxLightingMode>=0?StartupVfxLightingMode:0);
     if(!StartupVfxReviewSourceLighting) {
         previous_directional=UseDirLight;

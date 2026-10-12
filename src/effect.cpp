@@ -1303,6 +1303,8 @@ void TFlipbookBillboardComponent::Submit(TRenderer& renderer, const TObjectInsta
 class TFlameQuadComponent final : public TFlipbookBillboardComponent
 {
   public:
+    void ConfigureRetailTexture(bool argb4444) { retail_argb4444_ = argb4444; }
+
     void ConfigureAuthoredQuad(T3DImagery& imagery, float scale)
     {
         if (imagery.NumObjVerts(0) != 4)
@@ -1330,10 +1332,12 @@ class TFlameQuadComponent final : public TFlipbookBillboardComponent
         if (Texture() == kInvalidTexture)
             return;
         SQuadDrawItem item = {};
-        const bool variant = inst.ObjClass()==OBJCLASS_EFFECT && (inst.ObjId()==0x50ba373cu || inst.ObjId()==0x50ba373du);
-        const bool native = StartupVfxNativeDomain && variant;
-        item.retail_texture=variant?1:0;
-        item.retail_argb4444=variant;
+        // Base Flame uses the same authored ARGB4444 atlas as its colored
+        // variants. Select the source-format kernel from the loaded texture,
+        // including sector-less previews that have no retail type record.
+        const bool native = StartupVfxNativeDomain;
+        item.retail_texture = retail_argb4444_ ? 1 : 0;
+        item.retail_argb4444 = retail_argb4444_;
         hmm_mat4 native_owner;
         if(native){const auto& p=inst.Pos();BuildRetailSoftwareOwner(native_owner,p.x,p.y,p.z,uint8_t(inst.GetFace()));}
         const hmm_mat4& world = native?native_owner:inst.Transform().Matrix();
@@ -1367,6 +1371,7 @@ class TFlameQuadComponent final : public TFlipbookBillboardComponent
 
   private:
     hmm_vec3 local_corners_[4] = {};
+    bool retail_argb4444_ = false;
 };
 
 DEFINE_BUILDER("FLAME", TFlameEffect)
@@ -1405,7 +1410,8 @@ void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* 
         return;
     }
 
-    const uint32_t flame_id=inst->ObjId();
+    // Imagery-only preview constructors do not have a CLASS type record.
+    const uint32_t flame_id = inst->ObjClass() == OBJCLASS_EFFECT ? inst->ObjId() : 0;
     if ((flame_id==0x50ba373cu || flame_id==0x50ba373du) &&
         !flame_variants_preview::Matches(inst,img3d)) {
         log_warn("[flame] rejected exact colored variant resource id=%08x",flame_id);
@@ -1440,6 +1446,7 @@ void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* 
                             primary_bucket.height * primary_bucket.scale,
                             primary_bucket.additive, true);
         flipbook->ConfigureAuthoredQuad(*img3d, primary_bucket.scale);
+        flipbook->ConfigureRetailTexture(RetailMeshTextureLighting(primary_tex.desc.pixelFormat) == 3);
         std::string expr_error;
         if (!flipbook->SetFrameExpression(primary_bucket.frame_expr.c_str(), &expr_error))
             ParticleFatal("[particle] FLAME frame expression compile failed: " + expr_error);
@@ -8912,7 +8919,16 @@ TPhotonEffect_Bespoke* TPhotonEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoin
 void TPhotonEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
 {
     constexpr double step=1.0/24.0;sim_accum_+=TTime::DeltaTime();
-    while(sim_accum_+1e-9>=step) {sim_accum_-=step;if(IsAlive())AdvanceTick();}
+    while(sim_accum_+1e-9>=step) {
+        sim_accum_-=step;
+        if(IsAlive()) {
+            AdvanceTick();
+            if(getenv("REV_VFX_REVIEW_CLOCK_TRACE") && !stricmp(StartupTestMode,"vfx-review"))
+                log_info("[vfx-photon-clock] object=%d time=%.9f render=%lld state=%d frame0=%d active=%d ready=%d",
+                    GetMapIndex(),TTime::Time(),(long long)TTime::FrameCount(),missile_.state,
+                    particles_.frame[0],particles_.active,int(particles_.ready));
+        }
+    }
     Submit(debug_mode);
 }
 
@@ -14234,6 +14250,9 @@ void TAuthoredStaticMeshEffect::TickAndSubmitForTest_BESPOKE(EFxDebugMode /*debu
     texture_tick_seconds_+=TTime::DeltaTime()*rate;
     while(texture_tick_seconds_+1e-9>=tick_seconds) {
         texture_tick_seconds_-=tick_seconds;NextFrame();
+        if(getenv("REV_VFX_REVIEW_CLOCK_TRACE") && !stricmp(StartupTestMode,"vfx-review"))
+            log_info("[vfx-watcher-clock] object=%d time=%.9f render=%lld frame=%d rate=%.3f",
+                GetMapIndex(),TTime::Time(),(long long)TTime::FrameCount(),GetFrame(),rate);
     }
 }
 

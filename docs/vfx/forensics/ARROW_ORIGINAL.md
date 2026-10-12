@@ -102,3 +102,122 @@ Captured binary SHA-256:
 `4f4307c7f75eb0ffbdfc0f5079849223ea2a02b66e11b9ce00eff926197a1240`.
 The three final runtime regressions pass in24.193s; the documented natural
 caller/device/raster limits are unchanged.
+
+## Display-cadence correction, 2026-10-11
+
+The review adapter previously called the trail's random jitter producer on
+every display Render. At 60 Hz that resampled jitter more often than the
+24 Hz legacy animation. It now samples and caches packets once per legacy
+update, then submits the cached geometry once per display frame.
+
+The compiled actual `Advance` span produces identical per-tick owner state,
+RNG state/count and every cached packet channel at 24, 60 and 120 Hz for both
+QueenArrow and attached ArrowEffect. Four native/adapter tests pass under the
+existing controls. Fresh 24-frame native-domain captures of each effect match
+all 48 prior approved decoded images exactly, including blank tails. Evidence:
+private `research/vfx-arrow-cache-root-20261011/baseline-comparison.json` and
+the two capture manifests. The full game build passes.
+
+This verifies the declared adapter cadence and preserves the isolated 24 Hz
+appearance. The user's ordinary moving-gallery appearance report remains open;
+shared RNG ordering among simultaneous effects, natural actors, audio, skipped
+native Render calls and device/raster limits are not certified by this check.
+
+
+## Actual reviewer direction control, 2026-10-11
+
+`arrow_attached_visual_reference.py --gallery-direction` now uses the actual
+logged path delta(-170,-219), sourceZ144 and facing229. XY is algebraically
+relocated to source(0,0); no per-tick positions are supplied. Original startup
+builds the facing tables. Their literal velocity input is(-803840,-1034240,0)
+in16.16; original Move470920 computes the trajectory. The declared terrain
+boundary is a stationary plane through the target, rather than the old+X wall.
+Original Notify handles the explicit source-deletion event after Move blocks.
+
+Two independent24-tick original replays match every state/RNG/event and ordered
+draw matrix. The actual source core matches240 state fields and3,648 matrix
+channels; maximum matrix residual4.960937474152161e-7. The first position is
+(-12,-15,144); deletion starts at zero-based tick14. All existing horizontal
+and sparse-render controls remain passing; five arrow tests pass.
+
+The first source checker compared9-digit decimal velocity output against exact
+native float values and failed on decimal rounding alone. Its attempt is
+retained under `source-first`; velocities now print as hex floats and compare
+exactly, without widening a state tolerance. Matrix printing retains the existing
+declared error bound. `source-exact-velocity` records the corrected check.
+
+Private evidence: `research/vfx-arrow-gallery-direction-root-20261011/`.
+`direction-proof.json` SHA256:
+`061500c77a5b371d130bdf4bb31fb117470c04a181299a9a5d7f32d86b345de4`.
+This extends motion/controller coverage to the review direction; it is not
+rendered ordinary-gallery approval. The physical source/bow object is an
+upstream fixture and is not drawn, so the comparison covers the trail itself.
+Natural parent rendering, camera/raster/lighting and scene interaction remain
+open. No effect-production code changed in this direction audit.
+
+## Unclipped diagonal lifecycle, 2026-10-11
+
+The early 640x480 diagonal pictures clipped the trail while the owner was still
+alive. The attached-original tool now accepts `--resolution W H` and
+`--center X Y`, preserving its 640x480 / (320,320) defaults. The new comparison
+uses a declared 1280x960 surface and (640,640) center for both the original
+software raster and actual port renderer. The origin (0,0,144), destination
+(-170,-219,144), facing229, seed1 and 24Hz cadence remain unchanged. Nothing is
+fitted to the images, and no effect code or shared renderer policy changed.
+
+All24 original state/RNG/event records and ordered draw matrices are identical
+to the earlier 640x480 capture; pointer-valued draw arguments differ because the
+larger surfaces change fixture allocations. The source core still matches240
+state fields and3,648 matrix channels, with maximum matrix residual
+4.960937474152161e-7. All14 live frames fit inside the surface in the original,
+port native-domain and port common-domain captures. Deletion begins at zero-based
+tick14; all10 remaining frames are blank in allthree recordings. None of the
+full-frame effect bounds touches an edge.
+
+`arrow_fullcycle_review.py` checks those frame-pairing/lifecycle/bounds invariants,
+pins all72 full PNGs, checks the actual port phase/growth/RNG logs against the
+original live records, and packages a supplemental detail panel using the same
+fixed rectangle (600,240,760,480) without scaling or color changes. Its metrics
+are measurements, not appearance thresholds: native-domain support IoU is
+0.8767–0.9004(minimum/median), with at most one pixel of bounding-edge difference.
+Pixel equality is not claimed. The common projection remains a diagnostic.
+The independently viewed native-domain samples have closely corresponding
+shapes, growth, trajectory and deletion, while ordinary moving-gallery approval
+and natural physical-arrow/bow/map deletion dispatch remain open.
+
+Private evidence: `research/vfx-arrow-fullcycle-agent-20261011/` under
+`RevenantRetailLab`. Full package `review-final/manifest.json` SHA256:
+`7b6e54b85e79b84bbeb82000aafb36654c77f8261856daf918a9b0c1b38e1afa`.
+The frozen port binary SHA256 is
+`9875275ea0a1c820e1de8f63c1655dd7d259af70635714f8f8b8001bc3ed808a`.
+This comparison uses the same private endpoint-enabled source binary as the
+previous clipped attempt, rather than rebuilding during another agent's work.
+
+Reproduce the original frames from the worktree, with the retail-runtime Python
+environment and `PYTHONPATH=tools/retail_runtime:tools/retail_asm`:
+
+```sh
+python tools/retail_runtime/arrow_attached_visual_reference.py \
+  recon/retail_asm/baseline/Revenant.rebuilt.exe \
+  --output PRIVATE/native --gallery-direction --frames 24 \
+  --resolution 1280 960 --center 640 640 \
+  --samples 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23
+python tools/retail_runtime/arrow_core_probe.py PRIVATE/native/trace.json \
+  --output PRIVATE/source
+```
+
+Use `port_capture.py` twice with explicit scenarios matching those coordinates,
+24frames, fps24, warmup0, seed1, black background, resolution[1280,960],
+camera[640,640], rectangle[0,0,1280,960], ambient[32,255,255,255], and
+`ArrowEffect_ORIGINAL`; set `native_domain` true/false and write respectively to
+`PRIVATE/metal-native` and `PRIVATE/metal-common`. Pin an owned source binary and
+independent save directory in each scenario. Then package the unchanged frames:
+
+```sh
+python tools/retail_runtime/arrow_fullcycle_review.py \
+  --native PRIVATE/native --metal PRIVATE --output PRIVATE/review
+```
+
+These original fixtures still declare immutable resource/COM setup, base
+animator initialization, terrain plane and explicit source-deletion delivery;
+there is no newly certified natural scene, actor, audio or device result.

@@ -24,6 +24,13 @@ and real assets. Known software-renderer limits are recorded separately from
 VFX simulation, geometry, animation, material and integration defects. Rendering
 perfection is not a prerequisite for progressing through the effects catalogue.
 
+For natural maps, use the original `SOFTWARE3D` startup via
+[`software_scene_boot.py`](../tools/retail_runtime/software_scene_boot.py), then
+load a map with preflight `--boot-image` and keep its warm checkpoint. This
+selects retail's genuine NoTexOverlay composition and corrects the corrupted
+backdrop seen in the separate hybrid HUD fixture. See the
+[natural scene instructions](vfx/forensics/NATURAL_ARENA_AND_FLAME_20261011.md).
+
 ## Locations
 
 - Repository: `/Users/benjamincooley/projects/RevenantRevisited/RevenantRevisited`.

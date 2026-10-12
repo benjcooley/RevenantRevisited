@@ -114,6 +114,10 @@ extern float StartupVfxCamera[2];
 extern bool StartupVfxCameraExplicit; // Signed screen origin supplied by --vfx-camera.
 extern int32_t StartupVfxOrigin[3];
 extern bool StartupVfxOriginSet;
+// --vfx-target=x,y,z: explicit destination for a registered endpoint factory.
+// Requires --test=vfx and an explicit --vfx-origin source.
+extern int32_t StartupVfxTarget[3];
+extern bool StartupVfxTargetSet;
 
 // --input-script="..." (alias: --mouse-script) — a scripted synthetic input
 // sequence (mouse + keyboard) replayed into the active --test mode's input
