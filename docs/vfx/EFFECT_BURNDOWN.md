@@ -12,6 +12,10 @@ A useful pass compares actual port output with actual retail output and reviews 
 
 Natural gameplay triggers, attachment, audio, other configurations and targeted graphics-device checks remain follow-up tasks. The earlier all-gates count is an end-to-end integration measure, not the headline completion measure. Keep concrete visible differences open; do not silently accept them because another test passed.
 
+The [current verification gaps](CURRENT_VERIFICATION_GAPS.md) identify active
+spell-owner, saved-map, additional-state and terrain/cadence work after the
+scoped appearance milestone.
+
 Work proceeds in parallel: close current visual reviews, convert and compare new easy effects, and fix shared testing/rendering defects. Each effect lane should return a reviewed pass or a specific mismatch to fix. Infrastructure work does not block independent effect work.
 
 The dated sections below retain historical checkpoint counts. Use this summary and the JSON ledger for current status.
