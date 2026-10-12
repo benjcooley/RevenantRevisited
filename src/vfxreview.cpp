@@ -42,6 +42,7 @@ struct Entry {
     int type = -1;
     uint32_t id = 0;
     std::string name, asset, status = "Approaching";
+    std::string spell_preview;
     S3DPoint station{};
     int map_index = -1;
     double clearance = 96;
@@ -126,9 +127,26 @@ bool SelectCatalogue() {
         }
         if (!selected) continue;
         Entry entry; entry.type=type; entry.id=info->uniqueid; entry.name=info->name;
+        if(entry.id==0xdefeca7eu) entry.name="Essencedrain (Worm prototype)";
         if (auto* imagery = TObjectImagery::GetImageryEntry(info->imageryid))
             entry.asset = imagery->filename;
         entries.push_back(std::move(entry));
+    }
+    bool select_essence_spell=selectors.empty();
+    for(size_t i=0;i<selectors.size();++i)
+        if(selectors[i]=="essence drain" || selectors[i]=="essence drain (spell)")
+            select_essence_spell=found[i]=true;
+    if(select_essence_spell) {
+        const auto recipes=VfxTest::ReviewCatalogue();
+        const auto recipe=std::find_if(recipes.begin(),recipes.end(),[](const auto& r){
+            return r.id=="EssenceDrain_SPELL_CONFIGURED_TARGET";
+        });
+        if(recipe!=recipes.end()) {
+            Entry spell;spell.name="Essence Drain (spell)";
+            spell.id=0xad92bc13u;spell.type=EffectClass.FindObjType(spell.id);
+            spell.asset="ManaDrain: genuine named Essence Drain variant";
+            spell.spell_preview=recipe->id;entries.push_back(std::move(spell));
+        }
     }
     if (std::find(found.begin(), found.end(), false)!=found.end()) {
         log_error("[vfx-review] unknown effect name/type ID in --vfx-review-effects");
@@ -148,6 +166,7 @@ bool LayoutStations() {
     const auto direction=schedule.StepDirection();
     for(auto& e:entries) {
         e.clearance=schedule.spacing;
+        if(!e.spell_preview.empty()) { e.review_footprint=480;continue; }
         const auto support=DescribeVfxReviewSpawn(e.id);
         // An unavailable entry still has a named slot. With no drawable, it
         // needs the minimum slot rather than its asset's oversized bounds.
@@ -257,6 +276,18 @@ S3DPoint PathEndpoint(size_t index,bool target) {
     return {origin.x+int(std::lround(point.x)),origin.y+int(std::lround(point.y)),kFloor+128};
 }
 void Spawn(Entry& e, size_t index) {
+    if(!e.spell_preview.empty()) {
+        const auto recipes=VfxTest::ReviewCatalogue();
+        const auto recipe=std::find_if(recipes.begin(),recipes.end(),[&](const auto& r){return r.id==e.spell_preview;});
+        if(recipe==recipes.end() || !recipe->factory || !recipe->destroy) { e.failed=true;return; }
+        void* context=recipe->factory(e.station);
+        if(!context) { e.failed=true;e.missing_visual=true;return; }
+        e.preview=std::make_unique<VfxReviewPreview>(*recipe,context,e.station);
+        e.status="Named Essence Drain spell uses ManaDrain; separate from Worm prototype";
+        ++e.cycles;
+        log_info("[vfx-review] spell name=%s actual_effect=%08x implementation=%s",e.name.c_str(),e.id,e.spell_preview.c_str());
+        return;
+    }
     const auto support=DescribeVfxReviewSpawn(e.id);
     const auto controlled=DescribeVfxReviewPreview(e.id);
     if(e.id==0xadbcef18u && controlled.supported && controlled.lifetime_known &&

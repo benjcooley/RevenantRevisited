@@ -69,3 +69,5 @@ existing Mana Drain fixture does. Essence Drain costs254mana inSPELL.DEF, above
 the genuine Acolyte252; no mana/stat override or natural affordable-cast claim
 is made. Actor motion, spell scheduling and natural gameplay remain open.
 Source/evidence freeze:`spell-freeze.json` SHA256`e874deb7ec9fc4d2cdd46e56eaf72650bb7355512645e07b4446d1cf8c75a3ff`.
+
+Rootindependentintegratedreproduction `research/vfx-essence-spell-root-20261011/first` passes2tests/fresh100native+8rasters/state10495+matrix19680channels and100decodedGPUrepeat,90nonblack/91distinct/blank91..100. ExistingManaDrain2framecontrolpasses. Scrollinggallery nowaddsseparate`Essence Drain (spell)` stationwithactualManaDrainID andunreseededconfiguredtarget callback; Wormtype0xdefeca retainsitsownexplicitprototype label. Root24frameordinarygallerycapture animatesandcleanshutdown, independentliteralphasesreviewed. Noaffordablecast/naturalAI claim.
