@@ -4330,12 +4330,15 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             item.retail_rgb565_additive = (combat_native || static_particles || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) && sample.blendmode == 16;
             item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
             item.light_mode = EFxLightMode::Unlit;
-            // Dust and exact admitted fspray hardware FVF1e2 packets retain
-            // all eight diffuse bits; only software truncates them to RGB5.
-            // Preserve other profiles until their device paths are verified.
-            const bool fspray_rgb8 = static_particles && inst->ObjId() == 0x0c052638u;
+            // Actual hardware FVF1e2 packets retain RGB8 for these separately
+            // verified profiles. Their software policy still truncates to RGB5.
+            // Other profiles retain their policy until independently verified.
+            const uint32_t color_type = inst->ObjId();
+            const bool verified_static_rgb8 = static_particles &&
+                (color_type == 0x0c052638u || color_type == 0x10ac03deu ||
+                 color_type == 0xe0a3bc43u || color_type == 0xad92bd38u);
             const bool retail_rgb5_color = (combat_native || might || immortalmight || fmastery || speed || static_particles || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) &&
-                (!(dust || fspray_rgb8) || renderer.UsesRetailSoftwareMeshLighting());
+                (!(dust || verified_static_rgb8) || renderer.UsesRetailSoftwareMeshLighting());
             for (int c = 0; c < 3; ++c)
                 item.color_rgba[c] = retail_rgb5_color ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
             // Actual SW LV prelit channels are5bit; canonicalDEST_ONE ignores
