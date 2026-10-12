@@ -7,3 +7,10 @@ Parsing rejects missing, zero, negative, overflow, trailing text and dimensions 
 Private full build passes. An actual saved Pit sector test with `--resolution=640x480 --scene-camera=48,19186,19996,144 --scene-viewport=452,420` produces two452×420 PNGs, the exact viewport marker and clean exit. `--scene-viewport=641,340` on that display produces the explicit admission-rejection marker. Test-screen initialization rejects it without loading the scene; the diagnostic application still exits0, so the rejection marker is the oracle.
 
 Evidence: `/Users/benjamincooley/RevenantRetailLab/research/vfx-next-waterflft-insitu-20261011/viewport-smoke/manifest.json`. This verifies measured framing and invalid-bound admission only. Native/port water appearance, map residency/lights/occlusion and natural gameplay acceptance remain separate.
+
+Root integrated build and ASan/UBSan parser/admission checks pass. Independent
+actual Pit smoke at `research/vfx-water-viewport-root-20261011/manifest.json`
+passes two452×420 frames/clean exit and641×340 display-bound rejection, preserving
+module/camera/ambient. Root binary SHA256:
+`55e2a55296308290db4dbbbbb1d3d2ab976169c5d5f88d2e777590a15a7bdd49`.
+This framing test does not grant a new VFX appearance or map-context approval.
