@@ -24,6 +24,7 @@
 #include <time.h>
 
 #include "argh.h"
+#include "vfxpointoption.h"
 
 #include "revenant.h"
 #include "assetcache.h"
@@ -50,6 +51,7 @@
 #include "i3dgltf.h"
 #include "testmodes.h"
 #include "testconfig.h"
+#include "sceneviewport.h"
 #include "time.h"
 #include "combattrace.h"
 #include "mappane.h"
@@ -1562,10 +1564,11 @@ void GetParameters(int argc, char **argv)
         "loadmap", "lang", "test", "level", "resolution", "res",
         "cinematic", "menu", "exec", "vfx-lighting-mode", "partsys-quality", "partsys-incoming-blend",
         "seed", "combattrace", "combattrace-rng",
-        "vfx-review-speed", "vfx-review-ratio", "vfx-review-spacing",
+        "vfx-review-speed", "vfx-review-watcher-rate", "vfx-review-ratio", "vfx-review-spacing",
         "vfx-review-gap", "vfx-review-offset", "vfx-review-effects",
         "vfx-review-spacing-overrides",
-        "vfx-review-path-tilt", "vfx-review-path-length",
+        "vfx-review-path-tilt", "vfx-review-path-length", "scene-viewport",
+        "vfx-origin", "vfx-target", "vfx-camera",
     });
     cmd.parse(argc, argv);
 
@@ -1719,6 +1722,7 @@ void GetParameters(int argc, char **argv)
         struct ReviewArg { const char* name; float* value; double minimum; double maximum; };
         const ReviewArg args[] = {
             {"vfx-review-speed", &StartupVfxReviewSpeed, 0.1, 240.0},
+            {"vfx-review-watcher-rate", &StartupVfxReviewWatcherRate, 0.05, 1.0},
             {"vfx-review-ratio", &StartupVfxReviewRatio, 2.0f, 3.0f},
             {"vfx-review-spacing", &StartupVfxReviewSpacing, 64.0f, 800.0f},
             {"vfx-review-gap", &StartupVfxReviewGap, 640.0f, 1600.0f},
@@ -1882,6 +1886,17 @@ void GetParameters(int argc, char **argv)
         if (arg_param(cmd, "vfx-origin", p))
             StartupVfxOriginSet = sscanf(p.c_str(), "%d,%d,%d", &StartupVfxOrigin[0],
                                         &StartupVfxOrigin[1], &StartupVfxOrigin[2]) == 3;
+        if (arg_param(cmd, "vfx-target", p)) {
+            if(!ParseVfxPointOption(p,StartupVfxTarget))
+                FatalError("Invalid --vfx-target: expected three signed integer coordinates",nullptr);
+            StartupVfxTargetSet=true;
+            if(std::strcmp(StartupTestMode,"vfx")!=0 || !StartupVfxOriginSet)
+                FatalError("--vfx-target requires --test=vfx and --vfx-origin",nullptr);
+            std::string source;
+            if(!arg_param(cmd,"vfx-origin",source) || !ParseVfxPointOption(source,StartupVfxOrigin))
+                FatalError("Invalid endpoint source --vfx-origin",nullptr);
+        } else if(arg_flag(cmd,"vfx-target"))
+            FatalError("Missing --vfx-target coordinates",nullptr);
     }
 
   // INPUT-SCRIPT="..." (alias --mouse-script) — replay a scripted synthetic
@@ -1920,6 +1935,12 @@ void GetParameters(int argc, char **argv)
         if (arg_param(cmd, "scene-camera", p))
             StartupSceneCameraSet = sscanf(p.c_str(), "%d,%d,%d,%d", &StartupSceneCamera[0],
                 &StartupSceneCamera[1], &StartupSceneCamera[2], &StartupSceneCamera[3]) == 4;
+        if (arg_param(cmd, "scene-viewport", p)) {
+            if (!scene_viewport::Parse(p.c_str(),StartupSceneViewport))
+                FatalError("Invalid --scene-viewport: expected positive W,H within1920x1080",nullptr);
+            StartupSceneViewportSet=true;
+        } else if (arg_flag(cmd,"scene-viewport"))
+            FatalError("Missing --scene-viewport W,H",nullptr);
         if (arg_param(cmd, "scene-module", p))
             strncpyz(StartupSceneModule, p.c_str(), sizeof(StartupSceneModule));
         if (arg_param(cmd, "scene-command-file", p))

@@ -4,8 +4,9 @@ import argparse
 import json
 from pathlib import Path
 import time
+import tempfile
 import unittest
-from coverage import generate,canonical_id
+from coverage import generate,canonical_id,LEDGER,ROOT
 
 
 class CoverageTests(unittest.TestCase):
@@ -37,11 +38,19 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(row['gates']['full_acceptance']['status'],'open')
         self.assertFalse(row['gates']['runtime']['natural_context_verified'])
         self.assertEqual(row['gates']['visual_review']['status'],'pass_for_tested_configuration')
-        # Fog remains unreviewed; MistFog now has an explicit current Metal review.
-        fog=self.coverage['types']['0xc24b2a85']
-        self.assertEqual(fog['gates']['gpu']['status'],'not_checked')
-        self.assertEqual(fog['gates']['full_acceptance']['status'],'open')
-        self.assertEqual(fog['gates']['visual_review']['status'],'pending')
+        # An independent appearance approval can change in the live ledger.
+        # Preserve frontend evidence but explicitly remove approval in a copy.
+        ledger=json.loads(LEDGER.read_text())
+        copied_row=next(r for r in ledger['retail_effects'] if r['retail_type_id']=='0x50ba373b')
+        copied_row['acceptance']['visual_fidelity']=False
+        copied_row.pop('visual_review',None)
+        with tempfile.TemporaryDirectory(prefix='coverage-gate-',dir=ROOT) as temp:
+            path=Path(temp)/'ledger.json';path.write_text(json.dumps(ledger))
+            copied=generate(ledger_path=path)['types']['0x50ba373b']
+        self.assertEqual(copied['gates']['pixel_frontend']['status'],'shared_original_raster_pass')
+        self.assertEqual(copied['gates']['gpu']['status'],'differences_found')
+        self.assertEqual(copied['gates']['full_acceptance']['status'],'open')
+        self.assertEqual(copied['gates']['visual_review']['status'],'pending')
 
     def test_current_report_formats_count_pixels_without_promoting_visual_reviews(self):
         self.assertEqual(self.coverage['counts']['evidence_rows_with_shared_raster_pixel_pass'],
@@ -51,6 +60,24 @@ class CoverageTests(unittest.TestCase):
             self.assertEqual(row['gates']['pixel_frontend']['status'],'shared_original_raster_pass')
             if not row['ledger_acceptance']['visual_fidelity']:
                 self.assertEqual(row['gates']['visual_review']['status'],'pending')
+
+    def test_qualified_reference_does_not_claim_unchanged_device_or_full_acceptance(self):
+        for type_id,kind in [('0xaeaeeb23','modified_retail'),('0xadbcef18','modified_retail'),('0x0c052637','semantic_device_reference')]:
+            row=self.coverage['types'][type_id]
+            review=row['gates']['visual_review']
+            self.assertEqual(review['status'],'pass_for_tested_configuration')
+            self.assertTrue(review['qualified_reference'])
+            self.assertTrue(review[kind])
+            self.assertIs(review['device_identical'],False)
+            self.assertEqual(row['gates']['full_acceptance']['status'],'open')
+            self.assertFalse(row['gates']['runtime']['natural_context_verified'])
+        self.assertGreaterEqual(self.coverage['counts']['qualified_modified_reference_visual_rows'],4)
+        self.assertGreaterEqual(self.coverage['counts']['qualified_semantic_device_visual_rows'],1)
+        fire=self.coverage['types']['0x119f01e3']
+        self.assertFalse(fire['ledger_acceptance']['visual_fidelity'])
+        self.assertEqual(fire['gates']['visual_review']['status'],'pending')
+        self.assertFalse(fire['gates']['visual_review']['qualified_reference'])
+        self.assertEqual(fire['gates']['full_acceptance']['status'],'open')
 
     def test_fireball_route_requires_actual_moving_distinct_endpoint_scenario(self):
         control=self.coverage['types']['0x63fd382a']['control']

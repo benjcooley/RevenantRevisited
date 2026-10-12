@@ -4,6 +4,39 @@ from generate_review_preview_map import PARTIAL, SOURCE_MAPPINGS, admitted_candi
 
 
 class ReviewPreviewAdmission(unittest.TestCase):
+    def test_fire_routes_shipped_static_not_procedural_scatter(self):
+        row={"retail_type_id":"0x119f01e3","preview_candidates":["TFireEffect","TFireEffect_BESPOKE"]}
+        self.assertEqual(admitted_candidates(row),["Fire_INSTALLED_FACE0"])
+        self.assertTrue(candidate_metadata(row,"Fire_INSTALLED_FACE0")[0])
+
+    def test_rift_qualified_exact_id(self):
+        row={'retail_type_id':'0xadbcef18','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['Rift1_QUALIFIED_PARSER'])
+        partial,reason=candidate_metadata(row,'Rift1_QUALIFIED_PARSER')
+        self.assertFalse(partial);self.assertIn('Qualified',reason)
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Rift1_QUALIFIED_PARSER']}),[])
+
+    def test_labyrinth_qualified_exact_id(self):
+        row={'retail_type_id':'0xad92bd20','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['Labyrinth_QUALIFIED_BOUND'])
+        partial,reason=candidate_metadata(row,'Labyrinth_QUALIFIED_BOUND')
+        self.assertFalse(partial);self.assertIn('Qualified',reason)
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Labyrinth_QUALIFIED_BOUND']}),[])
+
+    def test_magicshield_exact_control(self):
+        row={'retail_type_id':'0xad92bc1b','preview_candidates':['TMagicShieldEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(row)[0],'MagicShield_PUBLIC_AURA')
+        partial,reason=candidate_metadata(row,'MagicShield_PUBLIC_AURA')
+        self.assertFalse(partial);self.assertIn('unmatched-name',reason)
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['MagicShield_PUBLIC_AURA']}),[])
+
+    def test_aura_exact_identity(self):
+        row={'retail_type_id':'0x00ab1d1d','preview_candidates':['TAuraEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(row)[0],'Aura_AUTHENTIC_ACOLYTE_INTEGER')
+        partial,reason=candidate_metadata(row,'Aura_AUTHENTIC_ACOLYTE_INTEGER')
+        self.assertFalse(partial);self.assertIn('zero selector',reason)
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Aura_AUTHENTIC_ACOLYTE_INTEGER']}),[])
+
     def test_placeholders_and_invalid_aliases_fail_closed(self):
         candidates = '''TBlastEffect_BESPOKE
 TTornadoEffect_BESPOKE
@@ -23,10 +56,63 @@ TWaterFallEffect_BESPOKE__WaterFlft TWaterFallEffect_BESPOKE__RiverFall
 TNewUnreviewedEffect_BESPOKE'''.split()
         self.assertEqual(admitted_candidates({'preview_candidates': candidates}), [])
 
+    def test_burn_genuine_actor_integer_control(self):
+        row={'retail_type_id':'0x55471bff','preview_candidates':['TBurnEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(row)[0],'Burn_AUTHENTIC_ACOLYTE_INTEGER')
+        partial,reason=candidate_metadata(row,'Burn_AUTHENTIC_ACOLYTE_INTEGER')
+        self.assertFalse(partial);self.assertIn('real Acolyte',reason)
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Burn_AUTHENTIC_ACOLYTE_INTEGER']}),[])
+
+    def test_halo_exact_public_case_has_no_parameter_alias(self):
+        row={'retail_type_id':'0xdedbdbed','preview_candidates':['THaloEffect']}
+        self.assertEqual(admitted_candidates(row),['Halo_AUTHORED_PUBLIC60','THaloEffect'])
+        partial,description=candidate_metadata(row,'Halo_AUTHORED_PUBLIC60')
+        self.assertFalse(partial);self.assertIn('explicit test inputs',description)
+        for name in ('Halo_AUTHORED_PUBLIC60','Halo_AUTHORED_PUBLIC20'):
+            self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':[name]}),[])
+
+    def test_blood_exact_controller_precedes_drawable_fallback(self):
+        row={'retail_type_id':'0xddc4042e','preview_candidates':['TBloodEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(row),['Blood_AUTHORED','TBloodEffect_BESPOKE'])
+        partial,description=candidate_metadata(row,'Blood_AUTHORED')
+        self.assertFalse(partial)
+        self.assertIn('live global RNG without reseed',description)
+        self.assertIn('SetParams(40,224,3,5,5,1)',description)
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Blood_AUTHORED']}),[])
+    def test_createfood_exact_declared_context(self):
+        row={'retail_type_id':'0x838cffba','preview_candidates':['IrisFlare_AUTHORED']}
+        self.assertEqual(admitted_candidates(row),['Createfood_ORIGINAL_CONTEXT'])
+        self.assertIn('real kill80',candidate_metadata(row,'Createfood_ORIGINAL_CONTEXT')[1])
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Createfood_ORIGINAL_CONTEXT']}),[])
+
+    def test_teleporter_is_exact_null_spell_not_irisflare_alias(self):
+        row={'retail_type_id':'0x369a5d2e','preview_candidates':['IrisFlare_AUTHORED','TFlareAnimator_BESPOKE__Teleporter']}
+        self.assertEqual(admitted_candidates(row),['Teleporter_ORIGINAL_NULL'])
+        self.assertIn('real kill51',candidate_metadata(row,'Teleporter_ORIGINAL_NULL')[1])
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['Teleporter_ORIGINAL_NULL']}),[])
+
+    def test_quicksand_configured_target(self):
+        row={'retail_type_id':'0xbabeface','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['Quicksand_ORIGINAL_TARGET'])
+        self.assertIn('stationary target offset(96,0,0)',candidate_metadata(row,'Quicksand_ORIGINAL_TARGET')[1])
+
+    def test_drip_exact_continuous_scope_rejects_aliases(self):
+        row={'retail_type_id':'0x5975abde','preview_candidates':['TDripEffect','TDripEffect_LINKED_DRAIN','TDripEffect.OnHand','TBloodEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(row),['TDripEffect_LINKED_NO_SPLASH'])
+        self.assertIn('SetParams(20,128,1)',candidate_metadata(row,'TDripEffect_LINKED_NO_SPLASH')[1])
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xffffffff','preview_candidates':['TDripEffect_LINKED_NO_SPLASH']}),[])
+
     def test_ytelekinesis_uses_exact_moving_chunk_controller(self):
         row={"retail_type_id":"0xaeaeeb28","preview_candidates":[]}
         self.assertEqual(admitted_candidates(row),["YTelekinesis_ORIGINAL"])
         self.assertFalse(candidate_metadata(row,"YTelekinesis_ORIGINAL")[0])
+
+    def test_nakrnoth_uses_exact_complete_owner(self):
+        row={'retail_type_id':'0xad92bd21','preview_candidates':['TNakrnothEffect_BESPOKE']}
+        self.assertEqual(admitted_candidates(row),['Nakrnoth_ORIGINAL'])
+        self.assertFalse(candidate_metadata(row,'Nakrnoth_ORIGINAL')[0])
+        self.assertIn('kill775',candidate_metadata(row,'Nakrnoth_ORIGINAL')[1])
+        self.assertNotIn('Nakrnoth_ORIGINAL',admitted_candidates({'retail_type_id':'0x12345678','preview_candidates':['Nakrnoth_ORIGINAL']}))
 
     def test_essencedrain_uses_all_root_default_controller(self):
         row={"retail_type_id":"0xdefeca7e","preview_candidates":[]}
@@ -35,6 +121,61 @@ TNewUnreviewedEffect_BESPOKE'''.split()
     def test_barriers_and_jhaga_exact_controllers(self):
         for type_id,name in [('0x224a5adf','BarrierEW_ORIGINAL'),('0x224b5adc','BarrierNS_ORIGINAL'),('0xaeaeeb32','JhagaAttack_ORIGINAL')]:
             self.assertEqual(admitted_candidates({'retail_type_id':type_id,'preview_candidates':[]}),[name])
+
+    def test_tornado_keeps_distinct_owner_and_caller_scope(self):
+        row={'retail_type_id':'0x2784abde','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['TTornado_CONFIGURED_TARGET'])
+        partial,description=candidate_metadata(row,'TTornado_CONFIGURED_TARGET')
+        self.assertFalse(partial)
+        self.assertIn('natural variant selects Funnel',description)
+
+    def test_ymanadrain_distinct_configured_target(self):
+        row={'retail_type_id':'0xae92bc14','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['TYManaDrain_CONFIGURED_TARGET'])
+        partial,description=candidate_metadata(row,'TYManaDrain_CONFIGURED_TARGET')
+        self.assertFalse(partial)
+        self.assertIn('uncapped mana transfer',description)
+        self.assertEqual(admitted_candidates({'retail_type_id':'0xad92bc13','preview_candidates':[]}),['TManaDrain_CONFIGURED_TARGET'])
+
+    def test_manadrain_exact_configured_target(self):
+        row={'retail_type_id':'0xad92bc13','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['TManaDrain_CONFIGURED_TARGET'])
+        partial,description=candidate_metadata(row,'TManaDrain_CONFIGURED_TARGET')
+        self.assertFalse(partial)
+        self.assertIn('actual mana transfer',description)
+        self.assertNotIn('TManaDrain_CONFIGURED_TARGET',admitted_candidates({'retail_type_id':'0xad92bc12','preview_candidates':[]}))
+
+    def test_paralize_named_no_target_is_explicitly_partial(self):
+        row = {'retail_type_id': '0xad92bc14', 'preview_candidates': []}
+        self.assertEqual(admitted_candidates(row), ['TParalize1_CONFIGURED_TARGET'])
+        configured, description=candidate_metadata(row,'TParalize1_CONFIGURED_TARGET')
+        self.assertFalse(configured)
+        self.assertIn('offset(96,0,0), radius16',description)
+        row['preview_candidates']=['TParalize1_NAMED_NO_TARGET']
+        self.assertEqual(admitted_candidates(row),['TParalize1_CONFIGURED_TARGET','TParalize1_NAMED_NO_TARGET'])
+        partial, reason = candidate_metadata(row, 'TParalize1_NAMED_NO_TARGET')
+        self.assertTrue(partial)
+        self.assertIn('enormous full trajectory', reason)
+        self.assertNotIn('TParalize1_NAMED_NO_TARGET', admitted_candidates({
+            'retail_type_id': '0xad92bc15', 'preview_candidates': []}))
+
+    def test_dragonattack_uses_exact_declared_caller(self):
+        row={'retail_type_id':'0xba09fead','preview_candidates':['TFireSwarmEffect_BESPOKE__dragonattack']}
+        self.assertEqual(admitted_candidates(row),['Dragonattack_ORIGINAL'])
+        partial,description=candidate_metadata(row,'Dragonattack_ORIGINAL')
+        self.assertFalse(partial)
+        self.assertIn('target offset(280,0), ground0',description)
+        self.assertIn('arbitrary endpoints',description)
+        self.assertNotIn('Dragonattack_ORIGINAL',admitted_candidates({'retail_type_id':'0xad92bc1a','preview_candidates':[]}))
+
+    def test_headfireball_uses_exact_self_moving_trap(self):
+        row={'retail_type_id':'0xd000f005','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['HeadFireBall_ORIGINAL'])
+        self.assertFalse(candidate_metadata(row,'HeadFireBall_ORIGINAL')[0])
+
+    def test_invisible_uses_exact_null_invoker_controller(self):
+        row={'retail_type_id':'0xad92bc16','preview_candidates':[]}
+        self.assertEqual(admitted_candidates(row),['Invisible_AUTHORED'])
 
     def test_smoke_exact_quality_controller(self):
         row={"retail_type_id":"0x224a5ccc","preview_candidates":[]}
@@ -94,7 +235,7 @@ TGlobeEffect_BESPOKE TFogEffect_Bespoke__MistFog_BESPOKE'''.split()
             row = {'retail_type_id': retail_id, 'preview_candidates': [name]}
             # Exact authored replacements precede retained partial previews.
             exact = [SOURCE_MAPPINGS[retail_id]] if retail_id in SOURCE_MAPPINGS else []
-            self.assertEqual(admitted_candidates(row), exact + [name])
+            self.assertEqual(admitted_candidates(row), list(dict.fromkeys(exact + [name])))
             partial, description = candidate_metadata(row, name)
             self.assertTrue(partial)
             self.assertIn(reason, description)

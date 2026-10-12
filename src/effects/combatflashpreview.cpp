@@ -7,6 +7,8 @@
 #include "../meshextract.h"
 #include "../object.h"
 #include "../renderer.h"
+#include "../retailsoftwaretransform.h"
+#include "../testconfig.h"
 #include "../time.h"
 
 #include <algorithm>
@@ -32,6 +34,7 @@ struct State
     std::vector<Flare> flares;   // every authored '#impact' flare with geometry
     double accumulated = 0;
     uint64_t ticks = 0;
+    bool show_particles=true, show_base=true;
 
     ~State()
     {
@@ -41,7 +44,7 @@ struct State
     }
 };
 
-State* Spawn(const S3DPoint& origin, int start)
+State* Spawn(const S3DPoint& origin, int start, bool show_particles, bool show_base)
 {
     if (!Renderer || start < 1 || start > 9) return nullptr;
     auto context = std::make_unique<State>();
@@ -61,6 +64,7 @@ State* Spawn(const S3DPoint& origin, int start)
     owner->SetState(context->state);
     if (owner->GetState() != context->state) return nullptr;
     context->identity = owner;
+    context->show_particles=show_particles; context->show_base=show_base;
     owner->OnScreen();
     auto* imagery = dynamic_cast<T3DImagery*>(owner->GetImagery());
     auto* animator = dynamic_cast<T3DAnimator*>(owner->GetAnimator());
@@ -101,10 +105,16 @@ State* Spawn(const S3DPoint& origin, int start)
             log_warn("[combatflash-preview] start%d: flare %s (slot %d) did not extract", start, name, slot);
             return nullptr;
         }
+        // Original 56e3e7..56e4f5 truncates UV*64 before its normal RGB565
+        // raster: the native reference draws its own mesh so.
+        if (StartupVfxNativeDomain)
+            for (auto& vertex : vertices)
+                for (float& uv : vertex.uv) uv = std::trunc(uv * 64.f) / 64.f;
         State::Flare flare;
         flare.object = object;
         flare.material = material.matdesc;
-        const uint64_t key = 0x4346535052455600ull | uint64_t(object);   // "CFSPREV" + object
+        const uint64_t key = (StartupVfxNativeDomain ? 0x4346535052455700ull : 0x4346535052455600ull) |
+                             uint64_t(object);   // "CFSPREV"/"CFSPREW" + object
         flare.mesh = Renderer->RegisterMeshAsset(key, vertices.data(), int32_t(vertices.size()),
             indices.data(), int32_t(indices.size()), texture);
         if (!flare.mesh) return nullptr;
@@ -112,6 +122,7 @@ State* Spawn(const S3DPoint& origin, int start)
         context->flares.push_back(flare);
     }
     owner->Animate(false);
+    log_info("[native-domain] enabled=%d camera_z=0 owner=CombatFlash_START%d_POS2", int(StartupVfxNativeDomain), start);
     log_info("[combatflash-preview] actual owner id=%08x map_index=%d generation=%u default-animator=1 state=%d (start%d) flares=%zu origin=(%d,%d,%d)",
              owner->ObjId(), owner->GetMapIndex(), owner->SafeRefGen(), context->state, start,
              context->flares.size(), origin.x, origin.y, origin.z);
@@ -145,7 +156,7 @@ void Advance(State* context, double seconds)
 
 void SubmitWorld(State* context, EFxDebugMode)
 {
-    if (!context || !Renderer || !context->owner) return;
+    if (!context || !Renderer || !context->owner || (context->owner->GetFlags() & OF_KILL)) return;
     TObjectInstance* owner = context->identity.Get();
     if (!owner || owner != context->owner.get() || owner->GetState() != context->state) return;
     owner->Animate(false); // render pose refresh only; never advances NextFrame/Pulse
@@ -159,7 +170,9 @@ void SubmitWorld(State* context, EFxDebugMode)
     S3DMat material = {};
     imagery->GetObject(prototype, &authored);
     imagery->GetMaterial(authored.material, &material);
-    animator->SubmitPartSys(*Renderer, prototype, material.texture + 1, render_scale);
+    animator->SubmitPartSys(*Renderer, prototype, material.texture + 1, render_scale, StartupVfxNativeDomain,
+                            context->show_particles);
+    if (!context->show_base) return;
     for (const State::Flare& flare : context->flares)
     {
         uint32_t blend = 0;
@@ -180,6 +193,11 @@ void SubmitWorld(State* context, EFxDebugMode)
         mesh.power = flare.material.power;
         mesh.additive_blend = true;
         mesh.retail_lighting = 1;
+        mesh.retail_software_projection = StartupVfxNativeDomain;
+        mesh.retail_software_pixel_grid = StartupVfxNativeDomain;
+        if (StartupVfxNativeDomain)
+            mesh.retail_normal_z_scale = 1.0f;
+        mesh.retail_additive_cull_none = StartupVfxNativeDomain; // observed original SetRenderState(22,1)
         mesh.retail_gold_no_depth = false; // Mode16 keeps depth testing; no '$' flag.
         Renderer->SubmitGoldFlareAfterFx(mesh); // Existing after-FX queue; depth remains enabled.
     }

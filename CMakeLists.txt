@@ -136,6 +136,14 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
   "${CMAKE_SOURCE_DIR}/src/*.h")
 list(REMOVE_ITEM SOURCES "${CMAKE_SOURCE_DIR}/src/countlines.cpp")
 
+# PNG encoding, resizing and captured-byte cleanup dominate long A/B films
+# in otherwise unoptimized builds. Keep game/renderer compilation unchanged.
+option(REVENANT_OPTIMIZE_CAPTURE "Optimize screenshot export in non-Debug builds" ON)
+if(REVENANT_OPTIMIZE_CAPTURE AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  set_property(SOURCE "${CMAKE_SOURCE_DIR}/src/framesnap.cpp" APPEND PROPERTY
+    COMPILE_OPTIONS "$<$<NOT:$<CONFIG:Debug>>:-O2>")
+endif()
+
 if(SOKOL_BACKEND STREQUAL "METAL")
   list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/sokol_impl.m")
 else()

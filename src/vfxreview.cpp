@@ -25,6 +25,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
 #include <memory>
 #include <set>
 #include <string>
@@ -37,10 +38,13 @@ namespace VfxReview {
 namespace {
 constexpr int kLevel = 250;
 constexpr int kFloor = 16;
+constexpr uint32_t kBrazierFire = 0x70dc006au;
 struct Entry {
+    int object_class = OBJCLASS_EFFECT;
     int type = -1;
     uint32_t id = 0;
     std::string name, asset, status = "Approaching";
+    std::string spell_preview;
     S3DPoint station{};
     int map_index = -1;
     double clearance = 96;
@@ -84,7 +88,7 @@ S3DPoint At(double distance, int z = kFloor) {
 }
 TObjectInstance* Resolve(Entry& e) {
     auto* object = MapPane.GetInstance(e.map_index);
-    return object && object->ObjId() == e.id ? object : nullptr;
+    return object && object->ObjClass() == e.object_class && object->ObjId() == e.id ? object : nullptr;
 }
 void Remove(Entry& e) {
     e.preview.reset();
@@ -116,7 +120,13 @@ bool SelectCatalogue() {
     for (int type=0; type<EffectClass.NumTypes(); ++type) {
         const auto* info = EffectClass.GetObjType(type);
         if (!info || !info->name) continue;
-        bool selected = selectors.empty();
+        // Audited unused shipped prototypes remain explicit diagnostics:
+        // Worm is separate from the named spell, cfire has disabled callers
+        // and missing presets, Vortex's old animator is commented out, and
+        // Fire has no discovered caller and only a static default binding.
+        bool selected = selectors.empty() && info->uniqueid!=0xdefeca7eu &&
+            info->uniqueid!=0xad92bd27u && info->uniqueid!=0x452dade0u &&
+            info->uniqueid!=0x119f01e3u;
         for (size_t i=0; i<selectors.size(); ++i) {
             char* end = nullptr; const auto id = strtoul(selectors[i].c_str(), &end, 0);
             if (Lower(info->name)==selectors[i] ||
@@ -125,9 +135,59 @@ bool SelectCatalogue() {
         }
         if (!selected) continue;
         Entry entry; entry.type=type; entry.id=info->uniqueid; entry.name=info->name;
+        if(entry.id==0xdefeca7eu) entry.name="Worm (static prototype)";
+        if(entry.id==0xad92bd27u) entry.name="cfire (unused prototype)";
+        if(entry.id==0x452dade0u) entry.name="Vortex (unused static prototype)";
+        if(entry.id==0x119f01e3u) entry.name="Fire (unused retail default)";
         if (auto* imagery = TObjectImagery::GetImageryEntry(info->imageryid))
             entry.asset = imagery->filename;
         entries.push_back(std::move(entry));
+    }
+    // The large dungeon sconce fire is an animated TILE, not an EFFECT.
+    // Keep its exact normal-map owner and asset available for VFX inspection.
+    bool select_brazier = selectors.empty();
+    for (size_t i=0; i<selectors.size(); ++i) {
+        if (selectors[i]=="twnbrazier" || selectors[i]=="brazier fire" ||
+            selectors[i]=="0x70dc006a")
+            select_brazier = found[i] = true;
+    }
+    if (select_brazier) {
+        Entry brazier;
+        brazier.object_class = OBJCLASS_TILE;
+        brazier.id = kBrazierFire;
+        brazier.type = TileClass.FindObjType(kBrazierFire);
+        brazier.name = "TwnBrazier";
+        brazier.asset = "Town\\TwnBrazier.I2D";
+        entries.push_back(std::move(brazier));
+    }
+    bool select_essence_spell=selectors.empty();
+    for(size_t i=0;i<selectors.size();++i)
+        if(selectors[i]=="essence drain" || selectors[i]=="essence drain (spell)")
+            select_essence_spell=found[i]=true;
+    if(select_essence_spell) {
+        const auto recipes=VfxTest::ReviewCatalogue();
+        const auto recipe=std::find_if(recipes.begin(),recipes.end(),[](const auto& r){
+            return r.id=="EssenceDrain_SPELL_CONFIGURED_TARGET";
+        });
+        if(recipe!=recipes.end()) {
+            Entry spell;spell.name="Essence Drain (spell)";
+            spell.id=0xad92bc13u;spell.type=EffectClass.FindObjType(spell.id);
+            spell.asset="ManaDrain: genuine named Essence Drain variant";
+            spell.spell_preview=recipe->id;entries.push_back(std::move(spell));
+        }
+    }
+    bool select_legacy_fire=false;
+    for(size_t i=0;i<selectors.size();++i)
+        if(selectors[i]=="fire" || selectors[i]=="fire (legacy animated)")
+            select_legacy_fire=found[i]=true;
+    if(select_legacy_fire) {
+        const auto recipes=VfxTest::ReviewCatalogue();
+        const auto recipe=std::find_if(recipes.begin(),recipes.end(),[](const auto& r){return r.id=="TFireEffect";});
+        if(recipe!=recipes.end()) {
+            Entry fire;fire.name="Fire (legacy preview — unverified)";fire.id=0x119f01e3u;
+            fire.type=EffectClass.FindObjType(fire.id);fire.asset="Misc/Fire.I3D: legacy animated recipe";
+            fire.spell_preview=recipe->id;entries.push_back(std::move(fire));
+        }
     }
     if (std::find(found.begin(), found.end(), false)!=found.end()) {
         log_error("[vfx-review] unknown effect name/type ID in --vfx-review-effects");
@@ -147,14 +207,17 @@ bool LayoutStations() {
     const auto direction=schedule.StepDirection();
     for(auto& e:entries) {
         e.clearance=schedule.spacing;
+        if(!e.spell_preview.empty()) { e.review_footprint=480;continue; }
         const auto support=DescribeVfxReviewSpawn(e.id);
         // An unavailable entry still has a named slot. With no drawable, it
         // needs the minimum slot rather than its asset's oversized bounds.
-        if(!support.safe_factory && e.id!=0x98974eabu && e.id!=0x98974ea7u) continue;
+        if(!support.safe_factory && e.id!=0x98974eabu && e.id!=0x98974ea7u &&
+            !(e.object_class==OBJCLASS_TILE && e.id==kBrazierFire)) continue;
         // These are padded culling/refresh bounds, not measured visible size.
         // Bound their layout contribution; explicit large-effect hints below
         // reserve space for genuinely broad trajectories.
-        const auto* info=EffectClass.GetObjType(e.type);
+        const auto* cls=TObjectClass::GetClass(e.object_class);
+        const auto* info=cls?cls->GetObjType(e.type):nullptr;
         const auto* image=info?TObjectImagery::GetImageryEntry(info->imageryid):nullptr;
         if(image && image->header) {
             for(int i=0;i<image->header->numstates;++i) {
@@ -256,8 +319,125 @@ S3DPoint PathEndpoint(size_t index,bool target) {
     return {origin.x+int(std::lround(point.x)),origin.y+int(std::lround(point.y)),kFloor+128};
 }
 void Spawn(Entry& e, size_t index) {
+    if (e.object_class==OBJCLASS_TILE) {
+        const auto* info=TileClass.GetObjType(e.type);
+        const auto* image=info?TObjectImagery::GetImageryEntry(info->imageryid):nullptr;
+        std::string path=image?Lower(image->filename):"";
+        std::replace(path.begin(),path.end(),'/','\\');
+        const bool exact=e.id==kBrazierFire && info && info->uniqueid==kBrazierFire &&
+            info->name && stricmp(info->name,"TwnBrazier")==0 &&
+            image && path=="town\\twnbrazier.i2d" &&
+            image->header && image->header->imageryid==OBJIMAGE_ANIMATION;
+        if (!exact) {
+            e.failed=true; e.missing_visual=true;
+            e.status="Exact TwnBrazier TILE/imagery mapping unavailable";
+            return;
+        }
+        SObjectDef def{}; def.objclass=OBJCLASS_TILE; def.objtype=e.type;
+        def.level=kLevel; def.pos=e.station;
+        e.map_index=MapPane.NewObject(&def);
+        auto* object=Resolve(e);
+        if (!object) { e.failed=true; e.missing_visual=true; e.status="TwnBrazier factory failed"; return; }
+        object->OnScreen(); object->Animate(false);
+        e.status="Original TILE still + authored animation layer";
+        ++e.cycles;
+        log_info("[vfx-review] spawn name=TwnBrazier class=TILE type=%08x cycle=%u source=%d,%d,%d status=%s",
+            e.id,e.cycles,e.station.x,e.station.y,e.station.z,e.status.c_str());
+        return;
+    }
+    if(!e.spell_preview.empty()) {
+        const auto recipes=VfxTest::ReviewCatalogue();
+        const auto recipe=std::find_if(recipes.begin(),recipes.end(),[&](const auto& r){return r.id==e.spell_preview;});
+        if(recipe==recipes.end() || !recipe->factory || !recipe->destroy) { e.failed=true;return; }
+        void* context=recipe->factory(e.station);
+        if(!context) { e.failed=true;e.missing_visual=true;return; }
+        e.preview=std::make_unique<VfxReviewPreview>(*recipe,context,e.station);
+        e.status=e.spell_preview=="TFireEffect" ? "Legacy animated Fire; separate from installed retail default"
+            : "Named Essence Drain spell uses ManaDrain; separate from Worm prototype";
+        ++e.cycles;
+        log_info("[vfx-review] spell name=%s actual_effect=%08x implementation=%s",e.name.c_str(),e.id,e.spell_preview.c_str());
+        return;
+    }
     const auto support=DescribeVfxReviewSpawn(e.id);
     const auto controlled=DescribeVfxReviewPreview(e.id);
+    if(e.id==0xadbcef18u && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"Rift1_QUALIFIED_PARSER")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Qualified Rift parser initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
+    if(e.id==0xad92bd20u && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"Labyrinth_QUALIFIED_BOUND")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Qualified Labyrinth selector initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
+    if(e.id==0xad92bc1bu && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"MagicShield_PUBLIC_AURA")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Configured MagicShield actor initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
+    if(e.id==0x00ab1d1du && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"Aura_AUTHENTIC_ACOLYTE_INTEGER")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Configured Aura actor initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
+    if(e.id==0x55471bffu && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"Burn_AUTHENTIC_ACOLYTE_INTEGER")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Configured Burn actor initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
+    // Halo has a declared public-parameter controller, not a procedural billboard.
+    if(e.id==0xdedbdbedu && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"Halo_AUTHORED_PUBLIC60")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Configured Halo initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
+    // The exact Blood route consumes live global RNG and owns its finite spray.
+    // Prefer it over the generic drawable owner factory only for this exact ID.
+    if(e.id==0xddc4042eu && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"Blood_AUTHORED")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Configured Blood initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
+    // The reviewed Drip fixture uses explicit no-splash parameters. Prefer
+    // only this exact audited persistent route in the gallery; the normal
+    // map factory and its authored/default gameplay parameters stay intact.
+    if(e.id==0x5975abdeu && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"TDripEffect_LINKED_NO_SPLASH")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Configured Drip initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
     if(controlled.supported && controlled.requires_endpoints) {
         const auto source=PathEndpoint(index,false),target=PathEndpoint(index,true);
         e.preview=CreateVfxReviewPreview(e.id,source,target);
@@ -474,6 +654,9 @@ bool Initialize() {
         } });
     renderer.SetDaylightCycle(false); renderer.SetSunShadowEnabled(false);
     renderer.SetGroundTilesVisible(false);
+    if (std::any_of(entries.begin(),entries.end(),[](const Entry& e) {
+        return e.object_class==OBJCLASS_TILE && e.id==kBrazierFire;
+    })) renderer.SetReviewVisibleTileTypes({kBrazierFire});
     renderer.SetLightingMode(StartupVfxLightingMode>=0?StartupVfxLightingMode:0);
     if(!StartupVfxReviewSourceLighting) {
         previous_directional=UseDirLight;
@@ -505,6 +688,17 @@ void Close() {
 }
 void Render() {
     if (!map) return;
+    if (std::getenv("REV_VFX_REVIEW_CLOCK_TRACE")) {
+        static auto start=std::chrono::steady_clock::now();
+        static double last=-1.0;
+        const double wall=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+        if (wall-last>=1.0) {
+            log_info("[vfx-review-clock] wall=%.6f simulation=%.6f delta=%.9f render=%lld legacy=%lld scale=%.3f",
+                wall,TTime::Time(),TTime::DeltaTime(),static_cast<long long>(TTime::FrameCount()),
+                static_cast<long long>(TTime::LegacyFrameCount()),TTime::TimeScale());
+            last=wall;
+        }
+    }
     elapsed+=paused?0.0:TTime::DeltaTime(); ticks+=TTime::DeltaTime()*24;
     const auto current_loop=schedule.LoopCount(elapsed);
     if (current_loop!=loop) { loop=current_loop; ResetObjects(); log_info("[vfx-review] loop=%llu",static_cast<unsigned long long>(loop+1)); }

@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""Actual exact Halo authored/public-parameter gallery controller lifecycle."""
+import argparse,json,os,subprocess,time
+from pathlib import Path
+from PIL import Image
+from speed_controller_preflight import ROOT
+from speed_profile_contract import sha
+
+def run(binary,data,output):
+ output.mkdir(parents=True,exist_ok=False);save=output/'save';save.mkdir();(save/'Revenant.ini').write_bytes((data/'revenant.ini').read_bytes());pinned=sha(binary.read_bytes());command=[str(binary),'--headless','--test=vfx-review','--vfx-review-effects=0xdedbdbed','--vfx-review-first','--vfx-review-speed=0.1','--vfx-review-source-lighting','--resolution=640x480','--vfx-no-ui','--filmstrip=100,0.0416666666666667','--snapstep=0.0416666666666667','--snapwarmup=1','--snapseed=1','--snaprect=0,0,640,480','--snapprefix='+str(output/'frame-')];start=time.monotonic()
+ with(output/'run.log').open('wb')as log:q=subprocess.run(command,cwd=ROOT,env=dict(os.environ,REVENANT_DATA_PATH=str(data),REVENANT_SAVE_PATH=str(save),REVENANT_ASSETS_PATH=str(ROOT/'assets')),stdout=log,stderr=log,timeout=90)
+ frames=sorted(output.glob('frame-[0-9][0-9][0-9]-*.png'));log=(output/'run.log').read_text();pixels=[Image.open(f).convert('RGB')for f in frames];hashes=[sha(im.tobytes())for im in pixels];visible=sum(im.getbbox()is not None for im in pixels);live_lines=[line for line in log.splitlines()if '[halo] typed_id=dedbdbed'in line];phase_lines=[line for line in log.splitlines()if '[halo-phase]'in line];ok=q.returncode==0 and len(frames)==100 and live_lines and all('totalframes=60'in line and 'declared_input=1'in line for line in live_lines) and 'implementation=Halo_AUTHORED_PUBLIC60 partial=0'in log and len(live_lines)>=2 and visible>0 and '[shutdown] complete'in log and sha(binary.read_bytes())==pinned
+ report=dict(status='pass'if ok else'fail',type_id='0xdedbdbed',binary_sha256=pinned,command=command,exit_code=q.returncode,elapsed_seconds=time.monotonic()-start,frames=[dict(path=str(f),sha256=sha(f.read_bytes()),pixel_sha256=h,visible=im.getbbox()is not None)for f,h,im in zip(frames,hashes,pixels)],visible_frames=visible,distinct_frames=len(set(hashes)),log_sha256=sha((output/'run.log').read_bytes()),accepted=False,spawn_logs=live_lines,phase_logs=phase_lines,scope='Exact Halo_AUTHORED_PUBLIC60 route on translated gallery station, complete authored mesh and real finite parameter cycle/restart. Explicit InitParams(60,.04) inputs; no naturalcaller constants or procedural sprite. Visible pixel count includes scene backdrop and is only a liveness diagnostic; ordinary projection/actor damage/map insertion are not appearance certification.');(output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],visible,len(set(hashes)),pinned);return report
+if __name__=='__main__':
+ p=argparse.ArgumentParser();p.add_argument('--binary',type=Path,required=True);p.add_argument('--data-root',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.binary.resolve(),a.data_root.resolve(),a.output.resolve())

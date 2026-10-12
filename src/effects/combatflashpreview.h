@@ -8,7 +8,7 @@ enum class EFxDebugMode : unsigned char;
 // animator and tags. EffectCombatFlash picks the state in play.
 namespace combatflash_preview {
 struct State;
-State* Spawn(const S3DPoint& origin, int start);
+State* Spawn(const S3DPoint& origin, int start, bool show_particles = true, bool show_base = true);
 void Advance(State*, double seconds);
 void SubmitWorld(State*, EFxDebugMode);
 bool Alive(State*);

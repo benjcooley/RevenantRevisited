@@ -1,5 +1,12 @@
 # FlameB and FlameG full original/Metal render
 
+Follow-up2026-10-11: the loaded-owner dispatch establishes that4e4ef0 is custom
+**Pulse**, invoked by ownerPulse4de800; default Animate is40e460. The isolated
+counter driver below was valid for its bounded loop but mislabeled that entry.
+Base Flame now shares source-format handling and explicit native-domain
+projection; the previous blue/green RGB captures remain byte-identical. See
+[the natural-scene and loaded Flame follow-up](NATURAL_ARENA_AND_FLAME_20261011.md).
+
 Root independently approved scoped native-domain appearance for `FlameB` (`0x50ba373c`) and `FlameG` (`0x50ba373d`) after inspecting all eleven phase pairs. Form, blue/green colors, all eight atlas cells, and counter wraps at18/20/36 agree. The dark texture plate exists in both original and port. Exact pixels/colors,1pixel sampling/edge coverage,quantization,native device,natural scene/other lighting,and movement/delete differential remain open; no full acceptance claim.
 
 Both literal shipped CLASS EFFECT rows are named **Flame**, independently bound to their own `Magic/FlameB.I3D` and `Magic/FlameG.I3D`. Their SHA256 values are `1e94317594421341b8b3d9c9b41be01ce724b63c9702deb0fcd6bd2773241718` and `a60243384bcfb5700e543d15c543cfcc25cca3d34baf4d37811cef386254a778`. Executing all93 original constructors resolves builder66ccc0/factory4f5d70/vtable5a9dec; whole Initialize4e4ec0 calls base Initialize40dd60 and CopyVertices40a0c0. Whole Animate4e4ef0 has its own18tick counter, independently of the one-frame looping owner header0x2001. Full Render4e4f20 rewrites actual UVs and calls RenderObject40a8f0/FVF_LVERTEX56eb30/ARGB4444 software kernel. The original empty factory object array is preserved and SetupObjects creates the real one draw object. Decoded immutable resource/textureCOM residency and nullspell owner flag/command accessors are explicit boundaries; no production pose/UV/colors/raster is injected. CopyVertices itself produces packed color0xfffffff8 (all RGB5 lanes31), rather than a host white input.

@@ -22,3 +22,13 @@ Private evidence root: `/Users/benjamincooley/RevenantRetailLab/research/vfx-wid
 - `dust-freeze.json`: frozen evidence hashes and modern-policy diagnostic pointer.
 
 This supersedes the old parser/controller-unavailable Dust status in `DUST_FOG.md`. It establishes conversion and bounded native behavior, **not a primary visual pass**.
+
+## Genuine loaded caller controls (2026-10-11)
+
+`dust_loaded_context_probe.py` removes the prior decoded-resource and flat-ground adapters: source-matched `HudWorld` startup loads the actual class registry, Dust factory, asset, default animator and particle controller. All original owner Pulse/Animate/PreRender/Render/PostRender and raster calls execute. The remaining device boundary is the explicit software RAM target and material-handle GetLightState semantics. No actor, terrain, particle, color or raster routine is replaced.
+
+Four independent 25-phase cases use quality0/3, source ambient/directional38/38 or255/255, and owner positions(10000,10000,16) or(3185,3185,16). Each submits331 original FVF1e2 packets and produces zero colored framebuffer pixels. The low/high-light cases have byte-identical per-phase state, full raw particle pools, RNG, ordered draw packets and pixels; quality3 also leaves those rows identical. The phase sequence explicitly includes cold frame0; the original owner reaches frame19 then sets its kill flag on the following Pulse. It consumes463 CRT random calls before stopping. These phase labels do not retroactively relabel the earlier fixture.
+
+The full authored monotone color envelope is stronger than the48 observed colors: RGB8 never exceeds(40,30,25), hence RGB5 never exceeds(5,3,3). All17 texture texels have source5 channels at most8. Exhaustively crossing every source texel with all6×4×4 possible color-channel values gives1,632 zero contributions under the independently proven additive kernel. Maximum modulation is(1,0,0), whose red low bit is discarded. The packets are prelit FVF1e2; changing normal lighting cannot brighten them. Moving the owner cannot change this source-color bound. This supports retaining Dust as a converted but legitimately blank software effect, without fitting brightness or awarding appearance credit. Natural alternate caller mutation and hardware behavior remain unverified.
+
+Frozen private report: `/Users/benjamincooley/RevenantRetailLab/research/vfx-wide-20261010/hard-astra/dust-loaded-final/manifest.json`, SHA256 `2342b57d86688dbb2b17b5fe76b9c02e282d1281b95dbf26587b32e0195f8649`. The report pins executable, boot image, exact asset, profile and executed probe hashes. No engine or policy change was needed.

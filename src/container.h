@@ -30,6 +30,8 @@ class TContainer : public TObjectInstance
 
     int32_t NumObjects();
         // Count the number of objects in the container
+    bool CanTrade() override;
+        // REVSYNC: 0x004dd3a0 -- always, but a bag named "Swag Bag"
 
     bool CheckKeyUse(TObjectInstance* user, TObjectInstance* inst);
         // Try to use inst to unlock this object

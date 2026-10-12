@@ -61,7 +61,7 @@ class MissileProbe:
         vm.put_u32(self.spell+4,self.source);vm.put_u32(self.spell+0xc,1)
         vm.put_u32(self.spell+0x10,self.target)
         self.tick=0;self.events=[];self.calls={};self.ground_height=1
-        self.wall_x=None;self.target_hp=100;self.enemy=True
+        self.wall_x=None;self.terrain_plane=None;self.target_hp=100;self.enemy=True
         # These are external world inputs and the excluded general effect chain.
         for address in (0x452e10,0x44ceb0,0x44d080,0x477e50,0x4c89c0,
                         0x4de800,0x477a10,0x4def00):
@@ -84,7 +84,11 @@ class MissileProbe:
         vm=self.vm;sp=uc.reg_read(UC_X86_REG_ESP);receiver=uc.reg_read(UC_X86_REG_ECX)
         if address==0x452e10:
             xyz=struct.unpack('<3i',vm.uc.mem_read(vm.u32(sp+4),12))
-            height=10000 if self.wall_x is not None and xyz[0]>=self.wall_x else self.ground_height
+            if self.terrain_plane is not None:
+                source,target=self.terrain_plane
+                blocked=sum((xyz[i]-target[i])*(target[i]-source[i])for i in (0,1))>=0
+            else:blocked=self.wall_x is not None and xyz[0]>=self.wall_x
+            height=10000 if blocked else self.ground_height
             self.ret(12,height)
         elif address==0x44ceb0:
             # Deterministic character query includes source and target. Target
@@ -147,7 +151,7 @@ class MissileProbe:
         if not hasattr(self,'source_xyz'):
             raise ValueError('Configure the missile fixture before checkpointing')
         self.vm.checkpoint()
-        fields=('tick','events','calls','ground_height','wall_x','target_hp','enemy',
+        fields=('tick','events','calls','ground_height','wall_x','terrain_plane','target_hp','enemy',
                 'source_xyz','target_xyz','angle')
         self.control_snapshot=deepcopy({name:getattr(self,name) for name in fields})
 

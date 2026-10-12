@@ -397,7 +397,13 @@ vertex vs_out _main(vs_in in [[stage_in]],
     float persp_scale = ((!native_projection && p.camz.w > 0.5) ? (p.camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = p.vp.x + S * persp_scale;
     float spy = p.vp.y + T * persp_scale;
-    if (prelit_rgba5 && native_projection) { spx = trunc(spx) + 0.5; spy = trunc(spy) + 0.5; }
+    // Native software RGB565 packets truncate XYZ before rasterization.
+    // +0.5 maps their integer sample lattice to GPU half-integer centers.
+    if ((prelit_rgba5 && native_projection) || in.retail_metadata.y > 1.5) {
+        spx = trunc(spx) + 0.5; spy = trunc(spy) + 0.5;
+    }
+    if (in.retail_metadata.y > 1.5)
+        scene_z_n = (trunc(scene_z_wu) - p.camz.x) / max(p.camz.y, 1e-6);
 
     int lmode = int(in.light_mode + 0.5);
     float3 lit = float3(1.0, 1.0, 1.0);

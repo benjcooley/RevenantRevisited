@@ -15,8 +15,10 @@
 #include "vortexlegacykeys.h"
 #include "smokelegacykeys.h"
 #include "barrierlegacykeys.h"
+#include "firelegacykeys.h"
 #include "i3dtexturealpha.h"
 #include "3dimage.h"
+#include "retailsoftwaretransform.h"
 
 #include <algorithm>
 #include <cmath>
@@ -35,6 +37,7 @@
 #include "lightstripprofile.h"
 #include "jhagaattackprofile.h"
 #include "combatflashprofile.h"
+#include "headfireballprofile.h"
 #include "funnelprofile.h"
 #include "cometprofile.h"
 #include "cometmatrix.h"
@@ -736,6 +739,42 @@ bool T3DImagery::ValidateRetailJhagaAttackProfile()
     return true;
 }
 
+bool T3DImagery::ValidateRetailHeadFireBallProfile()
+{
+    if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=3 ||
+       NumObjects()!=5 || NumTextures()!=1 || NumMaterials()!=2 ||
+       NumTags()!=4 || numverts!=12 || numfaces!=6)return false;
+    std::string path(GetResFilename());
+    for(char& c:path)c=c=='\\' ? '/' : char(std::tolower(static_cast<unsigned char>(c)));
+    const std::string suffix="magic/hfire.i3d";
+    if(path.size()<suffix.size() || path.compare(path.size()-suffix.size(),suffix.size(),suffix) ||
+       (path.size()!=suffix.size() && path[path.size()-suffix.size()-1]!='/'))return false;
+    const auto hash=[](const void* data,size_t n){uint64_t h=1469598103934665603ull;
+        const auto* b=static_cast<const uint8_t*>(data);for(size_t i=0;i<n;++i){h^=b[i];h*=1099511628211ull;}return h;};
+    for(int state=0;state<3;++state)
+        if(GetAniLength(state)!=retail_headfireball_profile::frames[state] || GetAniFlags(state)!=retail_headfireball_profile::flags[state])return false;
+    for(int i=0;i<5;++i){const auto& o=objects[i];const auto& p=retail_headfireball_profile::objects[i];
+        if(std::strcmp(o.name,p.name) || o.material!=p.material || o.numverts!=p.vertices || o.numfaces!=p.faces)return false;
+        for(int state=0;state<3;++state)
+            if(o.parent[state]!=-1 || !o.anikeys[state] || o.numanikeys[state]!=p.keys[state] ||
+               hash(o.anikeys[state],p.keys[state]*sizeof(SAniKey32))!=p.key_hash[state])return false;
+        for(int slot=0;slot<2;++slot)if(o.numtexfaces[slot]!=p.face_counts[slot])return false;
+        std::vector<S3DVertex> vertices(size_t(p.vertices));std::vector<S3DFace> faces(size_t(p.faces));
+        if(p.vertices)GetObjVerts(i,vertices.data(),0,0);
+        if(p.faces)GetObjFaces(i,faces.data());
+        if(hash(vertices.data(),vertices.size()*sizeof(S3DVertex))!=p.vertex_hash ||
+           hash(faces.data(),faces.size()*sizeof(S3DFace))!=p.face_hash)return false;
+    }
+    for(int i=0;i<4;++i){const auto& t=*GetTag(i);const auto& p=retail_headfireball_profile::tags[i];
+        if(t.state!=p.state || t.frame!=p.frame || !t.name || !t.str || std::strcmp(t.name,p.name) || std::strcmp(t.str,p.parameters))return false;}
+    for(int i=0;i<1;++i){const auto& t=textures[i];const auto& f=t.desc.pixelFormat;
+        if(t.numframes!=1 || t.desc.width!=retail_headfireball_profile::widths[i] || t.desc.height!=retail_headfireball_profile::heights[i] ||
+           f.dwRGBBitCount!=16 || f.dwRBitMask!=0xf800 || f.dwGBitMask!=0x7e0 || f.dwBBitMask!=31 || f.dwRGBAlphaBitMask ||
+           materials[i].texture!=i || hash(&materials[i].matdesc.diffuse,17*sizeof(float))!=retail_headfireball_profile::materials[i])return false;}
+    for(int i=0;i<2;++i)if(hash(&materials[i].matdesc.diffuse,17*sizeof(float))!=retail_headfireball_profile::materials[i])return false;
+    return true;
+}
+
 bool T3DImagery::ValidateRetailFunnelProfile()
 {
     if(!GetResFilename() || version!=3 || flags!=0xdc || NumStates()!=3 ||
@@ -925,6 +964,7 @@ void T3DImagery::InitializePartSysTracks()
     static_particles_profile = ValidateRetailStaticParticleProfile();
     lightstrip_partsys_profile = ValidateRetailLightStripProfile();
     jhagaattack_partsys_profile = ValidateRetailJhagaAttackProfile();
+    headfireball_partsys_profile = ValidateRetailHeadFireBallProfile();
     funnel_partsys_profile = ValidateRetailFunnelProfile();
     comet_partsys_profile = ValidateRetailCometProfile();
     fgeyser_partsys_profile = ValidateRetailFGeyserProfile();
@@ -994,7 +1034,7 @@ void T3DImagery::InitializePartSysTracks()
         for (int32_t j = 0; j < NumTags() && track.supported; ++j)
         {
             const char* name = GetTag(j)->name;
-            if ((gold_partsys_profile || combatflash_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || static_particles_profile || jhagaattack_partsys_profile || lightstrip_partsys_profile || funnel_partsys_profile || comet_partsys_profile || fgeyser_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
+            if ((gold_partsys_profile || combatflash_partsys_profile || speed_partsys_profile || quicksilver_partsys_profile || static_particles_profile || headfireball_partsys_profile || jhagaattack_partsys_profile || lightstrip_partsys_profile || funnel_partsys_profile || comet_partsys_profile || fgeyser_partsys_profile) && name && !stricmp(name, "blendcont")) continue;
             if (name && stricmp(name, "partsys") && stricmp(name, "scrolltex") &&
                 stricmp(name, "play") && stricmp(name, "beg") && stricmp(name, "end"))
             {
@@ -1299,6 +1339,8 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
     const bool barrier_keys=barrier_legacy::Matches(GetResFilename(),mesh,
         GetResSize(),NumStates(),GetAniLength(0),GetAniFlags(0));
 
+    const bool fire_keys=fire_legacy::Matches(GetResFilename(),mesh,GetResSize(),NumStates(),GetAniLength(0),GetAniFlags(0));
+
     // ---- morph vertex lists ----
     numverts = mesh->numverts;
 
@@ -1405,6 +1447,10 @@ bool T3DImagery::OldInitializeMesh(SOld3DImageryBody* mesh)
                 if (smoke_keys) {
                     static_assert(sizeof(SAniKey)==8);
                     std::memcpy(obj.anikeys[d],mesh->anikeys[d].ptr(),size_t(GetAniLength(d))*8);
+                }
+                if (fire_keys && d==0) {
+                    static_assert(sizeof(SAniKey)==8);
+                    std::memcpy(obj.anikeys[d],mesh->anikeys[0].ptr(),8);
                 }
                 if (barrier_keys && d==0) {
                     static_assert(sizeof(SAniKey)==8);
@@ -2427,13 +2473,48 @@ static void NormalizeRot(hmm_vec3& v1, hmm_vec3& v2)
         v2 = v1;
 }
 
+bool T3DImagery::GetRetailStrikeAniKey(int32_t object,int32_t frame,
+    hmm_vec3& pos,hmm_vec3& rot,hmm_vec3& scale)
+{
+    if(!HasRetailCometProfile() || !GetUninterpolatedAniKey(object,0,frame,pos,rot,scale,true))return false;
+    // Whole loaded PreRender40e84b stores previous0/frame0. GetAniKey409950
+    // uses the original five-frame initial transition with Interpolate enabled.
+    if(frame<5){
+        hmm_vec3 p{},r{},s{};if(!GetUninterpolatedAniKey(object,0,0,p,r,s,true))return false;
+        float weight=float(frame+1)/5.0f;NormalizeRot(rot,r);
+        // Original x87 retains1-weight and both products until the float store.
+        const auto blend=[weight](hmm_vec3& dst,const hmm_vec3& old){
+            for(int i=0;i<3;++i)dst.Elements[i]=float(static_cast<long double>(dst.Elements[i])*weight+
+                static_cast<long double>(old.Elements[i])*(1.0L-static_cast<long double>(weight)));
+        };
+        blend(pos,p);blend(rot,r);blend(scale,s);
+    }
+    return true;
+}
+
+bool T3DImagery::GetRetailNullifierEmitterAniKey(int32_t object, int32_t frame,
+    int32_t previous_state, int32_t previous_frame, hmm_vec3& pos, hmm_vec3& rot, hmm_vec3& scale)
+{
+    if (!HasRetailStaticParticleProfile(0xad92bd38u) || object<0 || object>8 || object==1)
+        return false;
+    // Full original PreRender40e84b publishes the real owner's previous pose.
+    // GetAniKey409950 blends the first five frames, including loop re-entry.
+    // Preserve shared imagery state after sampling the cached animator frame.
+    const int32_t saved_state=prevstate, saved_frame=prevframe;
+    SetPrevState(previous_state,previous_frame);
+    const bool result=GetAniKey(object,0,frame,pos,rot,scale);
+    SetPrevState(saved_state,saved_frame);
+    return result;
+}
+
 bool T3DImagery::GetAniKey(int32_t objnum, int32_t state, int32_t frame,
     hmm_vec3& pos, hmm_vec3& rot, hmm_vec3& scl)
 {
     if (!meshinitialized)
         InitializeMesh((S3DImageryBody*)GetBody());
 
-    if (!GetUninterpolatedAniKey(objnum, state, frame, pos, rot, scl))
+    const bool combat_base = state==0 && objnum==2 && HasCombatFlashPartSysProfile();
+    if (!GetUninterpolatedAniKey(objnum, state, frame, pos, rot, scl, combat_base))
         return false;
 
     if (!Interpolate) return true;
@@ -2458,7 +2539,8 @@ bool T3DImagery::GetAniKey(int32_t objnum, int32_t state, int32_t frame,
     if (prevstate >= 0 && frame < iframes && GetAniLength(state) >= iframes)
     {
         i = (float)(frame + 1) / (float)iframes;
-        GetUninterpolatedAniKey(objnum, prevstate, prevframe, ipos, irot, iscl);
+        GetUninterpolatedAniKey(objnum, prevstate, prevframe, ipos, irot, iscl,
+            combat_base && prevstate==0);
         NormalizeRot(rot, irot);
         InterpolatePoints(pos, ipos, i);
         InterpolatePoints(rot, irot, i);
@@ -3380,21 +3462,35 @@ TAnimation* T3DImagery::GetInvAnimation(int32_t state)
     return icons[state].invanim;
 }
 
+// REVSYNC: T3DImagery::NewAnimator @ 0x0040cf50 -- the animator registered
+// under the object's type name; else for a weapon, armor, light source or
+// arrow (an AMMO type named "arrow") the "Equip" animator; else the one
+// registered under the class name; else the default
+// (docs/gameflow/forensics/DEATH_LOOT.md §5). `name` is the name it was found by.
+static T3DAnimatorBuilder* SelectAnimatorBuilder(const TObjectInstance* oi, const char*& name)
+{
+    name = oi->GetTypeName();
+    T3DAnimatorBuilder* builder = T3DAnimatorBuilder::GetBuilder(name);
+    if (builder != &T3DAnimatorBuilderInstance)
+        return builder;
+
+    const char* classname = oi->GetClassName();
+    const bool equipment = !stricmp(classname, "WEAPON") || !stricmp(classname, "ARMOR") ||
+                           !stricmp(classname, "LIGHTSOURCE") ||
+                           (!stricmp(classname, "AMMO") && !stricmp(oi->GetTypeName(), "arrow"));
+    name = equipment ? "Equip" : classname;
+    return T3DAnimatorBuilder::GetBuilder(name);
+}
+
 void T3DImagery::AttachAnimatorComponents(TObjectInstance* oi)
 {
     if (!meshinitialized)
         if (!InitializeMesh((S3DImageryBody*)GetBody()))
             FatalError("Unable to initialize 3D imagery for %s", oi->GetName());
 
-    const char* name = oi->GetTypeName();
-    T3DAnimatorBuilder* builder = T3DAnimatorBuilder::GetBuilder(name);
-    const char* initial_name = name;
-
-    if (builder == &T3DAnimatorBuilderInstance)
-    {
-        name = oi->GetClassName();
-        builder = T3DAnimatorBuilder::GetBuilder(name);
-    }
+    const char* initial_name = oi->GetTypeName();
+    const char* name = nullptr;
+    T3DAnimatorBuilder* builder = SelectAnimatorBuilder(oi, name);
 
     const bool interesting = (builder != &T3DAnimatorBuilderInstance) ||
                              (oi && oi->ObjClass() == OBJCLASS_EFFECT);
@@ -3420,15 +3516,8 @@ TObjectAnimator* T3DImagery::NewObjectAnimator(TObjectInstance* oi)
         if (!InitializeMesh((S3DImageryBody*)GetBody()))
             FatalError("Unable to initialize 3D imagery for %s", oi->GetName());
 
-    const char* name = oi->GetTypeName();
-    T3DAnimatorBuilder* builder = T3DAnimatorBuilder::GetBuilder(name);
-
-    if (builder == &T3DAnimatorBuilderInstance)
-    {
-        name = oi->GetClassName();
-        builder = T3DAnimatorBuilder::GetBuilder(name);
-    }
-
+    const char* name = nullptr;
+    T3DAnimatorBuilder* builder = SelectAnimatorBuilder(oi, name);
     builder->AttachComponents(oi);
     return (TObjectAnimator*)builder->Build(oi);
 }
@@ -3500,9 +3589,11 @@ struct T3DAnimator::SPartSysControllers
                            TObjectInstance& owner)
     {
         const bool funnel_pose=(owner.ObjId()==0xad92bc17u && animator.Get3DImagery()->HasRetailFunnelProfile());
+        const bool dragon_pose=(owner.ObjId()==0xba09feadu && animator.Get3DImagery()->HasRetailHeadFireBallProfile());
+        const bool head_pose=((owner.ObjId()==0xd000f005u || dragon_pose) && animator.Get3DImagery()->HasRetailHeadFireBallProfile());
         const bool jhaga_pose=(owner.ObjId()==0xaeaeeb32u && animator.Get3DImagery()->HasRetailJhagaAttackProfile());
         const bool lightstrip_pose=(owner.ObjId()==0x10da54d0u && animator.Get3DImagery()->HasRetailLightStripProfile());
-        const bool comet_pose=(owner.ObjId()==0xf32bcfacu && animator.Get3DImagery()->HasRetailCometProfile());
+        const bool comet_pose=((owner.ObjId()==0xf32bcfacu || owner.ObjId()==0xad92bd32u) && animator.Get3DImagery()->HasRetailCometProfile());
         const bool fgeyser_pose=(owner.ObjId()==0xad92bd31u && animator.Get3DImagery()->HasRetailFGeyserProfile());
         const bool poison_pose=(owner.ObjId()==0xe0a3bc42u && animator.Get3DImagery()->HasRetailPoisonProfile());
         const bool dust_pose=(owner.ObjId()==0x0c052637u && animator.Get3DImagery()->HasRetailDustProfile());
@@ -3512,7 +3603,7 @@ struct T3DAnimator::SPartSysControllers
         inputs.owner_face = static_cast<unsigned char>(owner.GetFace());
         // Retail 403771 reads animator+14; Animate copies owner frame later.
         // Gold's transient PPS curve must see initial cached0, not owner1.
-        inputs.animation_frame = ((jhaga_pose || lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose) || owner.ObjId() == 0xd0c0f035u ||
+        inputs.animation_frame = ((head_pose || jhaga_pose || lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose) || owner.ObjId() == 0xd0c0f035u ||
             (owner.ObjId()==0x5be39ae0u && owner.GetState()==0 && animator.Get3DImagery()->HasRetailMightPartSysProfile()) ||
             (owner.ObjId()==0x82aeb30fu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailImmortalmightPartSysProfile()) ||
             (owner.ObjId()==0xb0e024dfu && owner.GetState()==0 && animator.Get3DImagery()->HasRetailFmasteryPartSysProfile()) ||
@@ -3526,6 +3617,14 @@ struct T3DAnimator::SPartSysControllers
         if (inputs.has_object_zero_origin)
             inputs.object_zero_origin = {object_zero.Elements[3][0],
                                          object_zero.Elements[3][1], object_zero.Elements[3][2]};
+        if(owner.ObjId()==0xad92bd32u && comet_pose){
+            // Original Strike/Meteor Storm403320 initializes from object0's
+            // untouched identity matrix, before the first delayed Render.
+            // Eager GetObjectMatrix would insert its authored134.117 key and
+            // alter the first relative-velocity particles. Pulse ignores this
+            // initialization-only input after State::Initialize.
+            inputs.has_object_zero_origin=true;inputs.object_zero_origin={0,0,0};
+        }
         if(jhaga_pose){
             // Original4033db/40efc0 reads the cached prototype matrix. Outgoing
             // flight Render leaves its origin zero; eager authored-key resampling here
@@ -3533,6 +3632,18 @@ struct T3DAnimator::SPartSysControllers
             const auto origin=animator.JhagaAttackObjectZeroOrigin();
             inputs.has_object_zero_origin=true;
             inputs.object_zero_origin={origin.X,origin.Y,origin.Z};
+        }
+        if(head_pose && !dragon_pose){
+            // Original4033db/40efc0 reads the cached prototype matrix. Outgoing
+            // flight Render leaves its origin zero; eager authored-key resampling here
+            // would add a false37.824-unit relative-velocity kick at state2.
+            const auto origin=animator.HeadFireBallObjectZeroOrigin();
+            inputs.has_object_zero_origin=true;
+            inputs.object_zero_origin={origin.X,origin.Y,origin.Z};
+        }
+        if(dragon_pose){
+            inputs.has_object_zero_origin=true;
+            inputs.object_zero_origin=animator.DragonAttackPrototype().value;
         }
         for (size_t i = 0; i < controller.track.emitters.size(); ++i)
         {
@@ -3547,12 +3658,19 @@ struct T3DAnimator::SPartSysControllers
             // copies the advanced owner frame. GetObjectMatrix above refreshes
             // modern bones at the owner frame, so exact static PartSys assets
             // must sample their verified root-emitter keys at the cached frame.
-            if ((jhaga_pose || lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose) || (owner.GetState()==0 &&
+            if ((head_pose || jhaga_pose || lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose) || (owner.GetState()==0 &&
                 animator.Get3DImagery()->HasRetailStaticParticleProfile(owner.ObjId())))
             {
                 hmm_vec3 rotation{};
                 if (!animator.Get3DImagery()->GetUninterpolatedAniKey(object, owner.GetState(),
-                    inputs.animation_frame, emitter_position, rotation, emitter_scale, (jhaga_pose || lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose))) continue;
+                    inputs.animation_frame, emitter_position, rotation, emitter_scale, (head_pose || jhaga_pose || lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose))) continue;
+                if(owner.ObjId()==0xad92bd38u && owner.GetState()==0 &&
+                   !animator.Get3DImagery()->GetRetailNullifierEmitterAniKey(object,
+                       inputs.animation_frame,owner.GetPrevState(),owner.GetPrevFrame(),
+                       emitter_position,rotation,emitter_scale))continue;
+                if(owner.ObjId()==0xad92bd32u && comet_pose &&
+                   !animator.Get3DImagery()->GetRetailStrikeAniKey(object,inputs.animation_frame,
+                       emitter_position,rotation,emitter_scale))continue;
                 MtxClear(&matrix);
                 if(poison_pose)
                     BuildRetailPoisonMatrix(matrix,object,emitter_position,rotation,emitter_scale);
@@ -3605,15 +3723,16 @@ void T3DAnimator::RefreshPartSysControllers()
     const bool immortalmight = id==0x82aeb30fu && imagery->immortalmight_partsys_profile && current_state==0;
     const bool fmastery=id==0xb0e024dfu && imagery->fmastery_partsys_profile && current_state==0;
     const bool speed=imagery->HasRetailSpeedFamilyPartSysProfile(id) && current_state==0;
-    const bool comet=id==0xf32bcfacu && imagery->HasRetailCometProfile() && current_state==0;
+    const bool comet=(id==0xf32bcfacu || id==0xad92bd32u) && imagery->HasRetailCometProfile() && current_state==0;
     const bool fgeyser=id==0xad92bd31u && imagery->HasRetailFGeyserProfile() && current_state==0;
     const bool poison=id==0xe0a3bc42u && imagery->HasRetailPoisonProfile() && current_state==0;
     const bool dust=id==0x0c052637u && imagery->HasRetailDustProfile() && current_state==0;
     const bool funnel=id==0xad92bc17u && imagery->HasRetailFunnelProfile() && current_state>=0 && current_state<3;
+    const bool head=(id==0xd000f005u || id==0xba09feadu) && imagery->HasRetailHeadFireBallProfile() && current_state>=0 && current_state<3;
     const bool jhaga=id==0xaeaeeb32u && imagery->HasRetailJhagaAttackProfile() && current_state>=0 && current_state<3;
     const bool lightstrip=id==0x10da54d0u && imagery->HasRetailLightStripProfile() && current_state>=0 && current_state<3;
     const bool static_particles=imagery->HasRetailStaticParticleProfile(id) && current_state==0;
-    if (!gold && !combat_flash && !might && !immortalmight && !fmastery && !speed && !static_particles && !jhaga && !lightstrip && !funnel && !comet && !fgeyser && !dust && !poison)
+    if (!gold && !combat_flash && !might && !immortalmight && !fmastery && !speed && !static_particles && !head && !jhaga && !lightstrip && !funnel && !comet && !fgeyser && !dust && !poison)
     {
         if (!state.initialized)
             log_warn("[partsys] unsupported runtime type=%s id=%08x map_index=%d: only exact audited particle profiles are enabled",
@@ -3633,7 +3752,7 @@ void T3DAnimator::RefreshPartSysControllers()
             return controller.track.state != -1 && controller.track.state != current_state;
         }), controllers.end());
     state.unsupported = false;
-    if(static_particles || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison)
+    if(static_particles || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison)
         for(int object=0;object<NumObjects();++object)
             if(S3DAnimObj* bone=GetObject(object)){
                 const char* name=imagery->GetObjectName(object);
@@ -3643,7 +3762,7 @@ void T3DAnimator::RefreshPartSysControllers()
     const bool static_litaddz=(static_particles && imagery->NumTags()==2) || (lightstrip && current_state==0) || comet;
     // Impact's start states carry the blendcont tag; the writes persist into
     // the following end state, which has none.
-    if (gold || (combat_flash && current_state % 2 == 0) || speed || static_litaddz || fgeyser || funnel || (jhaga && current_state==0))
+    if (gold || (combat_flash && current_state % 2 == 0) || speed || static_litaddz || fgeyser || funnel || ((head || jhaga) && current_state==0))
     {
         // Retail blendcont Initialize 405940: immediate state-entry writes to
         // every animator object, preserving the prior no-depth-test bit. Its
@@ -3686,7 +3805,7 @@ void T3DAnimator::RefreshPartSysControllers()
             S3DPoint position = {x, y, z};
             return MapPane.GetWalkHeight(position);
         };
-        if((jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) && lightstrip_ground)controller.inputs.ground_height=lightstrip_ground;
+        if((head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) && lightstrip_ground)controller.inputs.ground_height=lightstrip_ground;
         SPartSysControllers::FillInputs(controller, *this, *inst);
         std::string diagnostic;
         // Default quality0 retains full emission. Explicit capture overrides
@@ -3760,6 +3879,38 @@ void T3DAnimator::SetJhagaAttackGround(std::function<int(int,int,int)> query)
     lightstrip_ground=std::move(query);
     if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
 }
+void T3DAnimator::SetHeadFireBallObjectZeroOrigin(const hmm_vec3& origin)
+{
+    if(inst && inst->ObjId()==0xd000f005u && Get3DImagery()->HasRetailHeadFireBallProfile() && !headfireball_object_zero_sampled)
+        headfireball_object_zero_origin=origin;
+}
+void T3DAnimator::NoteHeadFireBallPrototypeSample()
+{
+    if(inst && inst->ObjId()==0xd000f005u && Get3DImagery()->HasRetailHeadFireBallProfile() && inst->GetState()==1){
+        // Original4026e1 marks the outgoing flight prototype for manual transforms.
+        // Its cached origin at the next Initialize is zero after sampling. Later
+        // teardown matrices are not another initialization input in this finite owner.
+        headfireball_object_zero_sampled=true;
+        headfireball_object_zero_origin={0,0,0};
+    }
+}
+void T3DAnimator::SetHeadFireBallGround(std::function<int(int,int,int)> query)
+{
+    if(!inst || inst->ObjId()!=0xd000f005u || !Get3DImagery()->HasRetailHeadFireBallProfile())return;
+    lightstrip_ground=std::move(query);
+    if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
+}
+void T3DAnimator::SetDragonAttackGround(std::function<int(int,int,int)> query)
+{
+    if(!inst || inst->ObjId()!=0xba09feadu || !Get3DImagery()->HasRetailHeadFireBallProfile())return;
+    lightstrip_ground=std::move(query);
+    if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
+}
+void T3DAnimator::SetDragonAttackPrototypePose(const hmm_vec3& position,const hmm_vec3& scale)
+{
+    if(inst && inst->ObjId()==0xba09feadu && Get3DImagery()->HasRetailHeadFireBallProfile())
+        dragonattack_object_zero.Authored({position.X,position.Y,position.Z},{scale.X,scale.Y,scale.Z});
+}
 void T3DAnimator::SetFunnelGround(std::function<int(int,int,int)> query)
 {
     if(!inst || inst->ObjId()!=0xad92bc17u || !Get3DImagery()->HasRetailFunnelProfile())return;
@@ -3769,7 +3920,7 @@ void T3DAnimator::SetFunnelGround(std::function<int(int,int,int)> query)
 
 void T3DAnimator::SetCometGround(std::function<int(int,int,int)> query)
 {
-    if(!inst || inst->ObjId()!=0xf32bcfacu || !Get3DImagery()->HasRetailCometProfile())return;
+    if(!inst || (inst->ObjId()!=0xf32bcfacu && inst->ObjId()!=0xad92bd32u) || !Get3DImagery()->HasRetailCometProfile())return;
     lightstrip_ground=std::move(query);
     if(partsys_controllers)for(auto& c:partsys_controllers->controllers)c.inputs.ground_height=lightstrip_ground;
 }
@@ -3965,7 +4116,7 @@ bool T3DAnimator::CombatFlashBaseMeshBlend(int32_t object, uint32_t& blend) cons
     return blend==16u;
 }
 
-bool T3DAnimator::CombatFlashBaseMeshWorldMatrix(int32_t object, hmm_mat4& world)
+bool T3DAnimator::CombatFlashBaseMeshWorldMatrix(int32_t object, hmm_mat4& world, bool native_software)
 {
     uint32_t blend=0;
     if (!CombatFlashBaseMeshBlend(object,blend)) return false;
@@ -3980,7 +4131,9 @@ bool T3DAnimator::CombatFlashBaseMeshWorldMatrix(int32_t object, hmm_mat4& world
     if (animobjs[object]->flags & OBJ3D_GOLD_CAMERA_FACING)
         ApplyRetailGoldCameraOrientation(world); // Recovered generic '#' branch, no new fitted matrix.
     MtxTranslate(&world,&position); // Original preserves translation after fixed camera orientation.
-    MtxMultiply(&world,&world,&inst->Transform().Matrix());
+    hmm_mat4 owner=inst->Transform().Matrix();
+    if(native_software){const auto& p=inst->Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(inst->GetFace()));}
+    MtxMultiply(&world,&world,&owner);
     return true;
 }
 
@@ -4169,14 +4322,18 @@ T3DAnimator::SAuthoredPartSysStats T3DAnimator::PartSysStats() const
 }
 
 int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
-                                  int32_t texture_slot, const hmm_vec3& render_scale, bool native_software)
+                                  int32_t texture_slot, const hmm_vec3& render_scale, bool native_software, bool submit_geometry)
 {
     if (!partsys_controllers || partsys_controllers->unsupported) return 0;
-    const bool comet=inst->ObjId()==0xf32bcfacu && inst->GetState()==0 && Get3DImagery()->HasRetailCometProfile();
+    const bool comet=(inst->ObjId()==0xf32bcfacu || inst->ObjId()==0xad92bd32u) && inst->GetState()==0 && Get3DImagery()->HasRetailCometProfile();
     const bool fgeyser=inst->ObjId()==0xad92bd31u && inst->GetState()==0 && Get3DImagery()->HasRetailFGeyserProfile();
     const bool poison=inst->ObjId()==0xe0a3bc42u && inst->GetState()==0 && Get3DImagery()->HasRetailPoisonProfile();
     const bool dust=inst->ObjId()==0x0c052637u && inst->GetState()==0 && Get3DImagery()->HasRetailDustProfile();
     const bool funnel=inst->ObjId()==0xad92bc17u && Get3DImagery()->HasRetailFunnelProfile();
+    const bool dragon=inst->ObjId()==0xba09feadu && Get3DImagery()->HasRetailHeadFireBallProfile();
+    const bool head=(inst->ObjId()==0xd000f005u || dragon) && Get3DImagery()->HasRetailHeadFireBallProfile();
+    const bool combat_native=native_software && inst->ObjId()==0xad92bd29u &&
+        inst->GetState()==0 && Get3DImagery()->HasCombatFlashPartSysProfile();
     const bool jhaga=inst->ObjId()==0xaeaeeb32u && Get3DImagery()->HasRetailJhagaAttackProfile();
     const bool lightstrip=inst->ObjId()==0x10da54d0u && Get3DImagery()->HasRetailLightStripProfile();
     const bool combat=inst->ObjId()==retail_combatflash_profile::type_id && Get3DImagery()->HasCombatFlashPartSysProfile();
@@ -4206,7 +4363,11 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // The retail helper samples three rotation ranges during Render.
             // Keep those calls here; Submit never advances simulation state.
             const auto sample = controller.simulation.SampleRender(slot, rng);
+            if(inst->ObjId()==0xad92bd32u && std::getenv("REV_STRIKE_PARTICLE_TRACE")){const auto&p=particles[slot];const auto pos=inst->Pos();log_info("[strike-particle] owner=%d,%d,%d frame=%d prototype=%d slot=%zu pos=%.9g,%.9g,%.9g vel=%.9g,%.9g,%.9g",pos.x,pos.y,pos.z,inst->GetFrame(),track.prototype,slot,p.position[0],p.position[1],p.position[2],p.velocity[0],p.velocity[1],p.velocity[2]);}
+
             if(jhaga && object==0)NoteJhagaAttackPrototypeSample();
+            if(head && object==0)NoteHeadFireBallPrototypeSample();
+            if(dragon && object==0)dragonattack_object_zero.Sample(sample.scale,sample.position);
             // Original Render 402901..402a0b: after the main draw, the shifted
             // history entries draw with the same rotation, scale and colour,
             // the last a duplicate of the current position. The shift happens
@@ -4218,7 +4379,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // Native Speed RenderObject40a9e7..9f3 skips geometry when its
             // CalcObjectMatrix scale gate40a591..5c1 returns0. Sampling still
             // happens first, preserving its three render-time RNG calls.
-            if((combat || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || (inst->GetState()==0 &&
+            if((combat || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || (inst->GetState()==0 &&
                ((Get3DImagery()->HasRetailSpeedFamilyPartSysProfile(inst->ObjId()) && track.prototype==2) ||
                 Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId())))) &&
                sample.scale<=9.999999747378752e-6f)continue;
@@ -4240,7 +4401,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             const bool static_particles=inst->GetState()==0 &&
                 Get3DImagery()->HasRetailStaticParticleProfile(inst->ObjId());
             // All three Impact prototypes are '#particle0N'.
-            if (combat || might || immortalmight || fmastery || speed || static_particles || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || inst->ObjId() == 0xd0c0f035u)
+            if (combat || might || immortalmight || fmastery || speed || static_particles || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || inst->ObjId() == 0xd0c0f035u)
                 ApplyRetailGoldCameraOrientation(orientation); // actual '#' flag retained on the audited prototypes
 
             SQuadDrawItem item = {};
@@ -4252,15 +4413,27 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             item.key.blend = uint8_t(sample.blendmode == 2 ? EFxBlend::Alpha : EFxBlend::AdditiveStraight);
             // Preserve source packed prelit vertex color. Combat particles are
             // RGB565 with litadd16, not normal-lit material meshes or alpha coins.
-            item.retail_texture = (combat || might || immortalmight || fmastery || speed || static_particles || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || inst->ObjId() == 0xd0c0f035u) ? 1 : 0;
+            item.retail_texture = (combat || might || immortalmight || fmastery || speed || static_particles || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison || inst->ObjId() == 0xd0c0f035u) ? 1 : 0;
             // Strict static profile admission pins RGB565 masks and literal
             // particle prototype. The queue applies this only to software
             // lighting and ONE/ONE; modern/hardware and alpha retain fallback.
-            item.retail_rgb565_additive = (static_particles || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) && sample.blendmode == 16;
+            item.retail_rgb565_additive = (combat_native || static_particles || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) && sample.blendmode == 16;
             item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
             item.light_mode = EFxLightMode::Unlit;
+            // Actual hardware FVF1e2 packets retain RGB8 for these separately
+            // verified profiles. Their software policy still truncates to RGB5.
+            // Other profiles retain their policy until independently verified.
+            const uint32_t color_type = inst->ObjId();
+            // The exact64x64 nullifier software prototype reaches original
+            // integer XYZ/UV triangle packets. Common/hardware stays floating.
+            item.retail_software_pixel_grid = static_particles && color_type==0xad92bd38u;
+            const bool verified_static_rgb8 = static_particles &&
+                (color_type == 0x0c052638u || color_type == 0x10ac03deu ||
+                 color_type == 0xe0a3bc43u || color_type == 0xad92bd38u);
+            const bool retail_rgb5_color = (combat_native || might || immortalmight || fmastery || speed || static_particles || head || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) &&
+                (!(dust || verified_static_rgb8) || renderer.UsesRetailSoftwareMeshLighting());
             for (int c = 0; c < 3; ++c)
-                item.color_rgba[c] = (might || immortalmight || fmastery || speed || static_particles || jhaga || lightstrip || funnel || comet || fgeyser || dust || poison) ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
+                item.color_rgba[c] = retail_rgb5_color ? float((int(sample.color[c]) & 255)>>3)/31.0f : sample.color[c]/255.0f;
             // Actual SW LV prelit channels are5bit; canonicalDEST_ONE ignores
             // alpha in its8wordXYZ/UV/RGB packet. Keep literal alpha metadata,
             // no premultiplication/alternateblend. PixelLSB-table raster gate open.
@@ -4290,6 +4463,23 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                         (world.Z - center[2]) * WORLD3D_Z_SCALE) * render_scale.Z;
                     item.uv[c][0] = vertex.tu;
                     item.uv[c][1] = vertex.tv;
+                    if (item.retail_software_pixel_grid && native_software &&
+                        renderer.UsesRetailSoftwareMeshLighting())
+                    {
+                        item.uv[c][0] = std::trunc(item.uv[c][0] * 64.0f) / 64.0f;
+                        item.uv[c][1] = std::trunc(item.uv[c][1] * 64.0f) / 64.0f;
+                    }
+                }
+                // Component diagnostics retain sampling and prototype bookkeeping.
+                if (!submit_geometry) return;
+                if (inst->ObjId() == 0xad92bd38u && std::getenv("REV_NULLIFIER_PACKET_TRACE"))
+                {
+                    log_info("[null-packet] tick=%lld frame=%d slot=%zu color=%.9g,%.9g,%.9g,%.9g",
+                             static_cast<long long>(TTime::FrameCount()), inst->GetFrame(), slot, item.color_rgba[0],
+                             item.color_rgba[1], item.color_rgba[2], item.color_rgba[3]);
+                    for (int c = 0; c < 4; ++c)
+                        log_info("[null-corner] %.9g,%.9g,%.9g,%.9g,%.9g", item.world_pos[c][0], item.world_pos[c][1],
+                                 item.world_pos[c][2], item.uv[c][0], item.uv[c][1]);
                 }
                 renderer.SubmitFxQuad(item);
                 ++submitted;

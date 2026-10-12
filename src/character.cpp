@@ -35,6 +35,7 @@
 #include <cstdlib>
 #include <math.h>
 #include <string.h>
+#include <vector>
 
 #define GRIDSNAPSIZE    48
 
@@ -536,11 +537,13 @@ void TCharacter::Pulse()
 // is one, then the dead loop (the prefixed "dead", else the plain one) as
 // the new root. The script hears of it every tick and the corpse stops
 // fidgeting. After 240 ticks it fades out over 100 more, and then it goes.
-// Not ported: the death loot (0x004d6570), which first scatters a
-// monster's inventory onto the map round the body (CHARACTER_PULSE.md §1);
-// the port's corpses keep theirs to be looted, as the 1998 build's did.
+// First, as long as it carries anything, a body that isn't a player's drops
+// it round itself (DropLoot, 0x004c21e4; docs/gameflow/forensics/DEATH_LOOT.md).
 void TCharacter::PulseCorpse()
 {
+    if (ObjClass() != OBJCLASS_PLAYER && NumInventoryItems() > 0)
+        DropLoot();
+
     if (doing->action != ACTION_DEAD)
     {
         doing->priority = doing->interrupt = false;
@@ -4053,10 +4056,10 @@ static std::string PickupLine(TObjectInstance* inst)
 // form with name and amount, else "%i %s %s." with CONTPICKUP), anything
 // else by name (FULLCONTPICKUP, else "%s %s."). The shipped english.def has
 // only CONTPICKUP ("Picked up"): "Short Sword Picked up.".
-// Not ported: the multiplayer request (0x005845c0 / 0x00584500), the item's
-// class sound (0x00473a10), and the item's vtable 0x144 hook (empty in the
-// base). The port's AddToInventory doesn't take the item off the map, so it
-// leaves here and comes back if it doesn't fit (retail's stayed put).
+// Not ported: the multiplayer request (0x005845c0 / 0x00584500) and the
+// item's vtable 0x144 hook (empty in the base). The port's AddToInventory
+// doesn't take the item off the map, so it leaves here and comes back if it
+// doesn't fit (retail's stayed put).
 bool TCharacter::Pickup(TObjectInstance* inst, TObjectInstance* to)
 {
     if (!inst || !inst->IsInventoryItem() || inst == this)
@@ -4066,6 +4069,7 @@ bool TCharacter::Pickup(TObjectInstance* inst, TObjectInstance* to)
 
     if (this == Player)
         TextBar.Print("%s", PickupLine(inst).c_str());
+    inst->PlayItemSound();                  // 0x004d0176
 
     inst->RemoveFromMap();
     if (!to->AddToInventory(inst))
@@ -4076,6 +4080,107 @@ bool TCharacter::Pickup(TObjectInstance* inst, TObjectInstance* to)
     return true;
 }
 
+// REVSYNC: DropLoot @ 0x004d6570 (docs/gameflow/forensics/DEATH_LOOT.md §2).
+// A bag named "Swag Bag" comes out to the top of the inventory (it stays with
+// the body: it can't be traded); the "gold" sound plays; then each thing at
+// the top of the inventory that can be traded leaves it. Gold lands at the
+// body's feet, (30, 30) off. Anything else walks out from the body in steps
+// of 16 along a random heading, as far as about twice the body's radius
+// while the steps stay walkable; a step that isn't, within the body's own
+// radius, starts again along another heading. It is thrown there from the
+// body (60 up but for armor) by its animator (TObjectAnimator::Toss) and
+// makes its own sound. Deviations (DEATH_LOOT.md §8): retail tests each step
+// a step late, at the last spot it accepted, so a thing could come to rest
+// a step into a wall or over a ledge -- the port tests the step itself;
+// retail tried headings without end where every one is walled in close by
+// -- the port gives up after kHeadingTries and leaves it at the body; and
+// retail ran (and played the sound) every pulse while a dead body held
+// anything at all -- the port only when it holds something to drop.
+void TCharacter::DropLoot()
+{
+    constexpr int32_t kGoldOffset   = 30;
+    constexpr int32_t kStep         = 16;
+    constexpr int32_t kMaxWalkStep  = 0x20;
+    constexpr int32_t kThrowHeight  = 60;
+    constexpr int32_t kHeadingTries = 32;
+
+    std::vector<TObjectInstance*> loot;
+    for (TInventoryIterator i(this); i; i++)
+        if (i.Item()->CanTrade())
+            loot.push_back(i.Item());
+    if (loot.empty())
+        return;
+    log_info("[loot] %s drops %zu thing(s) at (%d,%d,%d)", GetName(), loot.size(), pos.x, pos.y, pos.z);
+
+    if (TObjectInstance* swag = FindObjInventory("Swag Bag"))
+        AddToInventory(swag);
+
+    const int32_t sound = SoundPlayer.FindSound("gold");
+    if (sound >= 0 && SoundPlayer.Mount(sound))
+        SoundPlayer.Play(sound);
+
+    const S3DPoint body = pos;
+    const int32_t radiussteps = Radius() / kStep;
+    for (TObjectInstance* item : loot)
+    {
+        if (!stricmp(item->GetTypeName(), "gold"))
+        {
+            item->SetPos(S3DPoint{ body.x + kGoldOffset, body.y + kGoldOffset, body.z }, level);
+            item->RemoveFromInventory();
+            item->AddToMap();
+            log_info("[loot] %s at its feet", item->GetName());
+            continue;
+        }
+
+        S3DPoint drop = body;
+        float x = float(body.x), y = float(body.y);
+        float dx = 0.0f, dy = 0.0f;
+        auto heading = [&]() {
+            const double a = double(random(0, 0x100)) * 6.283185307179586 * 0.00390625;
+            dx = float(std::cos(a) * kStep);
+            dy = float(std::sin(a) * kStep);
+        };
+        heading();
+        int32_t tries = 1;
+        for (int32_t n = 0; n <= radiussteps * 2; ++n)
+        {
+            x += dx;
+            y += dy;
+            const S3DPoint step{ int32_t(x), int32_t(y), drop.z };
+            int32_t maxdelta = 0, height = 0;
+            bool hole = false;
+            MapPane.GetWalkHeightRadius(step, kStep, maxdelta, height, hole);
+            if (std::abs(maxdelta) <= kMaxWalkStep && !hole)
+                drop = S3DPoint{ int32_t(x), int32_t(y), height };
+            else if (n < radiussteps && tries < kHeadingTries)
+            {
+                x = float(body.x);
+                y = float(body.y);
+                drop = body;
+                heading();
+                ++tries;
+                n = 0;                  // retail counts the restart as a step
+            }
+            else
+                break;
+        }
+
+        item->SetPos(drop, level);
+        item->RemoveFromInventory();
+        item->AddToMap();
+        if (item->NeedsAnimator())
+            item->CreateAnimator();
+        S3DPoint from = body;
+        if (stricmp(item->GetClassName(), "Armor") != 0)
+            from.z += kThrowHeight;
+        TObjectAnimator* animator = item->GetAnimator();
+        if (animator)
+            animator->Toss(from, drop);
+        log_info("[loot] %s to (%d,%d,%d)%s", item->GetName(), drop.x, drop.y, drop.z,
+                 animator && animator->GetToss() ? ", thrown" : "");
+        item->PlayItemSound();
+    }
+}
 
 bool TCharacter::Pull(TObjectInstance* inst)
 {
@@ -4149,47 +4254,57 @@ bool TCharacter::TryUse()
     return true;
 }
 
-// Attempts to get something in the direction character is facing
+// REVSYNC: Get @ 0x004d0430, the Get key (DEATH_LOOT.md §7): the nearest of
+// the first ten objects within 80 of the point 40 ahead that offer a cursor
+// or can be picked up and aren't invisible, picked up. The main player is
+// told "There is nothing to get" (GETNOTHING), or what it takes (FULLGET
+// with the name, else BASEGET and the name: "Get Short Sword").
 bool TCharacter::TryGet()
 {
-    S3DPoint pos, v;
-    GetPos(pos);
-    ConvertToVector(GetFace(), 60, v);
-    pos += v;
+    if (Health() <= 0)
+        return false;
+
+    S3DPoint at, ahead;
+    GetPos(at);
+    ConvertToVector(GetFace(), 0x28, ahead);
+    at += ahead;
 
     int32_t list[MAXFOUNDOBJS];
-    int32_t n = MapPane.FindObjectsInRange(pos, list, 60);
+    const int32_t n = MapPane.FindObjectsInRange(at, list, 0x50);
 
     TObjectInstance* best = nullptr;
-    int32_t bestdist;
-
+    int32_t bestdist = 0;
     for (int32_t i = 0; i < n; i++)
     {
         TObjectInstance* oi = MapPane.GetInstance(list[i]);
-        if (!oi)
+        if (!oi || oi == this || (oi->GetFlags() & OF_INVISIBLE))
             continue;
-
-        if (oi->CursorType() != CURSOR_NONE || oi->IsInventoryItem())
+        if (oi->CursorType() == CURSOR_NONE && !oi->IsInventoryItem())
+            continue;
+        const int32_t dist = Distance(oi);
+        if (!best || dist <= bestdist)
         {
-            int32_t dist = Distance(oi);
-
-            if (best == nullptr || dist <= bestdist)
-            {
-                best = oi;
-                bestdist = dist;
-            }
+            best = oi;
+            bestdist = dist;
         }
     }
 
     if (!best)
     {
-        TextBar.Print("Nothing to get");
+        if (this == Player)
+            TextBar.Print("%s", DialogList.GetLine("GETNOTHING"));
         return false;
     }
 
-    TextBar.Print("Get %s", best->GetName());
+    if (this == Player)
+    {
+        const char* name = best->GetName();
+        if (DialogList.FindLine("FULLGET") >= 0)
+            TextBar.Print(DialogList.GetLine("FULLGET"), name);
+        else
+            TextBar.Print("%s %s", DialogList.GetLine("BASEGET"), name);
+    }
     Pickup(best);
-
     return true;
 }
 

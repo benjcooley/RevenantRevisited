@@ -28,6 +28,11 @@ def capture(scenario,output):
     if count<1 or fps<1 or stride<1:raise ValueError('Positive frame count, FPS and capture stride required')
     output=output.resolve();output.mkdir(parents=True,exist_ok=False)
     origin=scenario.get('origin',[0,0,0]);camera=scenario.get('camera',[320,170])
+    if 'target' in scenario:
+        for name in ('origin','target'):
+            point=scenario.get(name)
+            if not isinstance(point,(list,tuple)) or len(point)!=3 or any(type(v)is not int or not -2147483648<=v<=2147483647 for v in point):
+                raise ValueError('Endpoint '+name+' must be three signed int32 coordinates')
     rectangle=scenario.get('rectangle',[272,122,96,96])
     command=[str(binary),'--headless','--test=vfx','--vfx='+scenario['effect'],'--vfx-no-ui',
         '--vfx-bg='+scenario.get('background','black'),
@@ -35,6 +40,12 @@ def capture(scenario,output):
         f'--filmstrip={count},{stride/fps:.16f}',f'--snapstep={1/fps:.16f}',
         '--snapseed='+str(scenario.get('seed',1)),'--snapwarmup='+str(scenario.get('warmup',1)),
         '--snaprect='+','.join(map(str,rectangle)),'--snapprefix='+str(output/'frame-')]
+    if 'target' in scenario:
+        command += ['--vfx-target='+','.join(map(str,scenario['target']))]
+    if 'png_compression' in scenario:
+        level=scenario['png_compression']
+        if type(level) is not int or not 5<=level<=9:raise ValueError('PNG compression must be an integer5..9')
+        command += [f'--snapcompression={level}']
     if 'resolution' in scenario:
         width,height=map(int,scenario['resolution'])
         if width<1 or height<1:raise ValueError('Positive resolution required')
@@ -43,11 +54,20 @@ def capture(scenario,output):
         command += ['--vfx-native-domain']
     if 'ambient' in scenario:
         command += ['--scene-ambient='+','.join(map(str,scenario['ambient']))]
+    if 'lighting_mode' in scenario:
+        mode=scenario['lighting_mode']
+        if mode not in ('auto','classic','modern'):raise ValueError('Lighting mode must be auto, classic or modern')
+        command += ['--vfx-lighting-mode='+mode]
     if 'partsys_quality' in scenario:
         command += ['--partsys-quality='+str(scenario['partsys_quality'])]
     if 'partsys_incoming_blend' in scenario:
         command += ['--partsys-incoming-blend='+str(scenario['partsys_incoming_blend'])]
-    env=os.environ.copy();env['REVENANT_DATA_PATH']=str(data)
+    overrides=scenario.get('environment',{})
+    if not isinstance(overrides,dict) or any(not isinstance(k,str) or not k or '='in k or not isinstance(v,str) for k,v in overrides.items()):
+        raise ValueError('Capture environment must map variable names to string values')
+    # Explicit fixture roots below remain authoritative; scenario trace flags
+    # no longer depend on the invoking shell's exports.
+    env=os.environ.copy();env.update(overrides);env['REVENANT_DATA_PATH']=str(data)
     if 'save_root' in scenario:
         env['REVENANT_SAVE_PATH']=str(Path(scenario['save_root']).resolve())
     assets=Path(scenario.get('assets_root',env.get('REVENANT_ASSETS_PATH',ROOT/'assets'))).resolve()
@@ -103,6 +123,10 @@ def capture(scenario,output):
         if "--vfx='"+scenario['effect']+"' matched" not in log.read_text(errors='replace'):
             report['status']='fail';report['error']='Requested effect did not match the actual catalogue'
         log_text=log.read_text(errors='replace')
+        if 'target' in scenario:
+            marker='[vfx-endpoints] id='+scenario['effect']+' source='+','.join(map(str,origin))+' target='+','.join(map(str,scenario['target']))
+            if marker not in log_text:
+                report['status']='fail';report['error']='Requested endpoints did not reach the selected initializer'
         # Old binaries have no camera marker; retain their historical behavior.
         # New captures must prove the requested signed origin reached the renderer.
         framing=re.search(r'\[vfx-camera\] explicit=(\d+) actual=\(([0-9.eE+-]+),([0-9.eE+-]+)\) viewport=\((\d+),(\d+)\)',log_text)

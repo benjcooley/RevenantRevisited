@@ -20,6 +20,8 @@ struct State {
     struct Part{MeshHandle mesh=0;S3DMat material{};std::vector<SMeshVertex> vertices;std::vector<uint16_t> indices;};
     std::array<Part,7> parts;
     double accumulated=0;
+    std::vector<arrow_core::Draw> draws;
+    int64_t rendered=-1;
     ~State(){if(Renderer)for(auto& p:parts)if(p.mesh)Renderer->ReleaseMeshAssetRef(p.mesh);}
 };
 static bool Validate(T3DImagery& image){
@@ -61,11 +63,15 @@ void Advance(State* s,double seconds){
         else s->attached.Pulse(s->facing,blocked);++s->ticks;
         const auto p=s->Core().position;s->owner->ForcePos({p.x,p.y,p.z});
         if(!s->Core().alive)s->owner->SetFlags(s->owner->GetFlags()|OF_KILL|OF_PULSE);
+        s->draws.clear();
+        if(IsAlive(s))s->Core().Render([](int lo,int hi){return random(lo,hi);},
+            [&](const arrow_core::Draw& d){s->draws.push_back(d);});
     }
 }
 void SubmitWorld(State* s,EFxDebugMode){
-    if(!IsAlive(s) || !Renderer)return;
-    s->Core().Render([](int lo,int hi){return random(lo,hi);},[&](const arrow_core::Draw& d){
+    if(!IsAlive(s) || !Renderer || s->rendered==TTime::FrameCount())return;
+    s->rendered=TTime::FrameCount();
+    for(const auto& d:s->draws){
         const auto& p=s->parts[d.object];hmm_mat4 world;arrow_core::Matrix(world,d);
         if(!StartupVfxNativeDomain)for(int col=0;col<4;++col)world.Elements[col][2]*=WORLD3D_Z_SCALE;
         SHelperMeshSubmit q{};q.mesh=p.mesh;q.retail_lighting=4;q.retail_software_projection=StartupVfxNativeDomain;q.retail_normal_z_scale=StartupVfxNativeDomain?1.f:1.f/WORLD3D_Z_SCALE;
@@ -79,7 +85,7 @@ void SubmitWorld(State* s,EFxDebugMode){
                 const float z=StartupVfxNativeDomain?-.8748177289962769f*(w.X+w.Y)-.7142857909202576f*w.Z:-.8660254037844386f*(w.X+w.Y)-.5f*w.Z;if(z>farthest)farthest=z;}
                 q.index_offset=int(face);q.retail_flat_depth_offset=farthest;Renderer->SubmitHelperMesh(q);}
         }else Renderer->SubmitHelperMesh(q);
-    });
+    }
     log_info("[arrow-phase] tick=%d grow=%d countdown=%d random=%llu",s->ticks,s->Core().grow,s->Core().countdown,static_cast<unsigned long long>(RandomDraws()));
 }
 void Destroy(State* s){delete s;}

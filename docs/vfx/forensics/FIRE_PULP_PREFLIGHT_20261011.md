@@ -22,3 +22,31 @@ Render `4e9400` returns immediately when owner+`1a0` is zero at `4e940b..4e9419`
 Its initialized body-part/blood arrays are owned by the character pulp caller;
 the snapshot's empty standalone preview does not supply them. That actor/caller
 recovery is deferred, rather than replacing body parts with a generic emitter.
+
+
+A genuine loaded-world Fire follow-up uses actual class NewObject, the public
+CreateAnimator path and untouched loaded old-body imagery/COM textures. It
+executes NextFrame, complete Effect Pulse, Animate, original BeginScene,
+PreRender, Render, PostRender and EndScene. After PreRender, the original camera
+API binds only the declared1280×960 RAM target. Source(3185,3185,16), camera
+(3185,3185,0), ambient38/dir1 and material LightState1 are explicit boundaries;
+there are no actor/geometry/color or scene-mode replacements.
+
+All67 ticks submit one actual FVF112 quad. Contrary to the older injected
+scene policy above, the original caller chooses CULL_NONE, source-alpha and
+ZWRITE_OFF. Seven sampled frames0/1/2/16/32/33/66 remain completely blank.
+Owner state/frame and selected texture frame remain0, with no random draws.
+The projected quad is approximately10×5 pixels. Its literal first texture
+has119 nonzero ARGB4444 texels;33 frames exist but no original caller advancing
+them is established. This confirms a bounded default-path limitation, not a
+reason to invent a texture timer, change the geometry, or award visual credit.
+
+Reproducer: `tools/retail_runtime/fire_authentic_preflight.py`.
+Private evidence: `hard-alpha/fire-authentic-final/manifest.json`.
+Manifest SHA256: `9bb956f1c4c3b8885fec9c7b7a42107e53f4e7f83ecc4a9778dd912a31427c0c`.
+
+## First-frame texel sampling diagnosis
+
+Root `fire_first_texel_probe.py` replays the observed original Fire draw with its literal first64x64ARGB4444 texture, actual matrix/cull/source-alpha/no-Z-write state, camera and light. A read-only memory hook records35 original texture reads; every sampled word iszero. Its119 nonzero texels occupy a small upper-edge patch that the approximately10x5 projected quad misses. The first image staysblank for this bounded defaultcaller without an invented atlas clock, scale or brightness. ExactassetSHA remains70574ac537f9ec6f6a39df1adb449e969afa15691a9190c5b4450114d0ae3fee. The private report is `research/vfx-fire-root-20261011/retained/first-replay.json`; this diagnostic supplies no visible-effect approval.
+
+A read-only exact-ID scan of all4896serialized main Ahkuilon module sectors parses without error and finds no top-level Fire, Sandswirl or MagicShield placements. `research/vfx-remaining-map-placements-20261011.json` pins that archive and scan scope. This does not establish absence from inventory children, dynamic scripts, other modules or natural gameplay.

@@ -1,0 +1,23 @@
+# Nullifier software raster inputs
+
+The remaining core difference after the cached-emitter transition was a spatial sampling mismatch, not a missing brightness multiplier. Original `56eb30` FVF_LVERTEX conversion matches byte>>3 for all 44,368 observed RGBA5 channels. The existing source RGB565 modulation is independently tested against actual original kernel pixels. An independent implementation of that formula reproduces the pre-grid Metal software images to 48–357 RGB8 channel error at phases 5/15/25/30/59. Total Metal light was slightly lower than the original in most of those phases, despite some brighter-looking core pixels.
+
+The unchanged original full owner and Render produce 5,546 triangles over 77 ticks. Read-only observers at `56d960` and `54e3a0` prove that every screen XYZ coordinate and UV×64 is truncated before rasterization. Every selected original PNG and all controller pools/RNG/owner states repeat the frozen reference. The source quad path previously retained floating coordinates. Applying the observed integer XYZ/UV inputs and the already-proven native integer sample lattice reduces the independent software image error substantially, without modifying RGB channels.
+
+A default-false quad metadata flag now enables the same integer projection convention already retained for CEyes helpers: truncate screen XY then add0.5 to map native integer samples onto GPU half-integer centers, and truncate depth. Only exact nullifier's admitted 64×64 profile opts in, only with explicit native projection and software lighting. Its UVs truncate after multiplication by64. Hardware and common projection retain full authored UVs/coordinates. Metal, GLSL and HLSL use the same clause; no uniform or vertex-stride expansion is needed. Other quad profiles retain metadata0/1 and their prior behavior.
+
+Tests compile all three actual shader clauses, actual queue packing and all policy guards. The original raster probe executes the pixel kernel rather than intercepting it. Old floating-input films remain negative controls. This is not a reconstruction of the entire original fixed-point scanline sampler or RGB565 destination accumulation, and exact pixel equality remains open. Independent current software appearance review is still required.
+
+Private evidence: `research/vfx-wide-20261010/hard-alpha/static-rgb8-correction/nullifier/`, specifically `sw-packet-proof`, `software-grid`, `modern-grid`, `common-before`, `common-grid`, and `sw-controls`.
+
+The candidate actual Metal films complete cleanly. All 75 hardware and 75 common/native-off images are pixel-identical to their prior binaries. Across 13 fixed software phases, RGB8 absolute error decreases from 755,567 to 390,846; every phase improves. Phase 25 changes from 113,374 to 54,257 and phase 30 from 37,687 to 19,128. `software-grid-review/pair-manifest.json` freezes original/floating/integer-input triples and five detail pages. These are causal candidate results, not an independent appearance approval. Ten focused unit tests and the actual quad-packing capacity/metadata controls pass.
+
+Root independent integrated reproduction `research/vfx-nullifier-software-root-20261011/first` passes10focusedunits/actualpacking, fresh77originalrasters/states/5546integertriangles/44368RGBA5channels,225actualGPUimages exactto candidate and75hardware+75common unchanged. Rootreviewedall13whole/fixed phases andapprovescurrentconfiguredSWappearance. Softwareerror755567→390846 repeats; no exactpixel/fullnatural/devicecredit. This supersedes thependingcurrentSWreview aftertransition.
+
+The independent metadata impact audit compiles old/new actual shader clauses
+under ASan/UBSan:10,800 metadata0/1 cases are bit-identical across Metal/GLSL/HLSL,
+including Fog's independent flat depth. Only exact admitted nullifier can write
+the new flag, and packed value2 also requires native projection/software policy.
+Actual GPU execution remains Metal-only; compiled clauses are not a GLSL/HLSL
+GPU validation claim. Private audit SHA256:
+`0c85b20752d75104776d59f6f94e0caf5978052579b5eeedc09479ebc9863f81`.

@@ -123,6 +123,8 @@ class TMapRenderer
     // Keep tile walkmaps/collision resident while hiding ground visuals.
     // EFFECT sprites and meshes continue to render (VFX review backdrop).
     void SetGroundTilesVisible(bool visible);
+    // Explicit reviewer exceptions; regular maps retain every tile.
+    void SetReviewVisibleTileTypes(const std::vector<uint32_t>& types);
 
     // Last-frame draw counts, exposed so the editor status bar can show
     // exactly what's hitting the GPU. All-zero before the first frame.

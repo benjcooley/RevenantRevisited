@@ -43,6 +43,7 @@
 #include "sector.h"
 #include "surface.h"
 #include "testconfig.h"
+#include "sceneviewport.h"
 #include "time.h"
 
 #include <algorithm>
@@ -956,6 +957,24 @@ static TBitmap* StateStillBitmap(TObjectImagery* img, int32_t state)
     return static_cast<TBitmap*>(reinterpret_cast<SAnimImageryBody*>(body)->states[state].still);
 }
 
+// The animation is a separate layer, not a replacement for the state's still.
+// TAnimAnimator::Animate draws this at animreg minus the frame bitmap reg.
+static TBitmap* StateAnimationBitmap(TObjectImagery* img, int32_t state, int32_t frame)
+{
+    auto* anim_img = dynamic_cast<TAnimImagery*>(img);
+    if (!anim_img || state < 0 || state >= anim_img->NumStates() || frame < 0) return nullptr;
+    PTAnimation anim = anim_img->GetAnimation(state);
+    return anim ? anim->GetFrame(frame) : nullptr;
+}
+
+static bool AnimationLayerVisible(TObjectInstance* oi)
+{
+    if (!oi) return false;
+    if (oi->ObjClass() == OBJCLASS_EFFECT) return true;
+    TObjectAnimator* animator = oi->GetAnimator();
+    return oi->IsAnimated() && animator && !animator->IsComplete();
+}
+
 // Index of the resident tile texture made from bm, or -1.
 static int32_t FindSectorBitmap(const std::vector<SSectorTileTex>& cache, const TBitmap* bm)
 {
@@ -1105,17 +1124,11 @@ void SSectorDrawableInst::UpdateFromInstance()
     TObjectInstance* oi = src.Get();
     if (!oi) return;
     world_pos = oi->Pos();
+    // Preserve the sampled tile state/frame until RenderFrame refreshes
+    // its bitmap. Transfer-only bin refreshes must not mark stale textures current.
+    if (kind == ESectorDrawableKind::Tile) return;
     state = oi->GetState();
     frame = oi->GetFrame();
-    if (kind == ESectorDrawableKind::Tile)
-    {
-        if (TObjectImagery* img = oi->GetImagery())
-        {
-            regx = img->GetRegX(state);
-            regy = img->GetRegY(state);
-            regz = img->GetRegZ(state);
-        }
-    }
 }
 
 void SSectorDrawableInst::AccumulateSceneZ(const SMapRenderContext& ctx, float& scene_z_min_fit,
@@ -1138,6 +1151,7 @@ void SSectorDrawableInst::AccumulateSceneZ(const SMapRenderContext& ctx, float& 
     float z1 = camera_z + 512.0f;
     if (kind == ESectorDrawableKind::Tile && ctx.tile_assets)
     {
+        if (asset_idx < 0 || size_t(asset_idx) >= ctx.tile_assets->size()) return;
         const auto& tex = (*ctx.tile_assets)[asset_idx];
         S3DPoint sp;
         WorldToScreen(rel, sp.x, sp.y);
@@ -1189,6 +1203,13 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
     if (kind == ESectorDrawableKind::Tile)
     {
         if (!ctx.show_tiles || !ctx.tile_assets) return;
+        if (asset_idx < 0 || size_t(asset_idx) >= ctx.tile_assets->size()) return;
+        if (animation_layer && oi->ObjClass() != OBJCLASS_EFFECT)
+        {
+            if (!AnimationLayerVisible(oi)) return;
+            // The original sprite animator draws after background lighting.
+            obj_id |= kObjFlagSelfLit;
+        }
         if (!ctx.show_gizmos && (oi->IsLight() || oi->ObjClass() == OBJCLASS_HELPER)) return;
         // Retail's map draw skips OF_INVISIBLE objects (GetUpdateObjs'
         // CHECK_INVIS) and, outside the editor, OF_EDITOR ones
@@ -1200,7 +1221,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         // DrawLit, 1998 animimage.cpp; a state with both ends up lit, one
         // with neither isn't drawn). The resurrection pit's Elevator
         // platform is ANIIM_LIT. Effects keep their own path.
-        if (oi->ObjClass() != OBJCLASS_EFFECT)
+        if (!animation_layer && oi->ObjClass() != OBJCLASS_EFFECT)
             if (TObjectImagery* img = oi->GetImagery())
             {
                 const uint32_t image_flags = img->GetImageFlags(oi->GetState());
@@ -2069,6 +2090,10 @@ void TMapRenderer::SetPointLightMultipliers(float intensity_mul, float range_mul
 void TMapRenderer::SetLightingMode(int32_t mode) { if (impl) impl->lighting_mode = mode; }
 void TMapRenderer::SetDaylightCycle(bool has_cycle) { if (impl) impl->daylight_cycle = has_cycle; }
 void TMapRenderer::SetGroundTilesVisible(bool visible) { if (impl) impl->sectorShowGroundTiles = visible; }
+void TMapRenderer::SetReviewVisibleTileTypes(const std::vector<uint32_t>& types)
+{
+    if (impl) impl->reviewVisibleTileTypes = {types.begin(), types.end()};
+}
 
 TMapRenderer::SDrawCounts TMapRenderer::GetLastDrawCounts() const
 {
@@ -2226,6 +2251,9 @@ const char* TMapRenderer::GetDebugTabName() const
 bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t, int32_t)> post_load_hook)
 {
     Impl& s = *impl;
+    if(StartupSceneViewportSet && (!Renderer || !scene_viewport::FitsDisplay(StartupSceneViewport,Renderer->Width(),Renderer->Height()))) {
+        log_error("[scene] requested viewport exceeds actual display");return false;
+    }
     int32_t keep_lvl = 0, keep_sx = 2, keep_sy = 25;
     bool use_level_origin = false;
     if (StartupLevelId[0])
@@ -2381,7 +2409,7 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
     {
         SetCameraWorld(StartupSceneCamera[0], StartupSceneCamera[1],
                        StartupSceneCamera[2], StartupSceneCamera[3]);
-        SetOutputViewport(640, 340);
+        SetOutputViewport(StartupSceneViewport[0],StartupSceneViewport[1]);
         if (AreaManager.Initialize())
         {
             S3DPoint camera = {StartupSceneCamera[1], StartupSceneCamera[2], StartupSceneCamera[3]};
@@ -2399,9 +2427,10 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
                          uint8_t(StartupSceneAmbient[3])};
             }
             MapPane.SetAmbient(ambient, color);
-            log_info("[scene] camera=(%d,%d,%d,%d) area='%s' ambient=%d rgb=(%d,%d,%d) viewport=640x340",
+            log_info("[scene] camera=(%d,%d,%d,%d) area='%s' ambient=%d rgb=(%d,%d,%d) viewport=%dx%d",
                 StartupSceneCamera[0], camera.x, camera.y, camera.z,
-                area ? area->GetName() : "none", ambient, color.red, color.green, color.blue);
+                area ? area->GetName() : "none", ambient, color.red, color.green, color.blue,
+                StartupSceneViewport[0],StartupSceneViewport[1]);
         }
     }
 
@@ -2503,32 +2532,13 @@ static void CountExistingAssetRefForObject(TImpl& s, TObjectInstance* oi)
         return;
     }
 
-    PTBitmap bm = nullptr;
-    if (oi->ObjClass() == OBJCLASS_EFFECT && hdr->imageryid == OBJIMAGE_ANIMATION)
-    {
-        TAnimImagery* anim_img = dynamic_cast<TAnimImagery*>(img);
-        PTAnimation anim = (anim_img && st >= 0 && st < anim_img->NumStates()) ? anim_img->GetAnimation(st) : nullptr;
-        bm = anim ? anim->GetFrame(oi->GetFrame()) : nullptr;
-    }
-    else if (oi->ObjClass() == OBJCLASS_TILE && hdr->imageryid == OBJIMAGE_ANIMATION)
-    {
-        if (st < 0 || st >= hdr->numstates)
-            return;
-        auto* ab = (SAnimImageryBody*)body;
-        bm = (TBitmap*)ab->states[st].still;
-    }
-
-    if (!bm)
-        return;
-
+    if (hdr->imageryid != OBJIMAGE_ANIMATION) return;
+    PTBitmap still = oi->ObjClass() != OBJCLASS_EFFECT ? StateStillBitmap(img, st) : nullptr;
+    PTBitmap frame = (oi->ObjClass() == OBJCLASS_EFFECT || oi->IsAnimated())
+        ? StateAnimationBitmap(img, st, oi->GetFrame()) : nullptr;
     for (SSectorTileTex& tex : s.sectorTileTex)
-    {
-        if (tex.bm_key != bm)
-            continue;
-
-        ++tex.ref_count;
-        return;
-    }
+        if (tex.bm_key == still || tex.bm_key == frame)
+            ++tex.ref_count;
 }
 
 template <typename TImpl>
@@ -2878,32 +2888,42 @@ void TMapRenderer::RebuildForCurrentMap()
                 ++char_no_drawable_logged;
             }
 
-            if (oi->ObjClass() == OBJCLASS_EFFECT && hdr->imageryid == OBJIMAGE_ANIMATION)
+            if (hdr->imageryid == OBJIMAGE_ANIMATION &&
+                (oi->ObjClass() == OBJCLASS_EFFECT || oi->IsAnimated()))
             {
-                TAnimImagery* anim_img = dynamic_cast<TAnimImagery*>(img);
-                PTAnimation anim = (anim_img && st >= 0 && st < anim_img->NumStates()) ? anim_img->GetAnimation(st) : nullptr;
-                PTBitmap bm = anim ? anim->GetFrame(oi->GetFrame()) : nullptr;
-                if (!bm) { ++no_still; continue; }
-
-                const int32_t tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st);
-                if (tex_idx < 0) { ++upload_fail; continue; }
-
-                SSectorDrawableInst einst = {};
-                einst.kind = ESectorDrawableKind::Tile;
-                einst.asset_idx = tex_idx;
-                einst.world_pos = oi->Pos();
-                // Legacy TAnimAnimator draws at WorldToScreen(pos) + animreg
-                // with DM_USEREG, which subtracts the frame bitmap reg point.
-                einst.regx = bm->regx - img->GetAnimRegX(st);
-                einst.regy = bm->regy - img->GetAnimRegY(st);
-                einst.regz = img->GetAnimRegZ(st);
-                einst.src = TSafeRef<>(oi);
-                einst.debug_sector_level = L.lvl;
-                einst.debug_sector_x = L.sx;
-                einst.debug_sector_y = L.sy;
-                einst.debug_sector_slot = i;
-                draw_work.push_back(einst);
-                continue;
+                PTBitmap bm = StateAnimationBitmap(img, st, oi->GetFrame());
+                const int32_t tex_idx = bm
+                    ? CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st)
+                    : -1;
+                // Keep an empty animation record for ordinary objects, so a
+                // state change can supply frames without replacing the still.
+                if (tex_idx >= 0 || oi->ObjClass() != OBJCLASS_EFFECT)
+                {
+                    SSectorDrawableInst einst = {};
+                    einst.kind = ESectorDrawableKind::Tile;
+                    einst.animation_layer = true;
+                    einst.state = st;
+                    einst.frame = oi->GetFrame();
+                    einst.asset_idx = tex_idx;
+                    einst.world_pos = oi->Pos();
+                    // TAnimAnimator draws at WorldToScreen(pos) + animreg,
+                    // with DM_USEREG subtracting each frame bitmap reg.
+                    if (bm)
+                    {
+                        einst.regx = bm->regx - img->GetAnimRegX(st);
+                        einst.regy = bm->regy - img->GetAnimRegY(st);
+                        einst.regz = img->GetAnimRegZ(st);
+                    }
+                    einst.src = TSafeRef<>(oi);
+                    einst.debug_sector_level = L.lvl;
+                    einst.debug_sector_x = L.sx;
+                    einst.debug_sector_y = L.sy;
+                    einst.debug_sector_slot = i;
+                    draw_work.push_back(einst);
+                }
+                if (!bm) ++no_still;
+                else if (tex_idx < 0) ++upload_fail;
+                if (oi->ObjClass() == OBJCLASS_EFFECT) continue;
             }
 
             // Retail draws every map object through its imagery, whatever
@@ -2995,6 +3015,7 @@ void TMapRenderer::RebuildForCurrentMap()
         if (w.kind != ESectorDrawableKind::Tile)
             continue;
         S3DPoint sp; WorldToScreen(w.world_pos, sp);
+        if (w.asset_idx < 0 || size_t(w.asset_idx) >= s.sectorTileTex.size()) continue;
         const auto& tex = s.sectorTileTex[w.asset_idx];
         accumulate_bounds(all_bounds, w.world_pos, sp, w.regx, w.regy, tex.w, tex.h);
         const int32_t occ_sx = FloorDiv(w.world_pos.x, SECTORWIDTH);
@@ -3087,6 +3108,7 @@ void TMapRenderer::RebuildForCurrentMap()
         float z1 = camera_z + 512.0f;
         if (w.kind == ESectorDrawableKind::Tile)
         {
+            if (w.asset_idx < 0 || size_t(w.asset_idx) >= s.sectorTileTex.size()) continue;
             const auto& tex = s.sectorTileTex[w.asset_idx];
             z0 = w.has_authored_local_dz ? (camera_z + w.authored_local_dz_min)
                                          : (camera_z + (tex.z_local_min - float(w.regz)));
@@ -3225,19 +3247,16 @@ void TMapRenderer::RenderFrame()
         inst.world_pos = oi->Pos();
         inst.state = oi->GetState();
         inst.frame = oi->GetFrame();
-        if (oi->ObjClass() == OBJCLASS_EFFECT)
+        if (inst.animation_layer &&
+            (inst.asset_idx < 0 || inst.state != old_state || inst.frame != old_frame))
         {
-            if (inst.asset_idx >= 0 && inst.state == old_state && inst.frame == old_frame)
-                return;
             TObjectImagery* img = oi->GetImagery();
-            TAnimImagery* anim_img = dynamic_cast<TAnimImagery*>(img);
             const int32_t st = oi->GetState();
-            PTAnimation anim = (anim_img && st >= 0 && st < anim_img->NumStates()) ? anim_img->GetAnimation(st) : nullptr;
-            PTBitmap bm = anim ? anim->GetFrame(oi->GetFrame()) : nullptr;
+            PTBitmap bm = StateAnimationBitmap(img, st, oi->GetFrame());
             const int32_t tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st);
+            inst.asset_idx = tex_idx;
             if (tex_idx >= 0)
             {
-                inst.asset_idx = tex_idx;
                 if (img && bm)
                 {
                     inst.regx = bm->regx - img->GetAnimRegX(st);
@@ -3246,7 +3265,7 @@ void TMapRenderer::RenderFrame()
                 }
             }
         }
-        if (inst.kind == ESectorDrawableKind::Tile && oi->ObjClass() != OBJCLASS_EFFECT)
+        if (inst.kind == ESectorDrawableKind::Tile && !inst.animation_layer)
         {
             if (TObjectImagery* img = oi->GetImagery())
             {
@@ -3254,19 +3273,24 @@ void TMapRenderer::RenderFrame()
                 // A chest opening or a door's state change shows the new
                 // state's still, as the imagery draw does in retail.
                 if (st != old_state)
-                    if (TBitmap* bm = StateStillBitmap(img, st))
-                    {
-                        int32_t tex_idx = FindSectorBitmap(s.sectorTileTex, bm);
-                        if (tex_idx < 0)
-                            tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st);
-                        if (tex_idx >= 0)
-                            inst.asset_idx = tex_idx;
-                    }
+                {
+                    TBitmap* bm = StateStillBitmap(img, st);
+                    int32_t tex_idx = bm ? FindSectorBitmap(s.sectorTileTex, bm) : -1;
+                    if (bm && tex_idx < 0)
+                        tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st);
+                    inst.asset_idx = tex_idx;
+                }
                 inst.regx = img->GetRegX(st);
                 inst.regy = img->GetRegY(st);
                 inst.regz = img->GetRegZ(st);
             }
         }
+        static const char* animation_trace_type = std::getenv("REVENANT_MAP_ANIM_TRACE");
+        if (animation_trace_type && oi->GetTypeName() &&
+            stricmp(animation_trace_type, oi->GetTypeName()) == 0)
+            log_info("[map-anim] id=%08x index=%d layer=%d state=%d frame=%d rate=%d asset=%d reg=%d,%d,%d",
+                oi->ObjId(), oi->GetMapIndex(), int(inst.animation_layer), inst.state,
+                inst.frame, oi->GetFrameRate(), inst.asset_idx, inst.regx, inst.regy, inst.regz);
     };
     const int32_t vw = EffectiveViewportW(s);
     const int32_t vh = EffectiveViewportH(s);
@@ -3338,6 +3362,7 @@ void TMapRenderer::RenderFrame()
         float z1 = camera_z + 512.0f;
         if (inst.kind == ESectorDrawableKind::Tile)
         {
+            if (inst.asset_idx < 0 || size_t(inst.asset_idx) >= s.sectorTileTex.size()) continue;
             const auto& tex = s.sectorTileTex[inst.asset_idx];
             float spx = 0.0f, spy = 0.0f;
             ProjectWorldPointToScreen(projectctx, inst.world_pos, spx, spy);
@@ -3647,7 +3672,8 @@ void TMapRenderer::RenderFrame()
         ++stats.draw_candidates;
         if (!s.sectorShowGroundTiles) {
             if (TObjectInstance* owner = s.sectorDrawInst[idx].src.Get())
-                if (owner->ObjClass() == OBJCLASS_TILE) continue;
+                if (owner->ObjClass() == OBJCLASS_TILE &&
+                    !s.reviewVisibleTileTypes.count(owner->ObjId())) continue;
         }
         // A late replacement can inherit several cached submesh records.
         // Submit its whole visual once per gather, including any old billboard

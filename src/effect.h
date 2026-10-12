@@ -38,6 +38,7 @@ _CLASSDEF(TSpellBlock)
 
 #include "particlefx.h"
 #include "photoncore.h"
+#include "effectlightramp.h"
 #include "iceboltcore.h"
 #include "firewindcore.h"
 #include "missilestate.h"
@@ -63,8 +64,8 @@ class TEffect : public TObjectInstance
 
     void Pulse() override;
 
-    void SetSpell(PTSpell sp) { spell = sp; }
-      // REVSYNC: 0x004de7d0 (retail also zeroes its light's fade counters)
+    void SetSpell(PTSpell sp) { spell = sp; lightramp.Reset(); }
+      // REVSYNC: 0x004de7d0 (its light's fade counters cleared too)
     PTSpell GetSpell() { return spell; }
 
     void SetSubSpell(int32_t sp) { subspell = sp; }
@@ -73,6 +74,9 @@ class TEffect : public TObjectInstance
     void KillThisEffect();
       // REVSYNC: TEffect::KillThisEffect @ 0x004defe0 -- a poison spell's
       // first target is cured, the effect is removed, and its spell ends
+    void Notify(int32_t notify, void* ptr) override;
+      // The object it follows going (N_DELETING) ends it, as Follow's notify
+      // mark asks (0x004def90)
 
     int32_t GetAngle();         // Returns aiming angle
 
@@ -101,7 +105,13 @@ class TEffect : public TObjectInstance
     [[nodiscard]] int32_t BlinkTime() const { return blinktime; }
     [[nodiscard]] int32_t StartWait() const { return startwait; }
 
+    [[nodiscard]] const SEffectLightRamp& LightRamp() const { return lightramp; }
+
   protected:
+    void SetEffectFlags(uint32_t value);
+      // The flags as Pulse changes them: the kill starts the spell light's
+      // fade out; the light's coming and going reach the map's light lists
+      // (retail's ResetFlags 0x00472e90 on OF_LIGHT's edges)
     PTSpell spell;      // Spellblock which spawned this effect
     int32_t subspell;           // TEMP TEMP TEMP subspell (psuedo-talisman)
     int32_t angle;              // The direction we are cast
@@ -116,6 +126,7 @@ class TEffect : public TObjectInstance
     bool timed = false;                 // +0x130
     int32_t blinktime = 0;              // +0x134 the last ticks it blinks out over
     int32_t startwait = 0;              // +0x138 ticks held hidden before it starts
+    SEffectLightRamp lightramp;         // its spell LIGHT's fade in and out
     char visiblewhen[RESNAMELEN] = {};  // +0x15c shown only while the followed one's root matches
 };
 
@@ -2360,9 +2371,12 @@ class TRippleEffect : public TEffect
     // submission never advances the child's simulation a second time.
     void Advance(double seconds);
     void Submit(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
     [[nodiscard]] bool IsAlive() const { return alive_ || !spawned_ripples_.empty(); }
 
   private:
+    bool native_domain_ = false;
+    bool ring_argb4444_ = false, splash_argb4444_ = false;
     struct SWaterDrop
     {
         hmm_vec3 pos = {};
@@ -2451,8 +2465,11 @@ class TDripEffect : public TEffect
     void TickAndSubmitForTest(EFxDebugMode debug_mode);
     void Advance(double seconds);
     void Submit(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
 
   private:
+    bool native_domain_ = false;
+    bool drop_argb4444_ = false;
     int32_t ripplesize = 64;
     int32_t height = 128;
     int32_t period = 48;
@@ -5740,6 +5757,7 @@ class TAuthoredStaticMeshEffect : public TEffect
                                                                   bool scroll_textures = false);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     void SubmitWorldMeshForTest_BESPOKE(EFxDebugMode debug_mode);
+    void SubmitNativeWorldMeshForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return true; }
 
   private:
@@ -6927,7 +6945,7 @@ class TSetVortexEffect_Bespoke : public TEffect
     void Submit(EFxDebugMode debug_mode = EFxDebugMode::Normal) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] static TSetVortexEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
-    [[nodiscard]] bool IsAlive() const { return true; }
+    [[nodiscard]] bool IsAlive() const { return !(GetFlags() & OF_KILL); }
 
   private:
     std::vector<SMeshVertex> vertices_;

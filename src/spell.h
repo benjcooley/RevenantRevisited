@@ -340,6 +340,7 @@ class TStrikeSpell : public TSpell
     [[nodiscard]] const char* ClassName() const override { return "Strike"; }
     [[nodiscard]] TObjectInstance* StrikeTarget() const { return striketarget.Get(); }
 
+    using TSpell::Timer;                // keeps the base's Timer(value) visible
     void Pulse() override;
       // REVSYNC: TStrikeSpell::Pulse @ 0x00540d70 -- the base pulse, a frame
       // more; REPEATDAMAGE every 24 frames on the caster's combat target;

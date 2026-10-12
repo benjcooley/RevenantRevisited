@@ -1,9 +1,9 @@
 # VFX Agent Guide
 
-**Active workflow (2026-10-07):** use the thin in-process retail emulator for
-most VFX validation. DOSBox-X with the emulated 3D device is allowed for targeted
-checks of software-rendering issues, with guest ownership coordinated first.
-Keep routine work in the fast emulator. Read [the current A/B guide](../RETAIL_AB_TESTING.md)
+**Active workflow (2026-10-11):** use the thin in-process retail emulator for
+all new VFX validation. The active goal excludes DOSBox-X. Renderer defects may
+use explicitly qualified private builds with the unchanged control retained.
+Read [the current A/B guide](../RETAIL_AB_TESTING.md)
 and [independent named builds/sessions](../../tools/retail_runtime/README-parallel.md).
 Use structured test actions and direct retail-function adapters rather than
 typing editor console commands. Extend missing adapter support or move to another
