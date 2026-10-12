@@ -12798,7 +12798,8 @@
         "TBurnAnimator_SHIM"
       ],
       "source_fixes": [
-        "2026-10-11: Genuine actor/publicSet Burn finitefire/smoke core/nativeZ/actualbones/realdamage independentlyverified and14phase appearance reviewed;90PNG integrated repeat/exactgallery pass. Naturalmovingactors/poster/reignite/transition/device remainopen."
+        "2026-10-11: Genuine actor/publicSet Burn finitefire/smoke core/nativeZ/actualbones/realdamage independentlyverified and14phase appearance reviewed;90PNG integrated repeat/exactgallery pass. Naturalmovingactors/poster/reignite/transition/device remainopen.",
+        "2026-10-11: Integer fixture uses real CalcObjectMatrix(state14/frame0, parent composition) with scoped interpolation-off/restoration instead of live fractional GetObjectMatrix. Fresh original90tick state/RNG/matrix replay passes; all90 prior24Hz images unchanged and89 direct-time paired120Hz images identical. Ordinary moving-gallery appearance not certified."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -12817,7 +12818,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Reproduce current ordinary-gallery recipe against equivalent original caller/parameters/cadence; verify full intended components and attachment before reapproval.",
+      "next_action": "Recheck ordinary viewer after fixed integer-bone fixture; native24Hz film unchanged, matched legacy phases at120Hz unchanged. Common projection and natural moving actor remain unverified.",
       "notes": [],
       "batch": "2 \u2014 Close early parity and map/combat regressions",
       "visual_review": {
@@ -12837,7 +12838,7 @@
         "visual_pass": false,
         "configuration": "Full ordinary-world scrolling reviewer",
         "finding": "User reports Arrow Effect, Burn and cfire look suspiciously inaccurate.",
-        "next_action": "Reproduce current ordinary-gallery recipe against equivalent original caller/parameters/cadence; verify full intended components and attachment before reapproval."
+        "next_action": "Recheck ordinary viewer after fixed integer-bone fixture; native24Hz film unchanged, matched legacy phases at120Hz unchanged. Common projection and natural moving actor remain unverified."
       }
     },
     {
@@ -19822,7 +19823,7 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Reproduce current ordinary-gallery recipe against equivalent original caller/parameters/cadence; verify full intended components and attachment before reapproval.",
+      "next_action": "Omitted from normal review as unused shipped prototype; preserve exact-ID installed-base diagnostic. No invented missing presets.",
       "notes": [
         "VFS collision corrected. Earlier port evidence must be checked against the requested asset before certifying visual fidelity; old bytes differ.",
         "2026-10-05: exact Misc/Cfire asset exists with four subobjects,two textures,cfire/csparks tags. Corrected false no-asset stub diagnostic; factory remains explicitly unsupported, not accepted or silently replaced by Flame."
@@ -19847,7 +19848,14 @@
         "visual_pass": false,
         "configuration": "Full ordinary-world scrolling reviewer",
         "finding": "User reports Arrow Effect, Burn and cfire look suspiciously inaccurate.",
-        "next_action": "Reproduce current ordinary-gallery recipe against equivalent original caller/parameters/cadence; verify full intended components and attachment before reapproval."
+        "next_action": "Omitted from normal review as unused shipped prototype; preserve exact-ID installed-base diagnostic. No invented missing presets."
+      },
+      "review_list_policy": {
+        "default_visible": false,
+        "diagnostic_selector": "0xad92bd27",
+        "classification": "unused shipped prototype in audited inventory",
+        "basis": "Only class declaration and two commented-out hand ATTACHEFFECT lines in 73 archived text files; no exact name/type literal executable caller; zero placements across5307 sectors/seven modules; cfire.txt and csparks.txt absent from all nine archives. Full original default renderer loads no controllers and draws two base sprites. Computed/dynamic/external callers remain unproven.",
+        "note": "docs/vfx/forensics/REVIEW_PROTOTYPE_POLICY_20261011.md"
       }
     },
     {

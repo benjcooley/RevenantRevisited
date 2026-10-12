@@ -21,3 +21,41 @@ Full build passes, three core/profile/submission units pass3.381s,26 source mapp
 Exact Burn0x55471bff/own legacyBurnbabyburn twoRGB565quads, genuine Acolyte22bone APIs/state14frame0/facing96/publicSet4e2fa0, integer/no-transition reference control, explicit shared post-actor seed2. OriginalwholePreRender/ownerDamage/controller/render/raster execute, realHP102→97 atsame5damage ticks. Source correctedparentdependency mirrors and original nonlinearparticleZ used; no fakebones/pose/stat returns. Core108750state/90240matrix/90RNGfields max1.58e-5, strictownresource4positive815rejects, actualABSPOS22560vertices5640draws pass; rootthreeunitsPASS17.990s,27mappingtests/compiledbridge pass. Fourteenwholephasepairs/fixedcrop/allfive2xnearest detailstrips independentlyreviewed,31imagepins+8freezepinsverified; finite ramp/fire/smoke/fade/kill76/blank90 align. Integrated90PNGbyte-identical/cleanexit; gallery100frames89visible90distinct/twofinitecreations/liveRNG withoutfactoryreseed/cleanexit. Ordinarygalleryfractionalpose is liveness only; isolatedinteger control suppliesappearance. NaturalBurn map/poster/reignite, moving/animated/otheractors/defaultcachedtransition, spells/audio/lighting/hardware andfloat/edge/RGB565/exactpixel residualsremainopen.
 
 Rootapproval SHA256 `16e0966268aa84b62860f6a43bd8b56b4663328b9303e9fee80d34a76ce126d4`. Fullacceptance remainsopen.
+
+
+## Integer-pose viewer correction, 2026-10-11
+
+The named integer fixture previously used `GetObjectMatrix`, which samples the
+live display fraction. It now uses the real `CalcObjectMatrix` API at the
+fixture's declared state14/frame0 with parent composition and interpolation
+disabled only for that call. The shared interpolation policy is restored on
+success and failure. Normal actors and other effects retain their policy.
+No recorded bone matrices or pose values are inserted into production.
+
+Fresh original90-tick execution passes108,750 state fields,90,240 matrix fields
+and90 RNG states against the existing compiled core control. All90 new24Hz
+source images equal the prior approved source images. The120Hz source run
+has identical5,640 active slot rows. Its89 same-legacy-tick images equal24Hz
+exactly. Capture starts differ:24Hz starts at1/24s,120Hz at1/120s. Pairing uses
+`floor(simulation_seconds*24 + 1e-7)`, the existing accumulator convention;
+extra tick0 and tick90 remain unpaired. The failed ordinal-image checker is
+retained as `cadence-comparison.json`, superseded by the direct-time checker.
+Four core/profile/submission/scoped-policy tests pass; full game build passes.
+Fresh fourteen original/actualMetal phase pairs and four active2x detail rows
+were independently reviewed; no geometry/color/brightness/phase fit.
+
+Private evidence: `research/vfx-burn-integer-root-20261011/` under the retail lab.
+
+- `native-first/manifest.json`: SHA256 `d424f6649a5734841634420ad0b1529fd78c1079088fa488843a40027b965c1e`.
+- `native-source-state/manifest.json`: SHA256 `8732ce147772ab9ae27217a922b9d4608838e54289e73d4b7e51fdc9d463baa2`.
+- `metal24/manifest.json`: SHA256 `8213c0e08747485fc875faec6a23c4388878574eeb8c4394d07d60720d2fd71a`.
+- `metal120/manifest.json`: SHA256 `034af42b4840f53fc737e3e1d78680c0b96bcb6b893510d12d91abed200b4644`.
+- `cadence-phase-comparison.json`: SHA256 `0e8e86b434075fbdbb50f947b8912dd9392e634a1b9ddf518e7c53ba503b2333`.
+
+The user's ordinary moving-gallery appearance report remains open. Common
+projection, natural moving actors/rigs, attachment scheduling, audio and device
+limits are not certified by isolated cadence agreement.
+
+The integrated ordinary gallery100-frame smoke run also passes on the frozen
+corrected binary, with two real finite recreations, live RNG and clean shutdown.
+This confirms routing/liveness; it does not close the reported appearance issue.
