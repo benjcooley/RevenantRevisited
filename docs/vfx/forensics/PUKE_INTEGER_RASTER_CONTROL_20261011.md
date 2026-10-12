@@ -82,3 +82,5 @@ Natural actor-mouth attachment, destination RGB565 rounding, fixed-point scan
 conversion/interpolation, original hardware and exact pixel identity remain
 open. Halo is the next independent single-mesh candidate; this Puke result does
 not authorize enabling the grid for other effects.
+
+Root independent combinedsource reproduction `research/vfx-puke-integer-root-20261011/first` passesfresh33native/controller/raster/integerpacketproof, coreguards andall4policies/default/commonfilms. Default32andcommon32decodedimages repeatcandidateexactly; currentdefaultmatchesgridonlycontrol. Rootreviewedfixed15phasewhole/details andapprovesexistingnullspellappearance scope. Tick24native1/GPU0 andremainingfixedpoint/destination limits retained; noexactpixels/naturalcaller claim.

@@ -1159,3 +1159,7 @@ Audited `class.def`: 233,484 bytes; SHA-256 `bf46eaa4e25a43fa9828e1e8737114d63b9
 **Nullifier transition review (superseded pending status):** exactoriginalfiveframeemittertransition restored after fullhardwarepackets exposedup to1.72pixeltranslation error. HistoricSWreview retained; newbothpolicyrootappearance reviewpending. Sandswirl’s scopedpassremainsclosed.
 
 **Nullifier current re-review passed (2026-10-11):** correctedrealemittertransition plusoriginalintegerXYZ/UV inputs restore software core distribution without tint/scale/time fitting. Root77original/225source replay and13phase review pass; fixedpointscanline/destination precision remainexplicit. Primary scoped count returns176/176. [Evidence](forensics/NULLIFIER_SOFTWARE_RASTER_INPUTS_20261011.md).
+
+**Puke integration review (superseded pending status):** exactoriginalintegerinputcorrection nowintegrated; priorappearancepass retainedhistorically. Nullifier remainsreapproved. IndependentcurrentPukecomparisonwillclose thisbehaviorfix before restoring176currentpasses.
+
+**Puke current re-review passed (2026-10-11):** exactoriginalintegerinputproof andfresh4policy/default/common captures supportgrid-only nativeSW correction. Rootreviewed15phases; common32images unchanged, tick24native1/GPU0pixelresidual remains. All176scopedvisualrows currentagain. [Evidence](forensics/PUKE_INTEGER_RASTER_CONTROL_20261011.md).

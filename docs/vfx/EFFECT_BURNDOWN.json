@@ -16267,7 +16267,8 @@
       "asset": "Magic\\puke.I3D",
       "preview_candidates": [],
       "source_fixes": [
-        "2026-10-10: Actual null-spell zero-height Puke source,25 moving slots and three authored meshes replace unverified preview. Original ownerInit/Pulse/NextFrame, gravity/life floor and natural completion; no fabricated source lift or post-kill RNG."
+        "2026-10-10: Actual null-spell zero-height Puke source,25 moving slots and three authored meshes replace unverified preview. Original ownerInit/Pulse/NextFrame, gravity/life floor and natural completion; no fabricated source lift or post-kill RNG.",
+        "2026-10-11: exactPuke nativeSW integerinputs independentlyverified33original/4policy/default/common replay; scopedcurrentappearancepasseswithtick24onepixel residual explicit."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -16286,21 +16287,33 @@
         "accepted": false
       },
       "runtime_dispatch": "audit_pending",
-      "next_action": "Preserve approved isolated spray motion; resolve faint late-pixel residual and validate real actor-mouth caller/placement/audio.",
+      "next_action": "Preservecurrentnullspell appearance andcommonprojection controls; naturalcaller/fixedpointexactraster remainopen.",
       "notes": [
         "No name-associated candidate in the 146-entry harness scan; this is a mapping gap, not proof that all runtime support is absent."
       ],
       "batch": "5 \u2014 Buffs, debuffs, late boss effects and unresolved retail types",
       "visual_review": {
-        "date": "2026-10-10",
-        "reviewer": "root independent whole-effect phase inspection",
+        "date": "2026-10-11",
+        "reviewer": "root independent integration review",
         "result": "pass",
         "visual_pass": true,
-        "scope": "Fifteen full original factory/owner/software versus actual Metal native-domain null-spell zero-height spray phases.25 moving slots/three ARGB meshes, startup16 and realkill26/blank30;5,940 state/RNG fields match. Late native1/0 versus Metal15/7 pixels at24/25 remain explicit sampling/quantization mismatch. Actor-mouth/caller/audio/device/exactpixel behavior remains open.",
-        "report": "recon/retail_asm/runtime/effects/current-puke-authored-20261010/root-approval.json",
-        "sha256": "845b0444f045482cd034d7d8204febba5521ce7a153fe0f1bc05806eff0e351b",
-        "note": "docs/vfx/forensics/PUKE_NULLSPELL_RENDER_20261010.md"
-      }
+        "scope": "ExactPuke nullspell ownasset controller, native24Hz state/frame lifecycle andoriginalintegerXYZ/UV inputs. Rootfresh33native state/raster/3000triangles/45000channels, compiledcore/policy controls and4policyfilms/default/common reproduce. Fixed15phase original/default/grid/quant/both panels reviewed forform/motion/color/drain;gridonly followsnativecausally, all32commonmodeimages unchanged. Tick24native1/GPU0 pixel andfixedpointscanconversion/destination precision remainopen; nofitting/exactpixels/naturalcaller credit.",
+        "report": "recon/retail_asm/runtime/effects/current-puke-integer-raster-20261011/root-approval.json",
+        "sha256": "ff0a4b8895c687c710525553543915afb262d547051d877c2a9d7f82faecf21e",
+        "note": "docs/vfx/forensics/PUKE_INTEGER_RASTER_CONTROL_20261011.md"
+      },
+      "historical_visual_reviews": [
+        {
+          "date": "2026-10-10",
+          "reviewer": "root independent whole-effect phase inspection",
+          "result": "pass",
+          "visual_pass": true,
+          "scope": "Fifteen full original factory/owner/software versus actual Metal native-domain null-spell zero-height spray phases.25 moving slots/three ARGB meshes, startup16 and realkill26/blank30;5,940 state/RNG fields match. Late native1/0 versus Metal15/7 pixels at24/25 remain explicit sampling/quantization mismatch. Actor-mouth/caller/audio/device/exactpixel behavior remains open.",
+          "report": "recon/retail_asm/runtime/effects/current-puke-authored-20261010/root-approval.json",
+          "sha256": "845b0444f045482cd034d7d8204febba5521ce7a153fe0f1bc05806eff0e351b",
+          "note": "docs/vfx/forensics/PUKE_NULLSPELL_RENDER_20261010.md"
+        }
+      ]
     },
     {
       "index": 89,
