@@ -48,7 +48,7 @@ enum class EFxDebugMode:uint8_t{Normal=0};enum class EFxLightMode:uint8_t{Unlit=
 enum class EFxPipeline:uint16_t{Billboard=1,Particle=2,Strip=3};
 struct SFxBatchKey{TTextureHandle texture=0;uint16_t pipeline_id=1;uint8_t blend=0,depth_mode=0;};
 struct SQuadDrawItem{bool retail_rgb565_additive=false;float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};SFxBatchKey key;
- bool retail_software_projection=false;
+ bool retail_software_projection=false,retail_software_pixel_grid=false;
  uint8_t corner_count=4,retail_texture=0;EFxDebugMode debug_mode=EFxDebugMode::Normal;EFxLightMode light_mode=EFxLightMode::Unlit;};
 struct S3DVertex{hmm_vec3 pos,normal;float tu,tv;};
 uint32_t type_id=0;

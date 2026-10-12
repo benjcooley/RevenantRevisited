@@ -10,8 +10,8 @@ class FsprayDeviceTests(unittest.TestCase):
   code='#include <cmath>\n#include <cstdint>\n#include <cstdio>\nint main(){int checks=0;for(int profile=-1;profile<19;++profile)for(int sw=0;sw<2;++sw)for(int value=0;value<256;++value){\n'
   code+='struct{bool sw;bool UsesRetailSoftwareMeshLighting()const{return sw;}}renderer{bool(sw)};struct Owner{uint32_t id;uint32_t ObjId()const{return id;}}owner{profile==14||profile==18?0x0c052638u:profile==15?0x10ac03deu:profile==16?0xe0a3bc43u:profile==17?0xad92bd38u:0xdeadu};auto*inst=&owner;\n'
   code+=''.join(f'bool {name}=profile=={i}'+(' || (profile>=14&&profile<=17)'if name=='static_particles'else'')+';\n'for i,name in enumerate(names))
-  code+='struct{float color[3];}sample{{float(value),float(value),float(value)}};struct{float color_rgba[4];}item{};\n'+body
-  code+='float expected=profile<0||profile==18||((dust||(profile>=14&&profile<=17))&&!sw)?float(value)/255.f:float(value>>3)/31.f;for(int c=0;c<3;++c){if(std::fabs(item.color_rgba[c]-expected)>1e-7f)return 1;++checks;}}std::printf("checks=%d\\n",checks);}'
+  code+='struct{float color[3];}sample{{float(value),float(value),float(value)}};struct{float color_rgba[4];bool retail_software_pixel_grid=false;}item{};\n'+body
+  code+='if(item.retail_software_pixel_grid!=(static_particles&&owner.id==0xad92bd38u))return 2;float expected=profile<0||profile==18||((dust||(profile>=14&&profile<=17))&&!sw)?float(value)/255.f:float(value>>3)/31.f;for(int c=0;c<3;++c){if(std::fabs(item.color_rgba[c]-expected)>1e-7f)return 1;++checks;}}std::printf("checks=%d\\n",checks);}'
   with tempfile.TemporaryDirectory()as tmp:
    cpp=Path(tmp)/'policy.cpp';exe=Path(tmp)/'policy';cpp.write_text(code);subprocess.run(['clang++','-std=c++17',str(cpp),'-o',str(exe)],check=True,capture_output=True)
    result=subprocess.run([str(exe)],check=True,capture_output=True,text=True);self.assertIn('checks=30720',result.stdout)

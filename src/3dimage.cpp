@@ -4353,6 +4353,9 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // verified profiles. Their software policy still truncates to RGB5.
             // Other profiles retain their policy until independently verified.
             const uint32_t color_type = inst->ObjId();
+            // The exact64x64 nullifier software prototype reaches original
+            // integer XYZ/UV triangle packets. Common/hardware stays floating.
+            item.retail_software_pixel_grid = static_particles && color_type==0xad92bd38u;
             const bool verified_static_rgb8 = static_particles &&
                 (color_type == 0x0c052638u || color_type == 0x10ac03deu ||
                  color_type == 0xe0a3bc43u || color_type == 0xad92bd38u);
@@ -4383,6 +4386,11 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
                     (world.Z - sample.position[2]) * WORLD3D_Z_SCALE) * render_scale.Z;
                 item.uv[c][0] = vertex.tu;
                 item.uv[c][1] = vertex.tv;
+                if (item.retail_software_pixel_grid && native_software &&
+                    renderer.UsesRetailSoftwareMeshLighting()) {
+                    item.uv[c][0]=std::trunc(item.uv[c][0]*64.0f)/64.0f;
+                    item.uv[c][1]=std::trunc(item.uv[c][1]*64.0f)/64.0f;
+                }
             }
             // Component diagnostics retain sampling and prototype bookkeeping.
             if (!submit_geometry) continue;
