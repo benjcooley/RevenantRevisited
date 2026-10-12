@@ -19,8 +19,8 @@ class DustDeviceTests(unittest.TestCase):
    p['texture_hex']=bytes(8).hex();self.assertEqual(set(raster([p],mode,8,8)),{0});p['texture_hex']=struct.pack('<4H',*[0xffff]*4).hex()
  def test_compiled_production_policy(self):
   source=(ROOT/'src/3dimage.cpp').read_text();start=source.index('            const bool retail_rgb5_color =');end=source.index('            // Actual SW LV',start);body=source[start:end]
-  names='might immortalmight fmastery speed static_particles head jhaga lightstrip funnel comet fgeyser dust poison'.split()
-  code='#include <cmath>\n#include <cstdio>\nint main(){ int checks=0; for(int profile=-1;profile<13;++profile)for(int sw=0;sw<2;++sw)for(int value=0;value<256;++value){\n'
+  names='combat_native might immortalmight fmastery speed static_particles head jhaga lightstrip funnel comet fgeyser dust poison'.split()
+  code='#include <cmath>\n#include <cstdio>\nint main(){ int checks=0; for(int profile=-1;profile<14;++profile)for(int sw=0;sw<2;++sw)for(int value=0;value<256;++value){\n'
   code+='struct {bool sw;bool UsesRetailSoftwareMeshLighting()const{return sw;}} renderer{bool(sw)};\n'
   code+=''.join(f'bool {name}=profile=={i};\n'for i,name in enumerate(names))
   code+='struct{float color[3];}sample{{float(value),float(value),float(value)}};struct{float color_rgba[4];}item{};\n'+body
@@ -28,5 +28,5 @@ class DustDeviceTests(unittest.TestCase):
   with tempfile.TemporaryDirectory()as tmp:
    cpp=Path(tmp)/'policy.cpp';exe=Path(tmp)/'policy';cpp.write_text(code)
    subprocess.run(['clang++','-std=c++17',str(cpp),'-o',str(exe)],check=True,capture_output=True)
-   result=subprocess.run([str(exe)],check=True,capture_output=True,text=True);self.assertIn('checks=21504',result.stdout)
+   result=subprocess.run([str(exe)],check=True,capture_output=True,text=True);self.assertIn('checks=23040',result.stdout)
 if __name__=='__main__':unittest.main()
