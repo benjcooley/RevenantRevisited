@@ -70,9 +70,12 @@ def main():
    expected=[int(after['flags'],16),*[after['fields'][k]for k in ['0xe8','0x12c','0x138','0x13c','0x140','0x144','0x148']]]
    boundary="if(j==0 && (actual[j]^expected[j])==0x8000)continue;" if row['name']=='lights_on' else ''
    branch_code+=f"{{TEffect owner;owner.spell=&s;owner.retail_follow=&actor;owner.retail_owner.enabled=true;owner.flags={int(before['flags'],16)}u;{assignments}RealTimeLight={'true'if row['real_time_light']else'false'};owner.Pulse();auto&o=owner.retail_owner;int actual[]={{int(owner.flags),o.follow_remaining,o.remaining,o.delay,o.light_in,o.light_out,o.light_value,o.light_peak}};int expected[]={{{','.join(map(str,expected))}}};for(int j=0;j<8;++j)if(actual[j]!=expected[j]){{{boundary}std::fprintf(stderr,\"branch {row['name']} field%d got%d expected%d\\n\",j,actual[j],expected[j]);return {20+i};}}}}"
- main_source=MAIN.replace('return 0;}','RealTimeLight=true;'+branch_code+'return 0;}')
+ origin=json.loads(a.native.read_text()).get('declared_origin',[3185,3185,16])
+ prelude=PRELUDE.replace('S3DPoint pos{3185,3185,16}', 'S3DPoint pos{'+','.join(map(str,origin))+'}')
+ main_template=MAIN.replace('actor.pos={3300,3190,24}', 'actor.pos={'+','.join(str(a+b)for a,b in zip(origin,[115,5,8]))+'}')
+ main_source=main_template.replace('return 0;}','RealTimeLight=true;'+branch_code+'return 0;}')
  with tempfile.TemporaryDirectory(prefix='generic-owner-source-')as d:
-  cpp=Path(d)/'probe.cpp';binary=Path(d)/'probe';cpp.write_text(PRELUDE+bodies+main_source)
+  cpp=Path(d)/'probe.cpp';binary=Path(d)/'probe';cpp.write_text(prelude+bodies+main_source)
   subprocess.run([os.environ.get('CXX','clang++'),'-std=c++17','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),str(cpp),'-o',str(binary)],check=True)
   run=subprocess.run([str(binary)],text=True,capture_output=True);assert run.returncode==0,run.stderr
  lines=[[int(x)for x in line.split()]for line in run.stdout.splitlines()];native=json.loads(a.native.read_text());assert len(lines)==len(native['rows'])

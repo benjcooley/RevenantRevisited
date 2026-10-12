@@ -74,3 +74,5 @@ Private candidate evidence lives under
 `research/vfx-wide-20261010/hard-alpha/generic-effect-pulse/` in the retail lab.
 The root's fresh full native replay is under
 `research/vfx-generic-owner-root-20261011/native/`.
+
+Rootintegratedactualenginefixture passes all2880schedulersteps/31614ownerfields against theoriginal local-origin control: actualresidentAcolytes/BeginFighting/shippedStrikecreator, productionTimer/Pulse/Kill/genericowner/SubmitPartSys, invokerSetPos andrealspellkill2879. The3002framecapture exitscleanly andproducesnonemptyimages. Source/core2895stepcomparison and27unselectedlifecyclecases also pass. Evidence `research/vfx-generic-owner-root-20261011/engine-comparison.json`. This closes theboundedRegenerationbinding integrationcheck; naturalaffordablecasting/AI/broadStrike/bone/polar/lightedge boundaries remainopen.

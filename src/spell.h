@@ -226,6 +226,7 @@ class TSpell
     // Functions to return current spell values
     TObjectInstance* GetInvoker() { return invoker; }
     TSafeRef<TObjectInstance> GetInvokerRef() const { return invoker_ref; }
+    TSafeRef<TObjectInstance> GetEffectRef() const { return effect; }
       // Returns the character that invoked the spell
     TObjectInstance* GetTarget(int32_t numtarg = 0)
         { if (numtarg >= targetnum) return nullptr; else return targets[numtarg]; }

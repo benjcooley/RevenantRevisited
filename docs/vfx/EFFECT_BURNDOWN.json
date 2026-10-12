@@ -8,7 +8,7 @@
     "class_def_bytes": 233484,
     "class_def_sha256": "bf46eaa4e25a43fa9828e1e8737114d63b9525f3beb137bf5b6b2963c39c1d5d",
     "harness": "src/vfxtest.cpp",
-    "harness_sha256": "c09cd718959a8701f32804adea081b8eac089edb63f1bb630605c7f6be6d189d",
+    "harness_sha256": "b4c0f6d58b01ecd41fa7f0ab79124244fe001f1065a6dae72a5073a0e01e1405",
     "extraction": "CLASS \"EFFECT\" block through unindented END; quoted name + asset + hex type ID; preserve duplicate names by type ID.",
     "harness_pending_execution_ids": [
       "TAuthoredStaticMeshEffect_BESPOKE__ogrokwatcher1",
@@ -8256,7 +8256,8 @@
       "preview_candidates": [],
       "source_fixes": [
         "2026-10-10: exact static-emitter particle profile, prototype0 camera/RGB5/zero-scale admission and controller integration; complete default factory and native literal tags verified.",
-        "2026-10-11: exact admitted hardware RGB8 carrier correction independentlyverified original77HW/SW and150 sourceimages;75software imagesunchanged."
+        "2026-10-11: exact admitted hardware RGB8 carrier correction independentlyverified original77HW/SW and150 sourceimages;75software imagesunchanged.",
+        "2026-10-11: exactshippedRegeneration Strike ownerfollow/light/lifetime restored; rootactualengine2880steps/31614fields matchesoriginal andcleanexit. Naturalcasting/broadStrikeconfig remainopen."
       ],
       "port_smoke_ids": [],
       "reference_runs": [],
@@ -8295,6 +8296,15 @@
             "actual native scene/Metal appearance",
             "natural caller/character"
           ]
+        },
+        {
+          "name": "real_regeneration_spell_owner",
+          "status": "pass",
+          "report": "recon/retail_asm/runtime/effects/current-regeneration-spell-owner-20261011/engine-comparison.json",
+          "sha256": "87ea139a70448787e33580baab0c4893f6be247c6a2b0153b5d32433a862c8fe",
+          "scope": "Real source loaded classes, resident transient map, shipped Strike creator, production Timer/Pulse/Kill, generic animator/SubmitPartSys and actor SetPos. Explicit fixture scheduling; no actor AI, natural cast, particles/device visual equivalence or broader spell-control claim.",
+          "runtime_producer_compared": true,
+          "full_acceptance_granted": false
         }
       ],
       "command_lifecycle_validation": {

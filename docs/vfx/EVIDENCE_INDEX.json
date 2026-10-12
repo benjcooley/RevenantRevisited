@@ -2241,6 +2241,13 @@
       "check": "halo_native_integer_source_raster_visual",
       "status": "pass",
       "scope": "ExactauthoredHalo public60/.04 and20/.08 controls; originalowner/state/RNG/936drawpackets/14040integerchannels and40owntexelalpha controls. Rootfreshnative100 +fourpolicies/default/commonfilms,200default/commondecodedrepeat,1312loggedstatefields and24fixedwhole/detailphases verified. ExistingnativeSWhelperintegerXYZ+sourceflooroptin improvesform/rasterappearance; common100imagesunchanged. NearoneUV\u00d7128 trunc127/fixedpointscanconversion/destination precision/naturalcaller/exactpixels remainopen. Nofittedgeometry/color/phase."
+    },
+    "recon/retail_asm/runtime/effects/current-regeneration-spell-owner-20261011/engine-comparison.json": {
+      "sha256": "87ea139a70448787e33580baab0c4893f6be247c6a2b0153b5d32433a862c8fe",
+      "retail_row": "Regeneration:0x10ac03de",
+      "check": "real_regeneration_spell_owner",
+      "status": "pass",
+      "scope": "Real source loaded classes, resident transient map, shipped Strike creator, production Timer/Pulse/Kill, generic animator/SubmitPartSys and actor SetPos. Explicit fixture scheduling; no actor AI, natural cast, particles/device visual equivalence or broader spell-control claim."
     }
   }
 }

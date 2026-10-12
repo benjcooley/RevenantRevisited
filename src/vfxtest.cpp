@@ -1,3 +1,4 @@
+#include "effects/regenerationspellpreview.h"
 #include "effects/sandswirlqualifiedpreview.h"
 #include "effects/sandswirlruntime.h"
 #include "effects/strikemeteorpreview.h"
@@ -7462,6 +7463,16 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
             e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="Regeneration_SPELL_OWNER";e.family="spell";e.pipeline="actual Strike+owner+partsys";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return regeneration_spell_preview::Spawn(o);};
+            e.submit=[](void*c,EFxDebugMode){regeneration_spell_preview::Advance(static_cast<regeneration_spell_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode){regeneration_spell_preview::SubmitWorld(static_cast<regeneration_spell_preview::State*>(c));};
+            e.destroy=[](void*c){regeneration_spell_preview::Destroy(static_cast<regeneration_spell_preview::State*>(c));};
+            e.is_alive=[](void*c){return regeneration_spell_preview::Alive(static_cast<regeneration_spell_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
