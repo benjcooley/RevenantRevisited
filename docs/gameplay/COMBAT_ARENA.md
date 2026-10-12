@@ -115,9 +115,26 @@ and a hit lands 6-12 (doubles to 24), as in retail. Ported as
 health × 116 / 100) is a blow, and the combat log (the last five lines)
 gives its amount.
 
+**What the lab's video can time.** Retail draws few frames in the lab: the
+picture changes 3-8 times a second at uneven gaps (none at all from 14.41 s
+to 15.48 s of run 2) while the game ticks on at 21.8 a second. A blow seen
+in a capture is placed within about half a second, so measures over many
+blows hold (cadence, counts, amounts) but single moments don't: when the
+Araknid starts its approach, or Locke draws, can't be told below a second.
+Tick-level timing belongs to the emulator (a case's own random tape, both
+sides tick by tick).
+
+**A1b after the fixes (2026-10-11, port seeds 1-12).** Hits 7-10 (doubles
+15-16), glances 1-5, half the blows glances, 7.8 blows to kill Locke, 55-61
+ticks between blows: retail's two runs give hits 7-10, glances 1-4, 8 of 15
+glances, 7 and 9 blows, 66 ticks. A match within what two runs can show.
+
 Open from A1b:
-- **Cadence.** Retail 66 ticks a blow (run 2), the port 47 (seed 1): more
-  runs a side before calling it.
+- **The opening.** In the port Locke falls into combat at tick 31 and the
+  Araknid walks in from about tick 18; in retail's run 2 Locke was still in
+  his walk stance after ~100 ticks (the lab's INI may have AutoCombat off:
+  its copy wasn't read) and the Araknid started within ~1.2-2.3 s. Needs
+  the emulator.
 - **The port's combat results print raw tags** ("[BASEHIT] Locke [BASEDMG]:12
   [BASEDEF]:10 [BASEOFF]:12") where retail prints "Hit vs. Locke Dmg:7
   Def:10 Off:12": the text lookup for those lines fails.
