@@ -94,3 +94,53 @@ Build passed (`research/setvortex-20261005/build-authored.log`, binary42bcd45414
 Read-only orientation audit found no justified rotation or mirror: SCL1/POS2 suppresses animation keys, ABSPOS suppresses owner/root rotation, and extraction preserves XYZ/UV/indices. Raw faces0–1 and2–3 are coincident opposite-facing quads with mirrored U; eight remaining triangles are degenerate. Snapshot and current projected winding both select faces0–1. Retail SW camera disassembly at0x56cdc0 confirms +45degreeZ then−120degreeX, matching snapshot.
 
 Source versus current local screen-Y scale is approximately `.25254*(vx+vy)-.61859*vz` versus `.25*(vx+vy)-.65025*vz`; that modest difference does not explain a mirror/viewing-angle change. Next bounded diagnostic, later: trace actual retail SW projected triangles and UV raster arguments to identify selected surface/sampling orientation. Preserve authored data until evidence identifies the correction.
+
+## Genuine loaded renderer correction, 2026-10-11
+
+`setvortex_loaded_preflight.py` now executes the actual null-spell class factory,
+owner5a9f9c, CreateAnimator5aa19c, complete owner Pulse4e67d0, custom
+Animate4e6890, and full Render4e6920. Original Begin/PreRender/Post/End remain
+active, with explicit isolated RAM target1280x960/camera0/source0 and ambient38/dir1.
+All105 updates persist without RNG or death. Actual render state is SRC_ALPHA /
+INV_SRC_ALPHA, depth test on, no depth writes, **CULL_NONE**. Both coincident
+opposite-facing quads contribute; the old host-side winding rejection was wrong.
+
+Native Init4e6800 uses the nonlinear original FIX(ownerZ+30), not the port's
+linear macro: initialZ21.3433853. The source now uses the independently proven
+RetailSoftwareOwnerZ helper without changing the global macro. The exact32x32
+ARGB4444 format is checked and opts into existing texture mode3. Ordinary mesh
+geometry remains complete; native-domain projection is explicitly opt-in.
+No renderer/shader or other effect policy changes are needed.
+
+Compiled actual Advance and Submit functions under ASan/UBSan agree with all105
+native updates:315 bob channels max4.89e-8,1260 submitted triangles and18900
+vertex/UV channels. The old linear-height negative control differs0.79544 at
+first draw. Evidence: hard-alpha/setvortex-submit-proof/manifest.json and
+setvortex-loaded-first/manifest.json. Fixed24Hz updates/render are certified by
+this comparison; arbitrary skipped-render scheduling remains unverified.
+
+Final build and retained full native/source unittest PASS (36.5s). Fresh105-tick
+native state/full-draw replay is exact. `setvortex-review-final/pair-manifest.json`
+SHA256 f28b40db2eef19719173a70439e0bd1be1c0964655a6d76276c7022df397af4e
+pins27 full-frame original/Metal pairs and nine identical4x nearest detail pages.
+Final captured binary SHA256
+4ab18b5620806b6b555c23235838a2168279df8c372aa9b09c14d03590a6e620.
+`setvortex-metal-final` records27/27 nonblank snapshots across105 render ticks,
+clean shutdown, actual1280x960, explicit native policy. All27 images are byte
+identical to the earlier corrected film whose collector rejected a missing
+policy-confirmation log; that negative collection result is preserved.
+`setvortex-metal-common` separately records27 ordinary-projection snapshots.
+
+Head orientation and persistent bob now agree in the matched images. Tiny
+scanline/nearest sampling and overlap/RGB565 quantization differences remain
+visible at4x; exact pixels are not claimed. The fixed null-spell preview has
+no death tail by design. Real OF_KILL is reported through the gallery callback,
+and world submission is separated from advancement. The existing default/map
+factory remains available. Independent root approval/integrated gallery are
+separate from this source evidence submission.
+
+## Independent root review
+
+Exact persistent nullspell SetVortex genuine loaded owner/customAnimate/fullRender, original nonlinear FIX(+30) cachedheight, complete12authored triangles/CULL_NONE and strictARGB4444 decode. Full10524Hzupdates/render; source315bobfields max4.89e-8,1260triangles/18900XYZUVchannels checked, oldlinearZnegative differs0.79544. Rootnative/sourceunitPASS35.165s;27exacttick original/actualMetal wholepairs and nine4x detailpages independentlyreviewed,96pinsverified. Integrated27PNGsatstride4/all105renders byte-identical/cleanexit. Realruntime map gallery100/100visible52distinct/onepersistentfactory/cleanexit is liveness only, not standaloneappearance certification; initialcopiedvalidator incorrectly expectedpreviewruntime0/log retained and corrected againstactualruntime1 route. Initialcapture duringbuild rejectedchangedbinary, finalstablebinaryrepeatused. Spellteleportmarking/previousmarkerremoval,naturalmapcaller/skippedrenders/ordinaryprojection/audio/device/exactpixels andnearest/alphaRGB565overlap residualsremainopen.
+
+Root approval SHA256 `be346f066bcb25f35b461998cca9fc9c6a74b661124e0196d89c636910e8d16d`. Full acceptance remains open.

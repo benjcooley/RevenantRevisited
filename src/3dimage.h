@@ -11,6 +11,7 @@
 // *************************************************************************
 
 #pragma once
+#include "dragonattackcache.h"
 
 #include <cstdint>
 #include <memory>
@@ -241,9 +242,11 @@ class T3DImagery : public TObjectImagery
     bool quicksilver_partsys_profile = false;
     bool lightstrip_partsys_profile = false;
     bool jhagaattack_partsys_profile = false;
+    bool headfireball_partsys_profile = false;
     bool funnel_partsys_profile = false;
     bool ValidateRetailLightStripProfile();
     bool ValidateRetailJhagaAttackProfile();
+    bool ValidateRetailHeadFireBallProfile();
     bool ValidateRetailFunnelProfile();
     bool comet_partsys_profile=false;
     bool fgeyser_partsys_profile=false;
@@ -350,6 +353,7 @@ class T3DImagery : public TObjectImagery
     bool HasRetailPoisonProfile() const { return poison_partsys_profile; }
     bool HasRetailLightStripProfile() const { return lightstrip_partsys_profile; }
     bool HasRetailJhagaAttackProfile() const { return jhagaattack_partsys_profile; }
+    bool HasRetailHeadFireBallProfile() const { return headfireball_partsys_profile; }
     bool HasRetailFunnelProfile() const { return funnel_partsys_profile; }
     bool HasGoldPartSysProfile() const { return gold_partsys_profile; }
     bool HasRetailMightPartSysProfile() const { return might_partsys_profile; }
@@ -384,6 +388,11 @@ class T3DImagery : public TObjectImagery
         hmm_vec3 &pos, hmm_vec3 &rot, hmm_vec3 &scl, bool retail_inclusive = false);
     bool GetAniKey(int32_t objnum, int32_t state, int32_t frame,
         hmm_vec3 &pos, hmm_vec3 &rot, hmm_vec3 &scl);
+    // Exact nullifier cached emitter pose, including the original transition.
+    bool GetRetailNullifierEmitterAniKey(int32_t object,int32_t frame,int32_t previous_state,
+        int32_t previous_frame,hmm_vec3& pos,hmm_vec3& rot,hmm_vec3& scale);
+    // Exact loaded Meteor Storm/Strike initial previous-state0/frame0 pose.
+    bool GetRetailStrikeAniKey(int32_t object,int32_t frame,hmm_vec3& pos,hmm_vec3& rot,hmm_vec3& scale);
     void SetPrevState(int32_t pstate, int32_t pframe)
       { prevstate = pstate; prevframe = pframe; }
     int32_t GetObjectParent(int32_t objnum, int32_t state) const { return objects[objnum].parent[state]; }
@@ -538,6 +547,9 @@ class T3DAnimator : public TObjectAnimator
     retail_warp::State retail_warp_state;
     struct SPartSysControllers;
     std::unique_ptr<SPartSysControllers> partsys_controllers;
+    retail_dragonattack::PrototypeOrigin dragonattack_object_zero;
+    bool headfireball_object_zero_sampled=false;
+    hmm_vec3 headfireball_object_zero_origin{}; // original outgoing-flight initialization input
     bool jhagaattack_object_zero_sampled=false;
     hmm_vec3 jhagaattack_object_zero_origin{}; // outgoing-flight origin consumed by controller initialization
     std::function<int(int,int,int)> lightstrip_ground;
@@ -606,6 +618,13 @@ class T3DAnimator : public TObjectAnimator
     void SetJhagaAttackObjectZeroOrigin(const hmm_vec3& origin);
     void NoteJhagaAttackPrototypeSample();
     void SetJhagaAttackGround(std::function<int(int,int,int)> query);
+    hmm_vec3 HeadFireBallObjectZeroOrigin() const { return headfireball_object_zero_origin; }
+    void SetHeadFireBallObjectZeroOrigin(const hmm_vec3& origin);
+    void NoteHeadFireBallPrototypeSample();
+    void SetHeadFireBallGround(std::function<int(int,int,int)> query);
+    void SetDragonAttackGround(std::function<int(int,int,int)> query);
+    void SetDragonAttackPrototypePose(const hmm_vec3& position,const hmm_vec3& scale);
+    const retail_dragonattack::PrototypeOrigin& DragonAttackPrototype() const { return dragonattack_object_zero; }
     void SetLightStripGround(std::function<int(int,int,int)> query);
     void SetFunnelGround(std::function<int(int,int,int)> query);
     void SetCometGround(std::function<int(int,int,int)> query);
@@ -638,9 +657,9 @@ class T3DAnimator : public TObjectAnimator
     bool GoldBaseMeshBlend(int32_t object, uint32_t& blend) const;
     bool GoldBaseMeshWorldMatrix(hmm_mat4& world);
     bool CombatFlashStart1BaseMeshBlend(int32_t object, uint32_t& blend) const;
-    bool CombatFlashStart1BaseMeshWorldMatrix(hmm_mat4& world);
+    bool CombatFlashStart1BaseMeshWorldMatrix(hmm_mat4& world, bool native_software=false);
     int32_t SubmitPartSys(TRenderer& renderer, int32_t object, int32_t texture_slot,
-                         const hmm_vec3& render_scale, bool native_software = false);
+                         const hmm_vec3& render_scale, bool native_software = false, bool submit_geometry = true);
     uint64_t PartSysPulseCount() const;
     size_t PartSysLiveParticles() const;
     size_t PartSysControllerCount() const;

@@ -25,6 +25,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <chrono>
 #include <memory>
 #include <set>
 #include <string>
@@ -41,6 +42,7 @@ struct Entry {
     int type = -1;
     uint32_t id = 0;
     std::string name, asset, status = "Approaching";
+    std::string spell_preview;
     S3DPoint station{};
     int map_index = -1;
     double clearance = 96;
@@ -125,9 +127,40 @@ bool SelectCatalogue() {
         }
         if (!selected) continue;
         Entry entry; entry.type=type; entry.id=info->uniqueid; entry.name=info->name;
+        if(entry.id==0xdefeca7eu) entry.name="Essencedrain (Worm prototype)";
+        if(entry.id==0x119f01e3u) entry.name="Fire (retail default)";
         if (auto* imagery = TObjectImagery::GetImageryEntry(info->imageryid))
             entry.asset = imagery->filename;
         entries.push_back(std::move(entry));
+    }
+    bool select_essence_spell=selectors.empty();
+    for(size_t i=0;i<selectors.size();++i)
+        if(selectors[i]=="essence drain" || selectors[i]=="essence drain (spell)")
+            select_essence_spell=found[i]=true;
+    if(select_essence_spell) {
+        const auto recipes=VfxTest::ReviewCatalogue();
+        const auto recipe=std::find_if(recipes.begin(),recipes.end(),[](const auto& r){
+            return r.id=="EssenceDrain_SPELL_CONFIGURED_TARGET";
+        });
+        if(recipe!=recipes.end()) {
+            Entry spell;spell.name="Essence Drain (spell)";
+            spell.id=0xad92bc13u;spell.type=EffectClass.FindObjType(spell.id);
+            spell.asset="ManaDrain: genuine named Essence Drain variant";
+            spell.spell_preview=recipe->id;entries.push_back(std::move(spell));
+        }
+    }
+    bool select_legacy_fire=false;
+    for(size_t i=0;i<selectors.size();++i)
+        if(selectors[i]=="fire" || selectors[i]=="fire (legacy animated)")
+            select_legacy_fire=found[i]=true;
+    if(select_legacy_fire) {
+        const auto recipes=VfxTest::ReviewCatalogue();
+        const auto recipe=std::find_if(recipes.begin(),recipes.end(),[](const auto& r){return r.id=="TFireEffect";});
+        if(recipe!=recipes.end()) {
+            Entry fire;fire.name="Fire (legacy preview — unverified)";fire.id=0x119f01e3u;
+            fire.type=EffectClass.FindObjType(fire.id);fire.asset="Misc/Fire.I3D: legacy animated recipe";
+            fire.spell_preview=recipe->id;entries.push_back(std::move(fire));
+        }
     }
     if (std::find(found.begin(), found.end(), false)!=found.end()) {
         log_error("[vfx-review] unknown effect name/type ID in --vfx-review-effects");
@@ -147,6 +180,7 @@ bool LayoutStations() {
     const auto direction=schedule.StepDirection();
     for(auto& e:entries) {
         e.clearance=schedule.spacing;
+        if(!e.spell_preview.empty()) { e.review_footprint=480;continue; }
         const auto support=DescribeVfxReviewSpawn(e.id);
         // An unavailable entry still has a named slot. With no drawable, it
         // needs the minimum slot rather than its asset's oversized bounds.
@@ -256,8 +290,99 @@ S3DPoint PathEndpoint(size_t index,bool target) {
     return {origin.x+int(std::lround(point.x)),origin.y+int(std::lround(point.y)),kFloor+128};
 }
 void Spawn(Entry& e, size_t index) {
+    if(!e.spell_preview.empty()) {
+        const auto recipes=VfxTest::ReviewCatalogue();
+        const auto recipe=std::find_if(recipes.begin(),recipes.end(),[&](const auto& r){return r.id==e.spell_preview;});
+        if(recipe==recipes.end() || !recipe->factory || !recipe->destroy) { e.failed=true;return; }
+        void* context=recipe->factory(e.station);
+        if(!context) { e.failed=true;e.missing_visual=true;return; }
+        e.preview=std::make_unique<VfxReviewPreview>(*recipe,context,e.station);
+        e.status=e.spell_preview=="TFireEffect" ? "Legacy animated Fire; separate from installed retail default"
+            : "Named Essence Drain spell uses ManaDrain; separate from Worm prototype";
+        ++e.cycles;
+        log_info("[vfx-review] spell name=%s actual_effect=%08x implementation=%s",e.name.c_str(),e.id,e.spell_preview.c_str());
+        return;
+    }
     const auto support=DescribeVfxReviewSpawn(e.id);
     const auto controlled=DescribeVfxReviewPreview(e.id);
+    if(e.id==0xadbcef18u && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"Rift1_QUALIFIED_PARSER")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Qualified Rift parser initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
+    if(e.id==0xad92bd20u && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"Labyrinth_QUALIFIED_BOUND")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Qualified Labyrinth selector initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
+    if(e.id==0xad92bc1bu && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"MagicShield_PUBLIC_AURA")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Configured MagicShield actor initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
+    if(e.id==0x00ab1d1du && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"Aura_AUTHENTIC_ACOLYTE_INTEGER")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Configured Aura actor initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
+    if(e.id==0x55471bffu && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"Burn_AUTHENTIC_ACOLYTE_INTEGER")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Configured Burn actor initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
+    // Halo has a declared public-parameter controller, not a procedural billboard.
+    if(e.id==0xdedbdbedu && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"Halo_AUTHORED_PUBLIC60")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Configured Halo initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
+    // The exact Blood route consumes live global RNG and owns its finite spray.
+    // Prefer it over the generic drawable owner factory only for this exact ID.
+    if(e.id==0xddc4042eu && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"Blood_AUTHORED")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Configured Blood initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
+    // The reviewed Drip fixture uses explicit no-splash parameters. Prefer
+    // only this exact audited persistent route in the gallery; the normal
+    // map factory and its authored/default gameplay parameters stay intact.
+    if(e.id==0x5975abdeu && controlled.supported && controlled.lifetime_known &&
+       !controlled.partial && std::strcmp(controlled.preview_id,"TDripEffect_LINKED_NO_SPLASH")==0) {
+        e.preview=CreateVfxReviewPreview(e.id,e.station);
+        if(!e.preview) { e.failed=true; e.missing_visual=true; e.status="Configured Drip initializer failed"; return; }
+        e.missing_visual=false; e.status=controlled.description; ++e.cycles;
+        log_info("[vfx-review] preview name=%s type=%08x implementation=%s partial=0 status=%s",
+            e.name.c_str(),e.id,e.preview->Id().c_str(),e.status.c_str());
+        return;
+    }
     if(controlled.supported && controlled.requires_endpoints) {
         const auto source=PathEndpoint(index,false),target=PathEndpoint(index,true);
         e.preview=CreateVfxReviewPreview(e.id,source,target);
@@ -505,6 +630,17 @@ void Close() {
 }
 void Render() {
     if (!map) return;
+    if (std::getenv("REV_VFX_REVIEW_CLOCK_TRACE")) {
+        static auto start=std::chrono::steady_clock::now();
+        static double last=-1.0;
+        const double wall=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+        if (wall-last>=1.0) {
+            log_info("[vfx-review-clock] wall=%.6f simulation=%.6f delta=%.9f render=%lld legacy=%lld scale=%.3f",
+                wall,TTime::Time(),TTime::DeltaTime(),static_cast<long long>(TTime::FrameCount()),
+                static_cast<long long>(TTime::LegacyFrameCount()),TTime::TimeScale());
+            last=wall;
+        }
+    }
     elapsed+=paused?0.0:TTime::DeltaTime(); ticks+=TTime::DeltaTime()*24;
     const auto current_loop=schedule.LoopCount(elapsed);
     if (current_loop!=loop) { loop=current_loop; ResetObjects(); log_info("[vfx-review] loop=%llu",static_cast<unsigned long long>(loop+1)); }

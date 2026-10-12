@@ -38,6 +38,7 @@ _CLASSDEF(TSpellBlock)
 
 #include "particlefx.h"
 #include "photoncore.h"
+#include "effectownercore.h"
 #include "iceboltcore.h"
 #include "firewindcore.h"
 #include "missilestate.h"
@@ -56,17 +57,28 @@ class TEffect : public TObjectInstance
 
     virtual void Pulse();
 
-    void SetSpell(PTSpell sp) { spell = sp; }    
+    void SetSpell(PTSpell sp) { spell = sp; retail_owner.ResetLight(); }
     PTSpell GetSpell() { return spell; }
 
     void SetSubSpell(int32_t sp) { subspell = sp; }    
     int32_t GetSubSpell() { return subspell; }
 
+    // Declared direct FOLLOW/no-bone path from original4def90 and Strike Timer.
+    void ConfigureRetailSpellOwner(TObjectInstance* followed, int32_t duration,
+                                   int32_t blink_ticks, int32_t start_delay);
+    void KillRetailSpellOwner();
+    const retail_effect_owner::State& RetailOwnerState() const { return retail_owner; }
+    void Notify(int32_t notify, void* ptr) override;
     void KillThisEffect();  // Call when effect is finished
 
     int32_t GetAngle();         // Returns aiming angle
 
   protected:
+    retail_effect_owner::State retail_owner;
+    TSafeRef<> retail_follow;
+    void SetRetailOwnerFlags(uint32_t value);
+    bool BeginRetailOwnerPulse();
+    void AdvanceRetailOwnerPulse();
     PTSpell spell;      // Spellblock which spawned this effect
     int32_t subspell;           // TEMP TEMP TEMP subspell (psuedo-talisman)
     int32_t angle;              // The direction we are cast
@@ -2298,9 +2310,12 @@ class TRippleEffect : public TEffect
     // submission never advances the child's simulation a second time.
     void Advance(double seconds);
     void Submit(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
     [[nodiscard]] bool IsAlive() const { return alive_ || !spawned_ripples_.empty(); }
 
   private:
+    bool native_domain_ = false;
+    bool ring_argb4444_ = false, splash_argb4444_ = false;
     struct SWaterDrop
     {
         hmm_vec3 pos = {};
@@ -2389,8 +2404,11 @@ class TDripEffect : public TEffect
     void TickAndSubmitForTest(EFxDebugMode debug_mode);
     void Advance(double seconds);
     void Submit(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
 
   private:
+    bool native_domain_ = false;
+    bool drop_argb4444_ = false;
     int32_t ripplesize = 64;
     int32_t height = 128;
     int32_t period = 48;
@@ -5673,6 +5691,7 @@ class TAuthoredStaticMeshEffect : public TEffect
                                                                   bool scroll_textures = false);
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     void SubmitWorldMeshForTest_BESPOKE(EFxDebugMode debug_mode);
+    void SubmitNativeWorldMeshForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] bool IsAlive() const { return true; }
 
   private:
@@ -6860,7 +6879,7 @@ class TSetVortexEffect_Bespoke : public TEffect
     void Submit(EFxDebugMode debug_mode = EFxDebugMode::Normal) const;
     void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
     [[nodiscard]] static TSetVortexEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
-    [[nodiscard]] bool IsAlive() const { return true; }
+    [[nodiscard]] bool IsAlive() const { return !(GetFlags() & OF_KILL); }
 
   private:
     std::vector<SMeshVertex> vertices_;

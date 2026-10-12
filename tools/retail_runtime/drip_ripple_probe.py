@@ -89,15 +89,16 @@ def build_port(output,drip_asset,ripple_asset,inputs):
 #include <stdexcept>
 #include "particlefx.h"
 #include "math3d.h"
+#include "retailsoftwaretransform.h"
 #undef min
 #undef max
 enum class EFxBlend:uint8_t{Alpha};enum class EFxDepthMode:uint8_t{TestNoWrite};enum class EFxDebugMode:uint8_t{Normal,FullTexture};enum class EFxLightMode:uint8_t{Unlit};
-struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{};struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
+struct SQuadDrawItem{bool retail_software_projection=false,retail_argb4444=false;float world_pos[4][3]{},uv[4][2]{};struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};TRenderer renderer;TRenderer*Renderer=&renderer;
 struct Journal{int tick,id;};std::vector<Journal>births,deaths;int now=0;
 struct TObjectImagery{virtual~TObjectImagery()=default;static void FreeImagery(TObjectImagery*){throw std::runtime_error("Unexpected asset rejection");}};struct SObjectDef{};
 struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
-struct TObjectInstance{World world;S3DPoint pos{};int mapindex=0;virtual~TObjectInstance(){if(mapindex)deaths.push_back({now,mapindex});}
+struct TObjectInstance{int GetFace()const{return 0;}World world;S3DPoint pos{};int mapindex=0;virtual~TObjectInstance(){if(mapindex)deaths.push_back({now,mapindex});}
  const S3DPoint&Pos()const{return pos;}const World&Transform()const{return world;}void ForcePos(S3DPoint p){pos=p;MtxClear(&world.m);hmm_vec3 v={float(p.x),float(p.y),float(p.z)};MtxTranslate(&world.m,&v);}
  void SetMapIndex(int n){mapindex=n;births.push_back({now,n});}int GetMapIndex()const{return mapindex;}void ActivateComponents(){}};
 struct TEffect:TObjectInstance{TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual void Pulse(){};virtual void Load(RTInputStream,int32_t,int32_t){};virtual void Save(RTOutputStream){}};
@@ -105,7 +106,7 @@ struct TMapPane{int next=0;int MakeIndex(){return ++next;}}MapPane;
 void log_info(const char*,...){};void log_error(const char*,...){throw std::runtime_error("Asset binding failed");}
 extern "C" int rand(void){throw std::runtime_error("Unexpected raw RNG: native short no-splash physics requires none");}
 std::ifstream rng;int rng_count=0;
-struct S3DTex{TTextureHandle htexture=2;};struct SMeshVertex{};
+struct S3DTex{TTextureHandle htexture=2;struct{struct{uint32_t dwRGBBitCount=16,dwRBitMask=0x0f00,dwGBitMask=0x00f0,dwBBitMask=0x000f,dwRGBAlphaBitMask=0xf000;}pixelFormat;}desc;};struct SMeshVertex{};
 struct T3DImagery:TObjectImagery{S3DVertex vertices[2][4];int NumObjects()const{return 2;}int NumObjVerts(int n){return n<2?4:0;}int NumTextures()const{return 1;}
  void GetObjVerts(int n,S3DVertex*out){if(n<0||n>1)throw std::runtime_error("Unexpected object binding");std::memcpy(out,vertices[n],sizeof(vertices[n]));}void GetTexture(int n,S3DTex*out){if(n!=0)throw std::runtime_error("Unexpected texture slot");out->htexture=2;}}imagery;
 T3DImagery*LoadWaterImagery(const char*name,const char*){if(std::strcmp(name,"Magic\\ripples.I3D"))throw std::runtime_error("Unexpected linked asset");return &imagery;}

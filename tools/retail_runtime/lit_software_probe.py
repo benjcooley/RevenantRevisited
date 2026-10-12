@@ -9,8 +9,8 @@ from software_probe import SoftwareFixture
 
 
 class LitSoftwareFixture(SoftwareFixture):
-    def __init__(self, executable, width=512, height=512, camera=(0, 0, 0)):
-        super().__init__(executable, width, height)
+    def __init__(self, executable, width=512, height=512, camera=(0, 0, 0), vm=None):
+        super().__init__(executable, width, height, vm=vm)
         v = self.vm
         self.authored = v.allocate(4096 * 32)
         self.project([(0, 0, 0)], camera=camera)

@@ -6738,7 +6738,9 @@ void TRenderer::DrainFxQueue()
                 scratch.push_back(float(uint8_t(quad.debug_mode)));
                 scratch.push_back(float(uint8_t(quad.light_mode)));
                 scratch.push_back(float(quad.retail_texture));
-                scratch.push_back(quad.retail_software_projection ? 1.0f : 0.0f);
+                scratch.push_back(quad.retail_software_projection
+                    ? (quad.retail_software_pixel_grid && UsesRetailSoftwareMeshLighting() ? 2.0f : 1.0f)
+                    : 0.0f);
                 scratch.push_back(quad.retail_camera_z);
             }
             spans.push_back(ds);

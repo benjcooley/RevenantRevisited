@@ -360,6 +360,7 @@ struct SQuadDrawItem
     // maximum depth and source contribution truncation. Native projection also
     // uses the original integer sample lattice. Defaults preserve ordinary FX.
     bool retail_prelit_rgba5 = false;
+    bool retail_software_pixel_grid = false; // Default-off native/software integer XYZ sample lattice.
     bool retail_software_projection = false; // XYZ are original software MODELZ/world.
     float retail_camera_z = 0.0f; // Explicit original camera input; XY use reconstruction camera.
     EFxDebugMode debug_mode = EFxDebugMode::Normal;

@@ -35,6 +35,10 @@ def capture(scenario,output):
         f'--filmstrip={count},{stride/fps:.16f}',f'--snapstep={1/fps:.16f}',
         '--snapseed='+str(scenario.get('seed',1)),'--snapwarmup='+str(scenario.get('warmup',1)),
         '--snaprect='+','.join(map(str,rectangle)),'--snapprefix='+str(output/'frame-')]
+    if 'png_compression' in scenario:
+        level=scenario['png_compression']
+        if type(level) is not int or not 5<=level<=9:raise ValueError('PNG compression must be an integer5..9')
+        command += [f'--snapcompression={level}']
     if 'resolution' in scenario:
         width,height=map(int,scenario['resolution'])
         if width<1 or height<1:raise ValueError('Positive resolution required')
@@ -43,11 +47,20 @@ def capture(scenario,output):
         command += ['--vfx-native-domain']
     if 'ambient' in scenario:
         command += ['--scene-ambient='+','.join(map(str,scenario['ambient']))]
+    if 'lighting_mode' in scenario:
+        mode=scenario['lighting_mode']
+        if mode not in ('auto','classic','modern'):raise ValueError('Lighting mode must be auto, classic or modern')
+        command += ['--vfx-lighting-mode='+mode]
     if 'partsys_quality' in scenario:
         command += ['--partsys-quality='+str(scenario['partsys_quality'])]
     if 'partsys_incoming_blend' in scenario:
         command += ['--partsys-incoming-blend='+str(scenario['partsys_incoming_blend'])]
-    env=os.environ.copy();env['REVENANT_DATA_PATH']=str(data)
+    overrides=scenario.get('environment',{})
+    if not isinstance(overrides,dict) or any(not isinstance(k,str) or not k or '='in k or not isinstance(v,str) for k,v in overrides.items()):
+        raise ValueError('Capture environment must map variable names to string values')
+    # Explicit fixture roots below remain authoritative; scenario trace flags
+    # no longer depend on the invoking shell's exports.
+    env=os.environ.copy();env.update(overrides);env['REVENANT_DATA_PATH']=str(data)
     if 'save_root' in scenario:
         env['REVENANT_SAVE_PATH']=str(Path(scenario['save_root']).resolve())
     assets=Path(scenario.get('assets_root',env.get('REVENANT_ASSETS_PATH',ROOT/'assets'))).resolve()

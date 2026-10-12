@@ -44,6 +44,7 @@
 #include "sector.h"
 #include "surface.h"
 #include "testconfig.h"
+#include "sceneviewport.h"
 #include "time.h"
 
 #include <algorithm>
@@ -2060,6 +2061,9 @@ const char* TMapRenderer::GetDebugTabName() const
 bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t, int32_t)> post_load_hook)
 {
     Impl& s = *impl;
+    if(StartupSceneViewportSet && (!Renderer || !scene_viewport::FitsDisplay(StartupSceneViewport,Renderer->Width(),Renderer->Height()))) {
+        log_error("[scene] requested viewport exceeds actual display");return false;
+    }
     int32_t keep_lvl = 0, keep_sx = 2, keep_sy = 25;
     bool use_level_origin = false;
     if (StartupLevelId[0])
@@ -2215,7 +2219,7 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
     {
         SetCameraWorld(StartupSceneCamera[0], StartupSceneCamera[1],
                        StartupSceneCamera[2], StartupSceneCamera[3]);
-        SetOutputViewport(640, 340);
+        SetOutputViewport(StartupSceneViewport[0],StartupSceneViewport[1]);
         if (AreaManager.Initialize())
         {
             S3DPoint camera = {StartupSceneCamera[1], StartupSceneCamera[2], StartupSceneCamera[3]};
@@ -2233,9 +2237,10 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
                          uint8_t(StartupSceneAmbient[3])};
             }
             MapPane.SetAmbient(ambient, color);
-            log_info("[scene] camera=(%d,%d,%d,%d) area='%s' ambient=%d rgb=(%d,%d,%d) viewport=640x340",
+            log_info("[scene] camera=(%d,%d,%d,%d) area='%s' ambient=%d rgb=(%d,%d,%d) viewport=%dx%d",
                 StartupSceneCamera[0], camera.x, camera.y, camera.z,
-                area ? area->GetName() : "none", ambient, color.red, color.green, color.blue);
+                area ? area->GetName() : "none", ambient, color.red, color.green, color.blue,
+                StartupSceneViewport[0],StartupSceneViewport[1]);
         }
     }
 

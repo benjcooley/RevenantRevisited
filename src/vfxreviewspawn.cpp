@@ -22,6 +22,7 @@ bool ReviewProjectileType(uint32_t id)
         case 0xad92bd1eu: // queenarrow
         case 0xad92bd1fu: // arroweffect
         case 0xd000f005u: // headfireball
+        case 0xba09feadu: // dragonattack: declared self-moving preview only
             return true;
         default: return false;
     }

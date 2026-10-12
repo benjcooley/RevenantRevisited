@@ -1,3 +1,9 @@
+#include "effects/regenerationspellpreview.h"
+#include "effects/sandswirlqualifiedpreview.h"
+#include "effects/sandswirlruntime.h"
+#include "effects/strikemeteorpreview.h"
+#include "effects/sgeyserpreview.h"
+#include "effects/dragonfirepreview.h"
 #include "effects/cometoriginal.h"
 #include "effects/fgeyseroriginal.h"
 #include "effects/dustoriginal.h"
@@ -17,6 +23,9 @@
 #include "effects/arroworiginal.h"
 #include "effects/ytelekinesisoriginal.h"
 #include "effects/jhagaattackoriginal.h"
+#include "effects/headfireballoriginal.h"
+#include "effects/dragonattackoriginal.h"
+#include "effects/quicksandoriginal.h"
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
@@ -58,6 +67,7 @@
 #include "effects/cameraparticlespreview.h"
 #include "effects/scrollwaterpreview.h"
 #include "effects/genericstaticpreview.h"
+#include "effects/fireinstalled.h"
 #include "effects/blastpreview.h"
 #include "effects/fairypreview.h"
 #include "effects/fairy2preview.h"
@@ -66,12 +76,30 @@
 #include "effects/vortexpreview.h"
 #include "effects/jtelepreview.h"
 #include "effects/irisflarepreview.h"
+#include "effects/teleporteroriginal.h"
+#include "effects/createfoodoriginal.h"
 #include "effects/essencedrainpreview.h"
+#include "effects/invisiblepreview.h"
+#include "effects/bloodpreview.h"
+#include "effects/halopreview.h"
+#include "effects/burnactorprobe.h"
+#include "effects/burnpublicpreview.h"
+#include "effects/aurapublicpreview.h"
+#include "effects/magicshieldpreview.h"
+#include "effects/riftqualifiedpreview.h"
+#include "effects/labyrinthqualifiedpreview.h"
 #include "effects/labbackpreview.h"
 #include "effects/swamppreview.h"
+#include "effects/paralizepreview.h"
+#include "effects/manadrainpreview.h"
+#include "effects/ymanadrainpreview.h"
+#include "effects/tornadopreview.h"
+#include "effects/pulppreview.h"
 #include "effects/charmpreview.h"
 #include "effects/quickpreview.h"
 #include "effects/restorelifepreview.h"
+#include "effects/nakrnothoriginal.h"
+#include "effects/cfireoriginal.h"
 #include "effects/dexteritypreview.h"
 #include "effects/antimagicpreview.h"
 #include "effects/skinpreview.h"
@@ -1681,8 +1709,24 @@ void Render()
     const float zfar  = StartupVfxNativeDomain ? 65535.0f : kCam + zHalf;
     if(g_state.frames_rendered==1)
         log_info("[vfx-source-depth] native=%d near=%.9g far=%.9g",int(StartupVfxNativeDomain),znear,zfar);
+    // The genuine Dragon caller retains nonzero world coordinates because
+    // its prototype-origin initialization is world-position dependent. Use
+    // the declared source XY as this isolated fixture's actual camera XY.
+    const bool dragon_world_camera = StartupVfxOriginSet && g_state.active_idx >= 0 &&
+        g_state.active_idx < int32_t(g_state.catalogue.size()) &&
+        (g_state.catalogue[g_state.active_idx].id == "Dragonattack_ORIGINAL" ||
+         g_state.catalogue[g_state.active_idx].id == "StrikeEffect_METEOR_CALLER" ||
+         g_state.catalogue[g_state.active_idx].id == "SGeyser_LOADED_INLINE" ||
+         g_state.catalogue[g_state.active_idx].id.rfind("Fire_INSTALLED_FACE",0)==0 ||
+         g_state.catalogue[g_state.active_idx].id == "SANDSWIRL_QUALIFIED_SPARKS" ||
+         g_state.catalogue[g_state.active_idx].id == "SANDSWIRL_MAP_QUALIFIED_SPARKS" ||
+         g_state.catalogue[g_state.active_idx].id == "SANDSWIRL_MAP_RESTORED_SAND");
+    const float world_camera_x = dragon_world_camera ? float(StartupVfxOrigin[0]) : 0.0f;
+    const float world_camera_y = dragon_world_camera ? float(StartupVfxOrigin[1]) : 0.0f;
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy),
-                                      znear, zfar, 0.0f, 0.0f, kCam, 0.0f);
+                                      znear, zfar, world_camera_x, world_camera_y, kCam, 0.0f);
+    if(g_state.frames_rendered==1 && dragon_world_camera)
+        log_info("[dragonattack-camera] world=%.9g,%.9g,0",world_camera_x,world_camera_y);
     Renderer->ClearPointLights();
 
     // Step 1: tick the character rig (24 Hz sim-tick gated animation)
@@ -2858,6 +2902,32 @@ void DripSubmit(void* cp, EFxDebugMode dbg)
     c->drip->TickAndSubmitForTest(dbg);
 }
 
+// Explicit original public SetParams(20,128,1) fixture. The drain variant
+// changes only the public period at tick121; ordinary gallery loops continue.
+struct SDripLinkedCtx {
+    TDripEffect* drip=nullptr;
+    double elapsed=0;
+    bool drain=false,stopped=false;
+};
+void* DripLinkedSpawn(const S3DPoint& origin,bool drain) {
+    auto c=std::make_unique<SDripLinkedCtx>();
+    c->drip=TDripEffect::SpawnForTest(origin);
+    if(!c->drip)return nullptr;
+    c->drip->SetParams(20,128,1);c->drip->SetNativeDomain(StartupVfxNativeDomain);c->drain=drain;
+    log_info("[native-domain] enabled=%d camera_z=0",int(StartupVfxNativeDomain));
+    log_info("[drip-linked] parameters=20,128,1 managed_children=1 drain=%d",int(drain));
+    return c.release();
+}
+void DripLinkedAdvance(void* context,EFxDebugMode) {
+    auto* c=static_cast<SDripLinkedCtx*>(context);double seconds=TTime::DeltaTime();
+    if(c->drain && !c->stopped && c->elapsed+seconds>=120.0/24.0) {
+        const double before=(std::max)(0.0,120.0/24.0-c->elapsed);
+        c->drip->Advance(before);seconds-=before;c->elapsed+=before;
+        c->drip->SetParams(20,128,1000000);c->stopped=true;
+    }
+    c->drip->Advance(seconds);c->elapsed+=seconds;
+}
+
 // --- FB: TWaterFallEffect_Bespoke (H02 first-pass faithful port) --------
 // Persistent vertical waterfall — direct port of the snapshot
 // TWaterFallAnimator (effect_old.cpp:11685-11873). Static preview style:
@@ -3608,7 +3678,7 @@ void SetVortexBespokeDestroy(void* cp)
 void SetVortexBespokeSubmit(void* cp, EFxDebugMode dbg)
 {
     auto* c = static_cast<SSetVortexBespokeCtx*>(cp);
-    if (c && c->effect) c->effect->TickAndSubmitForTest_BESPOKE(dbg);
+    if (c && c->effect) c->effect->Advance(TTime::DeltaTime());
 }
 
 // --- wave-bespoke-W2A: weather A — ground/atmospheric scatter family ----
@@ -4608,8 +4678,13 @@ void GlobeBespokeDestroy(void* cp) { auto* c = static_cast<SGlobeBespokeCtx*>(cp
 void GlobeBespokeSubmit(void* cp, EFxDebugMode dbg)
 {
     auto* c = static_cast<SGlobeBespokeCtx*>(cp);
-    if (c && c->eff)
+    if (c && c->eff) {
+        const int before=c->eff->GetFrame();
         c->eff->TickAndSubmitForTest_BESPOKE(dbg);
+        if(std::getenv("REV_VFX_REVIEW_CLOCK_TRACE") && before!=c->eff->GetFrame())
+            log_info("[authored-texture-clock] render=%lld dt=%.9f frame=%d next=%d",
+                static_cast<long long>(TTime::FrameCount()),TTime::DeltaTime(),before,c->eff->GetFrame());
+    }
 }
 
 void GlobeBespokeSubmitWorld(void* cp, EFxDebugMode dbg)
@@ -4634,6 +4709,7 @@ void* AuthoredTextureMeshVariantSpawn(const S3DPoint& origin)
 {
     auto* c=new SGlobeBespokeCtx();
     c->eff=TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(origin,kAsset,true);
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT watcher=1", int(StartupVfxNativeDomain));
     return c;
 }
 
@@ -5338,6 +5414,26 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(original);
         }
         {
+            VfxTest::SEffect original{};original.id="HeadFireBall_ORIGINAL";
+            original.family="projectile";original.pipeline="IM+QUAD";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return headfireball_original::Spawn({o.x,o.y+60,o.z+78});};
+            original.submit=[](void* c,EFxDebugMode){headfireball_original::Advance(static_cast<headfireball_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode d){headfireball_original::SubmitWorld(static_cast<headfireball_original::State*>(c),d);};
+            original.is_alive=[](void* c){return headfireball_original::IsAlive(static_cast<headfireball_original::State*>(c));};
+            original.destroy=[](void* c){headfireball_original::Destroy(static_cast<headfireball_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect original{};original.id="Dragonattack_ORIGINAL";
+            original.family="projectile";original.pipeline="IM+QUAD";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return dragonattack_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){dragonattack_original::Advance(static_cast<dragonattack_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode d){dragonattack_original::SubmitWorld(static_cast<dragonattack_original::State*>(c),d);};
+            original.is_alive=[](void* c){return dragonattack_original::IsAlive(static_cast<dragonattack_original::State*>(c));};
+            original.destroy=[](void* c){dragonattack_original::Destroy(static_cast<dragonattack_original::State*>(c));};
+            VfxTest::DeferredRegister(original);
+        }
+        {
             VfxTest::SEffect original{};original.id="YTelekinesis_ORIGINAL";
             original.family="projectile";original.pipeline="IM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
             original.factory=[](const S3DPoint& o)->void*{return ytelekinesis_original::Spawn(o);};
@@ -5385,6 +5481,15 @@ struct SVfxTestBootstrap {
             original.is_alive=[](void* c){return funnel_original::IsAlive(static_cast<funnel_original::State*>(c));};
             original.destroy=[](void* c){funnel_original::Destroy(static_cast<funnel_original::State*>(c));};
             VfxTest::DeferredRegister(original);
+        }
+        {
+            VfxTest::SEffect e{};e.id="StrikeEffect_METEOR_CALLER";e.family="spell";e.pipeline="IM+QUAD";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return strike_meteor_preview::SpawnFixture(o);};
+            e.submit=[](void*c,EFxDebugMode){strike_meteor_preview::Advance(static_cast<strike_meteor_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode){strike_meteor_preview::SubmitWorld(static_cast<strike_meteor_preview::State*>(c));};
+            e.is_alive=[](void*c){return strike_meteor_preview::Alive(static_cast<strike_meteor_preview::State*>(c));};
+            e.destroy=[](void*c){strike_meteor_preview::Destroy(static_cast<strike_meteor_preview::State*>(c));};VfxTest::DeferredRegister(e);
+            e.id="StrikeEffect_METEOR_CONFIGURED";e.factory=[](const S3DPoint&o)->void*{return strike_meteor_preview::SpawnConfigured(o);};VfxTest::DeferredRegister(e);
         }
         {
             VfxTest::SEffect original{};original.id="MeteorStorm_AUTHORED";
@@ -5612,6 +5717,14 @@ struct SVfxTestBootstrap {
         mist.destroy       = [](void* c) { MistDestroy(c); };
         VfxTest::DeferredRegister(mist);
 
+        {
+            VfxTest::SEffect original{};original.id="Quicksand_ORIGINAL_TARGET";original.family="spell";original.pipeline="HM";original.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            original.factory=[](const S3DPoint& o)->void*{return quicksand_original::Spawn(o);};
+            original.submit=[](void* c,EFxDebugMode){quicksand_original::Advance(static_cast<quicksand_original::State*>(c),TTime::DeltaTime());};
+            original.submit_world=[](void* c,EFxDebugMode){quicksand_original::SubmitWorld(static_cast<quicksand_original::State*>(c));};
+            original.is_alive=[](void* c){return quicksand_original::IsAlive(static_cast<quicksand_original::State*>(c));};
+            original.destroy=[](void* c){quicksand_original::Destroy(static_cast<quicksand_original::State*>(c));};VfxTest::DeferredRegister(original);
+        }
         VfxTest::SEffect drip = {};
         drip.id            = "TDripEffect";
         drip.family        = "water";
@@ -5630,6 +5743,19 @@ struct SVfxTestBootstrap {
         drip_ab.id = "TDripEffect_AB";
         drip_ab.factory = [](const S3DPoint& o) -> void* { return DripAbSpawn(o); };
         VfxTest::DeferredRegister(drip_ab);
+
+        for(bool drain : {false,true}) {
+            VfxTest::SEffect linked{};
+            linked.id=drain?"TDripEffect_LINKED_DRAIN":"TDripEffect_LINKED_NO_SPLASH";
+            linked.family="water";linked.pipeline="QUAD";
+            linked.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            linked.factory=[drain](const S3DPoint& o)->void*{return DripLinkedSpawn(o,drain);};
+            linked.submit=DripLinkedAdvance;
+            linked.submit_world=[](void* c,EFxDebugMode d){static_cast<SDripLinkedCtx*>(c)->drip->Submit(d);};
+            linked.is_alive=[](void* c){return !(static_cast<SDripLinkedCtx*>(c)->drip->GetFlags()&OF_KILL);};
+            linked.destroy=[](void* c){auto* p=static_cast<SDripLinkedCtx*>(c);delete p->drip;delete p;};
+            VfxTest::DeferredRegister(linked);
+        }
 
         // F12 `add Sparks` initializes different parameters from the combat
         // caller. This one-shot entry supplies that exact comparison profile;
@@ -5695,6 +5821,13 @@ struct SVfxTestBootstrap {
         halo.destroy       = [](void* c) { HaloDestroy(c); };
         VfxTest::DeferredRegister(halo);
 
+        for(uint8_t facing:{0,64,128,192}){
+            VfxTest::SEffect e={};e.id="Fire_INSTALLED_FACE"+std::to_string(facing);e.family="fire";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[facing](const S3DPoint&o)->void*{return fire_installed::Spawn(o,facing);};
+            e.submit=[](void*p,EFxDebugMode){fire_installed::Advance(static_cast<fire_installed::State*>(p),TTime::DeltaTime());};
+            e.submit_world=[](void*p,EFxDebugMode){fire_installed::SubmitWorld(static_cast<fire_installed::State*>(p));};
+            e.is_alive=[](void*p){return fire_installed::Alive(static_cast<fire_installed::State*>(p));};e.destroy=[](void*p){fire_installed::Destroy(static_cast<fire_installed::State*>(p));};VfxTest::DeferredRegister(e);
+        }
         VfxTest::SEffect fire = {};
         fire.id            = "TFireEffect";
         fire.family        = "fire";
@@ -5995,6 +6128,8 @@ struct SVfxTestBootstrap {
         setvortex_bespoke.preview_style = VfxTest::EVfxPreviewStyle::Static;
         setvortex_bespoke.factory = [](const S3DPoint& o) -> void* { return SetVortexBespokeSpawn(o); };
         setvortex_bespoke.submit = [](void* c, EFxDebugMode d) { SetVortexBespokeSubmit(c, d); };
+        setvortex_bespoke.submit_world = [](void* p, EFxDebugMode d) { auto*c=static_cast<SSetVortexBespokeCtx*>(p); if(c && c->effect)c->effect->Submit(d); };
+        setvortex_bespoke.is_alive = [](void*p) { auto*c=static_cast<SSetVortexBespokeCtx*>(p); return c && c->effect && c->effect->IsAlive(); };
         setvortex_bespoke.destroy = [](void* c) { SetVortexBespokeDestroy(c); };
         VfxTest::DeferredRegister(setvortex_bespoke);
 
@@ -6103,8 +6238,59 @@ struct SVfxTestBootstrap {
         }
 
         {
+            VfxTest::SEffect e={};e.id="Teleporter_ORIGINAL_NULL";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return teleporter_original::Spawn(o);};e.submit=[](void*c,EFxDebugMode){teleporter_original::Advance(static_cast<teleporter_original::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){teleporter_original::SubmitWorld(static_cast<teleporter_original::State*>(c));};e.is_alive=[](void*c){return teleporter_original::Alive(static_cast<teleporter_original::State*>(c));};e.destroy=[](void*c){teleporter_original::Destroy(static_cast<teleporter_original::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="Createfood_ORIGINAL_CONTEXT";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return createfood_original::Spawn(o);};e.submit=[](void*c,EFxDebugMode){createfood_original::Advance(static_cast<createfood_original::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){createfood_original::SubmitWorld(static_cast<createfood_original::State*>(c));};e.is_alive=[](void*c){return createfood_original::Alive(static_cast<createfood_original::State*>(c));};e.destroy=[](void*c){createfood_original::Destroy(static_cast<createfood_original::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+
+        {
             VfxTest::SEffect e={};e.id="EssenceDrain_AUTHORED";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
             e.factory=[](const S3DPoint&o)->void*{return essencedrain_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){essencedrain_preview::Advance(static_cast<essencedrain_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){essencedrain_preview::SubmitWorld(static_cast<essencedrain_preview::State*>(c));};e.is_alive=[](void*c){return essencedrain_preview::Alive(static_cast<essencedrain_preview::State*>(c));};e.destroy=[](void*c){essencedrain_preview::Destroy(static_cast<essencedrain_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+
+        {
+            VfxTest::SEffect e={};e.id="Invisible_AUTHORED";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return invisible_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){invisible_preview::Advance(static_cast<invisible_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){invisible_preview::SubmitWorld(static_cast<invisible_preview::State*>(c));};e.is_alive=[](void*c){return invisible_preview::Alive(static_cast<invisible_preview::State*>(c));};e.destroy=[](void*c){invisible_preview::Destroy(static_cast<invisible_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+
+        {
+            VfxTest::SEffect e={};e.id="Blood_AUTHORED";e.family="blood";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return blood_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){blood_preview::Advance(static_cast<blood_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){blood_preview::SubmitWorld(static_cast<blood_preview::State*>(c));};e.is_alive=[](void*c){return blood_preview::Alive(static_cast<blood_preview::State*>(c));};e.destroy=[](void*c){blood_preview::Destroy(static_cast<blood_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+
+        {
+            VfxTest::SEffect e={};e.id="Burn_ACTOR_POSE_PROBE";e.family="diagnostic";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return burn_actor_probe::Spawn(o);};e.submit=[](void*,EFxDebugMode){};e.destroy=[](void*c){burn_actor_probe::Destroy(static_cast<burn_actor_probe::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="Burn_AUTHENTIC_ACOLYTE_INTEGER";e.family="blood";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return burn_public_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){burn_public_preview::Advance(static_cast<burn_public_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){burn_public_preview::SubmitWorld(static_cast<burn_public_preview::State*>(c));};e.is_alive=[](void*c){return burn_public_preview::Alive(static_cast<burn_public_preview::State*>(c));};e.destroy=[](void*c){burn_public_preview::Destroy(static_cast<burn_public_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="Aura_AUTHENTIC_ACOLYTE_INTEGER";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return aura_public_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){aura_public_preview::Advance(static_cast<aura_public_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){aura_public_preview::SubmitWorld(static_cast<aura_public_preview::State*>(c));};e.is_alive=[](void*c){return aura_public_preview::Alive(static_cast<aura_public_preview::State*>(c));};e.destroy=[](void*c){aura_public_preview::Destroy(static_cast<aura_public_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="Rift1_QUALIFIED_PARSER";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;e.factory=[](const S3DPoint&o)->void*{return rift_qualified_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){rift_qualified_preview::Advance(static_cast<rift_qualified_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){rift_qualified_preview::SubmitWorld(static_cast<rift_qualified_preview::State*>(c));};e.is_alive=[](void*c){return rift_qualified_preview::Alive(static_cast<rift_qualified_preview::State*>(c));};e.destroy=[](void*c){rift_qualified_preview::Destroy(static_cast<rift_qualified_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="Labyrinth_QUALIFIED_BOUND";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;e.factory=[](const S3DPoint&o)->void*{return labyrinth_qualified_preview::Spawn(o);};e.submit=[](void*c,EFxDebugMode){labyrinth_qualified_preview::Advance(static_cast<labyrinth_qualified_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){labyrinth_qualified_preview::SubmitWorld(static_cast<labyrinth_qualified_preview::State*>(c));};e.is_alive=[](void*c){return labyrinth_qualified_preview::Alive(static_cast<labyrinth_qualified_preview::State*>(c));};e.destroy=[](void*c){labyrinth_qualified_preview::Destroy(static_cast<labyrinth_qualified_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        for(int variant=0;variant<2;++variant){
+            VfxTest::SEffect e={};e.id=variant?"MagicShield_PUBLIC_FIRE_FLASH":"MagicShield_PUBLIC_AURA";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[variant](const S3DPoint&o)->void*{return magicshield_preview::Spawn(o,variant!=0);};e.submit=[](void*c,EFxDebugMode){magicshield_preview::Advance(static_cast<magicshield_preview::State*>(c),TTime::DeltaTime());};e.submit_world=[](void*c,EFxDebugMode){magicshield_preview::SubmitWorld(static_cast<magicshield_preview::State*>(c));};e.is_alive=[](void*c){return magicshield_preview::Alive(static_cast<magicshield_preview::State*>(c));};e.destroy=[](void*c){magicshield_preview::Destroy(static_cast<magicshield_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        // Exact Halo public API inputs; no natural retail caller is claimed.
+        for(int variant=0;variant<2;++variant) {
+            VfxTest::SEffect e={};e.id=variant?"Halo_AUTHORED_PUBLIC20":"Halo_AUTHORED_PUBLIC60";e.family="glow";e.pipeline="Mesh";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[variant](const S3DPoint&o)->void*{return halo_preview::Spawn(o,variant?20:60,variant?.08f:.04f);};
+            e.submit=[](void*c,EFxDebugMode){halo_preview::Advance(static_cast<halo_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode){halo_preview::SubmitWorld(static_cast<halo_preview::State*>(c));};
+            e.is_alive=[](void*c){return halo_preview::Alive(static_cast<halo_preview::State*>(c));};
+            e.destroy=[](void*c){halo_preview::Destroy(static_cast<halo_preview::State*>(c));};VfxTest::DeferredRegister(e);
         }
 
         // Shipped literal Vortex resolves the default animator and three legacy roots.
@@ -6901,7 +7087,7 @@ struct SVfxTestBootstrap {
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory = [](const S3DPoint& o)->void* { return AuthoredTextureMeshVariantSpawn<kVariantOgrokWatcher1_I3D>(o); };
             e.submit = [](void* c, EFxDebugMode d) { GlobeBespokeSubmit(c,d); };
-            e.submit_world = [](void* c, EFxDebugMode d) { GlobeBespokeSubmitWorld(c,d); };
+            e.submit_world = [](void* c, EFxDebugMode d) { auto* state=static_cast<SGlobeBespokeCtx*>(c); if(StartupVfxNativeDomain && state && state->eff) state->eff->SubmitNativeWorldMeshForTest_BESPOKE(d); else GlobeBespokeSubmitWorld(c,d); };
             e.destroy = [](void* c) { GlobeBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
@@ -6912,7 +7098,7 @@ struct SVfxTestBootstrap {
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory = [](const S3DPoint& o)->void* { return AuthoredTextureMeshVariantSpawn<kVariantOgrokWatcher2_I3D>(o); };
             e.submit = [](void* c, EFxDebugMode d) { GlobeBespokeSubmit(c,d); };
-            e.submit_world = [](void* c, EFxDebugMode d) { GlobeBespokeSubmitWorld(c,d); };
+            e.submit_world = [](void* c, EFxDebugMode d) { auto* state=static_cast<SGlobeBespokeCtx*>(c); if(StartupVfxNativeDomain && state && state->eff) state->eff->SubmitNativeWorldMeshForTest_BESPOKE(d); else GlobeBespokeSubmitWorld(c,d); };
             e.destroy = [](void* c) { GlobeBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
@@ -6923,7 +7109,7 @@ struct SVfxTestBootstrap {
             e.preview_style = VfxTest::EVfxPreviewStyle::Static;
             e.factory = [](const S3DPoint& o)->void* { return AuthoredTextureMeshVariantSpawn<kVariantOgrokWatcher3_I3D>(o); };
             e.submit = [](void* c, EFxDebugMode d) { GlobeBespokeSubmit(c,d); };
-            e.submit_world = [](void* c, EFxDebugMode d) { GlobeBespokeSubmitWorld(c,d); };
+            e.submit_world = [](void* c, EFxDebugMode d) { auto* state=static_cast<SGlobeBespokeCtx*>(c); if(StartupVfxNativeDomain && state && state->eff) state->eff->SubmitNativeWorldMeshForTest_BESPOKE(d); else GlobeBespokeSubmitWorld(c,d); };
             e.destroy = [](void* c) { GlobeBespokeDestroy(c); };
             VfxTest::DeferredRegister(e);
         }
@@ -7044,6 +7230,96 @@ struct SVfxTestBootstrap {
         // *   load the I3D asset and draw sub-object 0 as a billboard.         *
         // *   Awaiting user video A/B for forensics + kinematic tuning.        *
         // =====================================================================
+        {
+            VfxTest::SEffect e={};e.id="TManaDrain_AUTHENTIC_TARGET_FIXTURE";e.family="ambient";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return manadrain_preview::SpawnTargetFixture(o);};
+            e.submit=[](void* c,EFxDebugMode){manadrain_preview::Advance(static_cast<manadrain_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){manadrain_preview::SubmitWorld(static_cast<manadrain_preview::State*>(c));};
+            e.is_alive=[](void* c){return manadrain_preview::Alive(static_cast<manadrain_preview::State*>(c));};
+            e.destroy=[](void* c){manadrain_preview::Destroy(static_cast<manadrain_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+            e.id="TManaDrain_CONFIGURED_TARGET";
+            e.factory=[](const S3DPoint& o)->void*{return manadrain_preview::SpawnConfiguredTarget(o);};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="EssenceDrain_SPELL_AUTHENTIC_TARGET";e.family="ambient";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return manadrain_preview::SpawnEssenceDrainTargetFixture(o);};
+            e.submit=[](void* c,EFxDebugMode){manadrain_preview::Advance(static_cast<manadrain_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){manadrain_preview::SubmitWorld(static_cast<manadrain_preview::State*>(c));};
+            e.is_alive=[](void* c){return manadrain_preview::Alive(static_cast<manadrain_preview::State*>(c));};
+            e.destroy=[](void* c){manadrain_preview::Destroy(static_cast<manadrain_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+            e.id="EssenceDrain_SPELL_CONFIGURED_TARGET";
+            e.factory=[](const S3DPoint& o)->void*{return manadrain_preview::SpawnEssenceDrainConfiguredTarget(o);};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TYManaDrain_AUTHENTIC_TARGET_FIXTURE";e.family="ambient";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return ymanadrain_preview::SpawnTargetFixture(o);};
+            e.submit=[](void* c,EFxDebugMode){ymanadrain_preview::Advance(static_cast<ymanadrain_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){ymanadrain_preview::SubmitWorld(static_cast<ymanadrain_preview::State*>(c));};
+            e.is_alive=[](void* c){return ymanadrain_preview::Alive(static_cast<ymanadrain_preview::State*>(c));};
+            e.destroy=[](void* c){ymanadrain_preview::Destroy(static_cast<ymanadrain_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+            e.id="TYManaDrain_CONFIGURED_TARGET";
+            e.factory=[](const S3DPoint& o)->void*{return ymanadrain_preview::SpawnConfiguredTarget(o);};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TPulp_AUTHENTIC_ACTOR_FIXTURE";e.family="ambient";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return pulp_preview::SpawnActorFixture(o);};
+            e.submit=[](void* c,EFxDebugMode){pulp_preview::Advance(static_cast<pulp_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){pulp_preview::SubmitWorld(static_cast<pulp_preview::State*>(c));};
+            e.is_alive=[](void* c){return pulp_preview::Alive(static_cast<pulp_preview::State*>(c));};
+            e.destroy=[](void* c){pulp_preview::Destroy(static_cast<pulp_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+            e.id="TPulp_CONFIGURED_ACTOR";
+            e.factory=[](const S3DPoint& o)->void*{return pulp_preview::SpawnConfiguredActor(o);};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TTornado_AUTHENTIC_TARGET_FIXTURE";e.family="ambient";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return tornado_preview::SpawnTargetFixture(o);};
+            e.submit=[](void* c,EFxDebugMode){tornado_preview::Advance(static_cast<tornado_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){tornado_preview::SubmitWorld(static_cast<tornado_preview::State*>(c));};
+            e.is_alive=[](void* c){return tornado_preview::Alive(static_cast<tornado_preview::State*>(c));};
+            e.destroy=[](void* c){tornado_preview::Destroy(static_cast<tornado_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+            e.id="TTornado_CONFIGURED_TARGET";
+            e.factory=[](const S3DPoint& o)->void*{return tornado_preview::SpawnConfiguredTarget(o);};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id = "TParalize1_NAMED_NO_TARGET";e.family="ambient";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return paralize_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){paralize_preview::Advance(static_cast<paralize_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){paralize_preview::SubmitWorld(static_cast<paralize_preview::State*>(c));};
+            e.is_alive=[](void* c){return paralize_preview::Alive(static_cast<paralize_preview::State*>(c));};
+            e.destroy=[](void* c){paralize_preview::Destroy(static_cast<paralize_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e = {};
+            e.id = "TParalize1_AUTHENTIC_TARGET_FIXTURE";e.family="ambient";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return paralize_preview::SpawnTargetFixture(o);};
+            e.submit=[](void* c,EFxDebugMode){paralize_preview::Advance(static_cast<paralize_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){paralize_preview::SubmitWorld(static_cast<paralize_preview::State*>(c));};
+            e.is_alive=[](void* c){return paralize_preview::Alive(static_cast<paralize_preview::State*>(c));};
+            e.destroy=[](void* c){paralize_preview::Destroy(static_cast<paralize_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+            e.id="TParalize1_CONFIGURED_TARGET";
+            e.factory=[](const S3DPoint& o)->void*{return paralize_preview::SpawnConfiguredTarget(o);};
+            VfxTest::DeferredRegister(e);
+        }
         {
             VfxTest::SEffect e = {};
             e.id = "TSwamp_AUTHORED_TAGS";e.family="ambient";e.pipeline="IM";
@@ -7187,6 +7463,16 @@ struct SVfxTestBootstrap {
             e.submit=[](void*c,EFxDebugMode){static_particles_preview::Advance(static_cast<static_particles_preview::State*>(c),TTime::DeltaTime());};
             e.submit_world=[](void*c,EFxDebugMode d){static_particles_preview::SubmitWorld(static_cast<static_particles_preview::State*>(c),d);};
             e.destroy=[](void*c){static_particles_preview::Destroy(static_cast<static_particles_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="Regeneration_SPELL_OWNER";e.family="spell";e.pipeline="actual Strike+owner+partsys";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return regeneration_spell_preview::Spawn(o);};
+            e.submit=[](void*c,EFxDebugMode){regeneration_spell_preview::Advance(static_cast<regeneration_spell_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode){regeneration_spell_preview::SubmitWorld(static_cast<regeneration_spell_preview::State*>(c));};
+            e.destroy=[](void*c){regeneration_spell_preview::Destroy(static_cast<regeneration_spell_preview::State*>(c));};
+            e.is_alive=[](void*c){return regeneration_spell_preview::Alive(static_cast<regeneration_spell_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
         }
         {
@@ -7412,6 +7698,13 @@ struct SVfxTestBootstrap {
             e.destroy = [](void* context) { combatflash_start1_preview::Destroy(static_cast<combatflash_start1_preview::State*>(context)); };
             e.is_alive=[](void* c){return combatflash_start1_preview::Alive(static_cast<combatflash_start1_preview::State*>(c));};
             VfxTest::DeferredRegister(e);
+            // Isolated render components; simulation and render RNG still execute.
+            e.id="CombatFlash_START1_BASE_ONLY";
+            e.factory=[](const S3DPoint&o)->void*{return combatflash_start1_preview::Spawn(o,false,true);};
+            VfxTest::DeferredRegister(e);
+            e.id="CombatFlash_START1_PARTICLES_ONLY";
+            e.factory=[](const S3DPoint&o)->void*{return combatflash_start1_preview::Spawn(o,true,false);};
+            VfxTest::DeferredRegister(e);
         }
         {
             VfxTest::SEffect e = {};
@@ -7604,6 +7897,14 @@ struct SVfxTestBootstrap {
             e.submit_world=[](void* c,EFxDebugMode){energyspray_preview::SubmitWorld(static_cast<energyspray_preview::State*>(c));};
             e.is_alive=[](void* c){return energyspray_preview::Alive(static_cast<energyspray_preview::State*>(c));};
             e.destroy=[](void* c){energyspray_preview::Destroy(static_cast<energyspray_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="TDragonFire_BESPOKE_NULLSPELL";e.family="magic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return dragonfire_preview::Spawn(o);};
+            e.submit=[](void* c,EFxDebugMode){dragonfire_preview::Advance(static_cast<dragonfire_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){dragonfire_preview::SubmitWorld(static_cast<dragonfire_preview::State*>(c));};
+            e.is_alive=[](void* c){return dragonfire_preview::Alive(static_cast<dragonfire_preview::State*>(c));};
+            e.destroy=[](void* c){dragonfire_preview::Destroy(static_cast<dragonfire_preview::State*>(c));};VfxTest::DeferredRegister(e);
         }
         {
             VfxTest::SEffect e = {};
@@ -7869,6 +8170,23 @@ struct SVfxTestBootstrap {
                 delete c;
             };
             VfxTest::DeferredRegister(e);
+        }
+
+        {
+            VfxTest::SEffect e={};e.id="CFire_INSTALLED_NO_PRESETS";e.family="magic";e.pipeline="MS";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return cfire_original::Spawn(o);};
+            e.submit=[](void* p,EFxDebugMode){cfire_original::Advance(static_cast<cfire_original::State*>(p),TTime::DeltaTime());};
+            e.submit_world=[](void* p,EFxDebugMode m){cfire_original::SubmitWorld(static_cast<cfire_original::State*>(p),m);};
+            e.is_alive=[](void* p){return cfire_original::IsAlive(static_cast<cfire_original::State*>(p));};
+            e.destroy=[](void* p){cfire_original::Destroy(static_cast<cfire_original::State*>(p));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e={};e.id="Nakrnoth_ORIGINAL";e.family="magic";e.pipeline="MS+SQ";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return nakrnoth_original::Spawn(o);};
+            e.submit=[](void* p,EFxDebugMode){nakrnoth_original::Advance(static_cast<nakrnoth_original::State*>(p),TTime::DeltaTime());};
+            e.submit_world=[](void* p,EFxDebugMode m){nakrnoth_original::SubmitWorld(static_cast<nakrnoth_original::State*>(p),m);};
+            e.is_alive=[](void* p){return nakrnoth_original::IsAlive(static_cast<nakrnoth_original::State*>(p));};
+            e.destroy=[](void* p){nakrnoth_original::Destroy(static_cast<nakrnoth_original::State*>(p));};VfxTest::DeferredRegister(e);
         }
 
         // W3-E #5 TNakrnothEffect_Bespoke — magic\Nakrnoth.I3D (boss-specific)
@@ -8346,10 +8664,41 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(e);
         }
 
+        // Explicit modified-retail diagnostic: never a shipped-ID mapping.
+        {
+            VfxTest::SEffect e{};e.id="SANDSWIRL_QUALIFIED_SPARKS";e.family="diagnostic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return sandswirl_qualified_preview::Spawn(o);};
+            e.submit=[](void*c,EFxDebugMode){sandswirl_qualified_preview::Advance(static_cast<sandswirl_qualified_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode){sandswirl_qualified_preview::SubmitWorld(static_cast<sandswirl_qualified_preview::State*>(c));};
+            e.is_alive=[](void*c){return sandswirl_qualified_preview::Alive(static_cast<sandswirl_qualified_preview::State*>(c));};
+            e.destroy=[](void*c){sandswirl_qualified_preview::Destroy(static_cast<sandswirl_qualified_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e{};e.id="SANDSWIRL_MAP_QUALIFIED_SPARKS";e.family="diagnostic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return sandswirl_runtime::SpawnMapFixture(o);};
+            e.submit=[](void*c,EFxDebugMode){sandswirl_runtime::AdvanceMapFixture(static_cast<sandswirl_runtime::MapFixture*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode){sandswirl_runtime::SubmitMapFixture(static_cast<sandswirl_runtime::MapFixture*>(c));};
+            e.destroy=[](void*c){sandswirl_runtime::DestroyMapFixture(static_cast<sandswirl_runtime::MapFixture*>(c));};VfxTest::DeferredRegister(e);
+        }
+        {
+            VfxTest::SEffect e{};e.id="SANDSWIRL_MAP_RESTORED_SAND";e.family="diagnostic";e.pipeline="IM";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return sandswirl_runtime::SpawnRestoredSandMapFixture(o);};
+            e.submit=[](void*c,EFxDebugMode){sandswirl_runtime::AdvanceMapFixture(static_cast<sandswirl_runtime::MapFixture*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode){sandswirl_runtime::SubmitMapFixture(static_cast<sandswirl_runtime::MapFixture*>(c));};
+            e.destroy=[](void*c){sandswirl_runtime::DestroyMapFixture(static_cast<sandswirl_runtime::MapFixture*>(c));};VfxTest::DeferredRegister(e);
+        }
         // --- W3-C: Cave / environment ambient bespoke entries -----------
         // Localized-at-end pattern: structs + factory adapters + registration
         // all live in this block for clean diff-stack append.
 
+        {
+            VfxTest::SEffect e{};e.id="SGeyser_LOADED_INLINE";e.family="environment";e.pipeline="IM+QUAD";e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint&o)->void*{return sgeyser_preview::Spawn(o);};
+            e.submit=[](void*c,EFxDebugMode){sgeyser_preview::Advance(static_cast<sgeyser_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void*c,EFxDebugMode){sgeyser_preview::SubmitWorld(static_cast<sgeyser_preview::State*>(c));};
+            e.is_alive=[](void*c){return sgeyser_preview::Alive(static_cast<sgeyser_preview::State*>(c));};
+            e.destroy=[](void*c){sgeyser_preview::Destroy(static_cast<sgeyser_preview::State*>(c));};VfxTest::DeferredRegister(e);
+        }
         // W3-C sgeyser TGeyserEffect_Bespoke — steam variant. Periodic
         // upward spurt of 100 ballistic particles. Static preview style
         // (ambient cave fixture, no re-trigger).

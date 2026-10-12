@@ -1,8 +1,9 @@
 # VFX Restoration
 
-**Current validation workflow (2026-10-07):** most VFX verification uses the
-in-process retail emulator and original software renderer. DOSBox-X with the
-emulated 3D device is reserved for targeted software-rendering diagnostics.
+**Current validation workflow (2026-10-11):** all new VFX validation uses the
+in-process retail emulator. Keep original software-device failures explicit;
+use private, hash-pinned modified retail builds or qualified device fixtures
+when a demonstrated renderer/resource defect prevents a useful reference.
 Use [the active A/B guide](../RETAIL_AB_TESTING.md)
 and [private named builds/parallel sessions](../../tools/retail_runtime/README-parallel.md).
 Prioritize fast, repeatable tests; record known software-renderer limits

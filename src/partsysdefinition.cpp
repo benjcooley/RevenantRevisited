@@ -74,13 +74,20 @@ struct Reader {
         at += static_cast<std::size_t>(end - tail.c_str()); value = static_cast<float>(parsed);
         if(exact)*exact=parsed;return true;
     }
-    bool Tuple(Value& value, int count, bool wrapped) {
+    bool Tuple(Value& value, int count, bool wrapped, bool terminal_curve = false) {
         if (wrapped && !Take('(')) return Fail("expected vector '(' ");
         for (int i = 0; i < count; ++i) {
             if (i && !Take(wrapped ? ',' : ':')) return Fail("wrong expression width");
             if (!Number(value[i])) return false;
         }
-        if (wrapped && !Take(')')) return Fail("expected vector ')'");
+        if (wrapped && !Take(')')) {
+            // Nakrnoth's shipped final color key omits ')' before ']'.
+            // Original 4010d0 produces the same keys/evaluations as the
+            // closed vector. Permit only this complete terminal curve tuple.
+            Space();
+            if (!terminal_curve || at == text.size() || text[at] != ']')
+                return Fail("expected vector ')'");
+        }
         return true;
     }
     bool Expr(Expression& expression) {
@@ -95,7 +102,7 @@ struct Reader {
             if (key.percent < static_cast<float>(std::numeric_limits<int>::min()) ||
                 key.percent >= static_cast<float>(std::numeric_limits<int>::max())) return Fail("key time outside integer evaluator range");
             const bool vector = expression.dimensions > 1;
-            if (!Tuple(key.value, expression.dimensions, vector)) return false;
+            if (!Tuple(key.value, expression.dimensions, vector, true)) return false;
             if (!expression.keys.empty() && key.percent < expression.keys.back().percent)
                 return Fail("unsupported descending curve keys");
             expression.keys.push_back(key);

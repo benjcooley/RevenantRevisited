@@ -4,7 +4,11 @@ from pathlib import Path
 from vortex_legacy_contract import run as keys
 from vortex_owner_contract import run as owner
 from vortex_depth_contract import run as depth
+from vortex_material_contract import run as material
 class VortexTests(unittest.TestCase):
+ def test_authored_material_forwarding_rejects_zero_alpha(self):
+  with tempfile.TemporaryDirectory(prefix="vortex-material-")as tmp:r=material(Path(tmp)/"proof")
+  self.assertEqual((r["status"],r["materials"],r["channels"]),("pass",2,34))
  def test_exact_legacy_keys_texture_payload_and_default_other_paths(self):
   with tempfile.TemporaryDirectory(prefix='vortex-keys-')as tmp:r=keys(Path(tmp)/'proof')
   self.assertEqual((r['status'],r['accept'],r['reject'],r['native_pose_channels']),('pass',4,3676,27));self.assertEqual(r['max_pose_error'],0)
