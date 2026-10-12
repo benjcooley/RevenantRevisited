@@ -14,6 +14,7 @@ public:
     ~Effect() override;
     void Pulse() override;
     bool UseQualifiedSparks(int32_t initialized_seekz);
+    bool UseRestoredLegacySand(int32_t initialized_seekz);
     bool InitializeRuntime();
     bool Ready() const;
     int ParentFrame() const;
@@ -28,6 +29,7 @@ private:
 // Explicitly named test fixture uses real source map allocation and actors.
 struct MapFixture;
 MapFixture* SpawnMapFixture(const S3DPoint&);
+MapFixture* SpawnRestoredSandMapFixture(const S3DPoint&);
 void AdvanceMapFixture(MapFixture*,double);
 void SubmitMapFixture(MapFixture*);
 void DestroyMapFixture(MapFixture*);

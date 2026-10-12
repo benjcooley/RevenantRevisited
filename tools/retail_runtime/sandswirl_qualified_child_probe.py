@@ -20,10 +20,42 @@ from unicorn.x86_const import UC_X86_REG_EAX, UC_X86_REG_ESP, UC_X86_REG_EDI
 SAMPLES = (1, 2, 5, 10, 20, 35, 50, 65, 74)
 
 
-def run(executable, boot, output, substitute=False, spell_control=False, move_target=False, source_map_control=False):
+def restore_legacy_sand(v, call):
+    """Explicit modified-retail restoration of the supplied legacy registration.
+
+    legacy/Class.Def binds Sand/fecaface to Magic/Sandswirl.i3d; its
+    walkcode/effect.cpp registers sand with TParticle3DAnimator. The shipped
+    registry omits both. Execute public AddType and builder registration; the
+    original particle factory is shared code, not a Sparks imagery alias.
+    """
+    def string(text):
+        p=v.allocate(len(text)+1);v.write(p,text.encode()+b'\0');return p
+    name=string('sand');filename=string('Magic\\Sandswirl.i3d')
+    assert call(0x475210,(name,0),this=0x66cc68)==0xffffffff
+    sparks=call(0x40dca0,(string('sparks'),))
+    assert v.u32(v.u32(sparks))==0x4f5eb0
+    count=v.u32(0x5e872c);assert count<128
+    typ=call(0x4746d0,(name,filename,0xfecaface,0,0,0),this=0x66cc68,instruction_limit=100000000)
+    assert typ==176 and call(0x475210,(name,0),this=0x66cc68)==typ
+    builder=v.allocate(8);call(0x40db90,(name,),this=builder)
+    # The legacy macro's only virtual method returns new TParticle3DAnimator.
+    # A separate builder reuses that exact compiled virtual method.
+    v.put_u32(builder,v.u32(sparks))
+    assert call(0x40dca0,(name,))==builder and v.u32(0x5e872c)==count+1
+    assert call(0x40dca0,(string('sparks'),))==sparks
+    return dict(modified_registry=True,name='Sand',unique_id='0xfecaface',type=typ,
+                filename='Magic\\Sandswirl.i3d',asset_sha256='4ffcc6ab4e0f519bbfbfebc4713691eb92d14b792f27222130c35ce5502af85f',
+                animator='TParticle3DAnimator',factory='0x4f5eb0',builder=hex(builder),
+                add_type='0x4746d0',register_builder='0x40db90',sparks_unchanged=True,
+                legacy_commit='83f806bb65b762b2cc3e1ea509010f05342caa12',
+                class_source='legacy/Class.Def:2060',animator_source='legacy/walkcode/effect.cpp:4453')
+
+
+def run(executable, boot, output, substitute=False, spell_control=False, move_target=False, source_map_control=False, restored_sand=False):
     assert not source_map_control or spell_control
     assert not move_target or spell_control
-    assert not spell_control or substitute
+    assert not (substitute and restored_sand)
+    assert not spell_control or substitute or restored_sand
     output.mkdir(parents=True, exist_ok=False)
     f = AuthenticCharacters(executable, boot)
     f.select_screen_prefix()
@@ -92,6 +124,7 @@ def run(executable, boot, output, substitute=False, spell_control=False, move_ta
             replacement = p
     assert [x['type'] for x in lookups] == [0xffffffff,34,61]
     assert [x['factory'] for x in lookups] == ['0x40dc00','0x4f5eb0','0x4f8380']
+    restoration=restore_legacy_sand(v,call) if restored_sand else None
     before = bytes(v.uc.mem_read(0x4ede49,5))
     assert before == bytes.fromhex('6804105e00')
     if substitute:
@@ -192,7 +225,7 @@ def run(executable, boot, output, substitute=False, spell_control=False, move_ta
     childanim=v.u32(parent+0x104)
     rows=[]
     initial=None
-    if substitute:
+    if substitute or restored_sand:
         assert childanim and v.u32(childanim)==0x5a9ec0
         child=v.u32(childanim+4)
         assert v.u32(v.u32(owner)+0x110)==0x4edd80 and v.u32(v.u32(child)+0x110)==0x4de800
@@ -277,14 +310,14 @@ def run(executable, boot, output, substitute=False, spell_control=False, move_ta
             assert after['position']==expected
     fault=None
     if not spell_control:
-        tick=75 if substitute else 1
+        tick=75 if substitute or restored_sand else 1
         try:
             v.put_u32(0x65cb38,tick)
             call(0x470cc0,this=owner)
             call(0x4edd80,this=owner)
         except RuntimeError as error:
             fault=dict(tick=tick,error=str(error),details=f.world.last_fault)
-            assert f.world.last_fault[:2] == ((0x4ee13d,4) if substitute else (0x4ee0bc,0))
+            assert f.world.last_fault[:2] == ((0x4ee13d,4) if substitute or restored_sand else (0x4ee0bc,0))
         else:
             raise AssertionError('Expected missing-spell/child boundary was not reached')
     with zipfile.ZipFile(ROOT/'data/imagery.rvi') as z:
@@ -292,9 +325,10 @@ def run(executable, boot, output, substitute=False, spell_control=False, move_ta
                    ('class.def','Imagery/Magic/sandswirl.i3d','Imagery/Misc/sparks.i3d')}
         exact_sand=[name for name in z.namelist() if Path(name).stem.lower()=='sand']
     assert not exact_sand
-    result=dict(status='qualified_substitute_child_diagnostic' if substitute else 'original_missing_child',
-                accepted=False,visual_pass=False,original_identical=not substitute,
+    result=dict(status='restored_legacy_sand_diagnostic' if restored_sand else 'qualified_substitute_child_diagnostic' if substitute else 'original_missing_child',
+                accepted=False,visual_pass=False,original_identical=not (substitute or restored_sand),
                 guest_code_modified=substitute,executable_file_modified=False,
+                legacy_sand_restoration=restoration,
                 patch=patch,lookups=lookups,sectors=sectors,events=events,initial=initial,
                 records=rows,fault=fault,resource_sha256=resources,
                 named_spell_control="Quicksand" if spell_control else None,
@@ -306,6 +340,8 @@ def run(executable, boot, output, substitute=False, spell_control=False, move_ta
                 viewport=[1280,960],center=[640,480],source=[3185,3185,16],camera=[3185,3185,0],
                 executable_sha256=sha(executable),boot_image_sha256=sha(boot),probe_sha256=sha(__file__),
                 scope=__doc__,limits=('Modified allocator control: map-resident parent; actual index generation executes, then its IDs are replaced by a unique monotonic sequence and only its RNG seed/counter side effects are discarded. No per-effect seed injection. ' if source_map_control else '')+'Explicit isolated parent-before-child tick order; newly spawned Quicksand first pulses next tick. Original stack-derived seekz is retained and recorded, not normalized. Sparks imagery is a declared substitute, not inferred sand identity. No production admission. '+('Real Quicksand named spell is only a public SetSpell control, not an authentic Sandswirl variant; genuine actors are map-resident but character/world scheduler and effect destruction remain outside this tick fixture.' if spell_control else 'Null spell stops at75.'))
+    if restored_sand:
+        result['limits']=result['limits'].replace('Sparks imagery is a declared substitute, not inferred sand identity. No production admission.', 'Explicit restored legacy Sand/fecaface registration uses its own shipped Sandswirl resource. The shipped missing registration is unchanged on disk; this is a modified-retail configuration, not shipped-enabled behavior.')
     (output/'manifest.json').write_text(json.dumps(result,indent=2)+'\n')
     return result
 
@@ -316,8 +352,9 @@ if __name__=='__main__':
     p.add_argument('--boot-image',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--substitute-sparks',action='store_true')
+    p.add_argument('--restore-legacy-sand',action='store_true',help='Restore evidenced legacy Sand type and original particle animator; no Sparks resource substitution')
     p.add_argument('--quicksand-spell-control',action='store_true')
     p.add_argument('--move-target',action='store_true',help='Public actual actor SetPos at60 and85; explicit caller control')
     p.add_argument('--source-map-allocation-control',action='store_true',help='Modified-retail control: map-resident parent and RNG-neutral map ID allocation; no effect-seed injection')
     a=p.parse_args()
-    run(a.executable,a.boot_image,a.output,a.substitute_sparks,a.quicksand_spell_control,a.move_target,a.source_map_allocation_control)
+    run(a.executable,a.boot_image,a.output,a.substitute_sparks,a.quicksand_spell_control,a.move_target,a.source_map_allocation_control,a.restore_legacy_sand)

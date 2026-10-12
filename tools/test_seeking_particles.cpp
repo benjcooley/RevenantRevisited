@@ -30,5 +30,14 @@ int main() {
     p.target_count=1;assert(direct.ResetTargets(p,independent) && adapted.ResetTargets(p,stream));
     assert(independent.seed==stream.inner.seed && independent.calls==stream.inner.calls);
     for(int tick=0;tick<10;++tick){direct.Advance();adapted.Advance();assert(std::memcmp(direct.pool.data(),adapted.pool.data(),direct.pool.size()*sizeof(Particle))==0);}
+    // Restored Sand has one authored object; equal-range variant choice must
+    // consume no RNG. Sparks retains its independent four-object selection.
+    Params single;single.count=11;single.objflags=15;single.minlife=10;single.maxlife=20;
+    single.maxstart=5;single.trails=1;
+    Random one{1,0},four{1,0};State sand,sparks;
+    assert(sand.Init(single,1,one) && sparks.Init(single,4,four));
+    assert(one.calls==88 && four.calls==99 && one.seed!=four.seed);
+    for(const auto&q:sand.pool)assert(q.variant==0);
+    bool other=false;for(const auto&q:sparks.pool)other|=q.variant!=0;assert(other);
     std::puts("PASS: render immutability/order/bounce, equal-range RNG, target reset/seekz, completion and invalid allocation guards");
 }

@@ -35,7 +35,7 @@ static TObjectInstance* NewMapObject(int cls,int type,const S3DPoint&p){
  const int id=MapPane.NewObject(&d);return id<0?nullptr:MapPane.GetInstance(id);
 }
 static void Hex(const void*p,size_t n,char*out){const char*d="0123456789abcdef";const auto*b=static_cast<const uint8_t*>(p);for(size_t i=0;i<n;++i){out[2*i]=d[b[i]>>4];out[2*i+1]=d[b[i]&15];}out[2*n]=0;}
-MapFixture* SpawnMapFixture(const S3DPoint& origin){
+static MapFixture* Spawn(const S3DPoint& origin,bool restored){
  if(!Renderer || !SpellList.Initialize())return nullptr;auto s=std::make_unique<MapFixture>();s->previous=MapManager.CurrentMap();
  const int sx=origin.x>>SECTORWSHIFT,sy=origin.y>>SECTORHSHIFT;
  if(!MapManager.CreateTransient(MapFixture::level,sx-2,sy-2,sx+2,sy+2))return nullptr;s->map_created=true;
@@ -52,15 +52,25 @@ MapFixture* SpawnMapFixture(const S3DPoint& origin){
  const auto before_missing=RandomDraws();const bool missing_ok=!missing->InitializeRuntime() && (missing->Flags()&OF_KILL) && !missing->ParticleChild() && RandomDraws()==before_missing;
  MapPane.DeleteObject(missing);if(!missing_ok)return nullptr;
  log_info("[sandswirl-map-negative] missing_sand_failed_closed=1 no_child=1 rng_unchanged=1 actual_map_delete=1");
+ if(restored){
+  // Explicit diagnostic configuration only. Restores the supplied legacy
+  // Class.Def Sand/fecaface entry; keeps the shipped registry file unchanged.
+  int sand=effects->FindObjType("sand");
+  if(sand<0){char name[]="Sand",filename[]="Magic\\Sandswirl.i3d";sand=effects->AddType(name,filename,0xfecafaceu);}
+  if(sand<0 || effects->FindObjType(0xfecafaceu)!=sand)return nullptr;
+  log_info("[sandswirl-restored-binding] class=25 name=Sand id=fecaface resource=Magic/Sandswirl.i3d explicit_legacy_restoration=1 shipped_registry_file_unchanged=1");
+ }
  const auto&snap=FrameSnap::GetConfig();if(snap.seed_set)SeedRandom(snap.seed);
  // Unmodified map APIs, exact named builder, no supplied allocation return.
  s->owner=dynamic_cast<Effect*>(NewMapObject(OBJCLASS_EFFECT,effects->FindObjType("Sandswirl"),origin));if(!s->owner.Get())return nullptr;
- s->owner->SetSpell(s->spell.get());s->owner->UseQualifiedSparks(41);
+ s->owner->SetSpell(s->spell.get());if(restored)s->owner->UseRestoredLegacySand(41);else s->owner->UseQualifiedSparks(41);
  if(!s->owner->InitializeRuntime())return nullptr;
- log_info("[sandswirl-map-fixture] diagnostic_only=1 child=Sparks seekz=41 named_spell=Quicksand exact_sandswirl_variant=0 actors=%d,%d parent=%d seed=%u rng=%llu map_alloc_rng=none",s->caster->GetMapIndex(),s->target->GetMapIndex(),s->owner->GetMapIndex(),snap.seed,static_cast<unsigned long long>(RandomDraws()));
- log_info("[native-domain] enabled=%d camera_z=0 Sandswirl actual map-qualified Sparks",int(StartupVfxNativeDomain));
+ log_info("[sandswirl-map-fixture] diagnostic_only=1 child=%s seekz=41 named_spell=Quicksand exact_sandswirl_variant=0 actors=%d,%d parent=%d seed=%u rng=%llu map_alloc_rng=none",restored?"RestoredLegacySand":"Sparks",s->caster->GetMapIndex(),s->target->GetMapIndex(),s->owner->GetMapIndex(),snap.seed,static_cast<unsigned long long>(RandomDraws()));
+ log_info("[native-domain] enabled=%d camera_z=0 Sandswirl actual map child=%s",int(StartupVfxNativeDomain),restored?"RestoredLegacySand":"Sparks");
  return s.release();
 }
+MapFixture* SpawnMapFixture(const S3DPoint&o){return Spawn(o,false);}
+MapFixture* SpawnRestoredSandMapFixture(const S3DPoint&o){return Spawn(o,true);}
 void AdvanceMapFixture(MapFixture*s,double dt){
  if(!s || !std::isfinite(dt) || dt<=0)return;s->accumulator+=dt;
  while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;++s->ticks;auto*owner=s->owner.Get();if(!owner)return;

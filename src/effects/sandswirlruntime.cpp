@@ -1,4 +1,5 @@
 #include "sandswirlruntime.h"
+#include "sandswirlresource.h"
 #include "../character.h"
 #include "../mappane.h"
 #include "../mapmanager.h"
@@ -30,17 +31,20 @@ static uint32_t Hash(const void*p,size_t n){uint32_t h=2166136261u;const auto*b=
 class SeekingVisual final : public TFlipbookBillboardComponent {
 public:
  MeshHandle meshes[4]{};
+ int objects=0;
  ~SeekingVisual() override {if(Renderer)for(auto m:meshes)if(m)Renderer->ReleaseMeshAssetRef(m);}
  void OnAttach() override {} // owner animator Pulse is the only simulation clock
- bool Initialize(TObjectInstance& owner){
-  if(!Renderer || owner.ObjId()!=0x14db0f2eu)return false;
-  auto*im=dynamic_cast<T3DImagery*>(owner.GetImagery());if(!im || im->NumObjects()!=4 || im->NumTextures()!=1)return false;
+ bool Initialize(TObjectInstance& owner,bool restored){
+  if(!Renderer || owner.ObjId()!=(restored?0xfecafaceu:0x14db0f2eu))return false;
+  objects=restored?1:4;
+  auto*im=dynamic_cast<T3DImagery*>(owner.GetImagery());if(!im || im->NumObjects()!=objects || im->NumTextures()!=1 || (restored && (im->NumStates()!=1 || im->GetAniLength(0)!=1)))return false;
   S3DTex tex{};im->GetTexture(0,&tex);const auto&pf=tex.desc.pixelFormat;
   if(tex.numframes!=1 || tex.desc.width!=64 || tex.desc.height!=64 || pf.dwRGBBitCount!=16 || pf.dwRBitMask!=0xf00 || pf.dwGBitMask!=0xf0 || pf.dwBBitMask!=0xf || pf.dwRGBAlphaBitMask!=0xf000 || im->GetTextureHandle(0)==kInvalidTexture)return false;
   constexpr uint32_t hashes[]={0x9ee0e036u,0x7b4a7030u,0xf424a66au,0x597d591fu};
-  for(int i=0;i<4;++i){S3DVertex raw[4]{};im->GetObjVerts(i,raw);std::vector<SMeshVertex> v;std::vector<uint16_t> ix;
-   if(Hash(raw,sizeof raw)!=hashes[i] || !ExtractSubMeshTextureSlot(im,i,1,v,ix) || v.size()!=4 || ix.size()!=6 || Hash(ix.data(),12)!=0x4d2f57c6u)return false;
-   meshes[i]=Renderer->RegisterMeshAsset(0x53574d4150504100ull|uint64_t(i),v.data(),4,ix.data(),6,im->GetTextureHandle(0));if(!meshes[i])return false;Renderer->AddMeshAssetRef(meshes[i]);}
+  for(int i=0;i<objects;++i){S3DVertex raw[4]{};im->GetObjVerts(i,raw);std::vector<SMeshVertex> v;std::vector<uint16_t> ix;
+   if(Hash(raw,sizeof raw)!=(restored?0x9fb5ee98u:hashes[i]) || !ExtractSubMeshTextureSlot(im,i,1,v,ix) || v.size()!=4 || ix.size()!=6 || Hash(ix.data(),12)!=0x4d2f57c6u)return false;
+   if(restored && !LegacySandResourceAllowed(owner.ObjId(),objects,im->NumStates(),im->GetAniLength(0),Hash(raw,sizeof raw),Hash(ix.data(),12)))return false;
+   meshes[i]=Renderer->RegisterMeshAsset((restored?0x53574d53414e4400ull:0x53574d4150504100ull)|uint64_t(i),v.data(),4,ix.data(),6,im->GetTextureHandle(0));if(!meshes[i])return false;Renderer->AddMeshAssetRef(meshes[i]);}
   Configure(im->GetTextureHandle(0),64,64,1,1,1,0,0,false,true);return true;
  }
  void Submit(TRenderer&r,const TObjectInstance&owner) const override {
@@ -51,10 +55,10 @@ public:
    for(int row=0;row<4;++row)for(int col=0;col<4;++col)q.world[row*4+col]=world.Elements[col][row];r.SubmitHelperMesh(q);});
  }
 };
-bool AttachParticle(TObjectInstance& owner,const retail_seeking_particles::Params&p){
+bool AttachParticle(TObjectInstance& owner,const retail_seeking_particles::Params&p,bool restored){
  if(owner.GetComponent<TFlipbookBillboardComponent>())return false;
- auto visual=std::make_unique<SeekingVisual>();if(!visual->Initialize(owner))return false;
- auto animator=std::make_unique<SeekingAnimator>(&owner);animator->Initialize();GameRandom rng;if(!animator->core.Init(p,4,rng))return false;
+ auto visual=std::make_unique<SeekingVisual>();if(!visual->Initialize(owner,restored))return false;
+ auto animator=std::make_unique<SeekingAnimator>(&owner);animator->Initialize();GameRandom rng;if(!animator->core.Init(p,visual->objects,rng))return false;
  owner.FreeAnimator();owner.AddComponent(std::move(animator));owner.AddComponent(std::move(visual));return true;
 }
 class NullQuicksandAnimator final : public T3DAnimator {
@@ -72,13 +76,14 @@ bool AttachNullQuicksand(TObjectInstance&owner){
 }
 struct Effect::Runtime {
  retail_sandswirl::Controller parent;TSafeRef<TObjectInstance> child;
- bool attempted=false,qualified=false;int32_t seekz=0;
+ bool attempted=false,qualified=false,restored=false;int32_t seekz=0;
  std::vector<int32_t> quicksands,query;
 };
 Effect::Effect(TObjectImagery*im):TEffect(im),runtime(std::make_unique<Runtime>()){AddComponent(std::make_unique<HiddenVisual>());}
 Effect::Effect(SObjectDef*d,TObjectImagery*im):TEffect(d,im),runtime(std::make_unique<Runtime>()){AddComponent(std::make_unique<HiddenVisual>());}
 Effect::~Effect()=default;
-bool Effect::UseQualifiedSparks(int32_t seekz){if(runtime->attempted)return false;runtime->qualified=true;runtime->seekz=seekz;return true;}
+bool Effect::UseQualifiedSparks(int32_t seekz){if(runtime->attempted)return false;runtime->qualified=true;runtime->restored=false;runtime->seekz=seekz;return true;}
+bool Effect::UseRestoredLegacySand(int32_t seekz){if(runtime->attempted)return false;runtime->restored=true;runtime->qualified=false;runtime->seekz=seekz;return true;}
 bool Effect::Ready()const{return runtime->attempted && runtime->parent.Reason()==retail_sandswirl::Stop::None;}
 int Effect::ParentFrame()const{return runtime->parent.Frame();}
 TObjectInstance* Effect::ParticleChild()const{return runtime->child.Get();}
@@ -89,7 +94,7 @@ bool Effect::InitializeRuntime(){
  if(runtime->attempted)return Ready();runtime->attempted=true;
  if(ObjId()!=0xbecefedau){runtime->parent.Start(false);SetFlag(OF_KILL);return false;}
  auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cl?(runtime->qualified?cl->FindObjType(0x14db0f2eu):cl->FindObjType("sand")):-1;
- if(type<0){runtime->parent.Start(false);SetFlag(OF_KILL);log_warn("[sandswirl-runtime] missing intended sand dependency; no alias or static fallback");return false;}
+ if(type<0 || (!runtime->qualified && !runtime->restored)){runtime->parent.Start(false);SetFlag(OF_KILL);log_warn("[sandswirl-runtime] missing intended sand dependency; no alias or static fallback");return false;}
  SObjectDef d{};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.level=MapPane.GetMapLevel();d.pos=Pos();
  const int index=MapPane.NewObject(&d);auto*child=MapPane.GetInstance(index);if(!child){runtime->parent.Start(false);SetFlag(OF_KILL);return false;}
  child->CreateAnimator();int direction=0;
@@ -97,8 +102,8 @@ bool Effect::InitializeRuntime(){
  S3DPoint vector;ConvertToVector(direction,100,vector);
  retail_seeking_particles::Params p;p.count=random(50,100);p.pos={0,0,70};
  p.pspread={50,50,50};p.dir={float(double(vector.x)/100),float(double(vector.y)/100),float(double(vector.z)/100)};p.spread={.5f,.5f,.5f};p.trails=1;p.maxstart=p.count/2;p.minlife=100;p.maxlife=150;p.killobj=1;p.objflags=15;p.seeking=1;p.seekz=runtime->seekz;p.target_count=1;p.targets[0]={0,0,100};p.turn=.5f;p.speed=5;
- if(!runtime->qualified || !AttachParticle(*child,p)){child->SetFlag(OF_KILL);runtime->parent.Start(false);SetFlag(OF_KILL);log_warn("[sandswirl-runtime] child particle ABI/resource not verified");return false;}
- runtime->child=child;runtime->parent.Start(true);log_info("[sandswirl-runtime] qualified=%d parent=%d child=%d particles=%d angle=%d seekz=%d map_rng_policy=monotonic_no_rng",int(runtime->qualified),GetMapIndex(),index,p.count,direction,p.seekz);return true;
+ if(!AttachParticle(*child,p,runtime->restored)){child->SetFlag(OF_KILL);runtime->parent.Start(false);SetFlag(OF_KILL);log_warn("[sandswirl-runtime] child particle ABI/resource not verified");return false;}
+ runtime->child=child;runtime->parent.Start(true);log_info("[sandswirl-runtime] restored_legacy_sand=%d",int(runtime->restored));log_info("[sandswirl-runtime] qualified=%d parent=%d child=%d particles=%d angle=%d seekz=%d map_rng_policy=monotonic_no_rng",int(runtime->qualified),GetMapIndex(),index,p.count,direction,p.seekz);return true;
 }
 void Effect::Pulse(){
  if(Flags()&OF_KILL)return;TEffect::Pulse();if(!runtime->attempted && !InitializeRuntime())return;
