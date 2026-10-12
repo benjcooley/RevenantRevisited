@@ -504,11 +504,10 @@ void TMapRenderer::DrawDebugTab()
 
             // ---- Time of day --------------------------------------------
             // Drives the day/night ambient blend in TArea::Pulse. The
-            // current minute, daylight scalar (0..255 sun curve), and
-            // coarse DayTimeFlag bucket are all derived from
-            // PlayScreen.gametime; SetGameTime jumps that clock forward
-            // or backward, after which the next TArea::Pulse picks up
-            // the new value and FadeAmbient interpolates accordingly.
+            // current minute, daylight (0..255) and DayTimeFlag bucket are
+            // all derived from PlayScreen.gametime; SetTimeOfDay moves that
+            // clock within the day, after which the next TArea::Pulse picks
+            // up the new value and FadeAmbient interpolates accordingly.
             ImGui::Separator();
             const int32_t day_minutes = 24 * 60;
             int32_t tod_min = PlayScreen.TimeOfDay() % day_minutes;
@@ -528,14 +527,9 @@ void TMapRenderer::DrawDebugTab()
             int set_min = tod_min;
             if (ImGui::SliderInt("time-of-day (minutes)", &set_min,
                                  0, day_minutes - 1, "%d min"))
-            {
-                // gametime is centi-seconds; 1 minute = 6000.
-                PlayScreen.SetGameTime(set_min * 6000);
-            }
+                PlayScreen.SetTimeOfDay(set_min);
 
-            auto set_minute = [](int32_t m) {
-                PlayScreen.SetGameTime(m * 6000);
-            };
+            auto set_minute = [](int32_t m) { PlayScreen.SetTimeOfDay(m); };
             if (ImGui::Button("Midnight (00:00)")) set_minute(0);
             ImGui::SameLine();
             if (ImGui::Button("Sunrise (06:00)")) set_minute(6 * 60);

@@ -549,7 +549,9 @@ void TArea::Enter()
     if (Player)
         TextBar.Print("%s entered %s", Player->GetName(), name);
 
-    log_info("[area] entered '%s' (level=%d, audioenv=%d%s%s%s)", name, this->level,
+    const SColor& ambcolor_now = MapPane.GetAmbientColor();
+    log_info("[area] entered '%s' (level=%d, ambient=%d (%d,%d,%d), audioenv=%d%s%s%s)", name, this->level,
+             MapPane.GetAmbientLight(), ambcolor_now.red, ambcolor_now.green, ambcolor_now.blue,
              audioenv,
              ambsound[0] ? ", ambsound=" : "", ambsound[0] ? ambsound : "",
              bgeffect[0] ? ", bgeffect set" : "");
