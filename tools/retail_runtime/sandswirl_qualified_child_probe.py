@@ -289,7 +289,7 @@ def run(executable, boot, output, substitute=False, spell_control=False, move_ta
                      rgb565_sha256=hashlib.sha256(raw).hexdigest(),
                      nonzero_pixels=sum(x[0]!=0 for x in struct.iter_unpack('<H',raw)))
             row.update(spell_timer=v.u32(spell+0x110) if spell else None,actors=[f.dump(a) for a in actors],quicksands=[dict(pointer=hex(q),flags=v.u32(q+8),spell=v.u32(q+0xd8),frame=v.u32(v.u32(q+0x58)+0xfc)) for q in quicksands])
-            if tick in SAMPLES or spell_control and tick in (75,76,90,120,150,200,299,300,310):
+            if tick in SAMPLES or spell_control and tick in (75,76,90,120,150,200,299,300,310) or move_target and tick in (59,60,61,84,85,86,95,110):
                 name=f'diagnostic-{tick:03}.png'
                 save_rgb565_png(output/name,raw,1280,960)
                 row.update(image=name,image_sha256=sha(output/name),draws=list(draws))

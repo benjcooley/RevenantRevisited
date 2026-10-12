@@ -19,6 +19,7 @@ struct MapFixture {
  std::unique_ptr<TSpell> spell;
  double accumulator=0;int ticks=0;int64_t rendered=-1;
  bool trace=std::getenv("REV_SANDSWIRL_MAP_TRACE")!=nullptr;
+ bool move_target=false;
  ~MapFixture(){
   if(auto*o=owner.Get())o->SetSpell(nullptr);
   if(auto*c=caster.Get())if(auto*t=target.Get()){
@@ -37,6 +38,7 @@ static TObjectInstance* NewMapObject(int cls,int type,const S3DPoint&p){
 static void Hex(const void*p,size_t n,char*out){const char*d="0123456789abcdef";const auto*b=static_cast<const uint8_t*>(p);for(size_t i=0;i<n;++i){out[2*i]=d[b[i]>>4];out[2*i+1]=d[b[i]&15];}out[2*n]=0;}
 static MapFixture* Spawn(const S3DPoint& origin,bool restored){
  if(!Renderer || !SpellList.Initialize())return nullptr;auto s=std::make_unique<MapFixture>();s->previous=MapManager.CurrentMap();
+ s->move_target=restored && std::getenv("REV_SANDSWIRL_MOVE_TARGET")!=nullptr;
  const int sx=origin.x>>SECTORWSHIFT,sy=origin.y>>SECTORHSHIFT;
  if(!MapManager.CreateTransient(MapFixture::level,sx-2,sy-2,sx+2,sy+2))return nullptr;s->map_created=true;
  if(!MapPane.BindCommandMapWindow(MapFixture::level,origin))return nullptr;s->window=true;
@@ -67,6 +69,7 @@ static MapFixture* Spawn(const S3DPoint& origin,bool restored){
  if(!s->owner->InitializeRuntime())return nullptr;
  log_info("[sandswirl-map-fixture] diagnostic_only=1 child=%s seekz=41 named_spell=Quicksand exact_sandswirl_variant=0 actors=%d,%d parent=%d seed=%u rng=%llu map_alloc_rng=none",restored?"RestoredLegacySand":"Sparks",s->caster->GetMapIndex(),s->target->GetMapIndex(),s->owner->GetMapIndex(),snap.seed,static_cast<unsigned long long>(RandomDraws()));
  log_info("[native-domain] enabled=%d camera_z=0 Sandswirl actual map child=%s",int(StartupVfxNativeDomain),restored?"RestoredLegacySand":"Sparks");
+ if(s->move_target)log_info("[sandswirl-target-control] public_SetPos=1 moves=60,85 query_sample=75 caller_control_only=1");
  return s.release();
 }
 MapFixture* SpawnMapFixture(const S3DPoint&o){return Spawn(o,false);}
@@ -74,12 +77,18 @@ MapFixture* SpawnRestoredSandMapFixture(const S3DPoint&o){return Spawn(o,true);}
 void AdvanceMapFixture(MapFixture*s,double dt){
  if(!s || !std::isfinite(dt) || dt<=0)return;s->accumulator+=dt;
  while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;++s->ticks;auto*owner=s->owner.Get();if(!owner)return;
+  if(s->move_target && (s->ticks==60 || s->ticks==85))if(auto*target=s->target.Get()){
+   const auto&p=owner->Pos();const S3DPoint destination=s->ticks==60?S3DPoint{p.x+80,p.y+48,p.z}:S3DPoint{p.x+64,p.y+80,p.z};
+   const auto before=RandomDraws();const int result=target->SetPos(destination,-1,false);const auto&actual=target->Pos();
+   log_info("[sandswirl-target-move] tick=%d position=%d,%d,%d result=%d rng_before=%llu rng_after=%llu",s->ticks,actual.x,actual.y,actual.z,result,static_cast<unsigned long long>(before),static_cast<unsigned long long>(RandomDraws()));
+  }
   // Same declared snapshot ordering as the original diagnostic: children born
   // this tick first Pulse next tick. Each call is the actual object's virtual.
   std::vector<TSafeRef<TObjectInstance>> objects;objects.emplace_back(owner);if(auto*c=owner->ParticleChild())objects.emplace_back(c);
   for(int id:owner->SpawnedQuicksand())if(auto*q=MapPane.GetInstance(id))objects.emplace_back(q);
   for(auto&ref:objects)if(auto*o=ref.Get())if(!(o->Flags()&OF_KILL)){o->NextFrame();o->Pulse();}
   const auto*p=owner->ParticleState();
+  if(s->move_target && p){char hex[25];Hex(&p->params.targets[0],12,hex);log_info("[sandswirl-target-sample] tick=%d count=%d target=%s",s->ticks,p->params.target_count,hex);}
   log_info("[sandswirl-map-phase] tick=%d parent=%d parent_kill=%d child_kill=%d query=%zu quicksands=%zu rng=%llu spell_timer=%d",s->ticks,owner->ParentFrame(),int(bool(owner->Flags()&OF_KILL)),p?int(p->killed):-1,owner->QueriedObjects().size(),owner->SpawnedQuicksand().size(),static_cast<unsigned long long>(RandomDraws()),s->spell->TimerValue());
   for(int id:owner->SpawnedQuicksand())if(auto*q=MapPane.GetInstance(id))log_info("[sandswirl-map-quicksand] tick=%d id=%d frame=%d kill=%d",s->ticks,id,q->GetFrame(),int(bool(q->Flags()&OF_KILL)));
   if(s->trace && p)for(size_t i=0;i<p->pool.size();++i){char hex[81];Hex(&p->pool[i],40,hex);log_info("[sandswirl-map-pool] tick=%d slot=%zu data=%s",s->ticks,i,hex);}

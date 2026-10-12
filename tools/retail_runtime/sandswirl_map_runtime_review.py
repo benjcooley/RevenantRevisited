@@ -54,8 +54,26 @@ def run(native_path,metal_path,output):
   assert (frame,kill)==(q[0]['frame']%3,int(bool(q[0]['flags']&4096))),tick
  cleanup=re.search(r'\[sandswirl-map-cleanup\] tick=(\d+) health=(\d+)/(\d+) flags=([0-9a-f]+)/([0-9a-f]+) spell_timer=(\d+)',log)
  assert cleanup and tuple(map(int,cleanup.group(2,3,6)))==(102,102,0)
+ assert [int(value,16) for value in cleanup.group(4,5)]==[int(actor['flags'],0)for actor in n['actors_after']]
  actors=re.search(r'\[sandswirl-map-actors\] source=(\d+),(\d+),(\d+) target=(\d+),(\d+),(\d+)',log);assert actors
  assert list(map(int,actors.groups()))==[coordinate for actor in n['actors_after'] for coordinate in actor['position']]
+ movement=None
+ if n.get('actor_moves'):
+  moves=re.findall(r'\[sandswirl-target-move\] tick=(\d+) position=(\d+),(\d+),(\d+) result=(-?\d+) rng_before=(\d+) rng_after=(\d+)',log)
+  assert len(moves)==len(n['actor_moves'])==2
+  move_results=[]
+  for values,original in zip(moves,n['actor_moves']):
+   tick,x,y,z,result,before,after=map(int,values)
+   assert tick==original['tick'] and [x,y,z]==original['position'] and before==after
+   move_results.append(dict(tick=tick,position=[x,y,z],native_return=original['result'],source_return=result,rng_unchanged=True))
+  samples=re.findall(r'\[sandswirl-target-sample\] tick=(\d+) count=(\d+) target=([0-9a-f]+)',log);assert len(samples)==310
+  for tick,count,target in samples:
+   parameters=bytes.fromhex(rows[int(tick)]['state']['parameters_hex'])
+   assert int(count)==struct.unpack_from('<i',parameters,96)[0] and bytes.fromhex(target)==parameters[100:112],tick
+  sampled=n['records'][74]['actors'][1]['position'];origin=n['source'];relative=struct.pack('<3f',sampled[0]-origin[0],sampled[1]-origin[1],sampled[2]-origin[2]-32)
+  assert all(bytes.fromhex(row['state']['parameters_hex'])[100:112]==relative for row in n['records'][74:])
+  assert n['records'][84]['actors'][1]['position']!=sampled
+  movement=dict(public_setpos=move_results,cached_target_rows_exact=310,query_samples_tick=75,post85_move_does_not_retarget=True)
  pairs=[];boxes=[]
  for row in n['records']:
   if 'image' not in row:continue
@@ -78,6 +96,7 @@ def run(native_path,metal_path,output):
   report['source_sha256']['src/effects/sandswirlresource.h']=sha(ROOT/'src/effects/sandswirlresource.h')
   report['source_term_quantize']='[sandswirl-sand-raster] original_scene=2 argb4444=1 source_term_quantize=1' in log
   report['limits']=report['limits'].replace('Missing intended sand is not aliased. Explicit Sparks and named Quicksand spell control;', 'Explicit restored legacy Sand/fecaface binding to its own shipped Sandswirl resource; modified-retail configuration, not shipped-enabled. Named Quicksand spell control;').replace('intended sand appearance.', 'unmodified shipped appearance.')
+ if movement:report['moving_target_control']=movement
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({k:v for k,v in report.items() if k!='images'},indent=2));return report
 if __name__=='__main__':
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--native',type=Path,required=True);p.add_argument('--metal',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.native,a.metal,a.output)
