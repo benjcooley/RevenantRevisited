@@ -443,9 +443,13 @@ with `RealTimeLight` on; S1 showed otherwise (F18).
 
 ## 5. Revisited (mode 1)
 
-Mode 1, "modern", is unchanged: sun plus AO plus normals plus the world-space
-`pow` falloff, with the eyeballed ambient divisor. It is a Revisited art path,
-not a fidelity claim. Two corrections apply to it:
+Mode 1, "modern", is a Revisited art path, not a fidelity claim. Since
+2026-10-11 it starts from retail's own light levels (the tile ambient and
+light gains of §2.4, retail's reach and falloff, retail's 3D lighting for
+3D objects) and adds form (N.L, AO, a sun by day, a shared tone curve); its
+model and the settings fitted against retail at every AREA.DEF location are
+in [lighting/LIGHTING_AB.md](lighting/LIGHTING_AB.md) §6.4. Two earlier
+corrections still apply:
 
 - **Sun only where retail has a day/night cycle.** The sun is enabled only in
   areas with `AREA_DONIGHT` (the area defines `NIGHTAMBLIGHT`). The Keep has
