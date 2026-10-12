@@ -21,7 +21,8 @@ from unicorn import UC_HOOK_CODE
 from unicorn.x86_const import UC_X86_REG_ESP
 
 class ManaDrainTargetScene:
- def __init__(self,exe,boot,width=1280,height=960):
+ def __init__(self,exe,boot,width=1280,height=960,*,spell_name="Mana Drain"):
+  if spell_name not in ("Mana Drain","Essence Drain"):raise ValueError("Only audited shipped drain variants")
   self.actors=AuthenticCharacters(exe,boot);self.world=self.actors.world;self.vm=v=self.world.vm;call=self.world.call
   self.actors.select_screen_prefix()
   self.invoker=self.actors.new_character('Acolyte',SOURCE);self.target=self.actors.new_character('Acolyte',TARGET)
@@ -33,12 +34,14 @@ class ManaDrainTargetScene:
    sd=v.u32(v.u32(0x667c4c)+4*i)
    for j in range(v.u32(sd)):
     variant=v.u32(v.u32(sd+0x10)+4*j)
-    if v.string(variant+4)=='Mana Drain':matches.append((sd,variant))
+    if v.string(variant+4)==spell_name:matches.append((sd,variant))
   assert len(matches)==1
   targets=v.allocate(4);v.put_u32(targets,self.target);source=v.allocate(12);v.write(source,struct.pack('<3i',0,0,0))
   spell=call(0x542200,(self.invoker,targets,1,source,*matches[0],0),this=0x670630)
   self.spell_variant=dict(name=v.string(matches[0][1]+4),maximum_damage=v.u32(matches[0][1]+0x58))
-  assert self.spell_variant==dict(name='Mana Drain',maximum_damage=62)
+  assert self.spell_variant==dict(name=spell_name,maximum_damage=62 if spell_name=='Mana Drain' else 115)
+  assert v.string(matches[0][1]+0x2a)=='ManaDrain'
+  assert v.u32(matches[0][1]+0x54)==(60 if spell_name=='Mana Drain' else 110)
   self.owner=self.actors.new_object('ManaDrain',SOURCE,25,0x5adf18)
   call(0x4de7d0,(spell,),this=self.owner);v.put_u32(spell+8,self.owner);call(0x41c840,(self.owner,),this=spell+0x13c);self.spell=spell
   assert call(0x46e8b0,this=self.owner,instruction_limit=100000000)==1

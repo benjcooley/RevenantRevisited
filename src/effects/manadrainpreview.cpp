@@ -26,10 +26,11 @@ struct State {
  int64_t rendered=-1;
  ~State(){if(caster && target && spell){const auto& p=target->Pos();log_info("[manadrain-cleanup] tick=%d alive=%d mana=%d/%d health=%d/%d target=(%d,%d,%d) flags=%x/%x spell_timer=%d",tick,int(core.alive),caster->Mana(),target->Mana(),caster->Health(),target->Health(),p.x,p.y,p.z,caster->Flags(),target->Flags(),spell->TimerValue());}if(auto* effect=dynamic_cast<TEffect*>(owner.get()))effect->SetSpell(nullptr);if(Renderer)for(auto mesh:meshes)if(mesh)Renderer->ReleaseMeshAssetRef(mesh);}
 };
-static State* Spawn(const S3DPoint& origin,bool isolated_seed){
+static State* Spawn(const S3DPoint& origin,bool isolated_seed,bool essence=false){
  if(!Renderer || !SpellList.Initialize())return nullptr;
- auto* data=SpellList.GetSpellDataByName("Mana Drain");auto* variant=SpellList.GetVariantDataByName("Mana Drain");
- if(!data || !variant || std::strcmp(variant->name,"Mana Drain") || variant->mindamage!=60 || variant->maxdamage!=62)return nullptr;
+ const char* name=essence?"Essence Drain":"Mana Drain";
+ auto* data=SpellList.GetSpellDataByName(name);auto* variant=SpellList.GetVariantDataByName(name);
+ if(!data || !variant || std::strcmp(variant->name,name) || std::strcmp(variant->effect,"ManaDrain") || variant->mindamage!=(essence?110:60) || variant->maxdamage!=(essence?115:62))return nullptr;
  auto s=std::make_unique<State>();s->display=origin;s->minimum=variant->mindamage;s->maximum=variant->maxdamage;
  auto* effects=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=effects?effects->FindObjType(0xad92bc13u):-1;if(type<0)return nullptr;
  SObjectDef def={};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos={3185,3185,16};s->owner.reset(effects->NewObject(&def));if(!s->owner || s->owner->ObjId()!=0xad92bc13u)return nullptr;
@@ -47,10 +48,12 @@ static State* Spawn(const S3DPoint& origin,bool isolated_seed){
  const auto& snap=FrameSnap::GetConfig();if(isolated_seed && snap.seed_set)SeedRandom(snap.seed);s->initial_draws=RandomDraws();
  log_info("[manadrain-rng] seeded=%d seed=%u",int(isolated_seed && snap.seed_set),snap.seed);
  log_info("[native-domain] enabled=%d camera_z=0 owner=absolute_matrix ManaDrain authentic actors",int(StartupVfxNativeDomain));
- log_info("[manadrain] exact_id=ad92bc13 source=(3185,3185,16) target=(3281,3185,16) variant=Mana_Drain min=%d max=%d mana=%d/%d",s->minimum,s->maximum,s->caster->Mana(),s->target->Mana());return s.release();
+ log_info("[manadrain] exact_id=ad92bc13 source=(3185,3185,16) target=(3281,3185,16) variant=%s min=%d max=%d mana=%d/%d",essence?"Essence_Drain":"Mana_Drain",s->minimum,s->maximum,s->caster->Mana(),s->target->Mana());return s.release();
 }
 State* SpawnTargetFixture(const S3DPoint& origin){return Spawn(origin,true);}
 State* SpawnConfiguredTarget(const S3DPoint& origin){return Spawn(origin,false);}
+State* SpawnEssenceDrainTargetFixture(const S3DPoint& origin){return Spawn(origin,true,true);}
+State* SpawnEssenceDrainConfiguredTarget(const S3DPoint& origin){return Spawn(origin,false,true);}
 bool Alive(State* s){return s && s->core.alive && !(s->owner->GetFlags()&OF_KILL);}
 void Advance(State* s,double dt){
  if(!s || !std::isfinite(dt) || dt<=0)return;s->accumulator+=dt;

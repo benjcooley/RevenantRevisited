@@ -7243,6 +7243,19 @@ struct SVfxTestBootstrap {
             VfxTest::DeferredRegister(e);
         }
         {
+            VfxTest::SEffect e={};e.id="EssenceDrain_SPELL_AUTHENTIC_TARGET";e.family="ambient";e.pipeline="IM";
+            e.preview_style=VfxTest::EVfxPreviewStyle::Static;
+            e.factory=[](const S3DPoint& o)->void*{return manadrain_preview::SpawnEssenceDrainTargetFixture(o);};
+            e.submit=[](void* c,EFxDebugMode){manadrain_preview::Advance(static_cast<manadrain_preview::State*>(c),TTime::DeltaTime());};
+            e.submit_world=[](void* c,EFxDebugMode){manadrain_preview::SubmitWorld(static_cast<manadrain_preview::State*>(c));};
+            e.is_alive=[](void* c){return manadrain_preview::Alive(static_cast<manadrain_preview::State*>(c));};
+            e.destroy=[](void* c){manadrain_preview::Destroy(static_cast<manadrain_preview::State*>(c));};
+            VfxTest::DeferredRegister(e);
+            e.id="EssenceDrain_SPELL_CONFIGURED_TARGET";
+            e.factory=[](const S3DPoint& o)->void*{return manadrain_preview::SpawnEssenceDrainConfiguredTarget(o);};
+            VfxTest::DeferredRegister(e);
+        }
+        {
             VfxTest::SEffect e={};e.id="TYManaDrain_AUTHENTIC_TARGET_FIXTURE";e.family="ambient";e.pipeline="IM";
             e.preview_style=VfxTest::EVfxPreviewStyle::Static;
             e.factory=[](const S3DPoint& o)->void*{return ymanadrain_preview::SpawnTargetFixture(o);};
