@@ -22,6 +22,8 @@
 /recon/
 # Per-session VFX agent logs.
 /.vfx_logs/
+# Dear ImGui's sample apps: not part of the build.
+/thirdparty/imgui/examples/
 
 # Editor / OS
 .DS_Store

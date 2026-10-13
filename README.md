@@ -1,5 +1,13 @@
 # RevenantRevisited
 
+RevenantRevisited is a retail-faithful version of *Revenant*, the 1999 Windows PC game released by Eidos Games. This repository contains the game's engine source code and links to executable builds of the engine only; it does not include the complete game.
+
+You must purchase and install the original game for the engine to function. *Revenant* is available from [GOG](https://www.gog.com/en/game/revenant).
+
+The original source code comes from my own archives. I was the original lead engineer and creator of *Revenant* and a co-founder of Cinematix Studios.
+
+> **Alpha software.** Builds are made automatically from work in progress. Testers are welcome: please file bug reports, with screenshots, in [GitHub issues](https://github.com/benjcooley/RevenantRevisited/issues). Latest builds: [macOS](https://downloads.revenantrevisited.com/osx/latest/RevenantRevisited-osx.zip) · [Windows](https://downloads.revenantrevisited.com/windows/latest/RevenantRevisited-windows.zip) · [Linux](https://downloads.revenantrevisited.com/linux/latest/RevenantRevisited-linux.zip).
+
 `RevenantRevisited` is an in-progress modernization of the original 1998 **Revenant** codebase for contemporary machines. The project keeps the original game data and gameplay intent, while replacing old platform dependencies with a modern build and rendering stack.
 
 The current port already runs the game data, loads archived map sectors from the shipped module files, and includes an actively developed modern sector renderer with deferred lighting, shadows, ambient occlusion, and debug tooling.
