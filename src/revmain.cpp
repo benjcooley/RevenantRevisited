@@ -2821,7 +2821,7 @@ static bool BootGame()
         options.menuButton     = TLogoScreen::ButtonFromName(StartupMenuButton);
         if (StartupMenuButton[0] && options.menuButton < 0)
             log_warn("[boot] --menu=%s: unknown title button "
-                     "(newgame|loadgame|multi|options|exit)", StartupMenuButton);
+                     "(newgame|loadgame|options|exit)", StartupMenuButton);
         if (StartupSectorId[0] &&
             std::sscanf(StartupSectorId, "%d_%d_%d", &options.devLevel,
                         &options.devSectorX, &options.devSectorY) != 3)

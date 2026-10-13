@@ -19,6 +19,11 @@
 #define HEIGHT 480
 #define BPP    16
 
+// Multiplayer: retail's network game is not ported (cooperative
+// multiplayer may come later). While 0 the main menu's Multiplayer word,
+// painted into its backdrop, is not a button.
+#define MULTIPLAYER 0
+
 // math defines
 #define M_PI (3.141592654)
 #define M_2PI (M_PI + M_PI)

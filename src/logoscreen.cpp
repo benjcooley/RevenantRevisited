@@ -22,12 +22,22 @@ TLogoScreen LogoScreen;
 namespace {
 
 // Retail button order and sprite base names (Initialize @ 0x0053a2c0); each
-// button loads <base>U / <base>D / <base>S from menus.dat.
+// button loads <base>U / <base>D / <base>S from menus.dat. The backdrop has
+// all five words painted in, so without MULTIPLAYER the word stays on the
+// screen; it just isn't a button.
 const char* const kButtonSprites[TLogoScreen::BTN_COUNT] = {
-    "MenuNewGame", "MenuLoadGame", "MenuMulti", "MenuOptions", "MenuExit",
+    "MenuNewGame", "MenuLoadGame",
+#if MULTIPLAYER
+    "MenuMulti",
+#endif
+    "MenuOptions", "MenuExit",
 };
 const char* const kButtonNames[TLogoScreen::BTN_COUNT] = {
-    "newgame", "loadgame", "multi", "options", "exit",
+    "newgame", "loadgame",
+#if MULTIPLAYER
+    "multi",
+#endif
+    "options", "exit",
 };
 
 // Version text. Retail (Animate @ 0x0053a6d0) draws "Revenant   v%d.%02d"
@@ -146,8 +156,10 @@ void TLogoScreen::Activate(int32_t button)
     case BTN_OPTIONS:
         GameFlow.ShowOptionsScreen();
         break;
+#if MULTIPLAYER
     case BTN_MULTI:
         log_warn("[logoscreen] multiplayer is not supported");
         break;
+#endif
     }
 }
