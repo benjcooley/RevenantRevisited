@@ -6,7 +6,7 @@
 //
 // Retail's automap pane (TAutoMap, d:\revenant\AutoMap.cpp). The 1998
 // snapshot's pane -- a CPU merge of before/after map bitmaps -- is in
-// attic/src/automap.cpp; retail replaced it with this one.
+// attic-final:attic/src/automap.cpp; retail replaced it with this one.
 //
 // Retail drew the pane through T3DScene's overlay quads on a D3D7 device,
 // which puts pixel centres on integer coordinates; the GPU puts them half a

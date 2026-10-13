@@ -489,7 +489,7 @@ void ExitGame()
 // calls in the 1999 source. Now backed by simpleini (CSimpleIniA) with the
 // same public signatures so call sites in ctrlmap.cpp, editor.cpp, and the
 // main settings loader don't need touching. The original Win32 bodies live
-// in attic/src/revutils_win32_ini.cpp.
+// in attic-final:attic/src/revutils_win32_ini.cpp.
 //
 // Behaviour preserved from the original: every INIGet* re-writes the value
 // (default or parsed) back to the file via its matching INISet*. That's how

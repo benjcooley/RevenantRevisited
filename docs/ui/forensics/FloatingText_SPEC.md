@@ -107,7 +107,7 @@
 - **Errors to close (port stubs):** both `AddPostCharAnim` and `AddPostCharText`
   are `TODO(port)` no-ops at `src/playscreen.cpp:1217-1229`. No `attic` copy
   is wired to the new render path; the prior shim at
-  `attic/src/playscreen.cpp:519-550` (the pre-rewrite port) shows the snapshot
+  `attic-final:attic/src/playscreen.cpp:519-550` (the pre-rewrite port) shows the snapshot
   loop literally translated and is a useful pseudocode oracle.
 
 ---

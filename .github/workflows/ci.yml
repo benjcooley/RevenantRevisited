@@ -69,8 +69,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      # Only the engine's own assets ship; the rest of LFS is the retail
-      # install, which neither the build nor the tests read.
+      # Only the engine's own assets (fonts, editor icons) ship; nothing else
+      # in LFS is read by the build or the tests. They come from a cache
+      # keyed on their object ids, so a run downloads from LFS (a metered
+      # quota) only when the assets change.
+      - name: List engine assets in LFS
+        run: git lfs ls-files --long --include="assets/**" > .lfs-assets.txt
+
+      - name: Restore engine assets
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: .git/lfs/objects
+          key: lfs-assets-${{ hashFiles('.lfs-assets.txt') }}
+
       - name: Fetch engine assets (Git LFS)
         run: git lfs pull --include="assets/**"
 

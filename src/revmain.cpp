@@ -656,7 +656,7 @@ void ExitGame()
 // The INI accessor family (INISetPath/INIGetInt/INIGetBool/...) lives in
 // revutils.cpp now — the revutils port rebuilt them on top of CSimpleIniA.
 // The Win32 GetPrivateProfile* bodies that used to live here have been
-// retired to attic/src/revutils_win32_ini.cpp. Leaving the banner as a
+// retired to attic-final:attic/src/revutils_win32_ini.cpp. Leaving the banner as a
 // landmark for anyone grepping.
 #if 0  // ATTIC: retired duplicate — see revutils.cpp for the live impl
 
@@ -1283,7 +1283,7 @@ uint32_t TotalPage() { return 0; }
 
 // TODO(port): MMX paths are not shipped and scheduled for deletion; see
 // feedback_mmx_unused. The original CPUID-based HasMMX() is in
-// attic/src/revmain_win32_entry.cpp. Hard-coded false for now.
+// attic-final:attic/src/revmain_win32_entry.cpp. Hard-coded false for now.
 bool HasMMX()
 {
     return false;
@@ -2073,7 +2073,7 @@ void DriverSetupCallback()
 
 // TODO(port): multi-monitor selection. sokol_app puts the window on the
 // user's active display; the MONITOR=n command-line selector from the
-// Win32 build is not wired up yet. Originals in attic/src/revmain_win32_entry.cpp.
+// Win32 build is not wired up yet. Originals in attic-final:attic/src/revmain_win32_entry.cpp.
 bool InitMonitor()
 {
     MonitorX = 0;
@@ -2557,7 +2557,7 @@ void ShutdownGlobals()
 //   5. AppCleanup()  -> ShutdownGlobals() and teardown.
 //
 // The pre-port WinMain / MessageLoop / RegisterClass scaffolding lives
-// in attic/src/revmain_win32_entry.cpp and attic/src/mainwnd_win32.cpp.
+// in attic-final:attic/src/revmain_win32_entry.cpp and attic-final:attic/src/mainwnd_win32.cpp.
 
 #include <sokol_glue.h>
 #include "sokol_imgui.h"
@@ -3274,7 +3274,7 @@ static void AppEvent(const sapp_event* ev)
 }
 
 // Retired original WinMain body. Replaced by sokol_main + AppInit above.
-// Kept here in #if 0 briefly so the diff to attic/src/revmain_win32_entry.cpp
+// Kept here in #if 0 briefly so the diff to attic-final:attic/src/revmain_win32_entry.cpp
 // is easy to eyeball; delete once the sokol path is verified at runtime.
 #if 0
 static void UnusedWinMainAnchor_()

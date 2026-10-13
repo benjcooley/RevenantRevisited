@@ -20,8 +20,8 @@ Two distinctive strings appear in the recon decomp of `cls_0x5a4358` (file `reco
 
 | Recon symbol | Resolved literal | Source location |
 |---|---|---|
-| `s_Could_not_create_kill_event_for_c_005ceefc` | `"Could not create kill event for command processor!"` | `attic/src/editor.cpp:546` (`TConsolePane::Initialize`) |
-| `s_Could_not_create_character_event_005cef30` | `"Could not create character event for command processor!"` | `attic/src/editor.cpp:550` (`TConsolePane::Initialize`) |
+| `s_Could_not_create_kill_event_for_c_005ceefc` | `"Could not create kill event for command processor!"` | `attic-final:attic/src/editor.cpp:546` (`TConsolePane::Initialize`) |
+| `s_Could_not_create_character_event_005cef30` | `"Could not create character event for command processor!"` | `attic-final:attic/src/editor.cpp:550` (`TConsolePane::Initialize`) |
 
 These two error strings are emitted **only** by `TConsolePane::Initialize` in the pre-release source (verified via grep across the codebase — they appear nowhere else). The retail function emitting these strings is unambiguously `TConsolePane::Initialize`.
 
@@ -35,7 +35,7 @@ The same `virt_meth_0x43e370` (TConsolePane::Initialize) does, in order:
 2. Calls `CreateEventA` twice
 3. Calls `FUN_0058bd47` (Win32 `_beginthreadex`), with thread entry `LAB_0043f5a0` and `(int)this` as argument, then `SetThreadPriority(hThread, 1)`
 
-This is line-for-line `TConsolePane::Initialize` from `attic/src/editor.cpp:531–563` — kill event, character event, then begin the command-processor thread with `_beginthreadex`. `mbr_0xc8` stores the thread handle (matching pre-release `cmdthreadhandle`).
+This is line-for-line `TConsolePane::Initialize` from `attic-final:attic/src/editor.cpp:531–563` — kill event, character event, then begin the command-processor thread with `_beginthreadex`. `mbr_0xc8` stores the thread handle (matching pre-release `cmdthreadhandle`).
 
 No other pre-release class spins up a thread inside its `Initialize`. This is a structural fingerprint.
 
@@ -183,7 +183,7 @@ The editor `TConsolePane` body sitting in `cls_0x5a4358_likely_TTextBar.cpp` is 
 - Read pre-release `src/textbar.{h,cpp}`. Pre-release TTextBar is small (3 KB), single-line, single-color, with `SetHealthDisplay` opponent-name overlay.
 - Read `recon/classes_converted/cls_0x5a4358_likely_TTextBar.cpp` (510 lines, 12 KB) and `cls_0x5a4358.cpp` (the non-_likely_ variant — same content, different decomp pass).
 - Extracted distinctive strings → `Could not create kill event for command processor!` + `Could not create character event for command processor!`.
-- Grepped pre-release src for those strings → match only in `attic/src/editor.cpp:546,550` (`TConsolePane::Initialize`). **Decisive: cls_0x5a4358 is TConsolePane, not TTextBar.**
+- Grepped pre-release src for those strings → match only in `attic-final:attic/src/editor.cpp:546,550` (`TConsolePane::Initialize`). **Decisive: cls_0x5a4358 is TConsolePane, not TTextBar.**
 - Dumped vtable of `0x5a4358` (32 slots). Slot 0 = `0x43e370` = TConsolePane::Initialize. Confirms TPane-subclass hierarchy.
 - Confirmed inheritance: `cls_0x5a42d4` shares method `0x43da00` with cls_0x5a4358's base call → cls_0x5a42d4 = TTextPane. Constructor field layout (`text` ptr at +0x60, cursorx at +0x74, etc.) consistent.
 - Extracted parent Initialize at `0x43da00` → `recon/discovered/cls_0x5a4358_TConsolePane_parent_TTextPane_Initialize_43da00.cpp`. Two 10,000-byte buffers initialized to `'{' + null` (color-escape markers). Confirms TTextPane.

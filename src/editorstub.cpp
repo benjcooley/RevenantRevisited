@@ -36,7 +36,7 @@ PTTerrainTemplate     TerrainTemplates = nullptr;
 // `extern char buf[1024];`s it.
 char                  buf[1024]    = {};
 
-// Legacy editor command stubs. The retail bodies lived in attic/src/
+// Legacy editor command stubs. The retail bodies lived in attic-final:attic/src/
 // editor.cpp; they're referenced by name from command.cpp's command table
 // so we keep the symbols (no-ops). Will be retired or re-implemented as
 // the ImGui editor lands.

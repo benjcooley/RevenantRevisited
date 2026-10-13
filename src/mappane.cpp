@@ -4004,7 +4004,7 @@ void TMapPane::AnimateObjects(bool draw)
 // The window borrows sectors from TMapManager's current map (see mappane.h).
 // Loading, saving and freeing sectors is the manager's job: retail's
 // FreeAllSectors / ReloadSectors / SaveAllSectors / DeleteSector and the
-// streaming UpdateSectors are in attic/src/mappane_sectors.cpp with the
+// streaming UpdateSectors are in attic-final:attic/src/mappane_sectors.cpp with the
 // TMapManager operations that replace them.
 
 // REVSYNC: UpdateSectors @ 0x00459220 -- the window is the sectors around

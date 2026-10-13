@@ -68,7 +68,7 @@
 #include "uitextbartest.h"
 #include "vfxtest.h"
 #include "vfxreview.h"
-// uihudmockuptest + uistatusbartest moved to attic/: the rects/labels they
+// uihudmockuptest + uistatusbartest were retired (attic-final:attic/src/): the rects/labels they
 // encoded were derived from the pre-release src/ defines (HEALTHBARX etc)
 // and the AI-generated docs/HUD.md, neither of which match the shipped
 // retail HUD layout. See docs/ui/BURNDOWN.md "Phase B retraction" note.

@@ -4,7 +4,7 @@
 // *                editor.h - ImGui-based in-game editor                  *
 // *************************************************************************
 //
-// Replaces the retail TPane-based editor (now in attic/src/editor.{h,cpp})
+// Replaces the retail TPane-based editor (now in attic-final:attic/src/editor.{h,cpp})
 // with an ImGui-driven UI. F12 toggles the editor on/off.
 //
 // Layout: a docked-panel system separated by drag-able splitters.

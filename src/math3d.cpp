@@ -3,7 +3,7 @@
 // *                math3d.cpp - 4x4 matrix and 3D vector helpers          *
 // *************************************************************************
 //
-// Ported from the retired D3DMATRIX/D3DVECTOR helpers in attic/src/d3dmath.*.
+// Ported from the retired D3DMATRIX/D3DVECTOR helpers in attic-final:attic/src/d3dmath.*.
 // Matrix memory layout is preserved so downstream consumers (renderer,
 // animation data, etc.) see the same bytes they did under the original
 // DirectX 5 code path.

@@ -9,7 +9,8 @@
 // *  Immediate Mode command streams per-animator) no longer have a        *
 // *  backend equivalent -- pipelines + dynamic vertex buffers replace     *
 // *  it. Callers that were holding PTExecuteBuf now just re-record each   *
-// *  frame. The legacy code lives in attic/src/3dscene_d3d3.cpp.          *
+// *  frame. The legacy code is in git:                                    *
+// *  attic-final:attic/src/3dscene_d3d3.cpp.                              *
 // *************************************************************************
 
 #pragma once

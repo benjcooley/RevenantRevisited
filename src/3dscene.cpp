@@ -3,11 +3,12 @@
 // *                    Copyright (C) 1998 Cinematix                       *
 // *                   3dscene.cpp - 3D Scene module                       *
 // *                                                                       *
-// *  Ported (Phase 2): D3D3 execute-buffer recording path, viewport,      *
-// *  D3D light objects, and matrix-list cache have been removed. The      *
-// *  full legacy code lives in attic/src/3dscene_d3d3.cpp. The methods    *
-// *  declared in 3dscene.h are now bool stubs that return success -- the  *
-// *  renderer backend will replace the inner bodies in Phase 3.           *
+// *  Ported (Phase 2): D3D3 execute-buffer recording path, viewport, D3D  *
+// *  light objects, and matrix-list cache have been removed. The full     *
+// *  legacy code is in git: attic-final:attic/src/3dscene_d3d3.cpp. The   *
+// *  methods declared in 3dscene.h are now bool stubs that return         *
+// *  success -- the renderer backend will replace the inner bodies in     *
+// *  Phase 3.                                                             *
 // *************************************************************************
 
 #include "3dscene.h"

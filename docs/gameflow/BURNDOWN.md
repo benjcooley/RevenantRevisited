@@ -28,7 +28,7 @@ a status changes.
 | [x] | Wire `SoundPlayer.Initialize()` as step 22 of `InitGlobals`; `SoundPlayer.Close()` as first step of `ShutdownGlobals` inverse | 2026-05-16 |
 | [x] | `--test=audio` mode (auto-fires `open.wav` one-shot + auto-starts music; ImGui panel for SFX/music/volumes) | 2026-05-16 |
 | [x] | Smoke-test on macOS — miniaudio comes up on `MacBook Air Speakers`, .ogg playback confirmed audible | 2026-05-16 |
-| [x] | Retire pre-port `sound.cpp` to `attic/src/sound_directsound.cpp` | 2026-05-16 |
+| [x] | Retire pre-port `sound.cpp` to `attic-final:attic/src/sound_directsound.cpp` | 2026-05-16 |
 | [ ] | 3D voices — spatial source per `TSound::Play3D`, listener follows player (currently flat-pan classic mix; spatializer disabled by design) | — |
 | [ ] | Settings `[Audio]` section: master / sfx / music / spatial (G3.2 work; backend volume hooks already in place) | — |
 | [x] | Surface SFX from `resources.rvr` via new `VFSListByPrefix` + route `LoadWave` through `rev_fopen` — 1057 SFX in registry on GOG install | 2026-05-16 |
@@ -390,4 +390,4 @@ These items aren't part of any single track but block others:
   22 / first-inverse; `--test=audio` mode added; smoke-tested on
   macOS (CoreAudio → MacBook Air Speakers, .ogg vorbis path
   confirmed audible). Pre-port `sound.cpp` retired to
-  `attic/src/sound_directsound.cpp`.
+  `attic-final:attic/src/sound_directsound.cpp`.

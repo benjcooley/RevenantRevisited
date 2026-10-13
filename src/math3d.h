@@ -3,7 +3,7 @@
 // *                math3d.h - 4x4 matrix and 3D vector helpers            *
 // *************************************************************************
 //
-// Replaces the retired D3DMATRIX / D3DVECTOR helpers (attic/src/d3dmath.*).
+// Replaces the retired D3DMATRIX / D3DVECTOR helpers (attic-final:attic/src/d3dmath.*).
 // Semantics are preserved so the byte layout of produced matrices is
 // identical to the original game: Translate/Scale/Rotate* right-multiply a
 // local transform into dst (dst = dst * T), and MtxTransform applies the

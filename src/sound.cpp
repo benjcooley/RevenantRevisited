@@ -6,7 +6,7 @@
 //
 // 1998 TSound / TSoundPlayer rebuilt on the miniaudio facade in
 // audio_backend.h. The DirectSound + MCI + winmm bodies that used to live
-// here are now in attic/src/sound_directsound.cpp as a reference; this
+// here are now in attic-final:attic/src/sound_directsound.cpp as a reference; this
 // file is short on purpose.
 //
 // What survives from 1998:
