@@ -8,6 +8,9 @@
 /build.ninja
 /Makefile
 /Testing/
+# CI step records and packages (tools/ci/ci.py)
+/ci-out/
+/dist/
 
 # Reference copies (kept locally, not tracked)
 /legacy

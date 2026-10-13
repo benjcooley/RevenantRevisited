@@ -385,3 +385,57 @@ elseif(UNIX)
     Threads::Threads)
 endif()
 
+# ----------------------------------------------------------------------------
+# Tests: `ctest --test-dir build` runs them all; CI runs the same set on
+# every platform as the merge gate (docs/CI.md). A test registered here must
+# pass without the retail install: one that needs game data skips itself
+# when REVENANT_DATA_PATH is unset. New test executables join a list below.
+# ----------------------------------------------------------------------------
+enable_testing()
+include(GoogleTest)
+
+foreach(test IN ITEMS
+    test_anim_system
+    test_asset_cache
+    test_defdoc
+    test_parse
+    test_render_metadata
+    test_retail_mesh_lighting
+    test_transform
+    test_vfs_path_index
+    test_vfx_review_layout
+    test_vfx_review_preview
+    test_vfx_review_schedule)
+  add_test(NAME ${test} COMMAND ${test})
+endforeach()
+
+# GoogleTest suites report each case as its own test, named
+# <executable>.<Suite>.<Case>.
+foreach(test IN ITEMS
+    test_audio_decode
+    test_classiclighting
+    test_particlefx
+    test_playerstats)
+  gtest_discover_tests(${test} TEST_PREFIX "${test}." DISCOVERY_MODE PRE_TEST)
+endforeach()
+
+# Source-slice tests: each compiles a function cut from src/ into a small
+# fixture with clang++ and runs it. POSIX hosts only.
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND AND NOT WIN32)
+  foreach(script IN ITEMS
+      test_fx_capacity
+      test_fx_source_alpha
+      test_helper_source_alpha
+      test_helper_uv_submission
+      test_late_effect_submission
+      test_map_texture_submission
+      test_transient_map)
+    add_test(NAME ${script}.py
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/${script}.py)
+  endforeach()
+  # Out of date with SubmitFxQuad since the prelit RGBA5 path (6c6c5d53; its
+  # fixture lacks SQuadDrawItem::retail_prelit_rgba5 and EFxDepthMode).
+  # Listed so reports show it; re-enable once the VFX track updates it.
+  set_tests_properties(test_fx_source_alpha.py PROPERTIES DISABLED TRUE)
+endif()

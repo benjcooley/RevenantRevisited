@@ -184,6 +184,11 @@ cmake --build build
 
 On macOS, the project links Metal/Cocoa/AppKit frameworks through `CMakeLists.txt`.
 
+`ctest --test-dir build` runs the unit tests. Every pushed commit is built
+and tested on macOS, Windows and Linux, and its packages are published to
+downloads.revenantrevisited.com; merges into `main` go through a pull
+request that passes all three. See `docs/CI.md`.
+
 For the ASan + UBSan build, headless test runs and lldb setup, see
 `docs/DEBUG_TOOLING.md`.
 
