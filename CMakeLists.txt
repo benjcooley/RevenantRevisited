@@ -182,13 +182,17 @@ add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
 target_link_libraries(Revenant PRIVATE imgui revsmk)
 
 # buildinfo.h: the commit the binary is built from (the playtest recordings
-# name it). Regenerated every build, rewritten only when it changes.
+# name it) and its version (the main menu shows it). Regenerated every
+# build, rewritten only when it changes. CI passes the version it claimed;
+# otherwise BuildInfo.cmake works one out from the git tags.
+set(REVENANT_VERSION "" CACHE STRING "Version the build carries (vX.Y.Z); empty: from git tags")
 set(BUILDINFO_DIR "${CMAKE_BINARY_DIR}/generated")
 add_custom_target(buildinfo
   COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
-          -DOUTPUT=${BUILDINFO_DIR}/buildinfo.h -P ${CMAKE_SOURCE_DIR}/cmake/BuildInfo.cmake
+          -DOUTPUT=${BUILDINFO_DIR}/buildinfo.h -DVERSION=${REVENANT_VERSION}
+          -P ${CMAKE_SOURCE_DIR}/cmake/BuildInfo.cmake
   BYPRODUCTS ${BUILDINFO_DIR}/buildinfo.h
-  COMMENT "Recording the build's git commit")
+  COMMENT "Recording the build's git commit and version")
 add_dependencies(Revenant buildinfo)
 target_include_directories(Revenant PRIVATE ${BUILDINFO_DIR})
 

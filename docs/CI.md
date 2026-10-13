@@ -1,7 +1,7 @@
 # Continuous integration
 
-Every commit pushed to GitHub, on any branch, is built and tested on macOS,
-Windows and Linux. Packages that pass are published to
+Every commit pushed to GitHub, on any branch, gets a version and is built
+and tested on macOS, Windows and Linux. Packages that pass are published to
 `https://downloads.revenantrevisited.com`, and `main` only takes pull
 requests that pass on all three.
 
@@ -13,6 +13,7 @@ requests that pass on all three.
 
 | Job | Runs on | Does |
 |---|---|---|
+| `Version` | `ubuntu-24.04` | claims the commit's version tag (§6) |
 | `Build & test (osx)` | `macos-latest` (Apple silicon) | configure, build, test, package |
 | `Build & test (windows)` | `windows-latest` | the same |
 | `Build & test (linux)` | `ubuntu-24.04` (x86-64) | the same |
@@ -52,7 +53,9 @@ python3 tools/ci/ci.py package --platform osx     # dist/RevenantRevisited-osx.z
 python3 tools/ci/ci.py report --platform osx      # ci-out/report-osx.json
 ```
 
-`publish` and `summary` run in the publish job.
+`version` runs in its own job before the builds (§6), `publish` and
+`summary` in the publish job. Locally there is no claimed version and the
+build works one out from the tags.
 
 ## 3. Tests: the merge gate
 
@@ -126,7 +129,29 @@ anywhere leaves them all where they were.
 The archived object's metadata records the commit, branch, CI run and
 SHA-256.
 
-## 6. The run summary
+## 6. Versions
+
+Every CI build, on any branch, gets the next version: the `Version` job
+finds the highest `vX.Y.Z` tag on GitHub (numerically), adds one to its
+last number, and pushes that tag onto the commit as an annotated tag
+(`v0.0.1` comes first). Pushing the tag is the claim: if a build running
+alongside took the number first, the push is refused and the job takes the
+next one. A commit has one version: a rerun, or the same commit pushed to
+another branch, keeps the tag it already has. Failed builds keep their tags
+too, so the published versions can have gaps. To move to a new series, tag
+a commit by hand (say `v0.2.0`); builds continue from it (`v0.2.1`, …).
+
+The builds carry the version (`-DREVENANT_VERSION`, into `buildinfo.h` with
+the branch and the 7-character commit hash), the main menu shows it in the
+lower left (`RevenantRevisited v0.0.3 main ab84cff`, where retail showed
+`Revenant v1.22`), and the package README and the run summary name it. A
+local build without CI shows the tag on its commit, else the newest tag it
+descends from plus `-dev`.
+
+If the `Version` job fails, the builds still run with that local fallback:
+a skipped build would count as a passed check.
+
+## 7. The run summary
 
 The `Publish & report` job writes the run's summary page, which also appears
 in its log:
@@ -141,7 +166,7 @@ in its log:
 Download links and failures are also posted as annotations at the top of the
 run.
 
-## 7. Protecting `main`
+## 8. Protecting `main`
 
 A repository ruleset on `main`:
 
@@ -158,9 +183,12 @@ merge once its branch's latest push has passed. Pull requests from forks
 don't trigger the workflow; a maintainer pushes the fork's branch to this
 repository to run it.
 
-## 8. Secrets
+## 9. Secrets
 
 Repository secrets used by the publish job:
+
+The `Version` job pushes tags with the workflow's own token (`contents:
+write` for that job only); the builds read the repository only.
 
 | Secret | Use |
 |---|---|
@@ -170,7 +198,7 @@ Repository secrets used by the publish job:
 `R2_API_TOKEN` is also stored but unused: the bucket key can't administer
 the bucket or its domains, which is done in the Cloudflare dashboard.
 
-## 9. Known gaps
+## 10. Known gaps
 
 - GPU readback (`RendererReadback`) exists only for Metal. On Windows and
   Linux the stubs in `src/platform/` report it as unsupported, so

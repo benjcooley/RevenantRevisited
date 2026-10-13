@@ -5,7 +5,7 @@ The workflow (.github/workflows/ci.yml) runs one subcommand per step. Each
 step records what it saw in ci-out/<step>.json, and the report steps build
 the run's summary from those records. Every step runs locally the same way:
 
-    python3 tools/ci/ci.py configure --platform osx
+    python3 tools/ci/ci.py configure --platform osx   # REVENANT_VERSION from `version`
     python3 tools/ci/ci.py build
     python3 tools/ci/ci.py test
     python3 tools/ci/ci.py package --platform osx
@@ -162,6 +162,62 @@ def fmt_bytes(n: int | None) -> str:
 
 
 # --------------------------------------------------------------------------
+# version: every CI build claims the next vX.Y.Z tag
+# --------------------------------------------------------------------------
+
+VERSION_TAG = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+TAGGER = ("-c", "user.name=github-actions[bot]",
+          "-c", "user.email=41898282+github-actions[bot]@users.noreply.github.com")
+
+
+def remote_versions() -> dict[str, tuple[str, tuple[int, int, int]]]:
+    """origin's vX.Y.Z tags: name -> (the commit it marks, (X, Y, Z))."""
+    tags: dict[str, tuple[str, tuple[int, int, int]]] = {}
+    for line in git("ls-remote", "--tags", "origin", "refs/tags/v*").splitlines():
+        obj, ref = line.split("\t")
+        name = ref.removeprefix("refs/tags/")
+        peeled = name.endswith("^{}")           # an annotated tag's commit
+        name = name.removesuffix("^{}")
+        if m := VERSION_TAG.match(name):
+            if peeled or name not in tags:
+                tags[name] = (obj, tuple(int(g) for g in m.groups()))
+    return tags
+
+
+def claim_version(info: dict) -> str:
+    """Tags the commit with the version after the highest vX.Y.Z on origin
+    (last number + 1; v0.0.1 first) and returns it. Pushing the tag is the
+    claim: when a build running alongside took the number first, the push
+    is refused and the next number is tried. A commit keeps the version it
+    already has (a rerun, or the same commit pushed to another branch)."""
+    sha = info["sha"]
+    for _ in range(10):
+        tags = remote_versions()
+        own = [name for name, (commit, _) in tags.items() if commit == sha]
+        if own:
+            return max(own, key=lambda name: tags[name][1])
+        x, y, z = max((v for _, v in tags.values()), default=(0, 0, 0))
+        name = f"v{x}.{y}.{z + 1}"
+        subprocess.run(["git", *TAGGER, "tag", "-a", name, sha,
+                        "-m", f"{PRODUCT} {name}: build of {info['branch']}"],
+                       cwd=ROOT, check=True)
+        if subprocess.run(["git", "push", "origin", f"refs/tags/{name}"], cwd=ROOT).returncode == 0:
+            return name
+        git("tag", "-d", name)
+    raise SystemExit("could not claim a version tag")
+
+
+def cmd_version(args: argparse.Namespace) -> int:
+    info = commit_info()
+    version = claim_version(info)
+    print(f"{info['short']} on {info['branch']} is {version}")
+    if out := os.environ.get("GITHUB_OUTPUT"):
+        with open(out, "a", encoding="utf-8") as f:
+            f.write(f"version={version}\n")
+    return 0
+
+
+# --------------------------------------------------------------------------
 # configure / build
 # --------------------------------------------------------------------------
 
@@ -188,6 +244,11 @@ def cmd_configure(args: argparse.Namespace) -> int:
     ccache = platform.key != "windows" and shutil.which("ccache") is not None
     if ccache:
         options += ["-DCMAKE_C_COMPILER_LAUNCHER=ccache", "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"]
+    # The version the build job was handed (BuildInfo.cmake works one out
+    # from the tags when there is none).
+    version = os.environ.get("REVENANT_VERSION", "")
+    if version:
+        options.append(f"-DREVENANT_VERSION={version}")
     cmd = ["cmake", "-S", str(ROOT), "-B", str(BUILD), "-G", "Ninja",
            f"-DCMAKE_BUILD_TYPE={CONFIG}", *options]
     rc, seconds = run_logged(cmd, OUT / "configure.log")
@@ -196,7 +257,7 @@ def cmd_configure(args: argparse.Namespace) -> int:
     write_record("configure", {
         "ok": rc == 0, "seconds": seconds, "config": CONFIG,
         "generator": "Ninja", "cmake": cmake_version, "compiler": compiler_from_cache(),
-        "options": options, "ccache": ccache,
+        "options": options, "ccache": ccache, "version": version or None,
     })
     return rc
 
@@ -338,8 +399,10 @@ def render_readme(platform: Platform, info: dict, downloads_url: str) -> str:
                   lambda m: m[2] if m[1] == platform.key else "", text, flags=re.S)
     text = re.sub(r"\n{3,}", "\n\n", text)
     built = dt.datetime.fromtimestamp(time.time(), dt.timezone.utc)
+    version = (read_record("configure") or {}).get("version") or "development build"
     return string.Template(text).substitute(
         platform=platform.label,
+        version=version,
         exe=platform.ship,
         short=info["short"],
         sha=info["sha"],
@@ -424,6 +487,7 @@ def cmd_report(args: argparse.Namespace) -> int:
     platform = PLATFORMS[args.platform]
     report = {
         "platform": platform.key,
+        "version": os.environ.get("REVENANT_VERSION") or None,
         "label": platform.label,
         "runner": " ".join(filter(None, (os.environ.get("ImageOS"), os.environ.get("ImageVersion"))))
                   or sys.platform,
@@ -504,6 +568,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
     for key, (zip_path, package) in passed.items():
         platform = PLATFORMS[key]
         metadata = {"commit": info["sha"], "branch": info["branch"],
+                    "version": os.environ.get("REVENANT_VERSION", ""),
                     "run": os.environ.get("GITHUB_RUN_ID", "local"), "sha256": package["sha256"]}
         archive_key = f"{folder}/{platform.zip_name}"
         s3.upload_file(str(zip_path), bucket, archive_key, ExtraArgs={
@@ -614,7 +679,9 @@ def cmd_summary(args: argparse.Namespace) -> int:
     publish = read_record("publish") or {}
     published = publish.get("platforms", {})
 
-    md = [f"## {PRODUCT} · [`{info['short']}`]({info['commit_url']}) on `{info['branch']}`", "",
+    version = os.environ.get("REVENANT_VERSION")
+    tag = f"[{version}]({info['repo_url']}/releases/tag/{version}) · " if version else ""
+    md = [f"## {PRODUCT} {tag}[`{info['short']}`]({info['commit_url']}) on `{info['branch']}`", "",
           f"> {info['subject']} — {info['author']}", ""]
 
     md += ["| Platform | Build | Tests | Warnings | Build time | Download |",
@@ -671,6 +738,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     downloads = os.environ.get("DOWNLOADS_URL", "https://downloads.revenantrevisited.com")
 
+    sub.add_parser("version")
     p = sub.add_parser("configure"); p.add_argument("--platform", choices=PLATFORMS, required=True)
     sub.add_parser("build")
     sub.add_parser("test")
@@ -684,7 +752,7 @@ def main() -> int:
 
     args = parser.parse_args()
     return {
-        "configure": cmd_configure, "build": cmd_build, "test": cmd_test,
+        "version": cmd_version, "configure": cmd_configure, "build": cmd_build, "test": cmd_test,
         "package": cmd_package, "report": cmd_report, "publish": cmd_publish,
         "summary": cmd_summary,
     }[args.command](args)

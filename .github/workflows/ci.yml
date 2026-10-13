@@ -1,6 +1,7 @@
-# Builds and tests every pushed commit on macOS, Windows and Linux, then
-# publishes the packages to downloads.revenantrevisited.com. The three
-# "Build & test" checks gate merges into main. docs/CI.md has the details.
+# Gives every pushed commit a version, builds and tests it on macOS, Windows
+# and Linux, then publishes the packages to downloads.revenantrevisited.com.
+# The three "Build & test" checks gate merges into main. docs/CI.md has the
+# details.
 
 name: CI
 
@@ -31,10 +32,33 @@ defaults:
     shell: bash
 
 jobs:
+  # Claims the next vX.Y.Z tag for this commit; the builds carry it.
+  version:
+    name: Version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.claim.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          sparse-checkout: tools/ci
+
+      - id: claim
+        run: python3 tools/ci/ci.py version
+
   build:
     name: Build & test (${{ matrix.platform }})
+    needs: version
+    # Builds even if the version job failed (BuildInfo.cmake then works a
+    # version out itself): a skipped job would count as a passed check.
+    if: ${{ !cancelled() }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    env:
+      REVENANT_VERSION: ${{ needs.version.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -136,10 +160,12 @@ jobs:
 
   publish:
     name: Publish & report
-    needs: build
+    needs: [version, build]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      REVENANT_VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
