@@ -14,10 +14,14 @@
 
 # Reference copies (kept locally, not tracked)
 /legacy
-# Hand-extracted contents of data/resources.rvr and data/Modules/*.rvm —
-# kept local for grepping; the .rvr/.rvm archives are authoritative.
-/data/resources_unzipped
-/data/Modules/Ahkuilon_unzipped
+# The developer's own Revenant install (data/README.md): never committed.
+/data/*
+!/data/README.md
+# Reverse-engineering workspace (Ghidra output, class maps, pipeline): kept
+# local, never committed.
+/recon/
+# Per-session VFX agent logs.
+/.vfx_logs/
 
 # Editor / OS
 .DS_Store
@@ -44,12 +48,6 @@ __pycache__/
 /*.o
 /imgui.ini
 /Revenant.ini
-
-# Runtime-modified game state — not original game assets. These mutate
-# during gameplay/testing. Originals come from the stock GOG install at
-# the user's path; new-game initialization repopulates them as needed.
-/data/Curmap
-/data/Save
 
 # Backup / temp
 *~
