@@ -89,9 +89,11 @@ assets/                     engine-owned data: effects.def, render_metadata.def,
 README.md                   tools/ci/PACKAGE_README.md, filled in for the platform and commit
 ```
 
-The program is renamed so the zip can be unpacked straight into a retail
-install without touching the game's own `Revenant.exe` (README,
-"Distribution model"). The Linux binary ships with its debug sections
+The program is renamed so the zip can be unpacked into the root of a
+retail install (the README asks players for a copy of theirs) without
+touching the game's own `Revenant.exe`; run from there it shares the
+folder's `Revenant.ini` and saves, as retail does (docs/DATA_LAYOUT.md
+§1). The Linux binary ships with its debug sections
 stripped. Zip entries carry the commit's timestamp, so packing the same
 build twice gives identical bytes.
 

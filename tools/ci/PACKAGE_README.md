@@ -1,8 +1,12 @@
-# Revenant Revisited — development build for ${platform}
+# Revenant Revisited — alpha build for ${platform}
+
+> **This is alpha software, not ready for prime time.** It is built
+> automatically from work in progress: expect missing features, bugs and
+> crashes. We are looking for testers: if something breaks or looks
+> wrong, please tell us (see *Help test it* below).
 
 A modern build of Cinematix Studios' *Revenant*, made from the
-[Revenant Revisited](${repo_url}) source. It is built automatically from
-work in progress: expect missing features, bugs and crashes.
+[Revenant Revisited](${repo_url}) source.
 
 | | |
 |---|---|
@@ -13,21 +17,23 @@ work in progress: expect missing features, bugs and crashes.
 ## You need the original game
 
 This download holds no game data. Revisited plays your own copy of
-*Revenant*, from GOG or the original CD, and never changes its files.
+*Revenant*, from GOG or the original CD.
 
 ## Install
 
-1. Unzip into your Revenant install folder, beside the game's own program.
-   Nothing in the zip replaces a file of the game's: this program is
-   `${exe}`, and its own data stays in `assets/`.
-2. Run `${exe}`.
+1. **Make a copy of your Revenant game folder**, for instance
+   `Revenant Revisited` beside `Revenant`. Revisited plays from the copy,
+   so nothing it does can reach your original game or its saves.
+2. Unzip this download into the root of the copy, beside the game's
+   `Revenant.exe`. Nothing in the zip replaces a game file: the program
+   is `${exe}`, and its own data is the `assets/` folder.
+3. Run `${exe}`.
 
-To keep it elsewhere, unzip it anywhere (`assets/` must stay beside the
-program) and set the environment variable `REVENANT_DATA_PATH` to the
-install folder.
-
-Settings and saves go to your user folder, never the install:
-<!-- osx -->`~/Library/Application Support/Revenant/`.<!-- /osx --><!-- windows -->`%LOCALAPPDATA%\Revenant\`.<!-- /windows --><!-- linux -->`$$XDG_DATA_HOME/Revenant/` (usually `~/.local/share/Revenant/`).<!-- /linux -->
+Like the original game, Revisited keeps its settings (`Revenant.ini`) and
+saves (`Save/`) in the game folder: it starts with the copied settings and
+lists and opens the saves that were there. Saves are meant to work in both
+games, but that is still being tested, which is why Revisited gets a copy
+of the folder for now.
 
 ## ${platform} notes
 
@@ -56,7 +62,18 @@ Settings and saves go to your user folder, never the install:
   passes the unit tests on Linux, but the game sees far less play here.
 <!-- /linux -->
 
-## Reporting problems
+## Help test it
 
-Open an issue at ${repo_url}/issues. Name the commit above and attach
-`revenant.log`, which the program writes to the folder it was started from.
+Bug reports are the most useful thing you can give us. Open an issue at
+${repo_url}/issues and include:
+
+- this build's commit, `${short}` (in the table above), and that you
+  play on ${platform};
+- what you did, what happened, and what you expected;
+- **screenshots** of anything that looks wrong: drag them into the
+  issue. <!-- osx -->`⇧⌘4` captures part of the screen, `⇧⌘3` all of it.<!-- /osx --><!-- windows -->`Win`+`Shift`+`S` captures part of the screen.<!-- /windows --><!-- linux -->Your desktop's screenshot key (often `PrtSc`) captures the screen.<!-- /linux -->
+  If you can, a shot of the original game at the same spot helps too;
+- `revenant.log`, which the program writes to the folder it was started
+  from;
+- for trouble in a saved game, the slot's folder from `Save/Single/`,
+  zipped.
