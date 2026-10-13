@@ -97,8 +97,10 @@ folder's `Revenant.ini` and saves, as retail does (docs/DATA_LAYOUT.md
 stripped. Zip entries carry the commit's timestamp, so packing the same
 build twice gives identical bytes.
 
-Only `assets/**` is fetched from Git LFS. The rest of LFS is the retail
-install under `data/`, which neither the build nor the tests read.
+Only `assets/**` (fonts, editor icons) is fetched from Git LFS, through
+an Actions cache keyed on those files' object ids: a run downloads from
+LFS, whose bandwidth is metered, only when the assets change. Nothing
+else in LFS (screenshots, captures) is read by the build or the tests.
 
 ## 5. Downloads
 
