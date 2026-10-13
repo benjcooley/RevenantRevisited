@@ -14,6 +14,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <strings.h>
 
 TLogoScreen LogoScreen;
 

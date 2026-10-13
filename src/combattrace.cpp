@@ -10,12 +10,12 @@
 #include "character.h"
 #include "imagery.h"
 #include "mappane.h"
+#include "platform/executable.h"
 #include "playscreen.h"
 #include "revutils.h"
 
 #include <cstdarg>
 #include <cstdio>
-#include <dlfcn.h>
 #include <set>
 
 namespace CombatTrace
@@ -32,10 +32,7 @@ void OnRandom(int32_t value, const void* caller)
 {
     if (!g_out || g_tick < g_rngFrom || g_tick > g_rngTo)
         return;
-    Dl_info info;
-    uintptr_t at = (uintptr_t)caller;
-    if (dladdr(caller, &info) && info.dli_fbase)
-        at -= (uintptr_t)info.dli_fbase;
+    const uintptr_t at = rev_platform::ImageOffset(caller);
     fprintf(g_out, "%lld\trng\tn=%llu\tvalue=%d\tat=0x%llx\n", (long long)g_tick,
             (unsigned long long)RandomDraws(), value, (unsigned long long)at);
 }

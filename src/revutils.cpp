@@ -12,6 +12,8 @@
 #include "mainwnd.h"
 #include "mappane.h"
 #include "parse.h"
+#include "platform/executable.h"
+#include "platform/memfile.h"
 #include "time.h"
 #include "timer.h"
 #include "vfspathindex.h"
@@ -23,13 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#if defined(__APPLE__)
-#  include <mach-o/dyld.h>     // _NSGetExecutablePath
-#endif
-#if defined(__linux__)
-#  include <unistd.h>          // readlink
-#endif
+#include <strings.h>
 
 #include <cassert>
 #include <cctype>
@@ -953,31 +949,6 @@ static std::filesystem::path find_repo_root(const std::filesystem::path &start)
     return {};
 }
 
-// The directory holding the running executable, or an empty path.
-static std::filesystem::path executable_dir()
-{
-    namespace fs = std::filesystem;
-#if defined(__APPLE__)
-    char raw[MAXPATHLEN];
-    uint32_t sz = sizeof(raw);
-    if (_NSGetExecutablePath(raw, &sz) == 0)
-    {
-        std::error_code ec;
-        const fs::path p = fs::weakly_canonical(fs::path(raw), ec);
-        return (ec ? fs::path(raw) : p).parent_path();
-    }
-#elif defined(__linux__)
-    char raw[MAXPATHLEN];
-    const ssize_t n = readlink("/proc/self/exe", raw, sizeof(raw) - 1);
-    if (n > 0)
-    {
-        raw[n] = 0;
-        return fs::path(raw).parent_path();
-    }
-#endif
-    return {};
-}
-
 std::string rev_engine_asset(const char *relpath)
 {
     namespace fs = std::filesystem;
@@ -989,7 +960,7 @@ std::string rev_engine_asset(const char *relpath)
         fs::path found;
         if (const char *env = getenv("REVENANT_ASSETS_PATH"); env && *env && is_dir(env))
             found = env;
-        const fs::path exe_dir = executable_dir();
+        const fs::path exe_dir = rev_platform::ExecutableDir();
         if (found.empty() && !exe_dir.empty())
         {
             for (const fs::path &cand : {exe_dir / "assets",
@@ -1055,7 +1026,7 @@ const char *rev_resolve_revisited_overlay()
         }
     }
 
-    const fs::path exe_dir = executable_dir();
+    const fs::path exe_dir = rev_platform::ExecutableDir();
 
     // 2) production: <exe-dir>/RevenantRevisited.rvr
     // 3) production alt: <RunPath>/RevenantRevisited.rvr — RunPath is set
@@ -1395,7 +1366,7 @@ std::filesystem::path vfs_resolve_data_root()
             return fs::canonical(cand, ec);
     }
 
-    const fs::path exe_dir = executable_dir();
+    const fs::path exe_dir = rev_platform::ExecutableDir();
     if (!exe_dir.empty())
     {
         for (const fs::path cand : {
@@ -1487,47 +1458,6 @@ const VFSEntry *vfs_find_mounted(const std::string &path)
     return nullptr;
 }
 
-struct VFSHandle
-{
-    std::vector<uint8_t> buf;
-    size_t pos;
-};
-
-int vfs_read(void *c, char *p, int n)
-{
-    auto *h = static_cast<VFSHandle *>(c);
-    const size_t avail = h->buf.size() - h->pos;
-    size_t copy = n < 0 ? 0 : (size_t)n;
-    if (copy > avail)
-        copy = avail;
-    memcpy(p, h->buf.data() + h->pos, copy);
-    h->pos += copy;
-    return (int)copy;
-}
-
-fpos_t vfs_seek(void *c, fpos_t off, int whence)
-{
-    auto *h = static_cast<VFSHandle *>(c);
-    fpos_t newpos = 0;
-    switch (whence)
-    {
-    case SEEK_SET: newpos = off; break;
-    case SEEK_CUR: newpos = (fpos_t)h->pos + off; break;
-    case SEEK_END: newpos = (fpos_t)h->buf.size() + off; break;
-    default: return -1;
-    }
-    if (newpos < 0 || (size_t)newpos > (fpos_t)h->buf.size())
-        return -1;
-    h->pos = (size_t)newpos;
-    return newpos;
-}
-
-int vfs_close(void *c)
-{
-    delete static_cast<VFSHandle *>(c);
-    return 0;
-}
-
 // $REVENANT_VFS_TRACE=1 logs which copy served every read: "pack", "loose" or
 // the legacy "by-name" lookup. Off by default (thousands of lines per boot).
 bool vfs_trace_enabled()
@@ -1542,17 +1472,11 @@ bool vfs_trace_enabled()
 // Opens a pack entry as a read-only FILE over an in-memory copy.
 FILE *vfs_open_entry(const VFSEntry &entry)
 {
-    auto h = std::make_unique<VFSHandle>();
-    h->buf.resize(entry.size);
-    h->pos = 0;
+    std::vector<uint8_t> bytes(entry.size);
     if (!mz_zip_reader_extract_to_mem(&entry.arch->zip, entry.file_index,
-                                      h->buf.data(), h->buf.size(), 0))
+                                      bytes.data(), bytes.size(), 0))
         return nullptr;
-
-    FILE *fp = funopen(h.get(), vfs_read, nullptr, vfs_seek, vfs_close);
-    if (fp)
-        h.release();
-    return fp;
+    return rev_platform::OpenMemoryFile(std::move(bytes));
 }
 
 // Legacy fallback: exact/longest archive path, then unique basename aliases.

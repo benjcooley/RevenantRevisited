@@ -18,6 +18,21 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# The 1998 code was written for MSVC on x86, where char is signed; the
+# parser and the stat tables read bytes through plain char. GCC and Clang
+# make char unsigned on ARM Linux, so pin it.
+if(NOT MSVC)
+  add_compile_options(-fsigned-char)
+endif()
+
+# Windows: keep <windows.h> from defining min/max macros over revtypes.h's
+# functions, accept the C runtime's classic string functions, and supply
+# the POSIX headers the port uses (src/platform/windows/include).
+if(WIN32)
+  add_compile_definitions(NOMINMAX _CRT_SECURE_NO_WARNINGS)
+  include_directories(BEFORE "${CMAKE_SOURCE_DIR}/src/platform/windows/include")
+endif()
+
 # ----------------------------------------------------------------------------
 # Sanitizer build (ASan + UBSan). Off by default — opt in by configuring
 # with -DREVENANT_ASAN=ON. Use a separate build dir so the normal build
@@ -128,6 +143,9 @@ add_library(imgui STATIC
 )
 target_include_directories(imgui PUBLIC
   ${IMGUI_DIR} ${IMGUIZMO_DIR} ${IMPLOT_DIR} ${IMGUIFD_DIR} ${IMGUITGL_DIR} ${FONTS_DIR})
+# ImGuiFileDialog lists directories through std::filesystem on every
+# platform, rather than <dirent.h> (which Windows lacks).
+target_compile_definitions(imgui PRIVATE USE_STD_FILESYSTEM)
 
 # Gather C++ sources. Sokol TU is added explicitly per-backend below so
 # the GLOB doesn't pick up the wrong one on a given platform.
@@ -227,6 +245,7 @@ add_executable(test_particlefx
 target_include_directories(test_particlefx PRIVATE
   ${SOKOL_DIR}
   ${HANDMADE_MATH_DIR})
+target_compile_definitions(test_particlefx PRIVATE REV_ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")
 
 FetchContent_Declare(
   googletest
@@ -365,3 +384,4 @@ elseif(UNIX)
     dl
     Threads::Threads)
 endif()
+

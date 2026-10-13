@@ -26,8 +26,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <filesystem>
 #include <string>
-#include <sys/stat.h>
+#include <system_error>
 #include <vector>
 
 namespace FrameSnap {
@@ -67,27 +68,11 @@ bool IsManualMode()
 // `filmstrips/` folder so unprefixed snaps land somewhere predictable.
 void EnsureParentDir(const std::string& path)
 {
-    const auto slash = path.find_last_of('/');
-    if (slash == std::string::npos || slash == 0) return;
-    std::string parent = path.substr(0, slash);
-    std::string acc;
-    size_t i = 0;
-    if (parent[0] == '/') { acc = "/"; i = 1; }
-    while (i < parent.size())
-    {
-        const size_t next = parent.find('/', i);
-        const size_t end  = (next == std::string::npos) ? parent.size() : next;
-        if (end > i)
-        {
-            if (!acc.empty() && acc.back() != '/') acc += '/';
-            acc += parent.substr(i, end - i);
-            struct stat st {};
-            if (stat(acc.c_str(), &st) != 0)
-                (void) mkdir(acc.c_str(), 0755);
-        }
-        if (next == std::string::npos) break;
-        i = next + 1;
-    }
+    const std::filesystem::path parent = std::filesystem::path(path).parent_path();
+    if (parent.empty())
+        return;
+    std::error_code ec;
+    std::filesystem::create_directories(parent, ec);
 }
 
 // Strip "--key=" / "-key=" / "/key=" / "key=" prefixes and yield the

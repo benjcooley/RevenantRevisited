@@ -5,9 +5,8 @@
 // *************************************************************************
 //
 // Thin abstraction over OS window manipulation. The platform impl lives
-// in editorplatform.mm (macOS / Cocoa). Other platforms can grow their
-// own .cpp / .mm later; the no-op fallback inside .mm just leaves the
-// window size unchanged.
+// in platform/macosx/editorplatform.mm (Cocoa); elsewhere
+// platform/editorplatform_stub.cpp leaves the window size unchanged.
 //
 // *************************************************************************
 

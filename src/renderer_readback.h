@@ -6,9 +6,10 @@
 //
 // Pulls a single RGBA8 pixel out of a sokol-managed render target back to
 // CPU memory. Used by the editor for the OBJID pixel-pick path. The
-// implementation is platform-specific (renderer_readback.mm on Apple);
+// implementation is platform-specific (platform/macosx/renderer_readback.mm);
 // callers must be prepared for a not-implemented return when the build
-// targets a backend without a readback helper.
+// targets a backend without a readback helper
+// (platform/renderer_readback_stub.cpp).
 //
 // *************************************************************************
 
