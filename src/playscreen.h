@@ -20,7 +20,7 @@
 //     carried out at the start of the next Update().
 //
 // The retail TPlayScreen and its DrawBackground / Pulse / Animate /
-// post-character anim arrays have been retired to attic/src/playscreen.*
+// post-character anim arrays have been retired to attic-final:attic/src/playscreen.*
 // (see that file for the legacy implementation if a particular helper
 // needs to be revived).
 //

@@ -241,7 +241,7 @@ death, quit).
   `0x00451610`, which works from the object's own links), so deleting a
   player still standing in a sector is safe in any order. Retail kept the
   loaded sectors on `TMapPane` (a global loaded list it streamed and
-  freed); those paths are gone (`attic/src/mappane_sectors.cpp`).
+  freed); those paths are gone (`attic-final:attic/src/mappane_sectors.cpp`).
 - **No automap persistence until the retail automap files are ported**
   (SAVE_GAME §8). Dropping the pre-release blob loses automap state
   across save/load in the meantime; carrying it in a retail save is not

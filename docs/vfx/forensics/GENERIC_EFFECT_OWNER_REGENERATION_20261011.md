@@ -103,5 +103,5 @@ the shipped Regeneration shape itself and logs the same
 `[regeneration-owner]` fields from the unified effect (FollowTime, Duration,
 StartWait, LightRamp), so `generic_effect_owner_engine_compare.py` reads it as
 before. `generic_effect_owner_source_probe.py`, which compiled the removed
-bounded methods, is in tools/retail_runtime/attic/.
+bounded methods, is at `attic-final:tools/retail_runtime/attic/generic_effect_owner_source_probe.py`.
 

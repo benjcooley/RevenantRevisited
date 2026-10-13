@@ -22,11 +22,11 @@ brief `docs/ui/briefs/B_r4_textbar_assessment.md`:
    - `s_Could_not_create_character_event_005cef30`
      = `"Could not create character event for command processor!"`
    Both appear **only** inside `TConsolePane::Initialize` in the entire
-   pre-release `attic/src/editor.cpp:546` and `:550` — nowhere else in the source.
+   pre-release `attic-final:attic/src/editor.cpp:546` and `:550` — nowhere else in the source.
 2. Same `virt_meth_0x43e370` calls `CreateEventA` × 2 then `FUN_0058bd47`
    (= `_beginthreadex`) with entry `0x0043f5a0` and `(int)this`, then
    `SetThreadPriority(hThread, 1)`. Line-for-line `TConsolePane::Initialize`
-   from `attic/src/editor.cpp:531-563`. **No other pre-release class spawns a
+   from `attic-final:attic/src/editor.cpp:531-563`. **No other pre-release class spawns a
    thread inside `Initialize`** — structural fingerprint.
 3. Parent-class call at top of Initialize (`virt_meth_0x43da00` on `this`,
    `recon/ghidra/cls_0x5a4358_TConsolePane.cpp:339`) is byte-identical to
@@ -102,10 +102,10 @@ These are **editor diagnostic paths**, never reached during pure gameplay.
   chain)
 - `docs/ui/forensics/TTextBar_SPEC.md:1-60` (sibling spec — established that the
   in-game game-log lives at cls_0x5a5560, not cls_0x5a4358)
-- `attic/src/editor.cpp:528-1100` (pre-release `TConsolePane::Initialize`,
+- `attic-final:attic/src/editor.cpp:528-1100` (pre-release `TConsolePane::Initialize`,
   `ChainMouse`, `KeyPress`, `CharPress`, `MouseMove`, `MouseClick`,
   `DrawBackground`, `Input`, `Output`, `GetChar`, `GetLine`, `CommandThread`)
-- `attic/src/editor.h:42-216` (TTextPane + TConsolePane class definitions)
+- `attic-final:attic/src/editor.h:42-216` (TTextPane + TConsolePane class definitions)
 - `src/revdefs.h:200-208` (`CONSOLEX=4 CONSOLEY=125 CONSOLEWIDTH=381
   CONSOLEHEIGHT=124 TEXTBUFSIZE=10000`)
 
@@ -153,14 +153,14 @@ base DrawBackground (`virt_meth_0x43db30`).
   graphics-helper, not TConsolePane.
 - Do NOT reproduce the Win32 thread or the kill/character `CreateEventA` event
   pair literally. The pre-release scaffold already wraps them in
-  `#if 0 // TODO(port): Subsystem 4 — threading` (`attic/src/editor.cpp:543-560,
+  `#if 0 // TODO(port): Subsystem 4 — threading` (`attic-final:attic/src/editor.cpp:543-560,
   568-576, 822-825, 970-972, 1004-1017, 1054-1097`). The port replaces the
   thread + 2 events with a non-blocking command queue per
   `[[feedback-threading]]` (no raw `std::thread`s).
 
 **Snapshot note (supplementary — superseded by retail).** A pre-release
-`TConsolePane` implementation exists at `attic/src/editor.cpp:528-1100` +
-declaration `attic/src/editor.h:160-216`. Retail and pre-release behavior agree
+`TConsolePane` implementation exists at `attic-final:attic/src/editor.cpp:528-1100` +
+declaration `attic-final:attic/src/editor.h:160-216`. Retail and pre-release behavior agree
 **at the algorithm level** (text buffer + cursor + chained mouse + thread). The
 pre-release pane is constructed with `TTextPane(CONSOLEX=4, CONSOLEY=125,
 CONSOLEWIDTH=381, CONSOLEHEIGHT=124)` per `src/revdefs.h:200-205` — these are
@@ -219,7 +219,7 @@ only, gated to editor builds.
 |---|---|---|---|---|---|---|
 | (none — chrome) | — | — | — | The console has NO chrome bitmap. Background is a solid black fill (color `0`, `(*+0x64)` Box from `cls_0x5a42d4.cpp:119-120`). | — | `cls_0x5a42d4.cpp:119-120` |
 | editor bitmap font | (in-binary, GDI HDC) | font index = `DAT_0065bc40` (a global selector) — likely the editor's small fixed-pitch font (a member of the `DAT_0065b020` HDC table; see UI_METHOD_MAP §5) | font width + height read from `*(int*)(hdc+0x50)` and `*(int*)(hdc+0x54)` in `meth_0x4be110` — unknown until the HDC table is decoded (UNCONFIRMED-1) | the text glyphs | none (HDC glyph render) | `cls_0x5a42d4.cpp:42-44, 57-59`; `cls_0x5a68d8.cpp:1662-1663` |
-| `lrarrow`, `udarrow` (mouse-chain cursors) | EditorData (editor-only archive) | `"lrarrow"`, `"udarrow"` | unknown until measured | mouse-cursor swap for horizontal/vertical chained-mouse drag modes | full sprite | `attic/src/editor.cpp:585-588` (pre-release; retail equivalent: `meth_0x43e510` line `:428-438` calls `cls_0x46d6b0::meth_0x46d710(DAT_00656ce4)` — the editor pointer/cursor handle table indexed by `DAT_00656ce4`) |
+| `lrarrow`, `udarrow` (mouse-chain cursors) | EditorData (editor-only archive) | `"lrarrow"`, `"udarrow"` | unknown until measured | mouse-cursor swap for horizontal/vertical chained-mouse drag modes | full sprite | `attic-final:attic/src/editor.cpp:585-588` (pre-release; retail equivalent: `meth_0x43e510` line `:428-438` calls `cls_0x46d6b0::meth_0x46d710(DAT_00656ce4)` — the editor pointer/cursor handle table indexed by `DAT_00656ce4`) |
 
 **Asset section is intentionally minimal.** TConsolePane draws as text + box-
 fill only — no bitmaps, no atlases. The "chained mouse cursor swap" is the only
@@ -280,7 +280,7 @@ display-local frame used by `meth_0x4be110` text composite.
 
 | frame | parent | anchor | origin in parent (formula + literal) | what is expressed in it | cite |
 |---|---|---|---|---|---|
-| **screen** | (root) | — | `(0,0)` framebuffer top-left | global pixel space; `Display.Width()=640` per editor convention | `attic/src/editor.cpp:1933, 1939-1940` (uses `Display.Width()`) |
+| **screen** | (root) | — | `(0,0)` framebuffer top-left | global pixel space; `Display.Width()=640` per editor convention | `attic-final:attic/src/editor.cpp:1933, 1939-1940` (uses `Display.Width()`) |
 | **pane-local** | screen | TL | screen `(0, 0x164) = (0, 356)` | the pane's own rect; subsequent drawing args (0,0) and (0,3) are in this space | `cls_0x5a4358_TConsolePane.cpp:540-541, 544` (`mbr_0x4=0`, `mbr_0x8=0x164`); TPane Initialize `cls_0x5a4494.cpp:312` (`mbr_0x4 = mbr_0x14`) |
 | **box-local** (background fill) | pane-local | TL | pane-local `(0, 0)` | the `(*+0x64)` Box call clears the pane rect to black at pane-local `(0,0)` with size `(mbr_0xc, mbr_0x10) = (360, 125)` | `cls_0x5a42d4.cpp:119-120` (`(*+100)(param_1, 0,0, this->mbr_0xc, this->mbr_0x10, 0, 0xff, 0)`) |
 | **text-block-local** (text composite) | pane-local | TL | pane-local `(0, 3)` | text drawn starting at pane-local Y=3 (3 px top inset). Lines stack down at `(font_h+2)` per row (cite TTextPane DrawBackground: `dstY=3` literal at `cls_0x5a42d4.cpp:122`). | `cls_0x5a42d4.cpp:121-123` (the `meth_0x4be110(param_1, text_ptr, 0, 3, mbr_0x94, ...)`) |
@@ -342,7 +342,7 @@ screen y
 
 > **Note: the right edge of the console (x=360) leaves a 280-px gap to the
 > 640-px display edge.** The pre-release `EDMULTIPANEX` and `ClassPane` filled
-> that gap with the toolbar + editor class pane (`attic/src/editor.h:336-338`).
+> that gap with the toolbar + editor class pane (`attic-final:attic/src/editor.h:336-338`).
 > Retail editor likely does the same; this is **outside TConsolePane's
 > responsibility** and not covered by this spec.
 
@@ -665,7 +665,7 @@ int Input(this, char* in_str):
 ```
 
 `DAT_006581b8` and `DAT_00656db4` are the **shared `cmdchar` + `cmdline`
-statics** from `attic/src/editor.cpp:55-57` (the TConsolePane statics). The
+statics** from `attic-final:attic/src/editor.cpp:55-57` (the TConsolePane statics). The
 thread loop reads them after `WaitForMultipleObjects`.
 
 ### Helper 6 — `virt_meth_0x43f490` (Output)

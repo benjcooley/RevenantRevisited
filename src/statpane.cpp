@@ -6,7 +6,7 @@
 //
 // See statpane.h. Every constant is retail's, cited by the instruction that
 // holds it in docs/ui/forensics/StatPane_RETAIL.md. The 1998 pane (a skill
-// tree in the gold font) is in attic/src/statpane.*.
+// tree in the gold font) is in attic-final:attic/src/statpane.*.
 //
 // *************************************************************************
 

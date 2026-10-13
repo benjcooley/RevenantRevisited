@@ -5,7 +5,7 @@
 // *************************************************************************
 //
 // Retail behaviour: docs/gameflow/forensics/EXITS.md. The 1998 bodies the
-// shipped game replaced are in attic/src/exit_1998.cpp.
+// shipped game replaced are in attic-final:attic/src/exit_1998.cpp.
 
 #include "exit.h"
 

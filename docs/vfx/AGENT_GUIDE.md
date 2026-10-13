@@ -38,7 +38,7 @@ See [forensics/README.md](forensics/README.md) for why the split exists. The §3
 Spot-check the project-wide rules these touch:
 
 - [../../CLAUDE.md](../../CLAUDE.md) — house rules.
-- The user's standing feedback memories: no bodges; modern C++; preserve old code in `attic/` or `#ifdef UNUSED`; centralized rendering submission lives in the renderer class; renderer is game-agnostic; world-space invariant in deferred path; minimal includes; no raw threads.
+- The user's standing feedback memories: no bodges; modern C++; keep old code we'll migrate under `#ifdef UNUSED` (retired code is deleted; git history keeps it); centralized rendering submission lives in the renderer class; renderer is game-agnostic; world-space invariant in deferred path; minimal includes; no raw threads.
 
 ## 2. Picking work
 
@@ -548,7 +548,7 @@ Bump the status as each stage clears. Do not skip stages.
 - **No new raw threads.** Use the worker abstractions.
 - **Minimal includes.** Trim umbrella includes.
 - **No bodges.** If something is structurally wrong, fix it; if you can't fix it now, write a row in INVENTORY notes for the right fix and proceed deliberately.
-- **Preserve old code.** Move retired retail D3D code to `attic/` or wrap in `#ifdef UNUSED` — do not delete what you intend to migrate.
+- **Preserve old code you'll migrate.** Wrap retail D3D code you still intend to migrate in `#ifdef UNUSED`; delete the rest (git history keeps it).
 - **No new raw `fprintf(stderr)`.** Use `src/logging.h` (rxi log.c facade).
 - **World-space throughout** in any deferred-lighting path.
 - **Renderer stays game-agnostic.** Effect-specific code lives in `src/`, not in the core renderer. The renderer exposes generic submission (`SBillboardDrawItem`, `SParticleDrawItem`, etc.).
@@ -586,8 +586,8 @@ lifecycle. Lifecycle goes through `RegisterUpdate` like any other component.
 - The renderer's existing `SMeshSubmit` / skinned-mesh path is already there
   — don't add a new sokol pipeline for `IM`. (PHASE1_SPINE.md §1 lists this
   explicitly: MP/IM mesh-paths reuse `SMeshSubmit`, no new pipeline.)
-- Preserve retail mesh code under `attic/` or `#ifdef UNUSED` if you replace
-  rather than evolve it — per project-wide rule.
+- Keep retail mesh code under `#ifdef UNUSED` if you replace rather than
+  evolve it and may still need it — per project-wide rule.
 
 This rule reconciles PARTICLE_EFFECTS.md §15 ("don't port D3D animators
 one-by-one as bespoke renderers") with the reality that some retail

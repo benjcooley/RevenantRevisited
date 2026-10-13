@@ -11,7 +11,7 @@ not need to open the recon at all.
    means a clean file. Create a new `src/ui<panel>test.{cpp,h}` (and register a
    new `--test=` mode) written entirely from the spec. If a prior hand-iterated
    shell for this panel exists, do NOT edit it — once your new file is verified,
-   retire the old one (delete, or move to `attic/`). Editing the old file lets
+   delete the old one (git history keeps it). Editing the old file lets
    its bugs and stale assumptions hide inside your "reconstruction"; a fresh file
    makes the clean-room build verifiably independent. (Proof: the side-tabs panel
    was a brand-new file and was correct first pass; the stat bar was edited

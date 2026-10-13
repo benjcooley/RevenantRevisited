@@ -491,7 +491,7 @@ scroll the map a mosaic px a pointer px; a right release returns to the
 camera.
 
 **Port.** `TAutoMap` (`src/automap.*`; the 1998 pane is in
-`attic/src/automap.*`) is retail's pane on the GPU: the mosaic is a
+`attic-final:attic/src/automap.*`) is retail's pane on the GPU: the mosaic is a
 nearest-filtered render target stamped a tile at a time
 (`TSurface::ContinuePass`), the body four stretched quads under a target
 clip (`TRenderer::DrawSurfaceStretchedToTarget`, `SetTargetClip`), the fog
@@ -583,7 +583,7 @@ the player again. The examined-object formats (Character, Weapon, Armor,
 Default) add the portrait (ICON) and a description paged by Prev / Next.
 
 **Port.** `TStatPane` (`src/statpane.*`; the 1998 skill-tree pane is in
-`attic/src/statpane.*`) parses statpane.def once into blocks of statements
+`attic-final:attic/src/statpane.*`) parses statpane.def once into blocks of statements
 and runs the selected block on each compose, its text through the canonical
 helpers. The hot spots are rebuilt when the block changes
 (`TButtonPane::ClearButtons`). Retail repainted on the bound object's

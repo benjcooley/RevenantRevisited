@@ -718,7 +718,7 @@ The survey above found the 1998 exit code; this is what the port has now.
 
 | Piece | State |
 |---|---|
-| `src/exit.{h,cpp}` | retail: stats (+ TileFlags, AutoActivate), 6-state `SetExitState`, `Use`, `CursorType`, `Activate(user, forced)`, `Unactivate`, `Operate`, `IsOutside`, `Pulse` (players, door-type exclusion, `exitflags`, OF_ONEXIT), TLever (`Use`, `Operate`, its Pulse), TUpBlock, TPressPlate, TDragonEntAnimator. 1998 bodies in `attic/src/exit_1998.cpp` (TSpikeWall too). |
+| `src/exit.{h,cpp}` | retail: stats (+ TileFlags, AutoActivate), 6-state `SetExitState`, `Use`, `CursorType`, `Activate(user, forced)`, `Unactivate`, `Operate`, `IsOutside`, `Pulse` (players, door-type exclusion, `exitflags`, OF_ONEXIT), TLever (`Use`, `Operate`, its Pulse), TUpBlock, TPressPlate, TDragonEntAnimator. 1998 bodies in `attic-final:attic/src/exit_1998.cpp` (TSpikeWall too). |
 | Exit list | read by the session's `exits` load step (155 entries from `Ahkuilon.rvm`), written/freed at `TGameSession::End` |
 | `CursorType` | overrides really override (the const base was the bug) |
 | Teleport | `TObjectInstance::Teleport` (drop target, camera snap, `SetPos`), used by `Activate` and `pos` |
@@ -819,8 +819,8 @@ Each step lands with a `--test` or filmstrip check; no parallel paths.
    6-state `SetExitState`, `Operate(user)` + `IsOutside` (+ the
    `isoutside` member and the `operate` command), retail `Use`
    (Openable gate, CheckKeyUse fall-through, localized DOORLOCKED for the
-   player), `CursorType`, `Unactivate`. Move the 1998 bodies that change
-   meaning (TSpikeWall, the Door push) to `attic/`.
+   player), `CursorType`, `Unactivate`. Retire the 1998 bodies that change
+   meaning (TSpikeWall, the Door push): `attic-final:attic/src/exit_1998.cpp`.
 4. **The teleport primitive** (3.1): one function used by `pos` and
    `Activate`; port retail `pos` on it (no-arg form, `add`, SetTarget,
    camera flag 8 in `TMapPane::UpdateMapPos`).

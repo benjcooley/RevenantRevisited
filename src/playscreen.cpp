@@ -12,7 +12,7 @@
 // they don't fit the new architecture: BITMAP.100 backdrop, DrawOverhangs,
 // the postanim/posttext arrays, and the Pulse/Animate -> Display.Put/ZPut/
 // PutDim/WriteText draw chain. The legacy code is preserved at
-// attic/src/playscreen.cpp for reference.
+// attic-final:attic/src/playscreen.cpp for reference.
 //
 // What survived (often as stubs or shims):
 //  - Game-time tracking (gameframes, gametime, time-of-day curve).
@@ -115,7 +115,7 @@ static bool IsOffMapPane(int32_t x, int32_t y)
 }
 
 // Default game controls. Mirrors the retail table from
-// attic/src/playscreen.cpp. Mode flags differ per binding: directional
+// attic-final:attic/src/playscreen.cpp. Mode flags differ per binding: directional
 // keys are ALLMODES (work in walk / combat / bow / sneak), combat
 // strikes only fire in CTRL_COMBATMODE, etc. Mode bits live in the
 // ControlMap and gate which command a key generates -- the retail

@@ -65,7 +65,6 @@ RevenantRevisited/
 ├── tools/           ← test harnesses (test_parse, test_anim_system, …).
 ├── docs/            ← architecture notes and subsystem deep-dives.
 ├── images/          ← screenshots and visual references.
-├── attic/           ← retired code preserved for context (no longer built).
 └── legacy/          ← original 1998 source materials (read-only reference).
 ```
 
