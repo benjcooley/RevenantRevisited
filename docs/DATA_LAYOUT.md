@@ -13,15 +13,25 @@ binary in `data/`) unless marked otherwise.
 
 | Root | What | Writable | Found by |
 |---|---|---|---|
-| **Install** (`RunPath`) | The player's stock Revenant install: `resources.rvr`, `imagery.rvi`, `Modules/*.rvm`, loose patch files. The repo's `data/` stands in for it in dev. | never | `$REVENANT_DATA_PATH`, else cwd / exe-relative probes (`rev_resolve_program_paths`) |
-| **User data** (`SavePath`) | `Revenant.ini`, `curmap/`, `Save/`, `cache/` | yes, the only writable root | `$REVENANT_SAVE_PATH`, else Application Support / XDG / LOCALAPPDATA |
+| **Install** (`RunPath`) | The player's Revenant install: `resources.rvr`, `imagery.rvi`, `Modules/*.rvm`, loose patch files. The repo's `data/` stands in for it in dev. | its game files never | `$REVENANT_DATA_PATH`, else cwd / exe-relative probes (`rev_resolve_program_paths`) |
+| **User data** (`SavePath`) | `Revenant.ini`, `curmap/`, `Save/`, `cache/` | yes, the only writable root | `$REVENANT_SAVE_PATH`; else the install, when the program sits in it and may write there; else Application Support / XDG / LOCALAPPDATA |
 | **Overlay** | Revisited enhancements; mirrors the install tree. Opt-in (`--revisited`). | no | `rev_resolve_revisited_overlay()` |
 | **Engine assets** | Data the port itself authors or supplies and needs in every mode: `effects.def`, `render_metadata.def`, `editor/icons/`, `fonts/` (the TrueType faces: Arimo and Tinos draw retail's Arial and Times New Roman, plus the editor's). Repo: `assets/`. | no | `rev_engine_asset()`: `$REVENANT_ASSETS_PATH`, `<exe-dir>/assets`, `<exe-dir>/../Resources/assets`, `<repo>/assets` |
 
-The install is the player's property and stays stock: nothing the port
-authors goes into it, and nothing writes to it. The engine must run on a
+The install's game files are the player's property and stay stock:
+nothing the port writes replaces or edits them. The engine must run on a
 stock install with no overlay (revisited/README.md, "Hard invariant"),
 which is why engine-required data cannot live in the overlay either.
+
+A shipped build is unpacked into the root of the player's install, beside
+`Revenant.exe` (docs/CI.md §4). Run from there it is retail's hard-drive
+install: SavePath is the install, as retail's is, so the two games share
+`Revenant.ini` and see each other's saves under `Save/`. Revisited adds
+only what retail also writes there: `Revenant.ini` keys, save slots and
+the session's `curmap/`. Until save interop is proven both ways, the
+package README tells players to unpack into a copy of their install. A
+build run from anywhere else (development, or an install it can't write)
+keeps its user data in the per-user directory.
 
 ## 2. Retail path behavior
 

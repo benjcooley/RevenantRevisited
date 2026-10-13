@@ -1101,28 +1101,49 @@ static std::filesystem::path resolve_user_data_dir()
     return {};
 }
 
-// Posix port of retail's GetProgramPaths probe. Splits the two roles
-// retail collapsed when installed on HD:
-//   * RunPath  = install dir (read-only-safe assets: Imagery/, Modules/,
-//                resources.rvr, imagery.rvi). Resolved via the same
-//                logic that VFS uses (env var $REVENANT_DATA_PATH, or
-//                cwd / cwd/data / cwd/../data — see vfs_resolve_data_root).
-//                Inside a macOS .app bundle, this naturally lands in
-//                Contents/Resources/data/ when shipped that way.
-//   * SavePath = writable per-user data dir (Revenant.ini, curmap/,
-//                Save/Single/<n>/, …) at the platform-conventional
-//                Application Support / XDG_DATA_HOME / LOCALAPPDATA.
-//                Created if missing; if creation fails we abort —
-//                Revenant requires a writable user-data dir and refuses
-//                to run from non-writable media.
-// Both buffers are filled with a trailing '/' so makepath / rev_fopen
-// can concat directly.
+// True when a file can be created in `dir`. create_directories can succeed
+// on read-only mounts, so this writes and removes a probe file.
+static bool is_writable_dir(const std::filesystem::path &dir)
+{
+    const std::filesystem::path probe = dir / ".revenant_write_test";
+    FILE *fp = fopen(probe.string().c_str(), "wb");
+    if (!fp)
+        return false;
+    fclose(fp);
+    std::error_code ec;
+    std::filesystem::remove(probe, ec);
+    return true;
+}
+
+// Posix port of retail's GetProgramPaths probe.
+//   * RunPath  = the install (Imagery/, Modules/, resources.rvr,
+//                imagery.rvi), found as the VFS finds it:
+//                $REVENANT_DATA_PATH, the working directory, then the
+//                executable's (vfs_resolve_data_root).
+//   * SavePath = where Revenant.ini, curmap/ and Save/Single/<n>/ live:
+//       - $REVENANT_SAVE_PATH when set (isolated test runs);
+//       - the install itself when the program sits in it and may write
+//         there. That is retail's hard-drive install (SavePath ==
+//         RunPath): the original game and Revisited share one
+//         Revenant.ini and see each other's saves;
+//       - otherwise the per-user Application Support / XDG_DATA_HOME /
+//         LOCALAPPDATA directory, created if missing. Development runs
+//         from the repo land here.
+//     Revenant refuses to run without a writable SavePath.
+// Both buffers end in '/' so makepath / rev_fopen can concatenate.
 void rev_resolve_program_paths(char *RunPath, char *SavePath, int32_t buflen)
 {
     namespace fs = std::filesystem;
 
-    // ---------- SavePath: per-user writable dir, mandatory. ----------
-    fs::path save = resolve_user_data_dir();
+    fs::path run = vfs_data_root();
+
+    // ---------- SavePath ----------
+    const char *save_override = getenv("REVENANT_SAVE_PATH");
+    std::error_code same_ec;
+    const bool in_install = !(save_override && *save_override) && !run.empty() &&
+                            fs::equivalent(run, rev_platform::ExecutableDir(), same_ec) &&
+                            is_writable_dir(run);
+    const fs::path save = in_install ? run : resolve_user_data_dir();
     if (save.empty())
     {
         FatalError("Revenant: cannot resolve per-user data directory. "
@@ -1141,16 +1162,7 @@ void rev_resolve_program_paths(char *RunPath, char *SavePath, int32_t buflen)
                 save.string().c_str(), ec.message().c_str());
             FatalError(msg);
         }
-        // Sanity-check writability with an actual probe — create_directories
-        // can succeed on read-only mounts in odd circumstances.
-        const fs::path probe = save / ".revenant_write_test";
-        if (FILE *fp = fopen(probe.string().c_str(), "wb"))
-        {
-            fclose(fp);
-            std::error_code rmec;
-            fs::remove(probe, rmec);
-        }
-        else
+        if (!is_writable_dir(save))
         {
             char msg[512];
             std::snprintf(msg, sizeof(msg),
@@ -1163,24 +1175,13 @@ void rev_resolve_program_paths(char *RunPath, char *SavePath, int32_t buflen)
         strncpyz(SavePath, s.c_str(), buflen);
     }
 
-    // ---------- RunPath: install dir (read-only assets). ----------
-    // Reuse the VFS data-root probe — it already supports the
-    // $REVENANT_DATA_PATH env var and cwd-relative dev fallbacks. If
-    // SavePath itself looks like a populated install (someone copied
-    // the data tree there), prefer that — matches retail's HD-install
-    // case where SavePath == RunPath.
-    fs::path run;
+    // ---------- RunPath ----------
+    // A user-data directory holding a whole install (someone copied the
+    // data tree there) is the install, as on retail's hard-drive install.
     {
         std::error_code ec;
-        if (fs::exists(save / "imagery.rvi", ec) ||
-            fs::exists(save / "Modules", ec))
-        {
+        if (fs::exists(save / "imagery.rvi", ec) || fs::exists(save / "Modules", ec))
             run = save;
-        }
-        else
-        {
-            run = vfs_data_root();
-        }
     }
     if (!run.empty())
     {
@@ -1202,7 +1203,8 @@ void rev_resolve_program_paths(char *RunPath, char *SavePath, int32_t buflen)
     }
 
     log_info("[paths] RunPath  (install)  = %s", RunPath);
-    log_info("[paths] SavePath (user data) = %s", SavePath);
+    log_info("[paths] SavePath (user data) = %s%s", SavePath,
+             in_install ? "  (the install: settings and saves shared with the original game)" : "");
 }
 
 char *makepath(char *name, char *buf, int32_t buflen)
