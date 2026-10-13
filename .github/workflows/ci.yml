@@ -1,0 +1,159 @@
+# Builds and tests every pushed commit on macOS, Windows and Linux, then
+# publishes the packages to downloads.revenantrevisited.com. The three
+# "Build & test" checks gate merges into main. docs/CI.md has the details.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Every commit on main is built and archived; elsewhere a newer push
+  # supersedes the run in flight.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  DOWNLOADS_URL: https://downloads.revenantrevisited.com
+  PYTHONUNBUFFERED: "1"
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_BASEDIR: ${{ github.workspace }}
+  CCACHE_COMPRESS: "true"
+  CCACHE_MAXSIZE: 1G
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build & test (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: osx,     os: macos-latest }
+          - { platform: windows, os: windows-latest }
+          - { platform: linux,   os: ubuntu-24.04 }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      # Only the engine's own assets ship; the rest of LFS is the retail
+      # install, which neither the build nor the tests read.
+      - name: Fetch engine assets (Git LFS)
+        run: git lfs pull --include="assets/**"
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install toolchain (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends clang lld llvm ninja-build ccache \
+            libgl-dev libx11-dev libxi-dev libxcursor-dev libxrandr-dev libasound2-dev
+
+      - name: Install toolchain (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          command -v ninja || brew install ninja
+          command -v ccache || brew install ccache
+
+      - name: Set up MSVC environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756  # v1.13.0
+
+      - name: Install toolchain (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          command -v ninja || choco install ninja --no-progress -y
+          clang-cl --version
+
+      # Compiler cache (macOS, Linux): each run starts from the newest cache
+      # of its platform and saves its own.
+      - name: Restore compiler cache
+        if: runner.os != 'Windows'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: .ccache
+          key: ccache-${{ matrix.platform }}-${{ github.sha }}
+          restore-keys: ccache-${{ matrix.platform }}-
+
+      - name: Configure
+        run: python tools/ci/ci.py configure --platform ${{ matrix.platform }}
+
+      - name: Build
+        run: python tools/ci/ci.py build
+
+      - name: Test
+        run: python tools/ci/ci.py test
+
+      - name: Package
+        run: python tools/ci/ci.py package --platform ${{ matrix.platform }}
+
+      - name: Report
+        if: ${{ !cancelled() }}
+        run: python tools/ci/ci.py report --platform ${{ matrix.platform }}
+
+      - name: Upload package
+        if: ${{ success() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: package-${{ matrix.platform }}
+          path: dist/RevenantRevisited-${{ matrix.platform }}.zip
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Upload report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: report-${{ matrix.platform }}
+          path: |
+            ci-out/report-${{ matrix.platform }}.json
+            ci-out/*.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+  publish:
+    name: Publish & report
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          sparse-checkout: tools/ci
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install publish dependencies
+        run: pip install --quiet -r tools/ci/requirements.txt
+
+      - name: Download packages and reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          path: artifacts
+
+      - name: Publish to R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: revenant
+        run: python tools/ci/ci.py publish --artifacts artifacts
+
+      - name: Run summary
+        if: ${{ !cancelled() }}
+        run: python tools/ci/ci.py summary --artifacts artifacts

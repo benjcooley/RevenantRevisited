@@ -18,6 +18,21 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# The 1998 code was written for MSVC on x86, where char is signed; the
+# parser and the stat tables read bytes through plain char. GCC and Clang
+# make char unsigned on ARM Linux, so pin it.
+if(NOT MSVC)
+  add_compile_options(-fsigned-char)
+endif()
+
+# Windows: keep <windows.h> from defining min/max macros over revtypes.h's
+# functions, accept the C runtime's classic string functions, and supply
+# the POSIX headers the port uses (src/platform/windows/include).
+if(WIN32)
+  add_compile_definitions(NOMINMAX _CRT_SECURE_NO_WARNINGS)
+  include_directories(BEFORE "${CMAKE_SOURCE_DIR}/src/platform/windows/include")
+endif()
+
 # ----------------------------------------------------------------------------
 # Sanitizer build (ASan + UBSan). Off by default — opt in by configuring
 # with -DREVENANT_ASAN=ON. Use a separate build dir so the normal build
@@ -128,6 +143,9 @@ add_library(imgui STATIC
 )
 target_include_directories(imgui PUBLIC
   ${IMGUI_DIR} ${IMGUIZMO_DIR} ${IMPLOT_DIR} ${IMGUIFD_DIR} ${IMGUITGL_DIR} ${FONTS_DIR})
+# ImGuiFileDialog lists directories through std::filesystem on every
+# platform, rather than <dirent.h> (which Windows lacks).
+target_compile_definitions(imgui PRIVATE USE_STD_FILESYSTEM)
 
 # Gather C++ sources. Sokol TU is added explicitly per-backend below so
 # the GLOB doesn't pick up the wrong one on a given platform.
@@ -227,6 +245,7 @@ add_executable(test_particlefx
 target_include_directories(test_particlefx PRIVATE
   ${SOKOL_DIR}
   ${HANDMADE_MATH_DIR})
+target_compile_definitions(test_particlefx PRIVATE REV_ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")
 
 FetchContent_Declare(
   googletest
@@ -364,4 +383,59 @@ elseif(UNIX)
     asound
     dl
     Threads::Threads)
+endif()
+
+# ----------------------------------------------------------------------------
+# Tests: `ctest --test-dir build` runs them all; CI runs the same set on
+# every platform as the merge gate (docs/CI.md). A test registered here must
+# pass without the retail install: one that needs game data skips itself
+# when REVENANT_DATA_PATH is unset. New test executables join a list below.
+# ----------------------------------------------------------------------------
+enable_testing()
+include(GoogleTest)
+
+foreach(test IN ITEMS
+    test_anim_system
+    test_asset_cache
+    test_defdoc
+    test_parse
+    test_render_metadata
+    test_retail_mesh_lighting
+    test_transform
+    test_vfs_path_index
+    test_vfx_review_layout
+    test_vfx_review_preview
+    test_vfx_review_schedule)
+  add_test(NAME ${test} COMMAND ${test})
+endforeach()
+
+# GoogleTest suites report each case as its own test, named
+# <executable>.<Suite>.<Case>.
+foreach(test IN ITEMS
+    test_audio_decode
+    test_classiclighting
+    test_particlefx
+    test_playerstats)
+  gtest_discover_tests(${test} TEST_PREFIX "${test}." DISCOVERY_MODE PRE_TEST)
+endforeach()
+
+# Source-slice tests: each compiles a function cut from src/ into a small
+# fixture with clang++ and runs it. POSIX hosts only.
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_Interpreter_FOUND AND NOT WIN32)
+  foreach(script IN ITEMS
+      test_fx_capacity
+      test_fx_source_alpha
+      test_helper_source_alpha
+      test_helper_uv_submission
+      test_late_effect_submission
+      test_map_texture_submission
+      test_transient_map)
+    add_test(NAME ${script}.py
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/${script}.py)
+  endforeach()
+  # Out of date with SubmitFxQuad since the prelit RGBA5 path (6c6c5d53; its
+  # fixture lacks SQuadDrawItem::retail_prelit_rgba5 and EFxDepthMode).
+  # Listed so reports show it; re-enable once the VFX track updates it.
+  set_tests_properties(test_fx_source_alpha.py PROPERTIES DISABLED TRUE)
 endif()

@@ -12,6 +12,8 @@
 #include "mainwnd.h"
 #include "mappane.h"
 #include "parse.h"
+#include "platform/executable.h"
+#include "platform/memfile.h"
 #include "time.h"
 #include "timer.h"
 #include "vfspathindex.h"
@@ -23,13 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#if defined(__APPLE__)
-#  include <mach-o/dyld.h>     // _NSGetExecutablePath
-#endif
-#if defined(__linux__)
-#  include <unistd.h>          // readlink
-#endif
+#include <strings.h>
 
 #include <cassert>
 #include <cctype>
@@ -953,31 +949,6 @@ static std::filesystem::path find_repo_root(const std::filesystem::path &start)
     return {};
 }
 
-// The directory holding the running executable, or an empty path.
-static std::filesystem::path executable_dir()
-{
-    namespace fs = std::filesystem;
-#if defined(__APPLE__)
-    char raw[MAXPATHLEN];
-    uint32_t sz = sizeof(raw);
-    if (_NSGetExecutablePath(raw, &sz) == 0)
-    {
-        std::error_code ec;
-        const fs::path p = fs::weakly_canonical(fs::path(raw), ec);
-        return (ec ? fs::path(raw) : p).parent_path();
-    }
-#elif defined(__linux__)
-    char raw[MAXPATHLEN];
-    const ssize_t n = readlink("/proc/self/exe", raw, sizeof(raw) - 1);
-    if (n > 0)
-    {
-        raw[n] = 0;
-        return fs::path(raw).parent_path();
-    }
-#endif
-    return {};
-}
-
 std::string rev_engine_asset(const char *relpath)
 {
     namespace fs = std::filesystem;
@@ -989,7 +960,7 @@ std::string rev_engine_asset(const char *relpath)
         fs::path found;
         if (const char *env = getenv("REVENANT_ASSETS_PATH"); env && *env && is_dir(env))
             found = env;
-        const fs::path exe_dir = executable_dir();
+        const fs::path exe_dir = rev_platform::ExecutableDir();
         if (found.empty() && !exe_dir.empty())
         {
             for (const fs::path &cand : {exe_dir / "assets",
@@ -1055,7 +1026,7 @@ const char *rev_resolve_revisited_overlay()
         }
     }
 
-    const fs::path exe_dir = executable_dir();
+    const fs::path exe_dir = rev_platform::ExecutableDir();
 
     // 2) production: <exe-dir>/RevenantRevisited.rvr
     // 3) production alt: <RunPath>/RevenantRevisited.rvr — RunPath is set
@@ -1130,28 +1101,49 @@ static std::filesystem::path resolve_user_data_dir()
     return {};
 }
 
-// Posix port of retail's GetProgramPaths probe. Splits the two roles
-// retail collapsed when installed on HD:
-//   * RunPath  = install dir (read-only-safe assets: Imagery/, Modules/,
-//                resources.rvr, imagery.rvi). Resolved via the same
-//                logic that VFS uses (env var $REVENANT_DATA_PATH, or
-//                cwd / cwd/data / cwd/../data — see vfs_resolve_data_root).
-//                Inside a macOS .app bundle, this naturally lands in
-//                Contents/Resources/data/ when shipped that way.
-//   * SavePath = writable per-user data dir (Revenant.ini, curmap/,
-//                Save/Single/<n>/, …) at the platform-conventional
-//                Application Support / XDG_DATA_HOME / LOCALAPPDATA.
-//                Created if missing; if creation fails we abort —
-//                Revenant requires a writable user-data dir and refuses
-//                to run from non-writable media.
-// Both buffers are filled with a trailing '/' so makepath / rev_fopen
-// can concat directly.
+// True when a file can be created in `dir`. create_directories can succeed
+// on read-only mounts, so this writes and removes a probe file.
+static bool is_writable_dir(const std::filesystem::path &dir)
+{
+    const std::filesystem::path probe = dir / ".revenant_write_test";
+    FILE *fp = fopen(probe.string().c_str(), "wb");
+    if (!fp)
+        return false;
+    fclose(fp);
+    std::error_code ec;
+    std::filesystem::remove(probe, ec);
+    return true;
+}
+
+// Posix port of retail's GetProgramPaths probe.
+//   * RunPath  = the install (Imagery/, Modules/, resources.rvr,
+//                imagery.rvi), found as the VFS finds it:
+//                $REVENANT_DATA_PATH, the working directory, then the
+//                executable's (vfs_resolve_data_root).
+//   * SavePath = where Revenant.ini, curmap/ and Save/Single/<n>/ live:
+//       - $REVENANT_SAVE_PATH when set (isolated test runs);
+//       - the install itself when the program sits in it and may write
+//         there. That is retail's hard-drive install (SavePath ==
+//         RunPath): the original game and Revisited share one
+//         Revenant.ini and see each other's saves;
+//       - otherwise the per-user Application Support / XDG_DATA_HOME /
+//         LOCALAPPDATA directory, created if missing. Development runs
+//         from the repo land here.
+//     Revenant refuses to run without a writable SavePath.
+// Both buffers end in '/' so makepath / rev_fopen can concatenate.
 void rev_resolve_program_paths(char *RunPath, char *SavePath, int32_t buflen)
 {
     namespace fs = std::filesystem;
 
-    // ---------- SavePath: per-user writable dir, mandatory. ----------
-    fs::path save = resolve_user_data_dir();
+    fs::path run = vfs_data_root();
+
+    // ---------- SavePath ----------
+    const char *save_override = getenv("REVENANT_SAVE_PATH");
+    std::error_code same_ec;
+    const bool in_install = !(save_override && *save_override) && !run.empty() &&
+                            fs::equivalent(run, rev_platform::ExecutableDir(), same_ec) &&
+                            is_writable_dir(run);
+    const fs::path save = in_install ? run : resolve_user_data_dir();
     if (save.empty())
     {
         FatalError("Revenant: cannot resolve per-user data directory. "
@@ -1170,16 +1162,7 @@ void rev_resolve_program_paths(char *RunPath, char *SavePath, int32_t buflen)
                 save.string().c_str(), ec.message().c_str());
             FatalError(msg);
         }
-        // Sanity-check writability with an actual probe — create_directories
-        // can succeed on read-only mounts in odd circumstances.
-        const fs::path probe = save / ".revenant_write_test";
-        if (FILE *fp = fopen(probe.string().c_str(), "wb"))
-        {
-            fclose(fp);
-            std::error_code rmec;
-            fs::remove(probe, rmec);
-        }
-        else
+        if (!is_writable_dir(save))
         {
             char msg[512];
             std::snprintf(msg, sizeof(msg),
@@ -1192,24 +1175,13 @@ void rev_resolve_program_paths(char *RunPath, char *SavePath, int32_t buflen)
         strncpyz(SavePath, s.c_str(), buflen);
     }
 
-    // ---------- RunPath: install dir (read-only assets). ----------
-    // Reuse the VFS data-root probe — it already supports the
-    // $REVENANT_DATA_PATH env var and cwd-relative dev fallbacks. If
-    // SavePath itself looks like a populated install (someone copied
-    // the data tree there), prefer that — matches retail's HD-install
-    // case where SavePath == RunPath.
-    fs::path run;
+    // ---------- RunPath ----------
+    // A user-data directory holding a whole install (someone copied the
+    // data tree there) is the install, as on retail's hard-drive install.
     {
         std::error_code ec;
-        if (fs::exists(save / "imagery.rvi", ec) ||
-            fs::exists(save / "Modules", ec))
-        {
+        if (fs::exists(save / "imagery.rvi", ec) || fs::exists(save / "Modules", ec))
             run = save;
-        }
-        else
-        {
-            run = vfs_data_root();
-        }
     }
     if (!run.empty())
     {
@@ -1231,7 +1203,8 @@ void rev_resolve_program_paths(char *RunPath, char *SavePath, int32_t buflen)
     }
 
     log_info("[paths] RunPath  (install)  = %s", RunPath);
-    log_info("[paths] SavePath (user data) = %s", SavePath);
+    log_info("[paths] SavePath (user data) = %s%s", SavePath,
+             in_install ? "  (the install: settings and saves shared with the original game)" : "");
 }
 
 char *makepath(char *name, char *buf, int32_t buflen)
@@ -1395,7 +1368,7 @@ std::filesystem::path vfs_resolve_data_root()
             return fs::canonical(cand, ec);
     }
 
-    const fs::path exe_dir = executable_dir();
+    const fs::path exe_dir = rev_platform::ExecutableDir();
     if (!exe_dir.empty())
     {
         for (const fs::path cand : {
@@ -1487,47 +1460,6 @@ const VFSEntry *vfs_find_mounted(const std::string &path)
     return nullptr;
 }
 
-struct VFSHandle
-{
-    std::vector<uint8_t> buf;
-    size_t pos;
-};
-
-int vfs_read(void *c, char *p, int n)
-{
-    auto *h = static_cast<VFSHandle *>(c);
-    const size_t avail = h->buf.size() - h->pos;
-    size_t copy = n < 0 ? 0 : (size_t)n;
-    if (copy > avail)
-        copy = avail;
-    memcpy(p, h->buf.data() + h->pos, copy);
-    h->pos += copy;
-    return (int)copy;
-}
-
-fpos_t vfs_seek(void *c, fpos_t off, int whence)
-{
-    auto *h = static_cast<VFSHandle *>(c);
-    fpos_t newpos = 0;
-    switch (whence)
-    {
-    case SEEK_SET: newpos = off; break;
-    case SEEK_CUR: newpos = (fpos_t)h->pos + off; break;
-    case SEEK_END: newpos = (fpos_t)h->buf.size() + off; break;
-    default: return -1;
-    }
-    if (newpos < 0 || (size_t)newpos > (fpos_t)h->buf.size())
-        return -1;
-    h->pos = (size_t)newpos;
-    return newpos;
-}
-
-int vfs_close(void *c)
-{
-    delete static_cast<VFSHandle *>(c);
-    return 0;
-}
-
 // $REVENANT_VFS_TRACE=1 logs which copy served every read: "pack", "loose" or
 // the legacy "by-name" lookup. Off by default (thousands of lines per boot).
 bool vfs_trace_enabled()
@@ -1542,17 +1474,11 @@ bool vfs_trace_enabled()
 // Opens a pack entry as a read-only FILE over an in-memory copy.
 FILE *vfs_open_entry(const VFSEntry &entry)
 {
-    auto h = std::make_unique<VFSHandle>();
-    h->buf.resize(entry.size);
-    h->pos = 0;
+    std::vector<uint8_t> bytes(entry.size);
     if (!mz_zip_reader_extract_to_mem(&entry.arch->zip, entry.file_index,
-                                      h->buf.data(), h->buf.size(), 0))
+                                      bytes.data(), bytes.size(), 0))
         return nullptr;
-
-    FILE *fp = funopen(h.get(), vfs_read, nullptr, vfs_seek, vfs_close);
-    if (fp)
-        h.release();
-    return fp;
+    return rev_platform::OpenMemoryFile(std::move(bytes));
 }
 
 // Legacy fallback: exact/longest archive path, then unique basename aliases.

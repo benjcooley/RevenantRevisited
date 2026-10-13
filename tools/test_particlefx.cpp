@@ -30,10 +30,7 @@ void expect_vec_near(const float* values, std::initializer_list<float> expected)
 
 defdoc::Document load_effect_defs()
 {
-    std::filesystem::path path =
-        std::filesystem::current_path() / "assets" / "effects.def";
-    if (!std::filesystem::exists(path))
-        path = std::filesystem::current_path() / ".." / "assets" / "effects.def";
+    const std::filesystem::path path = std::filesystem::path(REV_ASSETS_DIR) / "effects.def";
     std::ifstream in(path);
     if (!in)
     {

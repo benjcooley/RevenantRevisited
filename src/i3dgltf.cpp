@@ -22,6 +22,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <strings.h>
 #include <vector>
 
 #include <stb_image_write.h>   // impl lives in framesnap.cpp

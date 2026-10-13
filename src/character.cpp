@@ -35,6 +35,7 @@
 #include <cstdlib>
 #include <math.h>
 #include <string.h>
+#include <strings.h>
 #include <vector>
 
 #define GRIDSNAPSIZE    48

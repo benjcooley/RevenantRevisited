@@ -24,6 +24,13 @@ using HANDLE = void*;
 // dropped entirely. Retained as a shim only while legacy DirectX call
 // sites still exist.
 // TODO(port): remove when Subsystems 2a and 3 land.
+// On Windows this must agree with <winnt.h>, which TUs reaching the OS
+// (miniaudio, sokol) also include; the macros are spelled as the SDK's so
+// either may come first.
+#if defined(_WIN32)
+using HRESULT = long;
+#else
 using HRESULT = int32_t;
-#define SUCCEEDED(hr) ((HRESULT)(hr) >= 0)
-#define FAILED(hr)    ((HRESULT)(hr) < 0)
+#endif
+#define SUCCEEDED(hr) (((HRESULT)(hr)) >= 0)
+#define FAILED(hr)    (((HRESULT)(hr)) < 0)

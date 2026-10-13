@@ -76,7 +76,7 @@ The engine resolves three platform-aware paths at boot:
 | Path     | Contents                                          | Default location                                                     |
 |---|---|---|
 | RunPath  | User's existing Revenant install (read-only)      | env `$REVENANT_DATA_PATH`, else exe-dir / cwd / repo `data/` heuristic |
-| SavePath | User saves, INI, prefs (writable, per-user)       | macOS `~/Library/Application Support/Revenant/` · Linux `$XDG_DATA_HOME/Revenant/` · Windows `%LOCALAPPDATA%\Revenant\` |
+| SavePath | User saves, INI, prefs (writable)                 | env `$REVENANT_SAVE_PATH`, else the install when the program sits in it (retail's hard-drive install: settings and saves shared with the original game), else macOS `~/Library/Application Support/Revenant/` · Linux `$XDG_DATA_HOME/Revenant/` · Windows `%LOCALAPPDATA%\Revenant\` |
 | Overlay  | Our enhancement pack (optional)                   | env `$REVENANT_REVISITED_PATH`, else `<exe-dir>/RevenantRevisited.rvr`, else dev `<repo>/revisited/resources/` |
 | Assets   | Engine-owned data (required)                      | env `$REVENANT_ASSETS_PATH`, else `<exe-dir>/assets/`, else `.app` `Resources/assets/`, else dev `<repo>/assets/` |
 
@@ -167,8 +167,11 @@ assets/                          ← required: engine-owned data (the repo's ass
 RevenantRevisited.rvr            ← optional: enhancement overlay (zipped revisited/resources/)
 ```
 
-The user drops these alongside their existing Revenant install. We
-**never ship original Cinematix assets** — the pack only carries
+The user unpacks these into the root of a copy of their Revenant install
+(the package README asks for a copy until save interop with retail is
+proven both ways). Run from there, Revisited keeps `Revenant.ini` and
+`Save/` in that folder exactly as retail does, so it lists and opens the
+saves already there. We **never ship original Cinematix assets** — the pack only carries
 patches that need a real install to function (similar to a Doom WAD
 needing an IWAD). Without the .rvr the binary plays vanilla retail
 against the user's existing data.
@@ -183,6 +186,11 @@ cmake --build build
 ```
 
 On macOS, the project links Metal/Cocoa/AppKit frameworks through `CMakeLists.txt`.
+
+`ctest --test-dir build` runs the unit tests. Every pushed commit is built
+and tested on macOS, Windows and Linux, and its packages are published to
+downloads.revenantrevisited.com; merges into `main` go through a pull
+request that passes all three. See `docs/CI.md`.
 
 For the ASan + UBSan build, headless test runs and lldb setup, see
 `docs/DEBUG_TOOLING.md`.
