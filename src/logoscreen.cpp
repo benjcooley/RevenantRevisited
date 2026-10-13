@@ -5,6 +5,7 @@
 
 #include "logoscreen.h"
 
+#include "buildinfo.h"
 #include "gameflow.h"
 #include "logging.h"
 #include "multi.h"
@@ -29,14 +30,18 @@ const char* const kButtonNames[TLogoScreen::BTN_COUNT] = {
     "newgame", "loadgame", "multi", "options", "exit",
 };
 
-// Version text (Animate @ 0x0053a6d0): "Revenant   v%d.%02d" with the
-// retail version bytes 1 / 22 (0x005d79dc/dd), cell (15,450) 150x40, flags
-// 0x41 = TEXT_LEFT | TEXT_VCENTER, color (175,72,255) — the violet visible
-// in the retail screenshot.
-constexpr int32_t kVersionMajor = 1;
-constexpr int32_t kVersionMinor = 22;
-constexpr uint32_t kTextLeft    = 0x0001;
-constexpr uint32_t kTextVCenter = 0x0040;
+// Version text. Retail (Animate @ 0x0053a6d0) draws "Revenant   v%d.%02d"
+// with its version bytes 1 / 22 (0x005d79dc/dd) in the cell (15,450) 150x40,
+// flags 0x41 = TEXT_LEFT | TEXT_VCENTER, color (175,72,255) — the violet in
+// the retail screenshot. Revisited names its own build there, in the same
+// font and color: version, branch and commit (buildinfo.h). The cell runs to
+// the screen's right margin so a long branch name fits.
+constexpr int32_t  kVersionX     = 15;
+constexpr int32_t  kVersionY     = 450;
+constexpr int32_t  kVersionW     = WIDTH - 2 * kVersionX;
+constexpr int32_t  kVersionH     = 40;
+constexpr uint32_t kTextLeft     = 0x0001;
+constexpr uint32_t kTextVCenter  = 0x0040;
 
 // --menu auto-press delay: long enough for the menu to be on screen (and in a
 // filmstrip) before the button fires. Pulses run at 24 Hz.
@@ -75,10 +80,11 @@ bool TLogoScreen::Initialize()
     for (int32_t i = 0; i < BTN_COUNT; ++i)
         menu.AddSpriteButton(kButtonNames[i], kButtonSprites[i]);
 
-    char version[32];
-    std::snprintf(version, sizeof(version), "Revenant   v%d.%02d", kVersionMajor, kVersionMinor);
-    menu.AddText("version", 15, 450, 150, 40, version, kTextLeft | kTextVCenter,
-                 SDefColor{175, 72, 255, true}, "Med");
+    char version[160];
+    std::snprintf(version, sizeof(version), "RevenantRevisited %s %s %s",
+                  kBuildVersion, kBuildBranch, kBuildShortSha);
+    menu.AddText("version", kVersionX, kVersionY, kVersionW, kVersionH, version,
+                 kTextLeft | kTextVCenter, SDefColor{175, 72, 255, true}, "Med");
 
     menu.SetOnActivate([this](TDefPane&, const SDefWidget& widget, int32_t) {
         Activate(ButtonFromName(widget.name.c_str()));

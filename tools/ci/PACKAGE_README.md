@@ -10,6 +10,7 @@ A modern build of Cinematix Studios' *Revenant*, made from the
 
 | | |
 |---|---|
+| Version | ${version} |
 | Commit | [`${short}`](${commit_url}) on `${branch}` |
 | Built | ${built} · ${run} |
 | Newest build | ${latest_url} |
