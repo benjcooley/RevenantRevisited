@@ -474,26 +474,35 @@ def cmd_publish(args: argparse.Namespace) -> int:
     bucket = args.bucket
     base = args.downloads_url.rstrip("/")
 
-    # latest/ follows main. A run that finishes after a newer push to main
-    # leaves latest/ to that push's run.
+    # latest/ follows main, all platforms together: it moves only when the
+    # commit passed everywhere and is still main's tip (a run finishing
+    # after a newer push leaves latest/ to that push's run), so the three
+    # latest/ links always name one commit.
     promote, why = False, f"not on {MAIN_BRANCH}"
     if info["branch"] == MAIN_BRANCH:
         tip = tip_of(MAIN_BRANCH)
         promote = tip == info["sha"]
         why = "" if promote else f"{MAIN_BRANCH} has moved on to {(tip or '?')[:SHORT_HASH]}"
 
-    folder = archive_folder(s3, bucket, info["sha"])
     published = {}
+    passed = {}
     for platform in PLATFORMS.values():
         report = read_record(f"report-{platform.key}", args.artifacts)
         package = (report or {}).get("package")
         test = (report or {}).get("test") or {}
         zip_path = next(args.artifacts.rglob(platform.zip_name), None)
-        if not package or not zip_path or not test.get("ok"):
+        if package and zip_path and test.get("ok"):
+            passed[platform.key] = (zip_path, package)
+        else:
             published[platform.key] = {"published": False,
                                        "reason": "build or tests failed" if report else "no build"}
-            continue
+    if promote and len(passed) < len(PLATFORMS):
+        failed = ", ".join(p.label for k, p in PLATFORMS.items() if k not in passed)
+        promote, why = False, f"{failed} did not pass, so no latest/ moved"
 
+    folder = archive_folder(s3, bucket, info["sha"])
+    for key, (zip_path, package) in passed.items():
+        platform = PLATFORMS[key]
         metadata = {"commit": info["sha"], "branch": info["branch"],
                     "run": os.environ.get("GITHUB_RUN_ID", "local"), "sha256": package["sha256"]}
         archive_key = f"{folder}/{platform.zip_name}"
@@ -514,7 +523,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
                            CacheControl="no-cache", Metadata=metadata)
             entry.update(latest_url=f"{base}/{latest_key}", promoted=True)
             print(f"promoted {platform.label}: {entry['latest_url']}")
-        published[platform.key] = entry
+        published[key] = entry
 
     write_record("publish", {"commit": info["sha"], "platforms": published})
     return 0

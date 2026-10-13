@@ -109,16 +109,17 @@ serves the same bucket):
 | Path | What | Cache |
 |---|---|---|
 | `<hash>/RevenantRevisited-<platform>.zip` | every passing build, on every branch | immutable, one year |
-| `<platform>/latest/RevenantRevisited-<platform>.zip` | the newest passing build of `main` | `no-cache` |
+| `<platform>/latest/RevenantRevisited-<platform>.zip` | the newest build of `main` that passed on all three platforms | `no-cache` |
 
 `<hash>` is the commit's 7-character short hash, as GitHub shows it;
 if another commit already holds that folder, publish lengthens it the way
 git lengthens an ambiguous abbreviation. `<platform>` is `osx`, `windows`
 or `linux`. A package is published only
-when its build and tests passed. `latest/` moves only when the commit is
-still the tip of `main` at publish time: a slow run never overwrites a newer
-one. Each platform's `latest/` moves on its own, so a commit that fails on
-one platform still updates the others.
+when its build and tests passed. `latest/` moves for all three platforms
+together, only when the commit passed on all three and is still the tip of
+`main` at publish time (a slow run never overwrites a newer one). The three
+`latest/` links therefore always name the same commit; a commit that fails
+anywhere leaves them all where they were.
 
 The archived object's metadata records the commit, branch, CI run and
 SHA-256.
