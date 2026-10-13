@@ -41,6 +41,7 @@ CONFIG = "RelWithDebInfo"          # what the dev checkouts build
 
 MAIN_BRANCH = "main"
 PRODUCT = "RevenantRevisited"
+SHORT_HASH = 7                     # GitHub's abbreviated commit hash
 
 
 @dataclass(frozen=True)
@@ -117,7 +118,7 @@ def commit_info() -> dict:
     run_id = os.environ.get("GITHUB_RUN_ID")
     return {
         "sha": sha,
-        "short": sha[:8],
+        "short": sha[:SHORT_HASH],
         "branch": branch,
         "subject": git("log", "-1", "--format=%s", sha),
         "author": git("log", "-1", "--format=%an", sha),
@@ -445,6 +446,20 @@ def tip_of(branch: str) -> str | None:
     return out.split()[0] if out else None
 
 
+def archive_folder(s3, bucket: str, sha: str) -> str:
+    """The commit's archive folder: its short hash, lengthened (as git
+    abbreviates) when another commit already holds that folder."""
+    for n in range(SHORT_HASH, len(sha) + 1):
+        prefix = sha[:n]
+        held = s3.list_objects_v2(Bucket=bucket, Prefix=f"{prefix}/", MaxKeys=1).get("Contents")
+        if not held:
+            return prefix
+        owner = s3.head_object(Bucket=bucket, Key=held[0]["Key"])["Metadata"].get("commit")
+        if owner == sha:
+            return prefix                           # a rerun of this commit
+    return sha
+
+
 def cmd_publish(args: argparse.Namespace) -> int:
     import boto3                                    # publish job only
 
@@ -465,8 +480,9 @@ def cmd_publish(args: argparse.Namespace) -> int:
     if info["branch"] == MAIN_BRANCH:
         tip = tip_of(MAIN_BRANCH)
         promote = tip == info["sha"]
-        why = "" if promote else f"{MAIN_BRANCH} has moved on to {(tip or '?')[:8]}"
+        why = "" if promote else f"{MAIN_BRANCH} has moved on to {(tip or '?')[:SHORT_HASH]}"
 
+    folder = archive_folder(s3, bucket, info["sha"])
     published = {}
     for platform in PLATFORMS.values():
         report = read_record(f"report-{platform.key}", args.artifacts)
@@ -480,7 +496,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
 
         metadata = {"commit": info["sha"], "branch": info["branch"],
                     "run": os.environ.get("GITHUB_RUN_ID", "local"), "sha256": package["sha256"]}
-        archive_key = f"{info['sha']}/{platform.zip_name}"
+        archive_key = f"{folder}/{platform.zip_name}"
         s3.upload_file(str(zip_path), bucket, archive_key, ExtraArgs={
             "ContentType": "application/zip",
             "CacheControl": "public, max-age=31536000, immutable",

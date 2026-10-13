@@ -108,10 +108,13 @@ serves the same bucket):
 
 | Path | What | Cache |
 |---|---|---|
-| `<commit>/RevenantRevisited-<platform>.zip` | every passing build, by full commit hash, on every branch | immutable, one year |
+| `<hash>/RevenantRevisited-<platform>.zip` | every passing build, on every branch | immutable, one year |
 | `<platform>/latest/RevenantRevisited-<platform>.zip` | the newest passing build of `main` | `no-cache` |
 
-`<platform>` is `osx`, `windows` or `linux`. A package is published only
+`<hash>` is the commit's 7-character short hash, as GitHub shows it;
+if another commit already holds that folder, publish lengthens it the way
+git lengthens an ambiguous abbreviation. `<platform>` is `osx`, `windows`
+or `linux`. A package is published only
 when its build and tests passed. `latest/` moves only when the commit is
 still the tip of `main` at publish time: a slow run never overwrites a newer
 one. Each platform's `latest/` moves on its own, so a commit that fails on
