@@ -2,6 +2,8 @@ name: Rust platforms
 
 on:
   push:
+    # PR branches are covered by pull_request; avoid running the matrix twice.
+    branches: [main]
     paths: ['rust/**', 'src/mappane.cpp', '.github/workflows/rust.yml']
   pull_request:
     paths: ['rust/**', 'src/mappane.cpp', '.github/workflows/rust.yml']
