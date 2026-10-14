@@ -27,6 +27,18 @@
 #include <optional>
 #include <string>
 
+// A generator's slot (retail: a 16-byte block the generator owns). At
+// namespace scope, not nested: a nested struct's member initializers are
+// only complete with the enclosing class, and libstdc++ decides
+// std::optional<SSlot>'s constructibility before then.
+struct SMonsterGenSlot
+{
+    std::string type;           // +0x00 the CHARACTER type it makes
+    int32_t     frequency = 0;  // +0x04 game time between monsters, 1/100 s
+    int32_t     treasure  = 0;  // +0x08 treasure tier (GiveSpawnTreasure)
+    int32_t     start     = 0;  // +0x0c game time its clock started; 0: not yet
+};
+
 _CLASSDEF(TMonsterGen)
 class TMonsterGen : public THelper
 {
@@ -69,14 +81,7 @@ class TMonsterGen : public THelper
   private:
     static constexpr uint32_t kGenFlags = OF_IMMOBILE | OF_EDITOR | OF_PULSE;
 
-    // A slot (retail: a 16-byte block the generator owns).
-    struct SSlot
-    {
-        std::string type;           // +0x00 the CHARACTER type it makes
-        int32_t     frequency = 0;  // +0x04 game time between monsters, 1/100 s
-        int32_t     treasure  = 0;  // +0x08 treasure tier (GiveSpawnTreasure)
-        int32_t     start     = 0;  // +0x0c game time its clock started; 0: not yet
-    };
+    using SSlot = SMonsterGenSlot;
 
     // REVSYNC: 0x00517240 -- a monster of slot `index`'s type on a walkable
     // spot 50-150 units away, facing a random way, with the slot's treasure.
