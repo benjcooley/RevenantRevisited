@@ -95,7 +95,13 @@ impl Canvas<'_> {
             },
         );
     }
-    pub fn text(&mut self, font: &Font, text: &str, x: i32, top: i32, max_width: i32) {
+    pub fn text_color(&mut self, font: &Font, text: &str, rect: Rect, color: u32) {
+        let Rect {
+            x,
+            y: top,
+            w: max_width,
+            ..
+        } = rect;
         let mut pen = x;
         for ch in text.chars() {
             if pen + font.advance(ch) > x + max_width {
@@ -112,20 +118,62 @@ impl Canvas<'_> {
                         src.w,
                         src.h,
                     ),
-                    Some(0xddcead),
+                    Some(color),
                 );
             }
             pen += font.advance(ch);
         }
     }
-    pub fn border(&mut self, r: Rect, color: u32) {
-        for edge in [
-            Rect::new(r.x, r.y, r.w, 1),
-            Rect::new(r.x, r.y + r.h - 1, r.w, 1),
-            Rect::new(r.x, r.y, 1, r.h),
-            Rect::new(r.x + r.w - 1, r.y, 1, r.h),
-        ] {
-            self.fill(edge, color);
+
+    /// Native DEF frame tiling, including the art's shadow margins. Edges
+    /// and centres repeat at source size; the last tile is cropped.
+    pub fn tiled_frame(
+        &mut self,
+        bitmap: &Bitmap,
+        rect: Rect,
+        frame: [i32; 4],
+        margins: [i32; 4],
+        center: bool,
+    ) {
+        let [l, t, r, b] = frame;
+        let [ml, mt, mr, mb] = margins;
+        let rect = Rect::new(rect.x - ml, rect.y - mt, rect.w + ml + mr, rect.h + mt + mb);
+        let mid_w = bitmap.width as i32 - l - r;
+        let mid_h = bitmap.height as i32 - t - b;
+        if mid_w <= 0 || mid_h <= 0 || rect.w < l + r || rect.h < t + b {
+            return;
         }
+        let band = |canvas: &mut Self, y, sy, height, middle| {
+            canvas.blit(
+                bitmap,
+                Rect::new(0, sy, l, height),
+                Rect::new(rect.x, y, l, height),
+            );
+            if middle {
+                let mut x = rect.x + l;
+                while x < rect.x + rect.w - r {
+                    let width = mid_w.min(rect.x + rect.w - r - x);
+                    canvas.blit(
+                        bitmap,
+                        Rect::new(l, sy, width, height),
+                        Rect::new(x, y, width, height),
+                    );
+                    x += mid_w;
+                }
+            }
+            canvas.blit(
+                bitmap,
+                Rect::new(l + mid_w, sy, r, height),
+                Rect::new(rect.x + rect.w - r, y, r, height),
+            );
+        };
+        band(self, rect.y, 0, t, true);
+        let mut y = rect.y + t;
+        while y < rect.y + rect.h - b {
+            let height = mid_h.min(rect.y + rect.h - b - y);
+            band(self, y, t, height, center);
+            y += mid_h;
+        }
+        band(self, rect.y + rect.h - b, t + mid_h, b, true);
     }
 }

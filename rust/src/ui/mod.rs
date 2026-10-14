@@ -7,10 +7,16 @@
 //! Native pane artwork and layout; gameplay values arrive separately.
 pub mod batch;
 mod canvas;
+mod definition;
 pub mod screens;
 
 use crate::{
-    assets::{bitmap::Bitmap, font::Font, multi::Multi, vfs::Vfs},
+    assets::{
+        bitmap::{Bitmap, Decode},
+        font::Font,
+        multi::Multi,
+        vfs::Vfs,
+    },
     input::{PointerFrame, Target},
     render::{Draw, Framebuffer, camera::Camera, equipment::Slot},
     world::{Scene, sector::Position},
@@ -111,7 +117,6 @@ impl Layout {
         }
         let p = self.logical(p);
         Rect::new(0, self.height - 60, self.play_width(), 60).contains(p)
-            || Rect::new(0, self.height - 76, self.play_width() - 60, 16).contains(p)
             || (self.sidebar && Rect::new(self.width - 188, 0, 188, self.height).contains(p))
             || self.tab_strip().contains(p)
             || Rect::new(6, 0, 190, 64).contains(p)
@@ -138,6 +143,7 @@ pub struct Response {
 
 pub struct Hud {
     art: BTreeMap<String, Bitmap>,
+    locke_portrait: Option<Bitmap>,
     font: Font,
     paperdoll: Framebuffer,
     pub visible: bool,
@@ -146,15 +152,13 @@ pub struct Hud {
     bottom: Tab,
     pressed: Option<Control>,
     hover: Option<Control>,
-    pub message: String,
-    pub muted: bool,
 }
 impl Hud {
     pub fn load(vfs: &mut Vfs) -> Result<Self> {
         let mut art = BTreeMap::new();
         for (file, names) in [
             (
-                "statusbarnotex.dat",
+                "statusbar.dat",
                 &[
                     "BackPanel",
                     "Bars",
@@ -164,12 +168,11 @@ impl Hud {
                     "Ring",
                 ][..],
             ),
-            ("portraits.dat", &["LockeFace"][..]),
             (
                 "bottombar.dat",
                 &["UtilityBar", "BarEndCap", "BarInvBox"][..],
             ),
-            ("sidebartabsnotex.dat", &["Up", "Down", "Select"][..]),
+            ("sidebartabs.dat", &["Up", "Down", "Select"][..]),
             (
                 "equippane.dat",
                 &[
@@ -192,13 +195,26 @@ impl Hud {
             for name in names {
                 art.insert(
                     format!("{file}/{name}"),
-                    multi.bitmap(name).with_context(|| file)?,
+                    multi
+                        .bitmap_mode(
+                            name,
+                            match (file, *name) {
+                                ("equippane.dat", _)
+                                | ("statspane.dat", _)
+                                | ("spellscroll.dat", _) => Decode::Keyed,
+                                _ => Decode::Unkeyed,
+                            },
+                        )
+                        .with_context(|| file)?,
                 );
             }
         }
         Ok(Self {
             art,
-            font: Font::decode(&vfs.read("sysfont.dat")?)?,
+            locke_portrait: crate::assets::mesh::Mesh::portrait(
+                &vfs.read("imagery/Chars/locke.i3d")?,
+            )?,
+            font: Font::named(vfs, "Small")?,
             paperdoll: Framebuffer::new(92, 164)?,
             visible: true,
             sidebar: true,
@@ -206,8 +222,6 @@ impl Hud {
             bottom: Tab::Inventory,
             pressed: None,
             hover: None,
-            message: "WASD / RIGHT MOUSE: WALK    F1: HUD    H: SIDEBAR    F9: SOUND".into(),
-            muted: false,
         })
     }
     pub fn cancel_capture(&mut self) {
@@ -263,8 +277,8 @@ impl Hud {
         &mut self,
         event: PointerFrame,
         viewport: [usize; 2],
-        scene: &Scene,
-        actor: Option<usize>,
+        _scene: &Scene,
+        _actor: Option<usize>,
     ) -> Response {
         let layout = self.layout(viewport);
         self.hover = event.position.and_then(|p| self.control(layout, p));
@@ -285,20 +299,7 @@ impl Hud {
                 response.activated = true;
                 match control {
                     Control::Tab(tab) => self.select(tab),
-                    Control::Slot(slot) => {
-                        let gear = actor
-                            .and_then(|i| scene.draws.get(i))
-                            .and_then(|d| match d {
-                                Draw::Mesh(m) => m.equipment(slot),
-                                _ => None,
-                            });
-                        self.message = match gear {
-                            Some(gear) => {
-                                format!("{slot:?}: {} attached parts", gear.bindings().len())
-                            }
-                            None => format!("{slot:?}: empty"),
-                        };
-                    }
+                    Control::Slot(_) => {}
                 }
             }
         }
@@ -345,11 +346,18 @@ impl Hud {
         let sx = layout.width - 188;
         let by = layout.height - 60;
         let pw = layout.play_width();
-        c.blit(
-            image("bottombar", "UtilityBar"),
-            Rect::new(0, 0, 640, 60),
-            Rect::new(0, by, pw, 60),
-        );
+        // Retail crops the authored plate. Explicit larger viewports repeat
+        // it at its native texel size instead of stretching its ornament.
+        let mut x = 0;
+        while x < pw {
+            let width = (pw - x).min(640);
+            c.blit(
+                image("bottombar", "UtilityBar"),
+                Rect::new(0, 0, width, 60),
+                Rect::new(x, by, width, 60),
+            );
+            x += width;
+        }
         c.bitmap(image("bottombar", "BarEndCap"), pw - 10, by);
         for x in [10, 60, 110, 160] {
             c.bitmap(image("spellicons", "RingG"), x, by + 10);
@@ -357,35 +365,57 @@ impl Hud {
         for i in 0..((pw - 220) / 45).max(0) {
             c.bitmap(image("bottombar", "BarInvBox"), 220 + i * 45, by + 10);
         }
-        c.fill(Rect::new(0, by - 16, pw - 60, 16), 0xb0101010);
-        c.text(&self.font, &self.message, 8, by - 13, pw - 76);
-        if self.muted {
-            c.text(&self.font, "MUTED", 8, 70, 80);
-        }
-
-        c.bitmap(image("statusbarnotex", "BackPanel"), 6, 0);
-        if locke {
-            c.bitmap(image("portraits", "LockeFace"), 17, 16);
-        }
-        c.bitmap(image("statusbarnotex", "Ring"), 10, 9);
-        for (name, y) in [("HealthIcon", 3), ("ManaIcon", 17), ("FatigueIcon", 32)] {
-            c.bitmap(image("statusbarnotex", name), 49, y);
-        }
-        for (y, src_y, w, h) in [(11, 49, 125, 17), (27, 66, 77, 12), (40, 81, 53, 12)] {
-            c.blit(
-                image("statusbarnotex", "Bars"),
-                Rect::new(2, src_y, w, h),
-                Rect::new(70, y, w, h),
+        // Retail's texture-overlay status chip: art at (4,4), a 40x40
+        // portrait centered on (26,31), then ring and icons back-to-front.
+        if actor.is_some() {
+            c.bitmap(image("statusbar", "BackPanel"), 4, 4);
+            if let Some(portrait) = self.locke_portrait.as_ref().filter(|_| locke) {
+                c.blit(
+                    portrait,
+                    Rect::new(
+                        0,
+                        0,
+                        portrait.width.min(40) as i32,
+                        portrait.height.min(40) as i32,
+                    ),
+                    Rect::new(
+                        10,
+                        15,
+                        portrait.width.min(40) as i32,
+                        portrait.height.min(40) as i32,
+                    ),
+                );
+            }
+            let ring = image("statusbar", "Ring");
+            c.bitmap(
+                ring,
+                30 - ring.width as i32 / 2,
+                35 - ring.height as i32 / 2,
             );
-            c.text(&self.font, "--", 80, y + 1, w - 4);
+            for (name, y) in [("FatigueIcon", 32), ("ManaIcon", 17), ("HealthIcon", 3)] {
+                c.bitmap(image("statusbar", name), 47, 4 + y);
+            }
+            for (y, src_y, w, h) in [(15, 49, 125, 17), (31, 66, 77, 12), (44, 81, 53, 12)] {
+                c.blit(
+                    image("statusbar", "Bars"),
+                    Rect::new(2, src_y, w, h),
+                    Rect::new(68, y, w, h),
+                );
+            }
+            if let Some(source) = source {
+                for (line, text) in self.font.wrap(&source.name, 64).iter().enumerate() {
+                    definition::Pane::label(
+                        &mut c,
+                        &self.font,
+                        text,
+                        Rect::new(0, 54 + line as i32 * self.font.height, 64, self.font.height),
+                        0,
+                        0xffffff,
+                        true,
+                    );
+                }
+            }
         }
-        c.text(
-            &self.font,
-            if locke { "LOCKE" } else { "PREVIEW" },
-            15,
-            53,
-            70,
-        );
 
         if self.sidebar {
             c.fill(Rect::new(sx, 0, 188, layout.height), 0xff171410);
@@ -396,11 +426,8 @@ impl Hud {
             };
             c.bitmap(image(top.0, top.1), sx, 0);
             if self.top == Tab::Equipment {
-                for (slot, name, x, y) in SLOTS {
+                for (_, name, x, y) in SLOTS {
                     c.bitmap(image("equippane", name), sx + x, y);
-                    if actor.is_some_and(|actor| actor.equipment(slot).is_some()) {
-                        c.border(Rect::new(sx + x, y, 40, 40), 0xffc4a65a);
-                    }
                 }
                 if let Some(actor) = actor {
                     let mut doll = actor.clone();
@@ -430,26 +457,6 @@ impl Hud {
                     }
                     c.bitmap(&bitmap, sx + 48, 78);
                 }
-                c.text(&self.font, "EQUIPMENT PREVIEW", sx + 24, 253, 152);
-                c.text(&self.font, "Select a slot to inspect", sx + 14, 268, 162);
-            } else if self.top == Tab::Stats {
-                c.text(&self.font, "CHARACTER STATS", sx + 28, 52, 135);
-                for (i, name) in [
-                    "Level    --",
-                    "Health   --",
-                    "Mana     --",
-                    "Fatigue  --",
-                    "Strength --",
-                    "Agility  --",
-                ]
-                .iter()
-                .enumerate()
-                {
-                    c.text(&self.font, name, sx + 28, 75 + i as i32 * 17, 140);
-                }
-            } else {
-                c.text(&self.font, "SPELL BOOK", sx + 35, 58, 130);
-                c.text(&self.font, "No spells loaded", sx + 27, 86, 140);
             }
             match self.bottom {
                 Tab::Inventory => {
@@ -462,7 +469,6 @@ impl Hud {
                     ] {
                         c.bitmap(image("inventory", name), sx + x, 306 + y);
                     }
-                    c.text(&self.font, "--", sx + 80, 319, 45);
                 }
                 Tab::Map => {
                     // A terrain preview from loaded walk cells, not explored-map state.
@@ -492,22 +498,20 @@ impl Hud {
                             Rect::new(sx + 92, 391, 4, 4),
                         );
                     }
-                    c.text(&self.font, "LOADED TERRAIN", sx + 30, 453, 135);
                 }
                 _ => {
                     c.bitmap(image("spellpane", "spellconstr"), sx, 306);
-                    c.text(&self.font, "No talismans loaded", sx + 20, 450, 148);
                 }
             }
         }
         let strip = layout.tab_strip();
-        c.bitmap(image("sidebartabsnotex", "Up"), strip.x, strip.y);
+        c.bitmap(image("sidebartabs", "Up"), strip.x, strip.y);
         for (i, tab) in TABS.into_iter().enumerate() {
             let selected = self.sidebar && (self.top == tab || self.bottom == tab);
             if selected || self.pressed == Some(Control::Tab(tab)) {
                 let r = layout.tab(i);
                 c.blit(
-                    image("sidebartabsnotex", "Down"),
+                    image("sidebartabs", "Down"),
                     Rect::new(r.x - strip.x, r.y - strip.y, r.w, r.h),
                     r,
                 );
@@ -515,7 +519,7 @@ impl Hud {
             if self.hover == Some(Control::Tab(tab)) {
                 let r = layout.tab(i);
                 c.blit(
-                    image("sidebartabsnotex", "Select"),
+                    image("sidebartabs", "Select"),
                     Rect::new(r.x - strip.x, r.y - strip.y, r.w, r.h),
                     r,
                 );

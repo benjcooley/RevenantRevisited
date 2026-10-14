@@ -62,11 +62,7 @@ fn dispatch(
 pub fn run(args: &Args, vfs: &mut Vfs) -> Result<()> {
     let mut frame = Framebuffer::new(args.width, args.height)?;
     let viewport = frame.viewport();
-    let mut window = DesktopWindow::new(
-        "Revenant / Rust — Esc: menu | WASD/right mouse: move",
-        args.width,
-        args.height,
-    )?;
+    let mut window = DesktopWindow::new("Revenant", args.width, args.height)?;
     let mut screens = Screens::load(vfs)?;
     let cursors = match CursorSet::load(vfs) {
         Ok(cursors) => Some(cursors),
@@ -86,6 +82,8 @@ pub fn run(args: &Args, vfs: &mut Vfs) -> Result<()> {
         volume: (args.volume * 100.0).round() as u8,
         muted: args.muted,
         shadows: !args.no_shadows,
+        real_time: true,
+        enhanced: lighting.modern,
     };
     let mut applied = settings;
     let mut game = Game::new(
@@ -151,6 +149,8 @@ pub fn run(args: &Args, vfs: &mut Vfs) -> Result<()> {
                     next: key(Key::ArrowDown),
                     accept: key(Key::Enter),
                     back: key(Key::Escape),
+                    left: key(Key::ArrowLeft),
+                    right: key(Key::ArrowRight),
                 },
             );
             if response.pressed {
@@ -250,6 +250,7 @@ pub fn run(args: &Args, vfs: &mut Vfs) -> Result<()> {
             audio.set_volume(f32::from(applied.volume) / 100.0)?;
             audio.set_muted(applied.muted);
             lighting.shadows = applied.shadows;
+            lighting.modern = applied.enhanced;
         }
         if let Some(error) = audio.take_output_error() {
             eprintln!("warning: audio output: {error}");
@@ -259,7 +260,6 @@ pub fn run(args: &Args, vfs: &mut Vfs) -> Result<()> {
         let mut camera = Camera::new(Default::default());
         lighting.points.clear();
         if let Some(session) = game.session_mut() {
-            session.hud.muted = applied.muted;
             session.hud.record(
                 &mut frame,
                 &session.scene,
@@ -268,9 +268,11 @@ pub fn run(args: &Args, vfs: &mut Vfs) -> Result<()> {
                 &mut backend,
             )?;
             let layout = session.hud.layout(viewport);
-            lighting.points = session
-                .scene
-                .point_lights(&session.camera, layout.world_viewport());
+            if applied.real_time {
+                lighting.points = session
+                    .scene
+                    .point_lights(&session.camera, layout.world_viewport());
+            }
             camera = layout.world_camera(session.camera, viewport);
         }
         let (progress, label) = game.loading();
@@ -354,7 +356,7 @@ const SMOKE: &[(Screen, Action)] = &[
     (Screen::Title, Action::NewGame),
     (Screen::Play, Action::Pause),
     (Screen::Pause, Action::Options),
-    (Screen::Options(MenuOrigin::Pause), Action::ToggleShadows),
+    (Screen::Options(MenuOrigin::Pause), Action::ToggleRealTime),
     (Screen::Options(MenuOrigin::Pause), Action::ApplyOptions),
     (Screen::Pause, Action::Resume),
     (Screen::Play, Action::Pause),

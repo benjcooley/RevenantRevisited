@@ -119,9 +119,9 @@ struct Args {
     /// Fail if a rendered scene has missing types or asset decode errors.
     #[arg(long)]
     strict: bool,
-    #[arg(long, default_value_t = 1024)]
+    #[arg(long, default_value = "1024", default_value_if("game", "true", "640"))]
     width: usize,
-    #[arg(long, default_value_t = 768)]
+    #[arg(long, default_value = "768", default_value_if("game", "true", "480"))]
     height: usize,
     /// GPU lighting: modern sun/AO/shadows, retail ambient/points, or unlit.
     #[arg(long, value_enum, default_value_t = LightingChoice::Modern)]
@@ -486,9 +486,6 @@ fn run(args: Args) -> Result<()> {
     } else {
         None
     };
-    if let Some(hud) = &mut hud {
-        hud.muted = args.muted;
-    }
     let layout = hud_layout(hud.as_ref(), frame.viewport());
     let bounds = scene
         .bounds(Some(args.sector))
@@ -837,7 +834,6 @@ fn desktop(
             if response.activated {
                 audio.play_ui(UiSound::Release);
             }
-            hud.muted = audio.muted();
         }
         let layout = hud_layout(hud.as_ref(), viewport);
         let world_viewport = layout.world_viewport();
@@ -1004,9 +1000,6 @@ fn desktop(
                 );
                 println!("{info}");
                 window.set_title(&format!("Revenant / Rust — {info}"));
-                if let Some(hud) = &mut hud {
-                    hud.message = info;
-                }
             }
         }
 
@@ -1041,6 +1034,12 @@ mod tests {
 
     #[test]
     fn game_mode_is_separate_from_preview_and_validation_tools() {
+        let game = Args::try_parse_from(["revenant", "--game"]).unwrap();
+        assert_eq!([game.width, game.height], [640, 480]);
+        let explicit =
+            Args::try_parse_from(["revenant", "--game", "--width", "1024", "--height", "768"])
+                .unwrap();
+        assert_eq!([explicit.width, explicit.height], [1024, 768]);
         for args in [
             vec!["revenant", "--game"],
             vec!["revenant", "--game", "--quickstart"],

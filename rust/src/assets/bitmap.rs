@@ -8,6 +8,16 @@
 use super::binary::{Bytes, Reader};
 use anyhow::{Context, Result, ensure};
 
+/// Retail chooses transparency at the draw call, independently of the stored
+/// pixel format. In particular, black is opaque on plates and alpha glass.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Decode {
+    Keyed,
+    Unkeyed,
+    MagentaKeyed,
+    Overlay4444,
+}
+
 #[derive(Clone, Debug)]
 pub struct Bitmap {
     pub width: usize,
@@ -58,6 +68,29 @@ impl Bitmap {
     }
 
     pub(crate) fn decode(data: Bytes<'_>, at: usize, alias: bool) -> Result<Self> {
+        Self::decode_mode(data, at, alias, Decode::Keyed)
+    }
+    /// DEF widgets use the stored draw mode: alpha/no-transparency bitmaps
+    /// keep black pixels, including dark glass at partial alpha.
+    pub(crate) fn decode_native(data: Bytes<'_>, at: usize) -> Result<Self> {
+        let mode = data.u32(at + 20)?;
+        let decode = if mode & 0x100 != 0 && mode & 0x2000 == 0 {
+            Decode::Keyed
+        } else {
+            Decode::Unkeyed
+        };
+        let mut bitmap = Self::decode_mode(data, at, false, decode)?;
+        if mode & 0x1000 != 0 && data.u32(at + 16)? & 128 != 0 {
+            bitmap.overlay_alias(data, at)?;
+        }
+        Ok(bitmap)
+    }
+    pub(crate) fn decode_mode(
+        data: Bytes<'_>,
+        at: usize,
+        alias: bool,
+        mode: Decode,
+    ) -> Result<Self> {
         data.slice(at, 72)?;
         let width = data.i32(at)?;
         let height = data.i32(at + 4)?;
@@ -91,7 +124,9 @@ impl Bitmap {
         pixels.slice(0, count * stride)?;
         let palette = if bits & 1 != 0 {
             let start = data.relative(at + 64)?.context("missing bitmap palette")?;
-            Some(Bytes(data.slice(start + 512, 1024)?))
+            // Retail draws through the 15-bit palette. The optional 24-bit
+            // copy has inconsistent byte order in shipped resources.
+            Some(Bytes(data.slice(start, 512)?))
         } else {
             None
         };
@@ -106,9 +141,8 @@ impl Bitmap {
         for (i, pixel) in bitmap.pixels.iter_mut().enumerate() {
             if let Some(palette) = palette {
                 let index = pixels.u8(i)?;
-                if index != key as u8 {
-                    let c = palette.u32(usize::from(index) * 4)?;
-                    *pixel = 0xff000000 | (c & 255) << 16 | (c & 0xff00) | (c >> 16 & 255);
+                if mode != Decode::Keyed || index != key as u8 {
+                    *pixel = 0xff000000 | decode_color(palette.u16(usize::from(index) * 2)?, false);
                 }
                 continue;
             }
@@ -116,18 +150,34 @@ impl Bitmap {
             if flags & 0x10000 != 0 {
                 let c = u32::from(color);
                 *pixel = ((c >> 12) * 17) << 24
-                    | ((c >> 8 & 15) * 17) << 16
-                    | ((c >> 4 & 15) * 17) << 8
-                    | ((c & 15) * 17);
+                    | (c >> 8 & 15) << 20
+                    | (c >> 4 & 15) << 12
+                    | (c & 15) << 4;
                 continue;
             }
             let a = alpha.map_or(255, |alpha| {
                 let a = u32::from(alpha[i] & 31);
                 a << 3 | a >> 2
             });
-            if a != 0 && color != key && color != if rgb565 { 0xf81f } else { 0x7c1f } {
-                *pixel = a << 24 | decode_color(color, rgb565);
+            if a == 0
+                || (mode == Decode::Keyed && color == key)
+                || (mode != Decode::Unkeyed && color == if rgb565 { 0xf81f } else { 0x7c1f })
+            {
+                continue;
             }
+            let rgb = if mode == Decode::Overlay4444 {
+                // The portrait goes through a 16-bit surface into the HUD's
+                // ARGB4444 texture, truncating colour to four bits.
+                let c = u32::from(if rgb565 {
+                    color
+                } else {
+                    (color & 0x7fe0) << 1 | (color & 0x1f)
+                });
+                (c >> 12) << 20 | (c >> 7 & 15) << 12 | (c >> 1 & 15) << 4
+            } else {
+                decode_color(color, rgb565)
+            };
+            *pixel = a << 24 | rgb;
         }
         Ok(bitmap)
     }
@@ -170,9 +220,61 @@ mod tests {
         let data = fixture(0x10000, &[0xfda5, 0x8000]);
         assert_eq!(
             Bitmap::decode(Bytes(&data), 0, false).unwrap().pixels,
-            [0xffddaa55, 0x88000000]
+            [0xffd0a050, 0x88000000]
         );
         assert!(Bitmap::decode(Bytes(&data[..data.len() - 1]), 0, false).is_err());
+    }
+    #[test]
+    fn draw_mode_preserves_opaque_black_and_truncates_portrait_texels() {
+        let data = fixture(2, &[0, 0x7c1f, 0x7fff]);
+        assert_eq!(
+            Bitmap::decode_mode(Bytes(&data), 0, false, Decode::Unkeyed)
+                .unwrap()
+                .pixels,
+            [0xff000000, 0xfff800f8, 0xfff8f8f8]
+        );
+        assert_eq!(
+            Bitmap::decode_mode(Bytes(&data), 0, false, Decode::MagentaKeyed)
+                .unwrap()
+                .pixels,
+            [0xff000000, 0, 0xfff8f8f8]
+        );
+        assert_eq!(
+            Bitmap::decode_mode(Bytes(&data), 0, false, Decode::Overlay4444)
+                .unwrap()
+                .pixels,
+            [0xff000000, 0, 0xfff0f0f0]
+        );
+    }
+    #[test]
+    fn indexed_ui_uses_the_retail_15_bit_palette() {
+        let mut data = fixture(1, &[1]);
+        data[64..68].copy_from_slice(&10i32.to_le_bytes());
+        data.resize(74 + 512 + 1024, 0);
+        data[76..78].copy_from_slice(&0x03e0u16.to_le_bytes());
+        // Conflicting 24-bit copy must not supply the colour.
+        data[74 + 512 + 4..74 + 512 + 8].copy_from_slice(&0xffu32.to_le_bytes());
+        assert_eq!(
+            Bitmap::decode(Bytes(&data), 0, false).unwrap().pixels,
+            [0xff00f800]
+        );
+    }
+    #[test]
+    fn native_alpha_widget_keeps_key_colored_glass() {
+        let mut data = fixture(0x102, &[0, 0x7fff]);
+        data[20..24].copy_from_slice(&0x2000u32.to_le_bytes());
+        data[36..40].copy_from_slice(&2u32.to_le_bytes());
+        data[40..44].copy_from_slice(&36i32.to_le_bytes());
+        data.extend([15, 31]);
+        assert_eq!(
+            Bitmap::decode_native(Bytes(&data), 0).unwrap().pixels,
+            [0x7b000000, 0xfff8f8f8]
+        );
+        data[20..24].copy_from_slice(&0x100u32.to_le_bytes());
+        assert_eq!(
+            Bitmap::decode_native(Bytes(&data), 0).unwrap().pixels,
+            [0, 0xfff8f8f8]
+        );
     }
     #[test]
     fn font_glyph_preserves_interior_and_overlays_alias_coverage() {

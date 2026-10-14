@@ -46,6 +46,9 @@ pub enum Action {
     VolumeUp,
     ToggleSound,
     ToggleShadows,
+    ToggleRealTime,
+    ToggleEnhanced,
+    SetVolume(u8),
     ApplyOptions,
 }
 
@@ -65,6 +68,8 @@ pub struct Settings {
     pub volume: u8,
     pub muted: bool,
     pub shadows: bool,
+    pub real_time: bool,
+    pub enhanced: bool,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -72,6 +77,8 @@ impl Default for Settings {
             volume: 70,
             muted: false,
             shadows: true,
+            real_time: true,
+            enhanced: true,
         }
     }
 }
@@ -185,6 +192,18 @@ impl Flow {
             }
             (S::Pause, A::ReturnToTitle) => {
                 self.screen = S::Confirm(Destination::Title);
+                Effect::None
+            }
+            (S::Options(_), A::ToggleRealTime) => {
+                self.draft.real_time = !self.draft.real_time;
+                Effect::None
+            }
+            (S::Options(_), A::ToggleEnhanced) => {
+                self.draft.enhanced = !self.draft.enhanced;
+                Effect::None
+            }
+            (S::Options(_), A::SetVolume(volume)) => {
+                self.draft.volume = volume.min(100);
                 Effect::None
             }
             (S::Pause, A::Quit) => {

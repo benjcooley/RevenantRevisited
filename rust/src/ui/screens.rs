@@ -1,19 +1,20 @@
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                    Copyright (C) 1998 Cinematix                       *
-// *                screens.rs - Title, loading and modal menus            *
+// *                screens.rs - Native title and modal menus              *
 // *************************************************************************
 
 use super::{
     batch::Batch,
     canvas::{Canvas, Rect},
+    definition::{Pane, Widget, WidgetState},
 };
 use crate::{
-    assets::{bitmap::Bitmap, font::Font, multi::Multi, vfs::Vfs},
-    game::{Action, Destination, Flow, Screen},
+    assets::{bitmap::Bitmap, definition, font::Font, multi::Multi, vfs::Vfs},
+    game::{Action, Destination, Flow, MenuOrigin, Screen},
     input::{PointerFrame, Target},
 };
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Default)]
@@ -22,6 +23,8 @@ pub struct MenuKeys {
     pub next: bool,
     pub accept: bool,
     pub back: bool,
+    pub left: bool,
+    pub right: bool,
 }
 #[derive(Default)]
 pub struct MenuResponse {
@@ -30,23 +33,10 @@ pub struct MenuResponse {
 }
 struct Control {
     action: Option<Action>,
-    label: String,
     rect: Rect,
     sprite: Option<&'static str>,
+    slider: bool,
 }
-impl Control {
-    fn text(action: Action, label: impl Into<String>, rect: Rect) -> Self {
-        Self {
-            action: Some(action),
-            label: label.into(),
-            rect,
-            sprite: None,
-        }
-    }
-}
-
-/// A centered 640x480 canvas, scaled down for smaller windows. Hit testing and
-/// composition share this transform, including the surrounding letterbox.
 #[derive(Clone, Copy)]
 struct Layout {
     scale: f64,
@@ -77,15 +67,20 @@ impl Layout {
 pub struct Screens {
     art: BTreeMap<String, Bitmap>,
     font: Font,
-    small: Font,
+    pause: Pane,
+    options_title: Pane,
+    options_game: Pane,
+    confirm: Pane,
+    questions: [String; 2],
     screen: Option<Screen>,
     selected: Option<Action>,
     pressed: Option<Action>,
+    dragging: bool,
 }
 impl Screens {
     pub fn load(vfs: &mut Vfs) -> Result<Self> {
         let mut art = BTreeMap::new();
-        for (file, names) in [
+        for (file, names, prefix) in [
             (
                 "menus.dat",
                 vec![
@@ -102,99 +97,157 @@ impl Screens {
                     "MenuExitD",
                     "MenuExitS",
                 ],
+                "",
             ),
-            ("loadbar.dat", vec!["background", "bar"]),
+            ("loadbar.dat", vec!["background", "bar"], "Loading"),
+            (
+                "death.dat",
+                vec![
+                    "background",
+                    "RestartU",
+                    "RestartD",
+                    "RestartS",
+                    "LoadU",
+                    "ExitU",
+                    "ExitD",
+                    "ExitS",
+                ],
+                "Death",
+            ),
         ] {
             let bytes = vfs.read(file)?;
             let multi = Multi::parse(&bytes)?;
             for name in names {
-                art.insert(name.into(), multi.bitmap(name).with_context(|| file)?);
+                art.insert(format!("{prefix}{name}"), multi.bitmap_native(name)?);
             }
         }
+        let english = definition::lines(&vfs.read("english.def")?)?;
+        let question = |key: &str, fallback: &str| {
+            english
+                .iter()
+                .find(|line| line[0].eq_ignore_ascii_case(key))
+                .and_then(|line| line.get(1))
+                .map_or_else(|| fallback.into(), |s| s.replace("\\n", "\n"))
+        };
         Ok(Self {
             art,
-            font: Font::decode(&vfs.read("dlgfont.dat")?)?,
-            small: Font::decode(&vfs.read("sysfont.dat")?)?,
+            font: Font::named(vfs, "Med")?,
+            pause: Pane::load(
+                vfs,
+                "ingamemenu",
+                "ingamemenu",
+                "tex",
+                Rect::new(126, 65, 394, 316),
+            )?,
+            options_title: Pane::load(
+                vfs,
+                "options",
+                "default",
+                "alpha",
+                Rect::new(0, 0, 640, 480),
+            )?,
+            options_game: Pane::load(vfs, "options", "default", "tex", Rect::new(0, 0, 640, 480))?,
+            confirm: Pane::load(
+                vfs,
+                "popup",
+                "yesno",
+                "alpha",
+                Rect::new(129, 122, 398, 212),
+            )?,
+            questions: [
+                question(
+                    "QUITGAMEYN",
+                    "\nAre you sure you want to quit the current module?",
+                ),
+                question(
+                    "EXITGAMEYN",
+                    "\nAre you sure you want to exit the game and return to Windows?",
+                ),
+            ],
             screen: None,
             selected: None,
             pressed: None,
+            dragging: false,
         })
     }
     pub fn reset_input(&mut self) {
         self.screen = None;
         self.selected = None;
         self.pressed = None;
+        self.dragging = false;
     }
-
+    fn pane(&self, screen: Screen) -> Option<&Pane> {
+        match screen {
+            Screen::Pause => Some(&self.pause),
+            Screen::Options(MenuOrigin::Title) => Some(&self.options_title),
+            Screen::Options(MenuOrigin::Pause) => Some(&self.options_game),
+            Screen::Confirm(_) => Some(&self.confirm),
+            _ => None,
+        }
+    }
+    fn binding(screen: Screen, widget: &Widget) -> Option<Action> {
+        match (screen, widget.name.to_ascii_lowercase().as_str()) {
+            (Screen::Pause, "options") => Some(Action::Options),
+            (Screen::Pause, "quit") => Some(Action::ReturnToTitle),
+            (Screen::Pause, "exit") => Some(Action::Quit),
+            (Screen::Pause, "resume") => Some(Action::Resume),
+            (Screen::Options(_), "realtime") => Some(Action::ToggleRealTime),
+            (Screen::Options(_), "enhanced") => Some(Action::ToggleEnhanced),
+            (Screen::Options(_), "sound") => Some(Action::VolumeUp),
+            (Screen::Options(_), "ok") => Some(Action::ApplyOptions),
+            (Screen::Options(_), "cancel") => Some(Action::Back),
+            (Screen::Confirm(_), "yes") => Some(Action::Confirm),
+            (Screen::Confirm(_), "no") => Some(Action::Back),
+            _ => None,
+        }
+    }
     fn controls(&self, flow: &Flow) -> Vec<Control> {
-        let row = |y| Rect::new(205, y, 230, 34);
-        match flow.screen() {
-            Screen::Title => [
+        let sprites: &[(Option<Action>, &str)] = match flow.screen() {
+            Screen::Title => &[
                 (Some(Action::NewGame), "MenuNewGame"),
                 (None, "MenuLoadGame"),
                 (None, "MenuMulti"),
                 (Some(Action::Options), "MenuOptions"),
                 (Some(Action::Quit), "MenuExit"),
-            ]
-            .into_iter()
-            .map(|(action, sprite)| {
-                let bitmap = &self.art[&format!("{sprite}U")];
-                Control {
-                    action,
-                    label: String::new(),
-                    sprite: Some(sprite),
-                    rect: Rect::new(
-                        -bitmap.registration[0],
-                        -bitmap.registration[1],
-                        bitmap.width as i32,
-                        bitmap.height as i32,
-                    ),
-                }
-            })
-            .collect(),
-            Screen::Pause => vec![
-                Control::text(Action::Resume, "Resume", row(165)),
-                Control::text(Action::Options, "Options", row(210)),
-                Control::text(Action::ReturnToTitle, "Quit Module", row(255)),
-                Control::text(Action::Quit, "Exit Program", row(300)),
             ],
-            Screen::Options(_) => {
-                let options = flow.options();
-                vec![
-                    Control::text(Action::VolumeDown, "Volume -", Rect::new(205, 165, 105, 34)),
-                    Control::text(Action::VolumeUp, "Volume +", Rect::new(330, 165, 105, 34)),
-                    Control::text(
-                        Action::ToggleSound,
-                        if options.muted {
-                            "Sound: Off"
-                        } else {
-                            "Sound: On"
-                        },
-                        row(235),
-                    ),
-                    Control::text(
-                        Action::ToggleShadows,
-                        if options.shadows {
-                            "Shadows: On"
-                        } else {
-                            "Shadows: Off"
-                        },
-                        row(280),
-                    ),
-                    Control::text(Action::ApplyOptions, "Apply", Rect::new(205, 340, 105, 34)),
-                    Control::text(Action::Back, "Cancel", Rect::new(330, 340, 105, 34)),
-                ]
-            }
-            Screen::Confirm(_) => vec![
-                Control::text(Action::Back, "No", Rect::new(205, 270, 105, 34)),
-                Control::text(Action::Confirm, "Yes", Rect::new(330, 270, 105, 34)),
+            Screen::Death => &[
+                (Some(Action::NewGame), "DeathRestart"),
+                (None, "DeathLoad"),
+                (Some(Action::ReturnToTitle), "DeathExit"),
             ],
-            Screen::Death => vec![
-                Control::text(Action::NewGame, "Restart", row(220)),
-                Control::text(Action::ReturnToTitle, "Return to Title", row(265)),
-            ],
-            _ => Vec::new(),
+            _ => &[],
+        };
+        if !sprites.is_empty() {
+            return sprites
+                .iter()
+                .map(|&(action, sprite)| {
+                    let bitmap = &self.art[&format!("{sprite}U")];
+                    Control {
+                        action,
+                        rect: Rect::new(
+                            -bitmap.registration[0],
+                            -bitmap.registration[1],
+                            bitmap.width as i32,
+                            bitmap.height as i32,
+                        ),
+                        sprite: Some(sprite),
+                        slider: false,
+                    }
+                })
+                .collect();
         }
+        self.pane(flow.screen()).map_or_else(Vec::new, |pane| {
+            pane.widgets
+                .iter()
+                .filter(|w| matches!(w.kind.as_str(), "BUTTON" | "SCROLLBAR"))
+                .map(|w| Control {
+                    action: Self::binding(flow.screen(), w),
+                    rect: w.rect,
+                    sprite: None,
+                    slider: w.kind == "SCROLLBAR",
+                })
+                .collect()
+        })
     }
     pub fn control_center(
         &self,
@@ -234,15 +287,13 @@ impl Screens {
             self.selected = enabled.first().copied();
             self.pressed = None;
         }
-        let hover = pointer.position.and_then(|p| {
-            let point = Layout::new(viewport).point(p);
-            controls
-                .iter()
-                .find(|c| c.rect.contains(point))
-                .and_then(|c| c.action)
-        });
+        let point = pointer.position.map(|p| Layout::new(viewport).point(p));
+        let hover = point
+            .and_then(|p| controls.iter().find(|c| c.rect.contains(p)))
+            .and_then(|c| c.action);
         if pointer.left.cancelled {
             self.pressed = None;
+            self.dragging = false;
         }
         if pointer.delta != [0.0; 2] && hover.is_some() {
             self.selected = hover;
@@ -259,12 +310,23 @@ impl Screens {
                 .iter()
                 .position(|&a| Some(a) == self.selected)
                 .unwrap_or(0);
-            let next = if keys.previous {
-                (at + enabled.len() - 1) % enabled.len()
-            } else {
-                (at + 1) % enabled.len()
+            self.selected = Some(
+                enabled[if keys.previous {
+                    (at + enabled.len() - 1) % enabled.len()
+                } else {
+                    (at + 1) % enabled.len()
+                }],
+            );
+        }
+        if self.selected == Some(Action::VolumeUp) && (keys.left || keys.right) {
+            return MenuResponse {
+                action: Some(if keys.left {
+                    Action::VolumeDown
+                } else {
+                    Action::VolumeUp
+                }),
+                pressed: false,
             };
-            self.selected = Some(enabled[next]);
         }
         if keys.accept {
             self.pressed = None;
@@ -278,25 +340,117 @@ impl Screens {
             self.pressed = hover;
             self.selected = hover.or(self.selected);
             response.pressed = hover.is_some();
+            self.dragging = false;
+        }
+        if pointer.left.held && pointer.left.target == Some(Target::Ui) {
+            if let (Some(p), Some(slider)) = (
+                point,
+                controls
+                    .iter()
+                    .find(|c| c.slider && c.action.is_some() && c.action == self.pressed),
+            ) {
+                let x = p[0] - f64::from(slider.rect.x);
+                if pointer.left.pressed {
+                    self.dragging = x >= 19.0 && x <= f64::from(slider.rect.w - 12);
+                    if !self.dragging {
+                        response.action = Some(if x < 19.0 {
+                            Action::VolumeDown
+                        } else {
+                            Action::VolumeUp
+                        });
+                    }
+                }
+                if self.dragging {
+                    response.action = Some(Action::SetVolume(
+                        ((x - 19.0) * 100.0 / f64::from(slider.rect.w - 49))
+                            .round()
+                            .clamp(0.0, 100.0) as u8,
+                    ));
+                }
+            }
         }
         if pointer.left.released {
             if pointer.left.released_on(Target::Ui)
                 && self.pressed.is_some()
                 && self.pressed == hover
+                && self.pressed != Some(Action::VolumeUp)
             {
                 response.action = self.pressed;
             }
             self.pressed = None;
+            self.dragging = false;
         }
         response
     }
-
+    fn draw_pane(
+        &self,
+        pane: &Pane,
+        flow: &Flow,
+        screen: Screen,
+        canvas: &mut Canvas<'_>,
+        origin: [i32; 2],
+    ) {
+        pane.background(canvas, origin);
+        for widget in &pane.widgets {
+            let binding = Self::binding(screen, widget);
+            let options = flow.options();
+            let down = match binding {
+                Some(Action::ToggleRealTime) => options.real_time,
+                Some(Action::ToggleEnhanced) => options.enhanced,
+                _ => binding.is_some() && binding == self.pressed,
+            };
+            let state = WidgetState {
+                down,
+                focused: screen == flow.screen() && binding.is_some() && binding == self.selected,
+                disabled: matches!(widget.kind.as_str(), "BUTTON" | "SCROLLBAR")
+                    && binding.is_none(),
+                value: if widget.name.eq_ignore_ascii_case("Sound") {
+                    options.volume
+                } else {
+                    0
+                },
+            };
+            if widget.name == "message" {
+                let Screen::Confirm(destination) = screen else {
+                    continue;
+                };
+                let rect = Rect::new(
+                    widget.rect.x + origin[0],
+                    widget.rect.y + origin[1],
+                    widget.rect.w,
+                    widget.rect.h,
+                );
+                let message = &self.questions[usize::from(destination == Destination::Exit)];
+                for (i, line) in self.font.wrap(message, rect.w).iter().enumerate() {
+                    if (i as i32 + 1) * self.font.height > rect.h {
+                        break;
+                    }
+                    Pane::label(
+                        canvas,
+                        &self.font,
+                        line,
+                        Rect::new(
+                            rect.x,
+                            rect.y + i as i32 * self.font.height,
+                            rect.w,
+                            self.font.height,
+                        ),
+                        0,
+                        0xffffff,
+                        true,
+                    );
+                }
+            } else {
+                pane.widget(canvas, &self.font, widget, origin, state);
+            }
+        }
+    }
     pub fn record(
         &self,
         flow: &Flow,
         viewport: [usize; 2],
         progress: u16,
-        label: &str,
+        _label: &str,
         batch: &mut Batch,
     ) {
         if matches!(flow.screen(), Screen::Play | Screen::Exit) {
@@ -308,51 +462,43 @@ impl Screens {
             scale: layout.scale,
             batch,
         };
-        let full = Rect::new(
-            0,
-            0,
-            (viewport[0] as f64 / layout.scale).ceil() as i32,
-            (viewport[1] as f64 / layout.scale).ceil() as i32,
-        );
-        let modal = matches!(
+        if matches!(
             flow.screen(),
-            Screen::Pause | Screen::Options(crate::game::MenuOrigin::Pause) | Screen::Confirm(_)
-        );
-        canvas.fill(full, if modal { 0xbb000000 } else { 0xff000000 });
-        let font = if matches!(flow.screen(), Screen::Title | Screen::Loading) {
-            &self.small
-        } else {
-            &self.font
-        };
-        let text = |canvas: &mut Canvas<'_>, text: &str, y| {
-            let x = 320 - font.width(text) / 2;
-            canvas.text(font, text, layout.origin[0] + x, layout.origin[1] + y, 610);
-        };
+            Screen::Title | Screen::Loading | Screen::Death | Screen::Options(MenuOrigin::Title)
+        ) {
+            canvas.fill(
+                Rect::new(
+                    0,
+                    0,
+                    (viewport[0] as f64 / layout.scale).ceil() as i32,
+                    (viewport[1] as f64 / layout.scale).ceil() as i32,
+                ),
+                0xff000000,
+            );
+        }
         match flow.screen() {
             Screen::Title => {
                 canvas.bitmap(&self.art["MainMenu"], layout.origin[0], layout.origin[1]);
-                canvas.text(
-                    font,
-                    concat!("Revenant / Rust  ", env!("CARGO_PKG_VERSION")),
-                    layout.origin[0] + 15,
-                    layout.origin[1] + 450,
-                    610,
-                );
                 if let Some(error) = flow.error() {
-                    canvas.fill(layout.rect(Rect::new(10, 10, 620, 60)), 0xee171310);
-                    text(&mut canvas, "Unable to start the game", 15);
-                    canvas.text(
-                        font,
+                    canvas.fill(layout.rect(Rect::new(10, 10, 620, 55)), 0xee171310);
+                    Pane::label(
+                        &mut canvas,
+                        &self.font,
                         error,
-                        layout.origin[0] + 20,
-                        layout.origin[1] + 40,
-                        600,
+                        layout.rect(Rect::new(20, 20, 600, 35)),
+                        -1,
+                        0xffffff,
+                        true,
                     );
                 }
             }
             Screen::Loading => {
-                canvas.bitmap(&self.art["background"], layout.origin[0], layout.origin[1]);
-                let bar = &self.art["bar"];
+                canvas.bitmap(
+                    &self.art["Loadingbackground"],
+                    layout.origin[0],
+                    layout.origin[1],
+                );
+                let bar = &self.art["Loadingbar"];
                 let width = (bar.width * usize::from(progress.min(1000)) / 1000) as i32;
                 canvas.blit(
                     bar,
@@ -364,34 +510,29 @@ impl Screens {
                         bar.height as i32,
                     )),
                 );
-                text(&mut canvas, label, 435);
+            }
+            Screen::Death => canvas.bitmap(
+                &self.art["Deathbackground"],
+                layout.origin[0],
+                layout.origin[1],
+            ),
+            Screen::Confirm(_) => {
+                self.draw_pane(&self.pause, flow, Screen::Pause, &mut canvas, layout.origin);
+                self.draw_pane(
+                    &self.confirm,
+                    flow,
+                    flow.screen(),
+                    &mut canvas,
+                    layout.origin,
+                );
             }
             screen => {
-                canvas.fill(layout.rect(Rect::new(165, 95, 310, 310)), 0xfa211c18);
-                canvas.border(layout.rect(Rect::new(165, 95, 310, 310)), 0xffa68b59);
-                let title = match screen {
-                    Screen::Pause => "Game Paused",
-                    Screen::Options(_) => "Options",
-                    Screen::Confirm(Destination::Title) => "Return to Title?",
-                    Screen::Confirm(Destination::Exit) => "Exit Program?",
-                    Screen::Death => "You have died",
-                    _ => "",
-                };
-                text(&mut canvas, title, 115);
-                if matches!(screen, Screen::Confirm(_)) {
-                    text(&mut canvas, "Your current game will end.", 205);
-                }
-                if matches!(screen, Screen::Options(_)) {
-                    text(
-                        &mut canvas,
-                        &format!("Volume: {}%", flow.options().volume),
-                        205,
-                    );
+                if let Some(pane) = self.pane(screen) {
+                    self.draw_pane(pane, flow, screen, &mut canvas, layout.origin);
                 }
             }
         }
         for control in self.controls(flow) {
-            let r = layout.rect(control.rect);
             if let Some(sprite) = control.sprite {
                 let state = if control.action.is_some() && self.pressed == control.action {
                     'D'
@@ -400,35 +541,12 @@ impl Screens {
                 } else {
                     'U'
                 };
-                canvas.bitmap(&self.art[&format!("{sprite}{state}")], r.x, r.y);
+                let rect = layout.rect(control.rect);
+                canvas.bitmap(&self.art[&format!("{sprite}{state}")], rect.x, rect.y);
                 if control.action.is_none() {
-                    canvas.fill(r, 0x99000000);
+                    canvas.fill(rect, 0x99000000);
                 }
-            } else {
-                let color = if self.pressed == control.action {
-                    0xff635039
-                } else if self.selected == control.action {
-                    0xff4c3d28
-                } else {
-                    0xff302a22
-                };
-                canvas.fill(r, color);
-                canvas.border(r, 0xff8e7955);
-                canvas.text(
-                    font,
-                    &control.label,
-                    r.x + (r.w - font.width(&control.label)) / 2,
-                    r.y + (r.h - font.height) / 2,
-                    r.w,
-                );
             }
-        }
-        if flow.screen() == Screen::Title {
-            text(
-                &mut canvas,
-                "Load Game and Multiplayer are unavailable.",
-                425,
-            );
         }
     }
 }

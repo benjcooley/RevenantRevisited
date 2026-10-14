@@ -21,6 +21,7 @@ remain unported. Exploration stays inside the loaded neighborhood.
 From this directory, with stable Rust 1.85 or newer and a Metal, Vulkan or DX12 adapter:
 
 ```sh
+git lfs pull --include="assets/fonts/Arimo-Regular.ttf" --exclude=""
 cargo run --release
 ```
 
@@ -50,16 +51,21 @@ cargo run --release -- --game
 cargo run --release -- --game --quickstart --sector 0_2_25 --radius 1
 ```
 
-`--game` opens the retail title menu. New Game loads the selected neighborhood,
-spawns Locke on valid ground, and opens the HUD. The title and progress bar use
-`menus.dat` and `loadbar.dat`; pause, options and confirmation dialogs use the
-retail font. Menus support mouse press/release and Up/Down/Enter/Escape. Load Game
-is disabled until saved-game support exists.
+`--game` defaults to a 640×480 window; `--width` and `--height` still override it.
+It opens the retail title menu. New Game loads the selected neighborhood,
+spawns Locke on valid ground, and opens the HUD. Title/loading/death use their
+native DAT artwork. Pause, options and confirmation panes read the retail DEF
+layouts, widget styles, portraits and alpha/tex packs. Their `Med` face resolves
+through `font.def` to Arial 16 bold, rendered with C++'s bundled Arimo substitute
+and retail GDI spacing; this is not pixel-identical Windows GDI rasterization.
+Menus support mouse press/release and Up/Down/Enter/Escape. The sound slider also
+supports Left/Right. Save/load and unported gameplay options are disabled.
 
 During play, WASD or held right mouse moves; Shift/R runs; the wheel zooms.
 Escape pauses, and loss of window focus also pauses. F1 toggles the HUD, H toggles
 the sidebar, and E/K/B/I/M/P select its panes. F9 toggles mute; F12 saves a capture.
-Options change volume, mute and shadows when Apply is selected; Cancel discards the draft.
+Options change SFX volume, real-time point lights and enhanced lighting when OK
+is selected; Cancel discards the draft. Key bindings are displayed read-only.
 Settings last for the application run. Quit Module returns to the title after
 confirmation; Exit Program confirms before closing a live game.
 
@@ -139,6 +145,7 @@ is read-only, with Linux build artifacts and registry data in separate volumes:
 docker build -t revenant-rust-linux:local -f ci/Dockerfile.linux ci
 docker run --rm --cpus 2 --memory 4g \
   -v "$PWD:/workspace/rust:ro" \
+  -v "$PWD/../assets:/workspace/assets:ro" \
   -v revenant-rust-linux-target:/target \
   -v revenant-rust-linux-registry:/usr/local/cargo/registry \
   revenant-rust-linux:local
@@ -166,7 +173,7 @@ runtime behavior.
 - Home: reset the camera; F: fit the loaded neighborhood.
 - Tab: switch between color and per-pixel depth.
 - Space: start/pause mesh animation preview (24 fps, looping).
-- Left click: inspect the visible object in the title bar, HUD text, and terminal.
+- Left click: inspect the visible object in the title bar and terminal.
 - Middle-button drag: pan the camera.
 - F1: show/hide the retail HUD; H: open/close its sidebar.
 - E / K / B: equipment / stats / spell book; I / M / P: inventory / map / spells.
@@ -277,17 +284,21 @@ preview; F1 toggles it on desktop. The same composition works in headless PNGs:
 
 The status panel, portrait, dim status bars, bottom bar, empty quick-use slots,
 sidebar tabs, equipment, inventory, stats, spell book and spell panes use retail
-`.dat` artwork. Top and bottom pane selection are independent. The equipment
-pane renders the actor's current pose and attached gear; outlined slots can be
-clicked to inspect their bindings. It uses the existing isometric renderer,
+`.dat` artwork. The HUD uses the texture-overlay `StatusBar.dat` and
+`SideBarTabs.dat` assets, with retail's ARGB4444 colour truncation and separate
+keyed, unkeyed, alpha and portrait conversion paths. The bottom bar is cropped,
+not stretched. Locke's status portrait is his I3D state-zero inventory icon,
+not the unrelated `Portraits.dat` face. Top and bottom pane selection are independent. The equipment
+pane renders the actor's current pose and attached gear. It uses the existing isometric renderer,
 not the C++ paperdoll's separate perspective camera. Equipment inventory icons,
 drag/drop and gameplay equip actions are not implemented.
 
-Health/mana/fatigue, stats and gold display `--`; inventory and spells are empty
-until their gameplay components supply state. The map tab shows walkable terrain
+Health/mana/fatigue bars are empty; numeric stats, gold, inventory and spells
+await their gameplay components. Diagnostic labels and keyboard hints are kept
+out of the game HUD. The map tab shows walkable terrain
 from the loaded neighborhood, centered on the preview actor. It does not store
-exploration or implement the native automap lifecycle. UI animation, menus,
-dialogue and inventory icon playback remain unported.
+exploration or implement the native automap lifecycle. UI animation, dialogue
+and inventory icon playback remain unported.
 
 Art keeps its native size at 640×480 and larger framebuffers; smaller buffers
 scale the whole layout uniformly. The world camera centers inside the playfield.
@@ -583,7 +594,7 @@ depth and picking. The retail equipment test exercises five armor meshes with
 attachment-only parent metadata and ShortSword at the first/middle/last frames
 of all 352 Locke clips.
 HUD validation renders all six pane types at 640×480, 1024×768 and 320×240,
-checks equipped slot inspection, scaling, and capture cancellation. UI asset
+checks equipment slot input, scaling, and capture cancellation. UI asset
 validation compiles the sibling native bitmap decoder and compares decoded
 pixels/registration and font metrics. Audio validation compares all 1,057 retail
 WAVs (38,447,664 samples) and optionally opens the native device while muted.
@@ -607,3 +618,23 @@ WAVs (38,447,664 samples) and optionally opens the native device while muted.
 For each subsystem, keep the C++ source as the behavioral reference and add
 small compatibility fixtures around meaningful boundaries. Structural Rust
 changes should not silently change gameplay rules.
+
+The UI bitmap A/B uses the original executable in the existing retail HUD lab.
+Generate the captures, then run the comparison with a Python that has NumPy and
+Pillow; `RETAIL_PY` must point to the lab Python with Unicorn:
+
+```sh
+cargo test --test gameflow --test hud -- --ignored --test-threads=1
+RETAIL_PY=/path/to/retail-lab/python python3 scripts/ui_retail_ab.py \
+  --retail-exe /path/to/Revenant.rebuilt.exe --data "$REVENANT_DATA_PATH"
+```
+
+It writes `captures/retail-ui/report.json` and retail/Rust/difference images.
+Cases cover title and in-game Options chrome, the empty status bars with Locke's
+portrait, and the empty bottom bar. The comparison uses the existing lab's
+RGB565 blend tolerances (17 for 2D alpha, 9 for overlay blending, 43 for nested
+4-bit composition). The HUD lab runs the original pane code and substitutes the
+final D3D overlay quad renderer, as documented in `docs/ui/HUD_REBUILD.md`.
+GDI glyph pixels, the unfinished binding-list contents and known retail
+narrow-alpha blit omissions are excluded explicitly. This does not assert
+pixel-identical fonts or complete gameplay UI parity.

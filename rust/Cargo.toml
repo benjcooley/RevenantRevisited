@@ -12,6 +12,7 @@ desktop = ["dep:cpal", "dep:winit"]
 
 [dependencies]
 anyhow = "1"
+ab_glyph = "0.2.32"
 clap = { version = "4.5", features = ["derive"] }
 cpal = { version = "0.16", optional = true }
 winit = { version = "0.30", optional = true }

@@ -219,13 +219,49 @@ fn native_screen_art_scaling_and_mouse_keyboard_capture() -> Result<()> {
             "disabled Load Game must be skipped"
         );
 
+        flow.dispatch(Action::Options);
+        screens.reset_input();
+        let sound = screens
+            .control_center(&flow, viewport, Action::VolumeUp)
+            .unwrap();
+        let scale = (w as f64 / 640.0).min(h as f64 / 480.0).min(1.0);
+        let arrow = [sound[0] - 77.0 * scale, sound[1]];
+        let press = pointer.update(Some(arrow), [true, false, false], true, true);
+        assert_eq!(
+            screens
+                .input(&flow, viewport, press, MenuKeys::default())
+                .action,
+            Some(Action::VolumeDown)
+        );
+        let held = pointer.update(Some(arrow), [true, false, false], true, true);
+        assert_eq!(
+            screens
+                .input(&flow, viewport, held, MenuKeys::default())
+                .action,
+            None,
+            "holding an arrow must not start thumb dragging"
+        );
+        let release = pointer.update(Some(arrow), [false; 3], true, true);
+        screens.input(&flow, viewport, release, MenuKeys::default());
+        let press = pointer.update(Some(sound), [true, false, false], true, true);
+        assert!(matches!(
+            screens
+                .input(&flow, viewport, press, MenuKeys::default())
+                .action,
+            Some(Action::SetVolume(_))
+        ));
+        pointer.cancel_capture();
+        screens.reset_input();
+        flow.dispatch(Action::Back);
+
         let mut frame = Framebuffer::new(w, h)?;
         for (name, actions) in [
             ("title", vec![]),
             ("options", vec![Action::Options]),
             ("loading", vec![Action::Back, Action::NewGame]),
             ("pause", vec![Action::Loaded, Action::Pause]),
-            ("confirm", vec![Action::ReturnToTitle]),
+            ("options-game", vec![Action::Options]),
+            ("confirm", vec![Action::Back, Action::ReturnToTitle]),
             (
                 "death",
                 vec![Action::Back, Action::Resume, Action::PlayerDied],
@@ -234,6 +270,13 @@ fn native_screen_art_scaling_and_mouse_keyboard_capture() -> Result<()> {
             for action in actions {
                 flow.dispatch(action);
             }
+            if name == "pause" && viewport == [640, 480] {
+                assert_eq!(
+                    screens.control_center(&flow, viewport, Action::Resume),
+                    Some([408.5, 326.5]),
+                    "ingamemenu.def position plus native pane origin"
+                );
+            }
             screens.input(
                 &flow,
                 viewport,
@@ -241,6 +284,15 @@ fn native_screen_art_scaling_and_mouse_keyboard_capture() -> Result<()> {
                 MenuKeys::default(),
             );
             batch.begin();
+            batch.overlay(
+                None,
+                revenant::render::effects::Overlay {
+                    rect: [0.0, 0.0, frame.width as f32, frame.height as f32],
+                    uv: [0.0, 0.0, 1.0, 1.0],
+                    color: [0.0, 0.0, 0.0, 1.0],
+                    clip: None,
+                },
+            );
             screens.record(&flow, viewport, 600, "Loading world", &mut batch);
             renderer.render(
                 &mut frame,
