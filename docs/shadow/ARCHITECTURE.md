@@ -45,8 +45,9 @@ plan's discipline:
 
 Wherever an abstraction has to guess, it guesses against Locke:
 
-- An aggressive monster that could see any point of the route attacks
-  him. In play it might not notice him.
+- The monsters along the route engage him, and the generators along it
+  spawn at their real rate while he passes (§5.5). Evading them costs
+  fatigue and still leaves at least one fight.
 - A closed door or gate blocks, whether or not its walkmap says so.
 - A trigger volume on the route fires as if he had walked into it.
 - Travel takes the time the walk would take, at walking speed, so the
@@ -246,30 +247,100 @@ would fire it. So:
 The cubes come from the same script scan as §5.3: every CUBE trigger
 block of every script that is loaded for the level.
 
-### 5.5 Encounters on the way
+### 5.5 Combat on the way
 
-When Locke walks, the sector window moves with him and the monsters
-along his way notice him. `TShadowNav` models that conservatively. A
-monster is met on the route if all of these hold:
+Travel between two points is not free. When Locke walks, the sector
+window moves with him: the monsters along his way notice him, and the
+generators along his way keep spawning. `TShadowEncounters` works out the
+fights a leg brings, from two sources.
+
+**Monsters already there.** These are placed monsters, and spawns left
+from earlier. One is on the leg when all of these hold:
 
 - it is alive, aggressive, and not an ally;
-- a point of the route lies within its sight (640) and `LineOfSight`
+- a point of the route lies within its sight (640), and `LineOfSight`
   from the monster to that point is clear.
 
-Encounters cost the route the duel model's expected health loss (§6.4),
-so the planner prefers quiet routes. A route that is taken is split at
-each encounter: Locke travels to the point where the monster would see
-him, and the step becomes a `Fight` with every monster that sees that
-point. After the fight, travel resumes from there.
+**Monsters the generators make.** A generator along the route spawns
+monsters of its own types while Locke is near: a forest with Kantha
+generators means Kantha on the road. For each generator whose 300-unit
+area lies within sight of the route:
+
+- The **exposure** is the time Locke would spend within sight of its
+  area, at his travel pace (§5.6).
+- Each of its slots yields `exposure / frequency` expected spawns of that
+  slot's type, rolled on Shadow's stream. That is the generator's real
+  rate (70–91 s a monster), compressed into the walk. The total is limited
+  by its cap, less the characters already within 300 units.
+- A spawn is real. It goes through `TMonsterGen`'s own spawn (§7): a
+  walkable spot near the generator, full health, the slot's treasure.
+  The generator's clock restarts, as after any spawn. The monster is then
+  on the leg like any other.
+
+**Travel modes: fight or evade.** Going from one forest to the next past
+X generators that make Y monsters, Locke meets the Y, plus the monsters
+already on the route. What he does about them depends on how he travels:
+
+- **`travel`** (the default): he goes at the player's pace (§5.6) and
+  fights every monster on the leg.
+- **`evade`**: he runs (fatigue permitting) and gets past most of them.
+  He still fights some: of the N on the leg, he fights the
+  ⌈N · share⌉ nearest the route, and **at least one** whenever N is
+  above 0. The share is 1/4 when they are slower than his run and 1/2
+  when they are as fast or faster.
+
+  The monsters he gets past stay in the world, where they are, as real
+  spawns would. Evading costs the run's fatigue (§5.6).
+
+The mode is the plan's (`travel <place> evade`) or the policy's. Locke
+evades when the leg's expected fights would cost more health or potions
+than he can spare, or when they are worth little (monsters whose Value is
+far below his level give almost no experience, GRIND.md §1.2). Otherwise
+he travels and fights, and the route becomes part of the grind.
+
+This compresses the generators' clocks: in retail a generator that has
+been away from Locke for long only restarts its clock on the first pulse
+(GRIND.md §3.1), so a quick pass spawns less. That is the price of not
+walking, and it errs toward more fighting, never less.
+
+**Planning and fighting.** The expected cost of a leg's encounters is the
+duel model's health loss against them (§6.4). It goes into the route's
+cost, so the planner prefers quiet routes, the way a player keeps to the
+road. Once a route is taken, the leg is split at each encounter in order:
+
+1. Locke travels to the point where the monster engages.
+2. The step becomes a `Fight` with it, and with every other engaging
+   monster that sees that point.
+3. Travel resumes from there.
+
+Every roll is logged with the leg's proof (§5.7): the chance, the
+generator's slot, and the result. The decision rolls use Shadow's own
+random stream, so they don't shift the game's.
 
 ### 5.6 Travel time
 
-A leg takes its path length divided by Locke's walking speed. That speed
-is measured once from his walk animation's root motion. The game then
-runs that many ticks with Locke standing at the destination, out of
-combat: generators spawn, timed scripts advance, and poison ticks.
-Regeneration runs too, but it is about one point a minute (GRIND.md
-§6.1), so it doesn't matter.
+Game time advances by exactly what the walk or run would take. The world's
+clocks therefore keep their real pace: generators spawn, timed scripts
+advance, and poison ticks.
+
+- **Speeds** are Locke's real ones: the walk and run states' root motion
+  per frame in his imagery, the movement `Go` applies. They are measured
+  once per run and logged. The ascent of slopes doesn't change them, as in
+  the game.
+- **Pace** is the player's. Running costs `RUNFATIGUE` (−10 a second, with
+  no fatigue recovery), and walking recovers it (about 13 a second;
+  GRIND.md §6.1). So a leg is paced in stretches: run while fatigue is
+  above a reserve, then walk until it is back. A short leg is run whole.
+  Locke arrives with the fatigue the real run would have left him.
+- **The ticks really run.** After the teleport, the game runs the leg's
+  ticks with Locke standing at the destination, out of combat. Standing
+  recovers fatigue at the walking rate, so the walking stretches take care
+  of themselves. The cost of the last running stretch is then taken off
+  at arrival. That is a decrease, which the ledger always allows, logged
+  with its cause (`travel: ran`).
+
+Health and mana regeneration run too, but at about one point a minute they
+don't matter.
 
 ### 5.7 The proof
 

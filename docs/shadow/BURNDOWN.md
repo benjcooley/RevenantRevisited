@@ -32,8 +32,10 @@ inline) · `[-]` cancelled. Dates are ISO.
 | [ ] | Transition graph: exit.def exits with locks and keys | — |
 | [ ] | Script scan: `pos` on the player in CUBE, USE, ACTIVATE and DIALOG blocks; conditional edges tried live | — |
 | [ ] | A* within regions; cube cost and route splitting at crossings | — |
-| [ ] | Encounters on the route (sight, LineOfSight), priced by the duel model | — |
-| [ ] | Travel time from Locke's walk speed; turbo ticks at the destination | — |
+| [ ] | Encounters on the route: monsters already there (sight, LineOfSight), priced by the duel model | — |
+| [ ] | Travel modes: `travel` fights every monster on the leg; `evade` runs and fights ⌈N·share⌉, at least one; the policy's choice | — |
+| [ ] | Generator encounters on the route: exposure × slot frequency, real spawns through `TMonsterGen` (after P3) | — |
+| [ ] | Travel time from Locke's real walk and run speeds; run/walk pacing by fatigue; the leg's ticks run at the destination | — |
 | [ ] | Proofs in the log; a teleport without a proof is a violation | — |
 | [ ] | Gate: the Keep chain's walks; tower door refused without key 42 | — |
 
