@@ -74,6 +74,13 @@ class TExit : public TContainer
 
     // REVSYNC: 0x0050d640 -- state auto-step, then every player on the strip.
     void Pulse() override;
+    // A scripted door (Door1, Door2, PortEW, PortNS): walking onto it does
+    // nothing; its master.s USE block takes the player through.
+    [[nodiscard]] bool IsScriptedDoor() const;
+    // The strip a walker sets this exit off from, in world units (right and
+    // bottom exclusive), and whether `at` stands on it (Pulse's test).
+    [[nodiscard]] SRect StripRect();
+    [[nodiscard]] bool IsOnStrip(const S3DPoint& at);
     // REVSYNC: 0x0050d1a0 -- lock check, then the USE trigger. Never opens.
     bool Use(TObjectInstance* user, int32_t with = -1) override;
     // REVSYNC: 0x0050d370

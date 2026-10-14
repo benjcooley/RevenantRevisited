@@ -191,6 +191,11 @@ bool ParseExpect(TLineReader& in, SShadowCondition& condition, std::string& erro
         condition.subject = EShadowSubject::Level;
         return ParseComparison(in, condition, error);
     }
+    if (in.TakeKeyword("maplevel"))
+    {
+        condition.subject = EShadowSubject::MapLevel;
+        return ParseComparison(in, condition, error);
+    }
     if (in.TakeKeyword("have"))
     {
         const SToken* item = in.Take();
@@ -340,6 +345,7 @@ std::string SShadowCondition::Describe() const
     {
         case EShadowSubject::GameState: out << name; break;
         case EShadowSubject::Level:     out << "level"; break;
+        case EShadowSubject::MapLevel:  out << "maplevel"; break;
         case EShadowSubject::Have:      out << "have \"" << name << '"'; break;
     }
     out << ' ' << CompareText(compare) << ' ' << value;

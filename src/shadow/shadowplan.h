@@ -34,7 +34,7 @@ enum class EShadowVerb : uint8_t
     Travel,     // travel <place|object> [evade]: a proven walk there
     Talk,       // talk <npc> [choose n ...]: Locke goes to the NPC and talks, then as scene
     Use,        // use <object> [with "<item>"]: Locke goes to it and uses it
-    Expect,     // expect <state> <op> <n> | expect level <op> <n> | expect have "<item>" [<op> <n>]
+    Expect,     // expect <state> <op> <n> | expect level|maplevel <op> <n> | expect have "<item>" [<op> <n>]
     Save,       // save "<name>": a waypoint save
 };
 
@@ -57,6 +57,7 @@ enum class EShadowSubject : uint8_t
 {
     GameState,  // a story variable (state.def), through ScriptManager.GameState
     Level,      // Locke's level
+    MapLevel,   // the map level he is on
     Have,       // how many of an item Locke carries, bags included
 };
 

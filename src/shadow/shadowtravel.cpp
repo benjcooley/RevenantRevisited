@@ -10,6 +10,7 @@
 #include "shadowplan.h"
 
 #include "../3dimage.h"
+#include "../exit.h"
 #include "../mappane.h"
 #include "../player.h"
 #include "../revenant.h"
@@ -19,6 +20,7 @@
 #include <algorithm>
 #include <charconv>
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <cstdlib>
 
@@ -36,6 +38,10 @@ constexpr int32_t kApproachSlack = 64;
 constexpr int32_t kObjectRadius = 24;
 // The proof samples the path this often.
 constexpr int32_t kProofSpacing = 256;
+// Through an exit: how long it may take to set off once he is on it, and
+// how far he must have gone for it to count.
+constexpr int32_t kExitTicks = 10 * 24;
+constexpr int32_t kExitJump = 200;
 
 int32_t Distance2D(const S3DPoint& a, const S3DPoint& b)
 {
@@ -240,6 +246,21 @@ bool TShadowTravel::Destination(SShadowContext& context, S3DPoint& out, std::str
     }
     object = found;
 
+    if (arrive == EArrive::Onto)
+        if (auto* exit = dynamic_cast<TExit*>(found))
+        {
+            if (exit->Locked())
+            {
+                failure = objectname + " is locked (key " + std::to_string(exit->KeyId()) +
+                          "): use it with its key first";
+                return false;
+            }
+            viaexit = true;
+            viadoor = exit->IsScriptedDoor();
+            if (!viadoor)
+                return OntoStrip(*field, *exit, out, failure);
+        }
+
     // Next to it, on Locke's side: the standable cells around it in his
     // region, between touching it and a step further, nearest him.
     const int32_t room = (found->IsCharacter() ? static_cast<TCharacter*>(found)->Radius() : kObjectRadius) +
@@ -268,6 +289,34 @@ bool TShadowTravel::Destination(SShadowContext& context, S3DPoint& out, std::str
         }
     }
     out = best;
+    return true;
+}
+
+bool TShadowTravel::OntoStrip(const TShadowWalkField& field, TExit& exit, S3DPoint& dest, std::string& failure) const
+{
+    const SRect strip = exit.StripRect();
+    const S3DPoint middle((strip.left + strip.right) / 2, (strip.top + strip.bottom) / 2, exit.Pos().z);
+    std::optional<S3DPoint> best;
+    int32_t bestdist = INT32_MAX;
+    for (int32_t y = strip.top + GRIDSIZE / 2; y < strip.bottom; y += GRIDSIZE)
+        for (int32_t x = strip.left + GRIDSIZE / 2; x < strip.right; x += GRIDSIZE)
+        {
+            const std::optional<S3DPoint> spot = field.NearestStandable(S3DPoint(x, y, middle.z), GRIDSIZE, region);
+            if (!spot || !exit.IsOnStrip(*spot))
+                continue;
+            const int32_t d = Distance2D(*spot, middle);
+            if (d < bestdist)
+            {
+                bestdist = d;
+                best = spot;
+            }
+        }
+    if (!best)
+    {
+        failure = "Locke can't walk onto " + target + "'s strip";
+        return false;
+    }
+    dest = *best;
     return true;
 }
 
@@ -383,9 +432,42 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
         // back what walking would have.
         if (pace.fatigue < Player->Fatigue())
             Player->SetFatigue(pace.fatigue);
+        if (viaexit)
+        {
+            if (viadoor)
+                if (TObjectInstance* door = object.Get())
+                {
+                    context.log.Event("use", target + ": the door's script takes him through");
+                    door->Use(Player, -1);
+                }
+            startlevel = level;
+            waited = 0;
+            stage = EStage::Through;
+            return EShadowStatus::Running;
+        }
         stage = EStage::Done;
         return EShadowStatus::Done;
     }
+
+    case EStage::Through:
+        // On the strip, the exit's own pulse takes him through (TExit::Pulse,
+        // Activate); at a door, its script does. The session brings the
+        // level in.
+        if (Player->GetLevel() == startlevel && Distance2D(Player->Pos(), dest) < kExitJump)
+        {
+            if (++waited > kExitTicks)
+            {
+                failure = viadoor ? target + "'s script didn't take Locke through"
+                                  : "Locke stood on " + target + "'s strip and it didn't take him";
+                return EShadowStatus::Failed;
+            }
+            return EShadowStatus::Running;
+        }
+        if (!ShadowGameIdle())
+            return EShadowStatus::Running;
+        context.log.Event("through", target + ": level " + std::to_string(Player->GetLevel()));
+        stage = EStage::Done;
+        return EShadowStatus::Done;
 
     case EStage::Done:
         return EShadowStatus::Done;

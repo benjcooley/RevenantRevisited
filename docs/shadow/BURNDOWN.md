@@ -65,7 +65,8 @@ it has got.
 |---|---|---|
 | [x] | Walk field per level with the game's standing test (`GetWalkHeightRadius`); regions; A*; `TSector::WalkmapVersion`; `TGameMap::FindSector` is a grid lookup (level 0 in ~0.5 s) | 2026-10-13 |
 | [ ] | Blocker overlay: closed doors and gates, NOWALK barriers, barrier effects; `nav-discrepancy` findings | — |
-| [ ] | Transition graph: exit.def exits with locks and keys | — |
+| [x] | Through exits: `travel <exit>` steps onto a strip, or walks up to a scripted door and uses it; waits for the jump; a locked exit is refused with its key number | 2026-10-14 |
+| [ ] | Automatic routing across levels (exit graph); today the plan names each exit, which doubles as the walkthrough | — |
 | [ ] | Script scan: `pos` on the player in CUBE, USE, ACTIVATE and DIALOG blocks; conditional edges tried live | — |
 | [ ] | A* within regions; cube cost and route splitting at crossings | — |
 | [ ] | Encounters on the route: monsters already there (sight, LineOfSight), priced by the duel model | — |
@@ -73,7 +74,8 @@ it has got.
 | [ ] | Generator encounters on the route: exposure × slot frequency, real spawns through `TMonsterGen` (after P3) | — |
 | [x] | Travel time from Locke's real speeds (`walkf` 5.71, `runf` 8.93 units a tick); run/walk pacing by fatigue; the walk's ticks pass before he arrives | 2026-10-13 |
 | [x] | Proofs in the log (path sampled every 256 units); the ledger accepts a jump only where a proven travel said he'd land | 2026-10-13 |
-| [ ] | Gate: the Keep chain's walks; tower door refused without key 42 | — |
+| [~] | Gate: the Keep chain's walks pass (Rand, Tendrick with every branch, the GowE scene, KeepExit, then S1: 13 min 53 s of game, 0 violations); tower door without key 42 to test | 2026-10-14 |
+| [ ] | Level 0 takes ~25 s of wall time to load each time Locke returns (the game releases levels with no player, as retail). Worth a look once runs get long | — |
 
 ## P2 Duel
 

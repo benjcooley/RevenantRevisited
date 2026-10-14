@@ -191,7 +191,10 @@ class TSceneRunner final : public TShadowStepRunner
 class TTravelRunner final : public TShadowStepRunner
 {
   public:
-    explicit TTravelRunner(const SShadowStep& step) : TShadowStepRunner(step), travel(step.target, step.evade) {}
+    explicit TTravelRunner(const SShadowStep& step)
+        : TShadowStepRunner(step), travel(step.target, step.evade, TShadowTravel::EArrive::Onto)
+    {
+    }
 
     EShadowStatus Pulse(SShadowContext& context) override
     {
@@ -210,7 +213,7 @@ class TApproachRunner final : public TShadowStepRunner
 {
   public:
     explicit TApproachRunner(const SShadowStep& step)
-        : TShadowStepRunner(step), travel(step.target, false),
+        : TShadowStepRunner(step), travel(step.target, false, TShadowTravel::EArrive::Beside),
           watch(step.choices, step.verb == EShadowVerb::Talk)
     {
     }
@@ -284,6 +287,9 @@ class TExpectRunner final : public TShadowStepRunner
                 break;
             case EShadowSubject::Level:
                 actual = Player->Level();
+                break;
+            case EShadowSubject::MapLevel:
+                actual = Player->GetLevel();
                 break;
             case EShadowSubject::Have:
                 actual = Player->GetInventoryAmount(c.name.c_str());

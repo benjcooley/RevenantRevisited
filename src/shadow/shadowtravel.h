@@ -20,6 +20,8 @@
 #include <optional>
 #include <string>
 
+class TExit;
+
 // Locke's pace, from his own animations and char.def, per game tick.
 struct SShadowGait
 {
@@ -64,23 +66,39 @@ class TShadowNav
 class TShadowTravel
 {
   public:
+    // Where the travel ends at an object: beside it (to talk to it or use
+    // it), or onto it. Onto an exit means through it, as a player goes: onto
+    // its strip, which sets it off, or up to a scripted door and using it,
+    // whose master.s block takes him through.
+    enum class EArrive : uint8_t { Beside, Onto };
+
     // To `target`: a plan place, or an object by name. `evade` runs past
     // the leg's monsters (§5.5; with the duel model, P2).
-    TShadowTravel(std::string target, bool evade) : target(std::move(target)), evade(evade) {}
+    TShadowTravel(std::string target, bool evade, EArrive arrive)
+        : target(std::move(target)), evade(evade), arrive(arrive)
+    {
+    }
 
     EShadowStatus Pulse(SShadowContext& context, std::string& failure);
     // The object travelled to (nullptr for a point, or once it is gone).
     [[nodiscard]] TObjectInstance* Object() const { return object.Get(); }
 
   private:
-    enum class EStage : uint8_t { Plan, Walk, Arrive, Done };
+    enum class EStage : uint8_t { Plan, Walk, Arrive, Through, Done };
 
     // Where Locke should end up for the target as it stands now: next to an
-    // object, or on the place. False with `failure` set.
+    // object, on an exit's strip, or on the place. False with `failure` set.
     bool Destination(SShadowContext& context, S3DPoint& dest, std::string& failure);
+    // A standable cell of `exit`'s strip in Locke's region, nearest its
+    // middle.
+    bool OntoStrip(const TShadowWalkField& field, TExit& exit, S3DPoint& dest, std::string& failure) const;
 
     std::string      target;
     bool             evade  = false;
+    EArrive          arrive = EArrive::Beside;
+    bool             viaexit = false;   // through an exit: it takes him on
+    bool             viadoor = false;   // ... a scripted door, used once he is there
+    int32_t          startlevel = -1;
     EStage           stage  = EStage::Plan;
     TSafeRef<TObjectInstance> object;
     int32_t          region = 0;        // Locke's, where the walk starts

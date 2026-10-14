@@ -13,6 +13,35 @@ stage opening "Locke wakes in the Keep"
     expect  RAHULSTATE = 1              # keep.s:660
     save    "opening"
 
+# stage rahul: Rahul attacks once the opening ends; he has to be beaten.
+# It needs the duel model (P2); until then the stages below start from the
+# "rahul defeated" waypoint.
+
+stage rand "Rand, in the Keep's jail"
+    travel  ressexit                    # out of the resurrection chamber
+    travel  jailenter
+    # RandK (keep.s:278-350): the first menu loops on its first two
+    # answers; any answer to the second finishes.
+    talk    RandK  choose 1 2 3 1
+    expect  RANDSTATE = 1               # keep.s:341
+    expect  TENDRICKSTATE = 1           # keep.s:342
+    save    "rand questioned"
+
+stage tendrick "Tendrick in the throne room"
+    travel  jailexit                    # back out of the jail (exit.def:111)
+    # TendrickT (keep.s:1016-1140): eastern and yhagoro loop; innocent and
+    # executed go on to a last menu, whose first answer loops back to the
+    # first menu and whose second finishes. Every branch, then on: the
+    # finish moves Locke to level 6 for the GowE scene, then back.
+    talk    TendrickT  choose 1 2 3 1 4 2
+    expect  TENDRICKSTATE = 2
+    save    "tendrick told"
+
+stage keepexit "Out of the Keep"
+    use     KeepExit                    # keep.s:1257-1290, open at TENDRICKSTATE > 1
+    expect  maplevel = 0
+    save    "left the keep"
+
 stage s1 "Gus's deal: passage to Arakna for the ring"
     # The tavern door (exit.def:20); master.s's door block takes Locke in.
     use     barin
