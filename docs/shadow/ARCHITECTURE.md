@@ -753,6 +753,30 @@ The ledger counts items by name across the whole tree, bags included, so
 a move between slots or bags changes nothing it sees. It only checks that
 moves never create or destroy items.
 
+### 8.10 Readying
+
+Before a fight, and after anything that changes what he carries (a buy,
+a pick-up, a level-up, a script that takes or gives weapons), Locke
+readies his equipment the way a player does:
+
+- **Wear the best he may.** Each armour slot takes its best piece by
+  Protection, and jewellery by its STATLINE's worth to the duel. Weapon
+  and armour limits (MinStrength, MinConstitution) are the game's own
+  `CanEquip`, applied by the real `TPlayer::Equip`, so a piece he can't
+  use stays in the pack.
+- **The weapon for this fight.** By the style rule (§8.4): fists against
+  a high `hand` resistance's opposite, the best weapon otherwise, and the
+  Training Sword when Jong hands it over. Switching is an unequip and an
+  equip, as on the equip pane.
+- **The belt and the quick spells** hold what this fight needs (§8.9,
+  §8.6).
+- **A buff** goes up first when tactics says the fight is worth one
+  (§8.7).
+
+Scripts can take this away. The Ogrok arena's `GIVEWEAPONS "CHIEF2"`
+takes every weapon (STORY.md S6). Readying then has no weapon to wield,
+and the plan's arena fight is barehanded by design.
+
 ## 9. The plan
 
 ### 9.1 The file

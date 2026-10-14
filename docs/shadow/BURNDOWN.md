@@ -32,7 +32,7 @@ it has got.
 | New stat points | `Train`: the level-up markers (§8.3) | P4 | — |
 | Buying armour, weapons, potions | the shop's keys (§8.1) | P4 | — |
 | Selling what is no longer useful | §8.1 | P4 | — |
-| Equipping gear | `Equip` (§3) | P4 | — |
+| Readying equipment: armour, the fight's weapon, belt, quick spells, a buff | `TPlayer::Equip` with the game's `CanEquip` (§8.10) | P4 | — |
 | Using potions and food | `Consume`, retail `TFood::Use` (§8.2) | P4 | agent porting `TFood::Use` |
 | Placing items, using bags | the real `AddToInventory`: belt for healing, pouches for consumables (§8.9) | P4 | — |
 | Talismans into the Spell Pouch | moved there on arrival; casting checks it (§8.9) | P4 | — |
