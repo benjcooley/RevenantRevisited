@@ -22,6 +22,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 
 class TObjectInstance;
 class TPlayer;
@@ -32,4 +33,7 @@ void ShadowTidyPack(TPlayer& locke, TShadowLog& log);
 
 // The healing potion on the belt to drink, `missing` health short: the
 // smallest that makes it up, else the biggest. Null with none on the belt.
-[[nodiscard]] TObjectInstance* ShadowBeltHealing(TPlayer& locke, int32_t missing);
+// `drunk`: how many of each a trial fight has drunk already -- they are
+// still on the belt, but not to be drunk twice.
+[[nodiscard]] TObjectInstance* ShadowBeltHealing(TPlayer& locke, int32_t missing,
+                                                 const std::map<const TObjectInstance*, int32_t>& drunk = {});
