@@ -395,58 +395,70 @@ Real (called, not copied):
 Modelled: where the two stand and when each acts. There is no
 animation, no movement, and no collision.
 
-### 6.2 One implementation of the roll
+### 6.2 One implementation of the blow
 
-Today the dice are thrown inside `TCharacter::IsValidAttack`, mixed with
-the checks that need animation state. The first step is to pull the pure
-part out, as a function both use:
+`ResolveHit` and `IsValidAttack` mix the arithmetic of a blow with the
+animation state they read. Their pure parts become functions of their own,
+which both the game and the duel model call:
 
 ```cpp
-// The dice of one blow (COMBAT_HIT.md §1-3): damage before the tier,
-// to-hit, roll, and the tier's factor. Called by IsValidAttack and by
-// the duel model.
-SAttackRoll TCharacter::RollAttack(const TCharacter& target,
-                                   const SAttackData& attack,
-                                   bool targetOpen) const;
+// The dice, as IsValidAttack throws them when an attack is chosen
+// (COMBAT_HIT.md §1-3): damage (tiered), to-hit, roll.
+SAttackRoll TCharacter::RollAttack(TCharacter& target, const SCharAttackData& attack,
+                                   int32_t dmgpcnt, bool targetopen, SAttackRoll thrown = {});
+// ResolveHit's arithmetic: a guarding target facing the blow takes 50 off
+// the to-hit and the damage is tiered again; a failed roll is a glance; at
+// least 1; a guarding player takes nothing from a glance.
+SBlowOutcome TCharacter::WeighBlow(TCharacter& target, int32_t damage, int32_t tohit,
+                                   int32_t roll, bool guarding) const;
+// ResolveHit's end: Damage, then a player's KillExp, SkillExp, StealthExp.
+void TCharacter::LandBlow(TCharacter& target, int32_t damage, TActionBlock* action);
 ```
 
-`IsValidAttack` then calls `RollAttack` where it rolls today. The dojo
-katas for to-hit and damage (C1, C2) must stay green, draw for draw.
-After that, the duel model can't drift from the real game, because the
-two call the same code.
+`IsValidAttack` and `ResolveHit` call them where they compute the same
+things today, draw for draw, and the dojo katas (C1, C2 and the attack
+choice) prove it. The duel model then can't drift from the game: it calls
+the same code.
 
 ### 6.3 The timeline
 
-A duel is a discrete-event simulation in ticks (24 a second):
+A duel is a discrete-event simulation in ticks (24 a second), resolved in
+one game tick (§6.5):
 
-- **The monster** acts on its own cadence:
-  - `nextattack = random(minattackfreq, maxattackfreq) · 24 / 100`;
-  - then `RandomAttack(random(1,100))` over the attacks valid at the
-    current distance band;
-  - impact at the attack's `impacttime`, recovery at its `nextwait`;
-  - it blocks with `random(1,100) ≤ blockfreq` while Locke's blow is
-    before its `blocktime`;
-  - it retreats at `retreatat`.
-- **Locke** acts on his tactics (§6.4). Each blow is one of his valid
-  attacks for the band he chooses: weapon mask, AttackLevel, weapon
-  skill, fatigue. It lands at its `impacttime` and costs its fatigue at
-  impact. Fatigue regenerates at the rules.def rate whenever he isn't
-  attacking.
-- **Distance** is a band (close, mid, lunge), not a position. Locke
-  chooses the band; the monster closes at its run speed.
-- **Facing.** Locke strikes a monster that is mid-attack with the +25
-  bonus when his blow lands inside its swing. A monster never gets the
-  bonus against Locke, because a player keeps facing his target.
-- **Several monsters.** Each one that sees Locke runs its own cadence.
-  At most three are in reach at once, as when monsters crowd a player;
-  the rest wait at the edge. Locke fights the one his tactics pick.
+- **The monster** acts as `TCharacter::AIAttack` does:
+  - its attack timer re-arms after every try at
+    `random(minattackfreq, maxattackfreq) · 24 / 100` ticks;
+  - a try is RandomAttack's: a percentage, the damage percentage, then up
+    to twice as many random picks as it has attacks, the first valid one
+    with `attackpcnt` at least the percentage (FindPcntAttack);
+  - the blow lands at its `impacttime`; the next can start at `nextwait`;
+  - attacked, it guards at `BLOCKFREQ` for `BLOCKMIN..BLOCKMAX` ticks
+    (OnAttacked);
+  - at `RETREATAT` it runs. It gets away if it outruns Locke; otherwise he
+    catches it.
+- **Locke** acts on his tactics (§6.4). Each blow is one of his attacks
+  valid where he stands (`IsValidAttack`'s tests that don't read
+  animation: mode flags, fatigue, distance band, weapon mask, AttackLevel,
+  weapon skill, chain timing). It lands at its `impacttime` and costs its
+  fatigue at impact. Fatigue comes back at the rules.def rate whenever he
+  isn't swinging.
+- **Distance.** A monster closes at its own run speed (its `runf` or
+  `combatf` motion) to its `maxattackrange`, and the fight is at that
+  range: its attacks and Locke's must be valid there.
+- **Facing.** Whoever is mid-swing is open: a blow chosen against a
+  swinging target gets the +25 (`targetopen`). Neither side fights with its
+  back turned.
+- **Several monsters.** Each runs its own timer. At most three are in reach
+  at once, as when monsters crowd a player; the rest wait at the edge.
+  Locke strikes the one nearest death.
+- **Not modelled yet:** grapples and other interactive attacks, responses
+  (an attack keyed to the target's state), stun and knockdown follow-ups,
+  knockback. Their effect on outcomes is what calibration (§6.7) measures.
 
-At each impact, the real `RollAttack` gives damage, to-hit and roll. A
-block cuts the to-hit by 50, and a blocking Locke takes nothing from a
-glance (ResolveHit's rules). Then the real `Damage` call applies the hit,
-with the attacker set, so death, `Died` and `Killed` run as they do in
-play. A player kill calls the three award functions, as `ResolveHit`
-does.
+At each impact the dice thrown at the choice go through `WeighBlow` with
+the target's guard, then `LandBlow`: the real `Damage` with the attacker
+set, so death, `Died` and `Killed` run as in play, and a player's kill
+earns its experience in the same calls `ResolveHit` makes.
 
 ### 6.4 Tactics
 
