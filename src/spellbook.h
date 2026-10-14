@@ -60,6 +60,9 @@ class TSpellBookPane final : public TButtonPane
     // REVSYNC: 0x00544fb0 -- a spell the player knows scrolls into view; a
     // spell.def spell with a circle and a description is learned first.
     void Reveal(const char *talismans);
+    // Whether Reveal would teach this combination: a spell.def spell with a
+    // circle and a description (0x00544fb0's test).
+    [[nodiscard]] static bool Learnable(const char *talismans);
     // REVSYNC: 0x00544f00 -- the arrows: the next (+1) or previous (-1)
     // row's top to the top of the window.
     void StepRow(int32_t direction);

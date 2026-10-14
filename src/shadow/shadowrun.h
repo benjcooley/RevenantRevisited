@@ -90,8 +90,8 @@ class TShadowRun
     int32_t        stage = 0;
     int32_t        step  = -1;
     std::unique_ptr<TShadowStepRunner> runner;
-    // A fight the plan didn't ask for (§6.5): it runs first, then the plan's
-    // step goes on.
+    // A step the plan didn't ask for -- a fight (§6.5), trying new spells
+    // (§8.6): it runs first, then the plan's step goes on.
     SShadowStep                        interruptstep;
     std::unique_ptr<TShadowStepRunner> interrupt;
     std::vector<SShadowWaypoint>       waypoints;
@@ -99,6 +99,7 @@ class TShadowRun
     std::set<int32_t>                  surveyed;   // levels whose chests are logged
     int32_t                            tidied = -1; // the ledger's items version the pack was put in order at
     int32_t                            settled = 0; // verifying: idle ticks since the load
+    int32_t                            inventedat = -1; // the items version spells were last looked for at
 
     // Turbo: the steps a frame runs, and when this frame's began.
     int32_t                               steps = 1;

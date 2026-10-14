@@ -16,7 +16,8 @@
 class TPlayer;
 
 // Locke's state as one JSON object: where he is, his vitals, level and
-// experience, attributes, skills and their experience, level-up picks,
+// experience, attributes and skills (as kept, and as modified, with the
+// stat effects in force), skill experience, level-up picks,
 // gold, where each thing he carries is (the pack, a bag, an equipment slot,
 // a belt box), the spells he knows, his quick spells, and the story
 // variables.

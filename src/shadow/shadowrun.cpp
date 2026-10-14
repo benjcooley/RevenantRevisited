@@ -231,7 +231,7 @@ void TShadowRun::RunSteps()
             return;
         if (status == EShadowStatus::Failed)
         {
-            Finish(1, "a fight the plan didn't ask for: " + interrupt->Failure());
+            Finish(1, "a step the plan didn't ask for (" + interruptstep.Describe() + "): " + interrupt->Failure());
             return;
         }
         interrupt.reset();
@@ -267,6 +267,20 @@ void TShadowRun::RunSteps()
                 ++stage;
                 step = -1;
                 continue;
+            }
+            // Between steps, with something new in the pack: a combination
+            // of his talismans that makes a spell he doesn't know is tried,
+            // as a player experiments in the spell pane (§8.6).
+            if (ledger.ItemsVersion() != inventedat && ShadowGameIdle())
+            {
+                inventedat = ledger.ItemsVersion();
+                if (ShadowSpellToInvent({}, nullptr))
+                {
+                    interruptstep = SShadowStep{};
+                    interruptstep.verb = EShadowVerb::Invent;
+                    interrupt = MakeInventRunner(interruptstep);
+                    return;
+                }
             }
             const SShadowStep& next = current.steps[step];
             log.Event("step", next.Describe(), [&](JsonOut& out) {

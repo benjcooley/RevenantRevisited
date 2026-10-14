@@ -36,7 +36,7 @@ it has got.
 | Using potions and food | `Consume`, retail `TFood::Use` (§8.2) | P4 | done (retail TFood::Use merged); in fights below 35% health |
 | Placing items, using bags | the real `AddToInventory`: belt for healing, pouches for consumables (§8.9) | P4 | — |
 | Talismans into the Spell Pouch | moved there on arrival; casting checks it (§8.9) | P4 | — |
-| Learning new spells | `Invent`: casting a talisman combination teaches it; scrolls to check (§8.6) | P4 | — |
+| Learning new spells | `invent`: casting a talisman combination in the spell pane teaches it; a scroll only shows its text (§8.6) | P4 | done |
 | Readying spells | quick-spell slots (§8.6) | P4 | — |
 | Casting spells | `CastByName` in the duel (§6.7) | P2 | agent extracting the damage dice |
 | Learning combos | Jong's lessons when due: AttackLevel, the lesson move landed (§8.5) | P4 | — |
@@ -112,7 +112,7 @@ it has got.
 | [ ] | Shopping list scored by the duel model; selling what is no longer useful (outgrown gear, spent keep-list items) | — |
 | [ ] | Level-up markers by style | — |
 | [ ] | Jong's lessons | — |
-| [ ] | Spell invention and quick-spell slots | — |
+| [x] | Spell invention: at each step boundary after the pack changes (or `invent`), every spell.def combination he holds and doesn't know goes in the construct slot and through the pane's own `TSpellPane::Invoke`; the book learns it cast or not. The opening's Life, Moon and Soul teach Poison, Nourish, Might, Fist Mastery and Physical Paralysis. A spell the style uses goes on a free quick-spell ring (Fist Mastery for hands) | 2026-10-14 |
 | [x] | The pack kept in order whenever its counts change (shadowpack.cpp, the game's AddToInventory): talismans into the Spell Pouch (the opening's three go in at once), potions onto belt boxes F5–F9 one kind a box (the Keep chest's Lesser Healing to box 1; bought ones merge onto it), scrolls and tradeable odd bits into Pouches of their own | 2026-10-14 |
 | [ ] | The duel drinks only from the belt (`ShadowBeltHealing`), once the calibrated duel lands | — |
 | [x] | `grind until level <n> \| skill <name> <n> [restock <routine>]`: sites scored by Value against his level, trial duels size each monster up, generators farmed from out of sight, food then potions below 60%, rest out of sight to 90% when nothing is left (never set off hurt), the restock routine when out of healing with the gold for it | 2026-10-14 |

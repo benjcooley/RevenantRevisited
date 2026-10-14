@@ -52,14 +52,31 @@ std::string ShadowStateJson(TPlayer& locke)
     out.Field("attacklevel", locke.AttackLevel());
     out.Field("poisoned", locke.Poisoned());
 
+    // The stats as kept, and as equipment and stat effects make them. A
+    // save keeps no stat effect (PLAYER_STATS.md §4, as retail), so the
+    // modified ones only match when none was in force.
     out.Key("stats").Begin('{');
     for (int32_t i = 0; i < NUM_PLRSTATS; ++i)
-        out.Field(kAttributeNames[i], locke.PlyrStat(i));
+        out.Field(kAttributeNames[i], locke.BaseObjStat(PLRSTAT_FIRST + i));
     out.End('}');
     out.Key("skills").Begin('{');
     for (int32_t i = 0; i < NUM_SKILLS; ++i)
-        out.Key(kSkillNames[i]).Begin('[').Value(locke.Skill(i)).Value(locke.SkillExp(i)).End(']');
+        out.Key(kSkillNames[i])
+            .Begin('[')
+            .Value(locke.BaseObjStat(SK_FIRST + i))
+            .Value(locke.BaseObjStat(SKE_FIRST + i))
+            .End(']');
     out.End('}');
+    out.Key("modified").Begin('{');
+    for (int32_t i = 0; i < NUM_PLRSTATS; ++i)
+        out.Field(kAttributeNames[i], locke.PlyrStat(i));
+    for (int32_t i = 0; i < NUM_SKILLS; ++i)
+        out.Field(kSkillNames[i], locke.Skill(i));
+    out.End('}');
+    out.Key("stateffects").Begin('[');
+    for (const TPlayer::SStatEffect& effect : locke.StatEffects())
+        out.String(effect.statline);
+    out.End(']');
     out.Key("levelup").Begin('[');
     for (const int32_t pick : locke.LevelUpStats())
         out.Value(pick);

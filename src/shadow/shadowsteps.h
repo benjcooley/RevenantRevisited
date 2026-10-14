@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,7 @@ class TShadowLedger;
 class TShadowLog;
 class TShadowNav;
 class TShadowPlan;
+struct SSpellData;
 
 enum class EShadowStatus : uint8_t { Running, Done, Failed };
 
@@ -117,6 +119,12 @@ struct SShadowOdds
     bool    take     = false;
 };
 [[nodiscard]] SShadowOdds ShadowSizeUp(const std::vector<TCharacter*>& foes, int64_t tick);
+// Trying the spells he can make (shadowspells.cpp, §8.6).
+[[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeInventRunner(const SShadowStep& step);
+// The first combination of spell.def's that Locke holds the talismans for,
+// would learn by casting, doesn't know and hasn't `tried`; null for none.
+// `spell`, when given, gets its spell.
+[[nodiscard]] const char* ShadowSpellToInvent(const std::set<std::string>& tried, const SSpellData** spell);
 // Grinding for a level (shadowgrind.cpp).
 [[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeGrindRunner(const SShadowStep& step);
 // Whether anything near Locke is fighting him (§6.5).

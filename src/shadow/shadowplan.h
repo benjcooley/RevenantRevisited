@@ -44,6 +44,7 @@ enum class EShadowVerb : uint8_t
     Train,      // train [<attribute> [<attribute>]]: the next level-up's two picks (none: the style's)
     Consume,    // consume "<item>": eat or drink it
     Fight,      // fight <target> [win]: Locke goes to it and fights it, and whoever joins
+    Invent,     // invent: cast each combination he holds that makes a spell he doesn't know (§8.6)
     Grind,      // grind until level <n> | skill <name> <n> [restock <routine>]: fight around here until then
     Expect,     // expect <state> <op> <n> | expect level|maplevel <op> <n> | expect skill <name> <op> <n>
                 //   | expect have "<item>" [<op> <n>]

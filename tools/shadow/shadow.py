@@ -85,6 +85,10 @@ def compare_states(saved: dict, loaded: dict) -> list[str]:
     found = []
     for key in sorted(set(saved) | set(loaded)):
         was, now = saved.get(key), loaded.get(key)
+        if key == 'stateffects':
+            continue                        # a save keeps none (PLAYER_STATS.md §4, as retail)
+        if key == 'modified' and saved.get('stateffects'):
+            continue                        # so a stat effect in force makes these differ
         if key == 'pos':
             if was is None or now is None or any(abs(a - b) > POS_SLACK for a, b in zip(was[:2], now[:2])):
                 found.append(f'pos {was} -> {now}')

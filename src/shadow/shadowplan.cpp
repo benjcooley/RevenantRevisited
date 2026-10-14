@@ -362,6 +362,16 @@ bool ParseStep(const std::string& verb, TLineReader& in, SShadowStep& step, std:
         }
         return true;
     }
+    if (verb == "invent")
+    {
+        step.verb = EShadowVerb::Invent;
+        if (!in.AtEnd())
+        {
+            error = "'invent' takes nothing";
+            return false;
+        }
+        return true;
+    }
     if (verb == "grind")
     {
         step.verb = EShadowVerb::Grind;
@@ -558,6 +568,7 @@ std::string SShadowStep::Describe() const
         case EShadowVerb::Consume: out << "consume \"" << item << "\""; break;
         case EShadowVerb::Fight:   out << "fight " << (target.empty() ? "(whoever attacks)" : target)
                                        << (mustwin ? " win" : ""); break;
+        case EShadowVerb::Invent:  out << "invent"; break;
         case EShadowVerb::Grind:   out << "grind until "
                                        << (goal.subject == EShadowSubject::Skill ? "skill " + goal.name : "level")
                                        << ' ' << goal.value << (routine.empty() ? "" : " restock " + routine); break;

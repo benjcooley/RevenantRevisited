@@ -754,9 +754,9 @@ loop goes to Jong whenever a lesson is due and he is reachable.
 
 **Learning.** In Revenant a spell is learned by casting it: casting a
 talisman combination in the spell pane teaches it (`SpellBook.Reveal`,
-then `TPlayer::LearnSpell`). Whether a scroll item such as the opening's
-`mgcscrl1` also teaches one is unconfirmed; the P4 forensics will settle
-it.
+then `TPlayer::LearnSpell`), whether the cast comes off or not
+(`TSpellPane::Invoke`). A scroll item such as the opening's `mgcscrl1`
+teaches nothing: `TScroll::Use` only opens the scroll pane on its text.
 
 Talismans come from the story (Olihoot's Sky and Sun) and from loot.
 When Locke holds a combination that makes a spell he hasn't learned,
@@ -764,6 +764,20 @@ When Locke holds a combination that makes a spell he hasn't learned,
 Shadow knows the combinations from spell.def; a player would find them
 by trying. The new spell goes into a quick-spell slot if it is useful to
 the style: damage, a fist buff, healing, cure poison.
+
+As built (`shadowspells.cpp`): `invent` runs as a step the plan didn't ask
+for at each step boundary after the pack's counts change, and as a plan
+verb. It goes through the pane's own `Invoke` with the combination in
+the construct slot, one cast every 3 seconds. The ledger allows the
+cast's Invoke experience and what a healing spell gives. The book's own
+test (`TSpellBookPane::Learnable`) picks the combinations worth trying.
+The opening's Life, Moon and Soul make Poison, Nourish, Might, Fist
+Mastery and Physical Paralysis.
+
+A buff in force when the game saves is not in the save (retail keeps no
+stat effects, PLAYER_STATS.md §4). The round trip (§10) compares base
+attributes and skills, and the modified ones only when no buff was in
+force.
 
 ### 8.7 Effects: poison and the rest
 
