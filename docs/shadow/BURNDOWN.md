@@ -146,7 +146,9 @@ it has got.
 | [ ] | 20-seed sweep | — |
 | [ ] | Waypoints load in retail (emulator or DOSBox lab) | — |
 | [x] | Save round trip: Locke's whole state (every item where it is, bags and belt and equipment, stats, skills, picks, spells, quick spells, story variables) recorded at each save; `--shadow-verify=<file>` with `--quickstart=<slot>` writes it from a fresh load; `shadow.py --check` compares field by field. The plan's first six saves come back unchanged | 2026-10-14 |
-| [x] | A guarded way: trial duels size up a leg's fight; he runs past what he'd lose to, and turns back (travel fails as guarded) when even that is lost. Death ends the run | 2026-10-14 |
+| [x] | A guarded way: trial duels size up a leg's fight; he runs past what he'd lose to, and turns back (travel fails as guarded) when even that is lost | 2026-10-14 |
+| [~] | Death → reload (§6.6): the newest save (the last `save` step, or a `--shadow-stage` run's start slot) is loaded within the death countdown and the plan goes on after it; a stage's second death fails the run. Written; no run has died since guarded ways (attempts to force one at level 1 were turned back) | 2026-10-14 |
+| [x] | `fight <type>` goes to the nearest living one of the type (it went to the last one's body) | 2026-10-14 |
 | [~] | Play styles (§8.4): `style` / `--shadow-style` = melee, hands, bow, spells, mixed. Done: the setting, the level-up picks (`train` alone takes the style's), the first forest grind barehanded for Baez in every style. To do: readying, duel tactics, shopping, spells | 2026-10-14 |
 | [ ] | Bows in the duel: bow-mode shots while a monster closes (needed for the Solifuge anyway) | — |
 | [ ] | Spells in the duel (§6.8): CastByName, the static TSpell::Damage, buffs | — |

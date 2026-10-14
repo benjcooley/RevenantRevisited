@@ -73,8 +73,11 @@ class TShadowNav
 };
 
 // The object `name` names on `level` nearest `near`: an instance name, else
-// a type name, compared without case. nullptr when there is none.
-[[nodiscard]] TObjectInstance* ShadowFindObject(const std::string& name, int32_t level, const S3DPoint& near);
+// a type name, compared without case. `living`: a character only while it
+// lives (a fight's target, not the body of the last one). nullptr when
+// there is none.
+[[nodiscard]] TObjectInstance* ShadowFindObject(const std::string& name, int32_t level, const S3DPoint& near,
+                                                bool living = false);
 
 class TShadowTravel
 {
@@ -101,6 +104,8 @@ class TShadowTravel
     EShadowStatus Pulse(SShadowContext& context, std::string& failure);
     // The object travelled to (nullptr for a point, or once it is gone).
     [[nodiscard]] TObjectInstance* Object() const { return object.Get(); }
+    // To a living character: the travel's target is never a body.
+    void OnlyLiving() { living = true; }
     // Failed because the way is held by monsters Locke wouldn't beat, even
     // running past them: a player turns back there (§5.5).
     [[nodiscard]] bool Guarded() const { return guarded; }
@@ -123,6 +128,7 @@ class TShadowTravel
     std::string      target;
     bool             evade  = false;
     bool             guarded = false;
+    bool             living  = false;   // the target must be a living character
     EArrive          arrive = EArrive::Beside;
     bool             viaexit = false;   // through an exit: it takes him on
     bool             viadoor = false;   // ... a scripted door, used once he is there

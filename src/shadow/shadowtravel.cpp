@@ -11,6 +11,7 @@
 #include "shadowplan.h"
 
 #include "../3dimage.h"
+#include "../character.h"
 #include "../exit.h"
 #include "../mappane.h"
 #include "../player.h"
@@ -194,7 +195,7 @@ const TShadowZones& TShadowNav::Zones(TShadowLog& log)
     return zones;
 }
 
-TObjectInstance* ShadowFindObject(const std::string& name, int32_t level, const S3DPoint& near)
+TObjectInstance* ShadowFindObject(const std::string& name, int32_t level, const S3DPoint& near, bool living)
 {
     std::string base = name;
     S3DPoint at = near;
@@ -210,6 +211,8 @@ TObjectInstance* ShadowFindObject(const std::string& name, int32_t level, const 
         {
             const char* n = bytype ? i->GetTypeName() : i->GetName();
             if (!n || stricmp(n, base.c_str()) != 0)
+                continue;
+            if (living && (i->ObjClass() != OBJCLASS_CHARACTER || static_cast<TCharacter*>(i.Item())->Health() <= 0))
                 continue;
             const S3DPoint p = i->Pos();
             const int64_t d = int64_t(p.x - at.x) * (p.x - at.x) + int64_t(p.y - at.y) * (p.y - at.y);
@@ -275,7 +278,7 @@ bool TShadowTravel::Destination(SShadowContext& context, S3DPoint& out, std::str
         objectname = place->object;
     }
 
-    TObjectInstance* found = ShadowFindObject(objectname, level, Player->Pos());
+    TObjectInstance* found = ShadowFindObject(objectname, level, Player->Pos(), living);
     if (!found)
     {
         failure = "no " + objectname + " on level " + std::to_string(level);

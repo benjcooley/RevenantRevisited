@@ -89,6 +89,8 @@ bool TShadowRun::Configure(const SShadowOptions& given)
             log_error("[smoke] --shadow-stage: the plan has no stage '%s'", options.from.c_str());
             return false;
         }
+        if (!options.startslot.empty())
+            lastsave = {options.startslot, stage, 0};
     }
     if (options.out.empty())
     {
@@ -150,17 +152,20 @@ void TShadowRun::Pulse()
     {
         ledger.Start(*Player, tick);
         player = Player;
+        reloading = false;
     }
+    else if (reloading)
+        return;             // the load hasn't begun yet: the dead Locke is still the player
     else if (ledger.Audit(*Player, tick, log) > 0 && !options.lenient)
     {
         Finish(2, "the ledger found a change with no cause");
         return;
     }
 
-    // Death ends the run (reloading the last waypoint is to come, §6.6).
-    if (Player->Health() <= 0 && ShadowGameIdle())
+    // A death: back to the newest save, as a player (§6.6).
+    if (Player->Health() <= 0)
     {
-        Finish(1, "Locke died");
+        Died("Locke died");
         return;
     }
 
@@ -236,7 +241,12 @@ void TShadowRun::RunSteps()
             return;
         if (status == EShadowStatus::Failed)
         {
-            Finish(1, "a step the plan didn't ask for (" + interruptstep.Describe() + "): " + interrupt->Failure());
+            const std::string why = "a step the plan didn't ask for (" + interruptstep.Describe() + "): " +
+                                    interrupt->Failure();
+            if (Player->Health() <= 0)
+                Died(why);
+            else
+                Finish(1, why);
             return;
         }
         interrupt.reset();
@@ -302,10 +312,17 @@ void TShadowRun::RunSteps()
         if (status == EShadowStatus::Failed)
         {
             const SShadowStep& failed = stages[stage].steps[step];
-            Finish(1, plan.Path() + ":" + std::to_string(failed.line) + ": " + failed.Describe() + ": " +
-                          runner->Failure());
+            const std::string why = plan.Path() + ":" + std::to_string(failed.line) + ": " + failed.Describe() +
+                                    ": " + runner->Failure();
+            if (Player->Health() <= 0)
+                Died(why);
+            else
+                Finish(1, why);
             return;
         }
+        // The newest save is where a death goes back to: the step after it.
+        if (stages[stage].steps[step].verb == EShadowVerb::Save)
+            lastsave = {"Shadow " + stages[stage].steps[step].name, stage, step + 1};
         runner.reset();
         ++step;
     }
@@ -330,6 +347,34 @@ void TShadowRun::Verify()
     if (!file)
         log_error("[smoke] can't write %s", options.verify.c_str());
     sapp_request_quit();
+}
+
+void TShadowRun::Died(const std::string& how)
+{
+    const std::string where = stage < (int32_t)plan.Stages().size() ? plan.Stages()[stage].id : "the end";
+    const int32_t times = ++deaths[where];
+    log.Event("death", how, [&](JsonOut& out) {
+        out.FieldString("stage", where);
+        out.Field("times", times);
+    });
+    // A balanced plan doesn't lose a fight it chose twice (§6.6).
+    if (lastsave.slot.empty())
+    {
+        Finish(1, how + " (no save to go back to)");
+        return;
+    }
+    if (times > kDeathsAllowed)
+    {
+        Finish(1, how + " (the second death in stage " + where + ")");
+        return;
+    }
+    log.Event("reload", "\"" + lastsave.slot + "\", back to stage " + plan.Stages()[lastsave.stage].id);
+    GameFlow.Session().RequestLoad(lastsave.slot, false);
+    reloading = true;
+    runner.reset();
+    interrupt.reset();
+    stage = lastsave.stage;
+    step = lastsave.step;
 }
 
 void TShadowRun::Finish(int32_t code, const std::string& why)

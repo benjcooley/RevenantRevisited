@@ -21,6 +21,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -30,6 +31,7 @@ struct SShadowOptions
     std::string plan;               // --shadow=<plan>
     std::string out;                // --shadow-out=<dir>; default <SavePath>/shadow/<run>
     std::string from;               // --shadow-stage=<stage>: start at it (with --quickstart=<its save>)
+    std::string startslot;          // that --quickstart save: the newest save a death goes back to
     std::string until;              // --shadow-until=<stage>: stop after it
     uint32_t    seed    = 1;        // --seed
     bool        lenient = false;    // --shadow-lenient: log violations, don't stop
@@ -68,6 +70,9 @@ class TShadowRun
     void WriteSummary(const std::string& why) const;
     void WriteWaypoints() const;
     void Verify();
+    // Locke is dead: the newest save is loaded and the plan goes on after
+    // it, or the run fails (§6.6).
+    void Died(const std::string& how);
 
     // The window is there to be watched, not played: a draw costs tens of
     // milliseconds on a big level, so the simulation gets most of the frame
@@ -100,6 +105,17 @@ class TShadowRun
     int32_t                            tidied = -1; // the ledger's items version the pack was put in order at
     int32_t                            settled = 0; // verifying: idle ticks since the load
     int32_t                            inventedat = -1; // the items version spells were last looked for at
+    // The newest save: its slot and the step after it.
+    struct SSavePoint
+    {
+        std::string slot;
+        int32_t     stage = 0;
+        int32_t     step  = 0;
+    };
+    SSavePoint                         lastsave;
+    bool                               reloading = false;  // a death's load is under way
+    std::map<std::string, int32_t>     deaths;     // by stage
+    static constexpr int32_t           kDeathsAllowed = 1;     // a stage's second death fails the run
 
     // Turbo: the steps a frame runs, and when this frame's began.
     int32_t                               steps = 1;

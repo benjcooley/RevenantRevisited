@@ -1608,6 +1608,7 @@ void GetParameters(int argc, char **argv)
         {
             arg_param(cmd, "shadow-out", shadow.out);
             arg_param(cmd, "shadow-stage", shadow.from);
+            arg_param(cmd, "quickstart", shadow.startslot);
             arg_param(cmd, "shadow-until", shadow.until);
             arg_param(cmd, "shadow-style", shadow.style);
             shadow.lenient = arg_flag(cmd, "shadow-lenient");

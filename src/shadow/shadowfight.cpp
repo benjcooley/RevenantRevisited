@@ -70,6 +70,7 @@ class TFightRunner final : public TShadowStepRunner
     TFightRunner(const SShadowStep& step, const std::vector<TCharacter*>& met)
         : TShadowStepRunner(step), travel(step.target, false, TShadowTravel::EArrive::Beside)
     {
+        travel.OnlyLiving();
         for (TCharacter* foe : met)
             given.push_back(foe);
     }
@@ -81,11 +82,12 @@ class TFightRunner final : public TShadowStepRunner
         case EStage::Go:
             if (!step.target.empty())
             {
-                // Someone already beaten -- dead, or his body gone -- is a
-                // fight already won; the plan's checks after it say so.
-                TCharacter* foe =
-                    dynamic_cast<TCharacter*>(ShadowFindObject(step.target, Player->GetLevel(), Player->Pos()));
-                if (!foe || foe->Health() <= 0)
+                // No one of that name alive -- beaten, or his body gone --
+                // is a fight already won; the plan's checks after it say so.
+                // By a type name, the nearest one still standing.
+                TCharacter* foe = dynamic_cast<TCharacter*>(
+                    ShadowFindObject(step.target, Player->GetLevel(), Player->Pos(), true));
+                if (!foe)
                 {
                     context.log.Event("fight", step.target + " is already down");
                     return EShadowStatus::Done;

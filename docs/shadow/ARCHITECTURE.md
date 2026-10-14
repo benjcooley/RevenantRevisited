@@ -565,6 +565,15 @@ The ledger resets to the save. The death and the reload are logged, and
 the stage's death count rises. Two deaths in one stage fail the run,
 because a balanced plan shouldn't lose a fight it chose to take twice.
 
+As built: a death is a dead Locke at the start of a tick, or a step that
+failed with him dead (the duel kills him inside a step). The newest save
+is the plan's last `save` step, or the waypoint a `--shadow-stage` run
+started from. It is requested at once, within retail's 8-second death
+countdown, while the play screen is still up. The plan goes on at the
+step after that save. Deaths have become rare: trial duels size up every
+fight on the way, and he turns back from a guarded one (§5.5). A run that
+first dies will be the first to exercise the reload.
+
 ### 6.7 Calibration: is it realistic?
 
 The duel model is right when it matches real fights. The combat arena
