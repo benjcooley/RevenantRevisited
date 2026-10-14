@@ -22,8 +22,9 @@ class TFood : public TObjectInstance
     TFood(TObjectImagery* newim) : TObjectInstance(newim) {}
     TFood(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 
-    virtual bool Use(TObjectInstance* user, int32_t with = -1);
-        // Munch munch munch
+    bool Use(TObjectInstance* user, int32_t with = -1) override;
+        // REVSYNC: 0x0050e780. Eaten or drunk: health and mana, a poison cure,
+        // one fewer in the stack
     int32_t CursorType(TObjectInstance* inst = nullptr) override { if (inst) return CURSOR_NONE; return CURSOR_MOUTH; }
         // Yummy
 

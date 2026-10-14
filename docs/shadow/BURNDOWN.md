@@ -106,7 +106,7 @@ it has got.
 
 | Status | Item | Last touched |
 |---|---|---|
-| [ ] | Retail `TFood::Use` (`0x0050e780`) | — |
+| [x] | Retail `TFood::Use` (`0x0050e780`): health and mana to the cap, poison cured (and its spell effects ended), one fewer, the last deleted, FOODGOOD1 | 2026-10-13 |
 | [x] | `buy "<item>" [n] from <merchant>` / `sell ... to ...`: the merchant's shop script sets up the stock (Buy/Sell answer), then the shop's own `TBuySellPane::Buy`/`Sell` per item and `Exit`, no drawer keys (the author's call, 2026-10-14); the ledger allows exactly the trade. Elahni sells Locke his second Lesser Healing for 250. Selling is written, not yet exercised | 2026-10-14 |
 | [x] | `equip`, `unequip` (TPlayer::Equip with the game's CanEquip), `consume` (the item's Use), `train` (TrainStat: the level-up picks); ledger causes for the picks and for what food gives | 2026-10-14 |
 | [ ] | Shopping list scored by the duel model; selling what is no longer useful (outgrown gear, spent keep-list items) | — |
