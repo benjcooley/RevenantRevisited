@@ -51,6 +51,7 @@ void ClearSeams();
 void WriteSeams(JsonOut& j);
 size_t SeamCount();
 void WriteSeamsSince(JsonOut& j, size_t first);   // "seams": those from `first` on
+const std::vector<std::string>& Seams();          // the records themselves, in order
 
 // The case's random draws ("draws": {lo, hi, result} for random(), {rand}
 // for a direct draw), from its `tape` and then retail's generator from its

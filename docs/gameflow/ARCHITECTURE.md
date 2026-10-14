@@ -135,7 +135,7 @@ class TGameSession
     void RequestLoad(const std::string& slot);
     void RequestSave(const std::string& slot);
     void RequestQuickSave();             // retail 0x0047e850
-    void RequestReloadLastSlot();        // developer convenience (F9), not retail
+    void RequestReloadLastSlot();        // developer convenience (Shift+F9), not retail
     void ProcessRequests();              // called by TPlayScreen::Update
 };
 ```

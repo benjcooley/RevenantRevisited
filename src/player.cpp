@@ -1075,6 +1075,23 @@ bool TPlayer::Equip(TObjectInstance* oi, int32_t slot)
     return true;
 }
 
+// REVSYNC: TPlayer::UseBelt = retail 0x0051e420. A weapon or armour goes to
+// its own equipment slot (EquipByName 0x00519ea0, the item it displaces
+// taking the belt box); anything else is used (vtable 0xbc, Use(this, -1)).
+// Retail's EquipByName equips the first item of the box item's name in the
+// inventory -- the same item unless two share the name; the port equips the
+// box's own.
+void TPlayer::UseBelt(int32_t box)
+{
+    TObjectInstance* item = GetInventorySlot(kInvSlotBeltFirst + box);
+    if (!item)
+        return;
+    if (item->ObjClass() == OBJCLASS_WEAPON || item->ObjClass() == OBJCLASS_ARMOR)
+        Equip(item, -1);
+    else
+        item->Use(this, -1);
+}
+
 // Returns the modifier value for the given player stat
 int32_t TPlayer::PlyrStatMod(int32_t plyrstat, int32_t flags)
 {

@@ -31,10 +31,31 @@ PRIMITIVES = {
     0x004a5ca0: ('SurfaceFromBitmap', 2),
 }
 DRAWPARAM_WORDS = 21
+DM_ALPHA, DM_USEDEFAULT = 0x2000, 0x80000000
+# REVSYNC: retail's 2D alpha blitter (0x004b3510) returns without drawing a
+# blit narrower than this (0x004b3539: `cmp [param+0x30], 4; jl`).
+ALPHA_MIN_WIDTH = 4
 
 
 def s32(value):
     return struct.unpack('<i', struct.pack('<I', value & 0xffffffff))[0]
+
+
+def narrow_alpha_drops(primitives):
+    """The Puts / PutSubrects retail's alpha blitter drops for being under
+    ALPHA_MIN_WIDTH pixels wide -- a retail renderer limit, not the pane's
+    intent: [{dst, rect: [x, y, w, h]}] on their surfaces."""
+    drops = []
+    for p in primitives:
+        if p['primitive'] not in ('Put', 'PutSubrect') or not p.get('bitmap'):
+            continue
+        mode = p['mode']
+        if mode & DM_USEDEFAULT:
+            mode = p['bitmap']['drawmode'] | (mode & ~DM_USEDEFAULT)
+        w, h = (p['src'][2], p['src'][3]) if p['primitive'] == 'PutSubrect' else p['bitmap']['size']
+        if mode & DM_ALPHA and 0 < w < ALPHA_MIN_WIDTH and h > 0:
+            drops.append(dict(dst=p['dst'], rect=[p['x'], p['y'], w, h]))
+    return drops
 
 
 class PrimitiveTap:

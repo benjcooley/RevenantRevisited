@@ -67,8 +67,10 @@ DEF and sends control event 1.
     from `MusicVolume` while the CD plays (127 clamps to `0x60`).
   - `Gamma` applies its ramp at once (§4).
 - The controller list is sized from the control count
-  (`0x00430c50(NumControls * 2)`), and the `name0..7` labels take the
-  names of the controls at its scroll position.
+  (`0x00430c50(NumControls * 2)`: two cells a control, its first two
+  codes), and the `name0..7` labels take the names of the controls at its
+  scroll position. The list, its cells and the key rebind are
+  [OPTIONS_CONTROLS.md](OPTIONS_CONTROLS.md).
 
 ## 4. Changes while the pane is open
 
@@ -79,7 +81,8 @@ DEF and sends control event 1.
 | | `Music` | member, and CD SetVolume `0x0049a5c0(value)` **live** |
 | | `Sound` | member only |
 | | `Gamma` | member, and the gamma ramp `0x004a98f0(value)` **live** |
-| `0x1389` / `0x138a` | `controller` list | the rebind path (key captured into the buffer) |
+| `0x1389` | `controller` list | its first item changed: `name0..7` re-read (OPTIONS_CONTROLS.md §2) |
+| `0x138a` | `controller` list | the mouse released on a key cell: the capture armed for it; KeyPress `0x0053b9e0` then takes the chord (OPTIONS_CONTROLS.md §3) |
 
 ## 5. OK — event 3000 `ok`
 
@@ -255,7 +258,8 @@ retail's keys and format.
 | OK | `TOptionsPane::Apply`: globals, music and effects volume, `SaveOptions()`, rebinds committed, `[Controls]` saved; then the host closes / returns to the title |
 | Cancel | the copies and the rebind buffer are dropped; the music stays where a drag left it, as retail |
 | rebind buffer `+0x1ac` | `TOptionsPane::bindings` (each control's keys); rebinding edits the buffer, OK commits it. Before this the port wrote rebinds straight into the live control map, so Cancel kept them |
-| control map Load `0x00439ba0` at boot | `InitDefaultControlMap()` reads `[Controls]` after building the table (it never did, so OK used to overwrite the player's `[Controls]` with the port's table). The port's table (from the 1998 source) isn't retail's `0x005d5500`: its order, several defaults and some controls differ. A control the INI names gets the INI's keys; the others keep the table's, and the port-only ones are added to `[Controls]` on first read |
+| controller list, `name0..7`, key capture (2026-10-13) | the list's cells from the pane's field getter (`TOptionsPane::FieldText`, retail `0x0053b5d0`: `Cont-A`), the names on every scroll (`OnListScrolled`), the capture (`OnListClick`, `Rebind`, `ClearConflicts`: retail `0x0053ba80`, its conflict pass, its quirks). A/B'd: `hud_ab.py options` |
+| control map Load `0x00439ba0` at boot | `InitDefaultControlMap()` reads `[Controls]` after building the table (it never did, so OK used to overwrite the player's `[Controls]` with the port's table). The port's table is retail's `0x005d5500` since 2026-10-13 (its 69 controls in order, `g_defaultGameControls`). A control the INI names gets the INI's keys; the others keep the table's, and the port-only ones are added to `[Controls]` on first read |
 | CD SetVolume `0x0049a5c0` | `ApplyMusicVolume(level)` (`sound.cpp`): 0..`0x60`, the music group's gain `level / 0x60` |
 | SetAmbientLight `0x00453640` | `TMapPane::SetAmbientLight` adds `GammaAmbientOffset(GammaLevel)` (`gameoptions.h`), floored at 0; FadeAmbient doesn't (2026-10-07) |
 | OK's `SetAmbientLight(MapPane.ambient, 1)` `0x0053afbc` | `TOptionsPane::Apply` re-sets `MapPane`'s ambient, adding the offset again as retail (question 93) |

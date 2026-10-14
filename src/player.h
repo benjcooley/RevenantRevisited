@@ -182,6 +182,11 @@ class TPlayer : public TCharacter
         // An equipped item leaving the inventory is unequipped first
     TObjectInstance* GetEquip(int32_t slot) { return equipment[slot]; }
         // Returns object pointer to equipment in the given slot
+    void UseBelt(int32_t box);
+        // REVSYNC: TPlayer::UseBelt @ 0x0051e420 -- Belt Use 1..5 (F5..F9):
+        // the item in belt box `box` (inventory slot 0x10b + box) is put on
+        // if it is a weapon or armour, else this player uses it (a potion is
+        // drunk, food eaten; docs/gameplay/forensics/CONSUMABLES.md §7.3)
 
     // The modified stats (retail +0x34c): a copy of the object stats that
     // equipment and stat effects change. Every stat read answers from it;

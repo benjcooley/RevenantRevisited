@@ -216,9 +216,9 @@ TSafeRef<TPlayer>         g_bodyPlayer;
 TSafeRef<TObjectInstance> g_bodyEquip[NUM_EQ_SLOTS];
 bool                      g_bodyBowMode = false;
 // The paperdoll's pose: the first frame of this state, independent of the
-// player's state in the world. Retail slot 19 (EquipPane_SPEC §9) steps an
-// idle animation chosen through the character's vtable +0x131, which isn't
-// identified yet, so the pane holds the recovered state's first frame.
+// player's state in the world. Retail slot 19 (0x005368c0) loops random
+// "walk" idle variants, FindState("walk", -1) (docs/ui/HUD_LIVE_BINDING.md
+// §5); the pane doesn't play them yet and holds this state's first frame.
 int32_t                   g_bodyState = -1;
 T3DImagery*      g_body3DImg   = nullptr;  // dynamic_cast<T3DImagery*> of imagery
 TTextureHandle   g_bodyFallbackAlbedo = kInvalidTexture;
@@ -957,6 +957,59 @@ void BuildRetailPaperdollRoot(float out[16])
     TransposeSourceToRenderer16(src, out);
 }
 
+// Retail FUN_00536bc0 lights the paperdoll as a T3DScene of its own, for this
+// one draw: with the view identity it sets the scene ambient to 0xff5f5a55
+// and adds one white light at (-90,70,0) (T3DScene::AddLight 0x00415790,
+// intensity 0xff, multiplier 0x26), removing it afterwards. That is
+// T3DScene's vertex lighting -- the ambient plus a key light by N.L, the
+// vertex colour clamped to 1 -- which the light pass evaluates for meshes in
+// the Classic model. The paperdoll therefore draws in the Classic model with
+// these inputs, whatever the map's lighting mode: the map's key light (in
+// world space), its area ambient and the modern model's character terms
+// mean nothing in the paperdoll's view space. The map sets its own lighting
+// again before it draws.
+//
+// Approximations: the point light acts as a directional light from the
+// body's centre, at full strength. The light pass reconstructs positions
+// with the map's iso inverse, so it can't place a paperdoll pixel for a
+// per-pixel point light, and retail's D3D attenuation for this light isn't
+// recovered. The colours are those for a 1x texture stage; with
+// EnhancedLighting on a MODULATE2X/4X device retail swaps in a dimmer, warmer
+// light and a near-black ambient (0x00536d6f..0x00536dd3), not modelled here.
+constexpr float kPaperdollLightPos[3] = { -90.0f, 70.0f, 0.0f };
+constexpr float kPaperdollAmbient[3]  = { 0x5f / 255.0f, 0x5a / 255.0f, 0x55 / 255.0f };
+
+void ApplyPaperdollLighting(const float root[16])
+{
+    const float centre[3] = { 0.5f * (g_bodyBBoxMin[0] + g_bodyBBoxMax[0]),
+                              0.5f * (g_bodyBBoxMin[1] + g_bodyBBoxMax[1]),
+                              0.5f * (g_bodyBBoxMin[2] + g_bodyBBoxMax[2]) };
+    float to_light[3] = {};
+    float len2 = 0.0f;
+    for (int32_t r = 0; r < 3; ++r)
+    {
+        const float view = root[r * 4 + 0] * centre[0] + root[r * 4 + 1] * centre[1] +
+                           root[r * 4 + 2] * centre[2] + root[r * 4 + 3];
+        to_light[r] = kPaperdollLightPos[r] - view;
+        len2 += to_light[r] * to_light[r];
+    }
+    const float inv_len = len2 > 0.0f ? 1.0f / std::sqrt(len2) : 0.0f;
+
+    SClassicLightModel model;
+    for (int32_t i = 0; i < 3; ++i)
+    {
+        model.mesh_ambient[i]      = kPaperdollAmbient[i];
+        model.mesh_dir_color[i]    = 1.0f;
+        model.mesh_dir_to_light[i] = to_light[i] * inv_len;
+    }
+    model.mesh_overbright = 1.0f;     // MODULATE: the vertex colour's clamp at 1
+    model.mesh_map_lights = false;
+    Renderer->SetClassicLightModel(model);
+    Renderer->SetLightingMode(0);
+    Renderer->SetTileViewMode(0);
+    Renderer->ClearPointLights();
+}
+
 // Per-frame: render the 3D body via the renderer's tile-pass + lighting-
 // pass machinery. Mirrors char3d::RenderCharPreviewMode but with a small
 // camera origin so Locke projects into a known sub-rect of lit_target
@@ -978,31 +1031,17 @@ void RenderBody3D()
     const int32_t cam_ox = kBody3DSrcX + kBody3DSrcW / 2;
     const int32_t cam_oy = kBody3DSrcY + kBody3DSrcH / 2;
 
-    // Retail light: AddLight at (-90,70,0), white diffuse, ambient
-    // 0xff5f5a55, intensity 0xff, scalar 0x26. The D3D light's ambient
-    // color is already the fill term; do not multiply it by 0x26/255.
-    // The directional component remains an approximation until the recovered
-    // point-light path is forwarded through the paperdoll projection.
-    Renderer->SetLight(-0.789352f, 0.613941f, 0.0f,
-                       1.0f, 1.0f, 1.0f, 1.0f, 1.0f);
-    Renderer->SetAmbientColor(95.0f / 255.0f, 90.0f / 255.0f, 85.0f / 255.0f);
-    Renderer->SetAmbientOcclusion(false, 12.0f, 1.0f, 0.15f, 96.0f);
-    Renderer->SetNormalLightingHardness(1.0f);
-    Renderer->SetLightingMode(1);
-    Renderer->SetTileViewMode(0);
-    Renderer->SetSunShadow(false, 24.0f, 3.0f, 32);
+    float root[16];
+    BuildRetailPaperdollRoot(root);
 
+    ApplyPaperdollLighting(root);
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy),
                                       0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f);
     Renderer->SetMeshProjectionMode(1);
-    Renderer->ClearPointLights();
     // Transparent backdrop — we only want Locke's lit pixels in the body
     // sub-rect; the rest of lit_target stays clear so the equip pane
     // chrome reads cleanly over it on swapchain present.
     Renderer->BeginTilePass(0.0f, 0.0f, 0.0f, 0.0f);
-
-    float root[16];
-    BuildRetailPaperdollRoot(root);
 
     const SAnimPose pose = SampleI3DAnimPose(g_body3DImg, state, 0, state, 0);
 

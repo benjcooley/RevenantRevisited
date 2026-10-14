@@ -5,11 +5,13 @@
 //
 // Parses Revenant's `.def` UI layout files + the shared `widgets.def` style
 // library and renders the resulting widget tree into a TSurface. See
-// defpane.h for the architecture and the recon citations.
+// defpane.h for the architecture, docs/ui/forensics/DEF_ENGINE.md for how
+// retail draws each widget.
 
 #include "defpane.h"
 
 #include "font.h"
+#include "fonttable.h"
 #include "logging.h"
 #include "multi.h"
 #include "renderer.h"
@@ -22,37 +24,52 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 
 // =====================================================================
-// Flag bits — mirror the #define values in data/Resources/widgets.def. Only
-// the bits the engine's style-resolution / text-alignment logic tests are
-// named here; the full set is parsed generically from the .def #define lines
-// into the symbol table and OR'd into widget/style flag words.
+// Flag bits -- the #define values in widgets.def that the engine tests.
+// The .def files' own #define lines fill the symbol table their FLAGS
+// expressions are evaluated with.
 // =====================================================================
 namespace {
 
-constexpr uint32_t kTextLeft       = 0x0001;
-constexpr uint32_t kTextCenter     = 0x0002;
-constexpr uint32_t kTextRight      = 0x0004;
-constexpr uint32_t kTextVCenter    = 0x0040;
-constexpr uint32_t kTextSingleLine = 0x0080;
-constexpr uint32_t kTextShadow     = 0x0400;
-constexpr uint32_t kTextElipses    = 0x2000;
-constexpr uint32_t kTextflagCenter = 0x00040000;
-constexpr uint32_t kTextflagRight  = 0x00080000;
+// Control flags (every widget).
+constexpr uint32_t kCtrlHidden     = 0x00000002;
+constexpr uint32_t kCtrlDisabled   = 0x00000004;
+constexpr uint32_t kCtrlSelectable = 0x00000010;
+constexpr uint32_t kCtrlDrawToBg   = 0x00000800;
 constexpr uint32_t kCtrlClearBg    = 0x00001000;
+// TEXT
+constexpr uint32_t kTextFrame      = 0x00010000;
+constexpr uint32_t kTextCenter     = 0x00040000;
+constexpr uint32_t kTextRight      = 0x00080000;
+constexpr uint32_t kTextTop        = 0x00100000;
+constexpr uint32_t kTextBottom     = 0x00200000;
+// BUTTON
+constexpr uint32_t kBtnDown        = 0x00010000;
 constexpr uint32_t kBtnToggle      = 0x00040000;
 constexpr uint32_t kBtnRadio       = 0x00080000;
+constexpr uint32_t kBtnDrawRadio   = 0x00200000;
+constexpr uint32_t kBtnDrawToggle  = 0x00400000;
+// SCROLLBAR
 constexpr uint32_t kScrollVScroll  = 0x00010000;
 constexpr uint32_t kScrollHScroll  = 0x00020000;
+// LISTBOX
 constexpr uint32_t kListVList      = 0x00010000;
 constexpr uint32_t kListHList      = 0x00020000;
 constexpr uint32_t kListNoScroll   = 0x00040000;
+constexpr uint32_t kListUseFormat  = 0x00080000;
+constexpr uint32_t kListViewOnly   = 0x00200000;
+// EDIT
+constexpr uint32_t kEditNoFrame    = 0x00010000;
+constexpr uint32_t kEditNoEdit     = 0x00020000;
 constexpr uint32_t kEditSpin       = 0x00040000;
+constexpr uint32_t kEditCenter     = 0x00200000;
+constexpr uint32_t kEditRight      = 0x00400000;
 
 // REVSYNC: the DEF engine draws its sprites with DM_USEDEFAULT (0x80000000,
 // cls_0x5b93c4.cpp:237), which takes the bitmap's own draw mode (1998
@@ -60,24 +77,31 @@ constexpr uint32_t kEditSpin       = 0x00040000;
 // widget packs, popupalpha's Background -- goes through the alpha blit
 // (0x004b349d), which reads only its alpha track, never the key colour: its
 // dark glass and edges are black pixels (the key, 0) with alpha. Other
-// stored modes keep the keyed decode (a mode without DM_TRANSPARENT would
-// draw the key colour too; BURNDOWN cross-track).
+// stored modes key only with DM_TRANSPARENT; without it the key colour draws
+// like any other (optionsalpha's Background, mode 0, is a whole picture).
 EBitmapDecode DecodeFor(const TBitmap* bm)
 {
-    return (bm && (bm->drawmode & DM_ALPHA)) ? EBitmapDecode::Unkeyed : EBitmapDecode::Pixels;
+    return (bm && (bm->drawmode & DM_TRANSPARENT) && !(bm->drawmode & DM_ALPHA)) ? EBitmapDecode::Pixels
+                                                                                 : EBitmapDecode::Unkeyed;
 }
 
-// Retail bitmap fonts ("Med"/"Large"/"small" from font.def) are mapped to the
-// Arial-metric Arimo TTF per the UI text-rendering convention
-// (project-ui-text-rendering; InGameMenuDef_SPEC §2 maps "Med" -> Arimo-14).
-struct SFontMap { const char* name; const char* file; int32_t px; };
-constexpr SFontMap kFontMap[] = {
-    {"Med",   "Arimo-Regular.ttf", 14},
-    {"Large", "Arimo-Regular.ttf", 18},
-    {"small", "Arimo-Regular.ttf", 11},
-};
-constexpr const char* kDefaultFontFile = "Arimo-Regular.ttf";
-constexpr int32_t     kDefaultFontPx   = 14;
+// REVSYNC: a sprite's draw mode as the engine resolves DM_USEDEFAULT
+// (0x0042cd22, 0x00429b74): the bitmap's own without DM_USEREG and
+// DM_BACKGROUND, with DM_NORESTORE.
+uint32_t ResolvedMode(uint32_t mode, const TBitmap* bm)
+{
+    return mode == kDefDrawDefault && bm ? (bm->drawmode & ~0x20010u) | 0x20u : mode;
+}
+
+// The draw modes that make a widget restore its rect before drawing
+// (DEF_ENGINE.md §1.3): a button's face, a scrollbar's, list's or edit's
+// chrome.
+constexpr uint32_t kButtonRestoreModes = DM_ALPHA | DM_TRANSPARENT;                   // 0x2100
+constexpr uint32_t kChromeRestoreModes = 0x8000u | DM_ALPHA | 0x1000u | DM_TRANSPARENT; // 0xb100
+
+// A style without a FONT draws in FONT.DEF's "Med" (font 7, every compose
+// of the Options pane).
+constexpr const char* kDefaultFont = "Med";
 
 // DEF_FADE: the level runs 0..5, one step per pulse (TButtonPane::Initialize
 // 0x00434e40 sets the target 5; 0x00435d70 steps it), and the pane is drawn
@@ -85,24 +109,16 @@ constexpr int32_t     kDefaultFontPx   = 14;
 // rate rather than in steps.
 constexpr float kFadeSteps = 5.0f;
 
-// Retail TDefButton plays "click1" when it fires (0x0042d390 for a key,
-// 0x0042d4b0 for a mouse release inside it): once, at full volume, not
-// positioned (0x0049b990(id, 0x7f, 1, 0, 0x50, 700)).
-constexpr const char* kClickSound = "click1";
+// REVSYNC: the EDIT's pulse @ 0x004329a0 -- while edited, a counter runs
+// 0..47 a pulse (from 0 when editing begins, 0x00432a34) and the caret "|"
+// shows while it is under 24 (0x0043276c). The port runs it on the clock.
+constexpr int32_t kCaretPeriod = 48;
+constexpr int32_t kCaretOn     = 24;
 
-// The VLIST listbox's own scrollbar: `SCROLLBAR RELRB 21 4 5 4` in its style
-// (widgets.def), a strip 21 px in from the list's right edge, 16 px wide,
-// inset 4 px top and bottom; up arrow at (1,1), down arrow 12 px above the
-// strip's bottom, thumb 19 px minimum with 2 px clearance
-// (LoadGameDef_SPEC §3).
-constexpr int32_t kListBarRight  = 21;
-constexpr int32_t kListBarWidth  = 16;
-constexpr int32_t kListBarInset  = 4;
-constexpr int32_t kListBarArrowX = 1;
-constexpr int32_t kListBarUpY    = 1;
-constexpr int32_t kListBarDownY  = 12;   // from the strip's bottom
-constexpr int32_t kListBarThumbMin    = 19;
-constexpr int32_t kListBarThumbMargin = 2;
+// Retail TDefButton plays "click1" when it fires (0x0042d390 for a key,
+// 0x0042d4b0 for a mouse press on a toggle or a release inside a button):
+// once, at full volume, not positioned (0x0049b990(id, 0x7f, 1, 0, 0x50, 700)).
+constexpr const char* kClickSound = "click1";
 
 // ----- low-level helpers -------------------------------------------------
 
@@ -129,12 +145,6 @@ bool ParseNumber(const std::string& t, int64_t& out)
         return false;
     out = v;
     return true;
-}
-
-bool IsNumber(const std::string& t)
-{
-    int64_t v = 0;
-    return ParseNumber(t, v);
 }
 
 // Strip // line + /* */ block comments and join `\`-newline continuations,
@@ -270,6 +280,34 @@ const char* TypeName(EDefWidget t)
     }
 }
 
+// A style before anything is parsed into it. The TEXT style's text flags
+// start as TEXT_LEFT | TEXT_SHADOW (the TEXT parser 0x0042b340, +0xd0 =
+// 0x401); every other text format as TEXT_LEFT.
+SDefStyle DefaultStyle(EDefWidget type)
+{
+    SDefStyle s;
+    if (type == EDefWidget::Text)
+        s.text.flags = TextFlag::Left | TextFlag::Shadow;
+    return s;
+}
+
+// The arrows and the thumb along a scrollbar: the top-left of a piece from
+// its placement.
+int32_t PartX(const SDefScrollbar& bar, const SDefScrollPart& part)
+{
+    return bar.x + (part.relR ? bar.w - part.a : part.a);
+}
+
+int32_t PartY(const SDefScrollbar& bar, const SDefScrollPart& part)
+{
+    return bar.y + (part.relB ? bar.h - part.b : part.b);
+}
+
+bool HitBitmap(const TBitmap* bm, int32_t x, int32_t y, int32_t px, int32_t py)
+{
+    return bm && px >= x && py >= y && px < x + bm->width && py < y + bm->height;
+}
+
 }  // namespace
 
 // =====================================================================
@@ -302,137 +340,218 @@ uint32_t TDefPane::EvalFlags(const std::vector<std::string>& toks, size_t& i) co
 }
 
 // =====================================================================
-// Style resolution: pick the widgets.def style for a widget's type + the
-// variant implied by its flags.
+// Style resolution: the widgets.def style for a widget's type and the
+// variant its control flags pick (the constructors, DEF_ENGINE.md §3-§6).
 // =====================================================================
 const SDefStyle& TDefPane::ResolveStyle(EDefWidget type, uint32_t flags) const
 {
-    static const SDefStyle kEmpty;
     std::string variant;
     switch (type)
     {
-        case EDefWidget::Button:
-            variant = (flags & kBtnToggle) ? "TOGGLE"
-                    : (flags & kBtnRadio)  ? "RADIO" : "NORMAL";
+        case EDefWidget::Button:      // by the draw bits (0x0042c6a0)
+            variant = (flags & kBtnDrawRadio)  ? "RADIO"
+                    : (flags & kBtnDrawToggle) ? "TOGGLE" : "NORMAL";
             break;
-        case EDefWidget::Scrollbar:
-            variant = (flags & kScrollVScroll) ? "VSCROLL" : "HSCROLL";
+        case EDefWidget::Scrollbar:   // 0x0042df00
+            variant = (flags & kScrollHScroll) ? "HSCROLL" : "VSCROLL";
             break;
-        case EDefWidget::Listbox:
-            variant = (flags & kListHList) ? "HLIST" : "VLIST";
+        case EDefWidget::Listbox:     // 0x00430090: NOSCROLL takes a third, undefined style
+            if (!(flags & kListNoScroll))
+                variant = (flags & kListVList) ? "VLIST" : (flags & kListHList) ? "HLIST" : "";
             break;
-        case EDefWidget::Edit:
+        case EDefWidget::Edit:        // 0x00431ca0
             variant = (flags & kEditSpin) ? "SPIN" : "NORM";
             break;
         case EDefWidget::Droplist:
             variant = "VSCROLL";
             break;
-        default:
-            variant.clear();                        // FRAME / TEXT / BITMAP: single style
+        default:                      // FRAME / TEXT / BITMAP: one style
             break;
     }
-    const std::string key = std::string(TypeName(type)) + "/" + variant;
-    const auto it = styles.find(key);
-    return (it != styles.end()) ? it->second : kEmpty;
+    const auto it = styles.find(std::string(TypeName(type)) + "/" + variant);
+    if (it != styles.end())
+        return it->second;
+    static const SDefStyle kText = DefaultStyle(EDefWidget::Text);
+    static const SDefStyle kOther;
+    return type == EDefWidget::Text ? kText : kOther;
 }
 
 // =====================================================================
-// Attribute parsing. Applies STYLE-ish attributes (chrome, fonts, colours,
-// rects) onto `s`. `flagsToText` routes FLAGS to the style's text flags (true
-// for STYLE blocks); widget lines parse their own FLAGS into the widget word
-// and pass false here. Label context (UPLABEL/DOWNLABEL) redirects the
-// following FONT/COLOR/FLAGS to the up/down label fields.
+// Attribute parsing: a style's keywords, from a STYLE line or the rest of a
+// widget line (over the copy of its type's style). Retail parses each type
+// with a fixed-order grammar (DEF_ENGINE.md §2-§6); the keywords here are
+// the same, and what a keyword means depends on where it falls:
+//  - FONT starts the text format; FLAGS, COLOR and DRAWMODE after it are the
+//    text's (FLAGS replaces, it isn't OR'd in). DRAWMODE before it is the
+//    chrome's.
+//  - UPLABEL / DOWNLABEL start a button label; the FLAGS and COLOR after are
+//    its. A DOWNLABEL starts as a copy of the UPLABEL; UPLABELRECT also sets
+//    DOWNLABELRECT.
+//  - RECT is an EDIT's outer rect before FONT and its text rect after; on
+//    every other type the content / text inset.
+//  - UP / DOWN are a BUTTON's faces; on a SCROLLBAR, a LISTBOX's SCROLLBAR
+//    clause and an EDIT's SPIN they are arrows, with THUMB.
 // =====================================================================
 namespace {
 
-void ApplyAttrs(const std::vector<std::string>& t, const std::vector<bool>& q,
-                size_t start, SDefStyle& s, bool flagsToText,
-                const std::unordered_map<std::string, uint32_t>& defines)
+class TStyleParser
 {
-    enum class Ctx { Main, Up, Down } ctx = Ctx::Main;
+  public:
+    TStyleParser(const std::vector<std::string>& toks, const std::vector<bool>& quoted,
+                 const std::unordered_map<std::string, uint32_t>& defines, EDefWidget type)
+        : t(toks), q(quoted), defs(defines), type(type) {}
 
-    auto kw  = [&](size_t i, const char* w) { return i < t.size() && !q[i] && t[i] == w; };
-    auto num = [&](size_t i) -> int32_t { int64_t v = 0; if (i < t.size()) ParseNumber(t[i], v); return (int32_t)v; };
-    auto str = [&](size_t i) -> std::string { return i < t.size() ? t[i] : std::string(); };
-    auto evalFlags = [&](size_t& i) -> uint32_t {
-        uint32_t acc = 0; bool wantTerm = true;
+    void Apply(size_t start, SDefStyle& s)
+    {
+        enum class ECtx { Main, Up, Down } ctx = ECtx::Main;
+        bool sawFont = false;
+        auto format = [&]() -> SDefTextFormat& {
+            return ctx == ECtx::Up ? s.uplabel : ctx == ECtx::Down ? s.downlabel : s.text;
+        };
+
+        for (i = start; i < t.size(); )
+        {
+            if (q[i]) { ++i; continue; }                 // a stray string
+            const std::string& k = t[i++];
+
+            if (k == "FONT")       { s.text.font = Str(); sawFont = true; ctx = ECtx::Main; }
+            else if (k == "FLAGS") format().flags = Flags();
+            else if (k == "COLOR") format().color = Color();
+            else if (k == "DRAWMODE")
+            {
+                const uint32_t mode = Flags();
+                if (ctx != ECtx::Main || sawFont) format().drawmode = mode;
+                else                              s.drawmode = mode;
+            }
+            else if (k == "BGBITMAP" || k == "BITMAP") s.bgbitmap = Str();
+            else if (k == "FRAME")    { s.frame = Insets(); s.framed = true; }
+            else if (k == "MARGINS")  s.margins = Insets();
+            else if (k == "NOCENTER") s.nocenter = true;
+            else if (k == "RECT")     (type == EDefWidget::Edit && !sawFont ? s.outerRect : s.rect) = Insets();
+            else if (k == "ITEM")     { s.itemw = Int(); s.itemh = Int(); }
+            else if (k == "SELCOLOR") s.selcolor = Color();
+            else if (k == "EDITCOLOR") s.editcolor = Color();
+            else if (k == "UPLABEL")
+            {
+                s.uplabel = SDefTextFormat{};
+                s.uplabel.font = Str();
+                s.hasUpLabel = true;
+                ctx = ECtx::Up;
+            }
+            else if (k == "DOWNLABEL")
+            {
+                s.downlabel = s.uplabel;
+                s.downlabel.font = Str();
+                s.hasDownLabel = true;
+                ctx = ECtx::Down;
+            }
+            else if (k == "UPLABELRECT")   { s.uplabelrect = Insets(); s.downlabelrect = s.uplabelrect; ctx = ECtx::Main; }
+            else if (k == "DOWNLABELRECT") { s.downlabelrect = Insets(); ctx = ECtx::Main; }
+            else if (k == "SCROLLBAR")     // a LISTBOX's: SCROLLBAR <RELRB> a b c d
+            {
+                s.hasScrollbar = true;
+                s.scrollRel = Keyword("RELRB");
+                s.scrollRect = Insets();
+            }
+            else if ((k == "UP" || k == "DOWN") && type == EDefWidget::Button)
+                (k == "UP" ? s.up : s.down) = Str();
+            else if (k == "UP" || k == "DOWN")   // name <RELR> a <RELB> b
+            {
+                SDefScrollPart& part = k == "UP" ? s.scrollUp : s.scrollDown;
+                part.bitmap = Str();
+                part.relR = Keyword("RELR");
+                part.a = Int();
+                part.relB = Keyword("RELB");
+                part.b = Int();
+            }
+            else if (k == "THUMB")               // name a b <RELBR> c
+            {
+                s.scrollThumb.bitmap = Str();
+                s.scrollThumb.a = Int();
+                s.scrollThumb.b = Int();
+                s.scrollThumb.relR = Keyword("RELBR");
+                s.scrollThumb.c = Int();
+            }
+            // Anything else -- variant names, SPIN, a widget's own attributes
+            // (MAXLEN), the DROPLIST's keywords -- is skipped a token at a
+            // time; its numbers fall through the same way.
+        }
+    }
+
+  private:
+    std::string Str() { return i < t.size() ? t[i++] : std::string(); }
+
+    int32_t Int()
+    {
+        int64_t v = 0;
+        if (i < t.size() && !q[i] && ParseNumber(t[i], v))
+            ++i;
+        return static_cast<int32_t>(v);
+    }
+
+    bool Keyword(const char* word)
+    {
+        if (i < t.size() && !q[i] && t[i] == word)
+        {
+            ++i;
+            return true;
+        }
+        return false;
+    }
+
+    SDefInsets Insets()
+    {
+        SDefInsets r;
+        r.l = Int(); r.t = Int(); r.r = Int(); r.b = Int();
+        return r;
+    }
+
+    SDefColor Color()
+    {
+        SDefColor c;
+        c.r = static_cast<uint8_t>(Int());
+        c.g = static_cast<uint8_t>(Int());
+        c.b = static_cast<uint8_t>(Int());
+        return c;
+    }
+
+    uint32_t Flags()
+    {
+        uint32_t acc = 0;
+        bool wantTerm = true;
         while (i < t.size())
         {
             if (t[i] == "|") { wantTerm = true; ++i; continue; }
             if (!wantTerm) break;
             int64_t v = 0;
-            if (ParseNumber(t[i], v)) acc |= (uint32_t)v;
-            else { auto it = defines.find(t[i]); if (it != defines.end()) acc |= it->second; else break; }
-            wantTerm = false; ++i;
+            if (ParseNumber(t[i], v))
+                acc |= static_cast<uint32_t>(v);
+            else if (const auto it = defs.find(t[i]); it != defs.end())
+                acc |= it->second;
+            else
+                break;
+            wantTerm = false;
+            ++i;
         }
         return acc;
-    };
-
-    for (size_t i = start; i < t.size(); )
-    {
-        if (q[i]) { ++i; continue; }                 // stray quoted token
-        const std::string& k = t[i];
-
-        if (k == "FLAGS")
-        {
-            ++i; const uint32_t f = evalFlags(i);
-            if (flagsToText)
-            {
-                if      (ctx == Ctx::Up)   s.uplabelflags   |= f;
-                else if (ctx == Ctx::Down) s.downlabelflags |= f;
-                else                       s.textflags      |= f;
-            }
-            continue;
-        }
-        if (k == "DRAWMODE")  { ++i; s.drawmode = evalFlags(i); continue; }
-
-        if (k == "FONT")
-        {
-            const std::string f = str(i + 1);
-            if      (ctx == Ctx::Up)   s.uplabelfont   = f;
-            else if (ctx == Ctx::Down) s.downlabelfont = f;
-            else                       s.font          = f;
-            i += 2; continue;
-        }
-        if (k == "COLOR")
-        {
-            const SDefColor c{(uint8_t)num(i+1), (uint8_t)num(i+2), (uint8_t)num(i+3), true};
-            if      (ctx == Ctx::Up)   s.uplabelcolor   = c;
-            else if (ctx == Ctx::Down) s.downlabelcolor = c;
-            else                       s.color          = c;
-            i += 4; continue;
-        }
-        if (k == "EDITCOLOR") { s.editcolor = {(uint8_t)num(i+1),(uint8_t)num(i+2),(uint8_t)num(i+3),true}; i += 4; continue; }
-        if (k == "SELCOLOR")  { s.selcolor  = {(uint8_t)num(i+1),(uint8_t)num(i+2),(uint8_t)num(i+3),true}; i += 4; continue; }
-        if (k == "RECT")      { s.rect      = {num(i+1),num(i+2),num(i+3),num(i+4),true}; i += 5; continue; }
-        if (k == "FRAME")     { s.frame     = {num(i+1),num(i+2),num(i+3),num(i+4),true}; i += 5; continue; }
-        if (k == "MARGINS")   { s.margins   = {num(i+1),num(i+2),num(i+3),num(i+4),true}; i += 5; continue; }
-        if (k == "BITMAP" || k == "BGBITMAP") { s.bgbitmap = str(i+1); i += 2; continue; }
-        if (k == "NOCENTER")  { s.nocenter = true; ++i; continue; }
-        if (k == "ITEM")      { s.itemw = num(i+1); s.itemh = num(i+2); i += 3; continue; }
-
-        if (k == "UP")    { s.up        = str(i+1); i += 2; continue; }
-        if (k == "DOWN")  { s.down      = str(i+1); i += 2; continue; }
-        if (k == "THUMB") { s.scrollthumb = str(i+1); i += 2; continue; }
-
-        if (k == "UPLABEL")   { s.uplabelfont   = str(i+1); ctx = Ctx::Up;   i += 2; continue; }
-        if (k == "DOWNLABEL") { s.downlabelfont = str(i+1); ctx = Ctx::Down; i += 2; continue; }
-        if (k == "UPLABELRECT")   { for (int j=0;j<4;++j) s.uplabelrect[j]   = num(i+1+j); ctx = Ctx::Main; i += 5; continue; }
-        if (k == "DOWNLABELRECT") { for (int j=0;j<4;++j) s.downlabelrect[j] = num(i+1+j); ctx = Ctx::Main; i += 5; continue; }
-
-        // Widget-instance attributes handled elsewhere, and position specifiers
-        // (RELR/RELB/RELRB + their bare numbers) and unknown tokens: skip one.
-        ++i;
     }
-}
+
+    const std::vector<std::string>& t;
+    const std::vector<bool>& q;
+    const std::unordered_map<std::string, uint32_t>& defs;
+    EDefWidget type;
+    size_t i = 0;
+};
 
 }  // namespace
 
 // =====================================================================
 // STYLE line: `STYLE <TYPE> [<VARIANT>] <attrs...>` -> styles["TYPE/VARIANT"].
+// A STYLE parses from the defaults, so a screen's STYLE replaces the
+// widgets.def one rather than merging into it (0x0042b2c0).
 // =====================================================================
 void TDefPane::ParseStyleLine(const std::vector<std::string>& toks,
-                                const std::vector<bool>& quoted)
+                              const std::vector<bool>& quoted)
 {
     if (toks.size() < 2) return;
     const std::string& typeName = toks[1];
@@ -452,8 +571,8 @@ void TDefPane::ParseStyleLine(const std::vector<std::string>& toks,
             if (toks[2] == v) { variant = v; attrStart = 3; break; }
     }
 
-    SDefStyle s;
-    ApplyAttrs(toks, quoted, attrStart, s, /*flagsToText*/ true, defines);
+    SDefStyle s = DefaultStyle(type);
+    TStyleParser(toks, quoted, defines, type).Apply(attrStart, s);
     styles[std::string(typeName) + "/" + variant] = std::move(s);
 }
 
@@ -461,8 +580,8 @@ void TDefPane::ParseStyleLine(const std::vector<std::string>& toks,
 // Widget lines inside a PANEL body [begin, end).
 // =====================================================================
 void TDefPane::ParseWidgetLines(const std::vector<std::vector<std::string>>& lines,
-                                  const std::vector<std::vector<bool>>& quoted,
-                                  size_t begin, size_t end)
+                                const std::vector<std::vector<bool>>& quoted,
+                                size_t begin, size_t end)
 {
     for (size_t idx = begin; idx < end; )
     {
@@ -474,32 +593,68 @@ void TDefPane::ParseWidgetLines(const std::vector<std::vector<std::string>>& lin
         SDefWidget w;
         w.type = type;
 
-        // Pass 1: positional + identity attrs + FLAGS (-> w.flags).
-        for (size_t i = 1; i < t.size(); )
+        // REVSYNC: the base parse @ 0x0042a350 -- POS, NAME, FIELD, INDEX,
+        // TEXT, STRINGREF, FLAGS, GROUP, HOTKEY, each optional, in that
+        // order. That FLAGS is the control word; a FLAGS after the style's
+        // FONT is the text's.
+        size_t i = 1;
+        bool sawFlags = false;
+        const auto num = [&](size_t at) {
+            int64_t v = 0;
+            if (at < t.size()) ParseNumber(t[at], v);
+            return static_cast<int32_t>(v);
+        };
+        const auto str = [&](size_t at) { return at < t.size() ? t[at] : std::string(); };
+        while (i < t.size())
         {
-            if (q[i]) { ++i; continue; }
             const std::string& k = t[i];
-            if      (k == "POS")   { int64_t v=0;
-                                     if(i+1<t.size())ParseNumber(t[i+1],v); w.x=(int32_t)v;
-                                     if(i+2<t.size())ParseNumber(t[i+2],v); w.y=(int32_t)v;
-                                     if(i+3<t.size())ParseNumber(t[i+3],v); w.w=(int32_t)v;
-                                     if(i+4<t.size())ParseNumber(t[i+4],v); w.h=(int32_t)v; i += 5; }
-            else if (k == "NAME")      { if(i+1<t.size()) w.name  = t[i+1]; i += 2; }
-            else if (k == "TEXT")      { if(i+1<t.size()) w.text  = t[i+1]; i += 2; }
-            else if (k == "FIELD")     { if(i+1<t.size()) w.field = t[i+1]; i += 2; }
-            else if (k == "STRINGREF") { if(i+1<t.size()) w.field = t[i+1]; i += 2; }
-            else if (k == "MAXLEN")    { int64_t v=0; if(i+1<t.size())ParseNumber(t[i+1],v); w.maxlen=(int32_t)v; i += 2; }
-            else if (k == "FLAGS")     { ++i; w.flags |= EvalFlags(t, i); }
-            else                       { ++i; }
+            if (q[i])                       { ++i; }
+            else if (k == "POS")            { w.x = num(i + 1); w.y = num(i + 2); w.w = num(i + 3); w.h = num(i + 4); i += 5; }
+            else if (k == "NAME")           { w.name  = str(i + 1); i += 2; }
+            else if (k == "FIELD")          { w.field = str(i + 1); i += 2; }
+            else if (k == "TEXT")           { w.text  = str(i + 1); i += 2; }
+            else if (k == "INDEX")          { i += 2; }               // no in-scope screen reads it
+            else if (k == "STRINGREF")      { i += 2; }               // nor uses one
+            else if (k == "GROUP")          { w.group = num(i + 1); i += 2; }
+            else if (k == "HOTKEY")         { w.hotkey = num(i + 1); i += 2; }
+            else if (k == "FLAGS" && !sawFlags) { ++i; w.flags = EvalFlags(t, i); sawFlags = true; }
+            else break;
         }
 
-        // Resolve the base style, then overlay per-widget chrome/text overrides.
+        // The type's style, the rest of the line parsed over the copy.
         w.style = ResolveStyle(type, w.flags);
-        ApplyAttrs(t, q, 1, w.style, /*flagsToText*/ false, defines);
+        TStyleParser(t, q, defines, type).Apply(i, w.style);
+        for (size_t m = i; m + 1 < t.size(); ++m)
+            if (!q[m] && t[m] == "MAXLEN")
+                w.maxlen = num(m + 1);
+
+        // The constructors' adjustments.
+        if (type == EDefWidget::Text)
+        {
+            // REVSYNC: 0x0042b5d0 -- the alignment control flags move the
+            // style's text alignment; nothing else of the control word
+            // reaches the text.
+            uint32_t& f = w.style.text.flags;
+            if (w.flags & kTextCenter)      f = (f & ~(TextFlag::Left | TextFlag::Right)) | TextFlag::Center;
+            else if (w.flags & kTextRight)  f = (f & ~(TextFlag::Left | TextFlag::Center)) | TextFlag::Right;
+            if (w.flags & kTextTop)         f = (f & ~(TextFlag::Bottom | TextFlag::VCenter)) | TextFlag::Top;
+            else if (w.flags & kTextBottom) f = (f & ~(TextFlag::Top | TextFlag::VCenter)) | TextFlag::Bottom;
+        }
+        else if (type == EDefWidget::Button)
+        {
+            // 0x0042c6a0: a GROUP makes a radio button, and a radio button
+            // toggles.
+            if (w.group >= 0)       w.flags |= kBtnRadio;
+            if (w.flags & kBtnRadio) w.flags |= kBtnToggle;
+            w.selected = (w.flags & kBtnDown) != 0;
+        }
+        w.hidden   = (w.flags & kCtrlHidden) != 0;
+        w.disabled = (w.flags & kCtrlDisabled) != 0;
 
         ++idx;
 
-        // LISTBOX row format: inner BEGIN ... FIELD ... END.
+        // LISTBOX row format: an inner BEGIN ... END block (0x0042f700),
+        // each item starting from the list's text format.
         if (type == EDefWidget::Listbox && idx < end && !lines[idx].empty()
             && lines[idx][0] == "BEGIN")
         {
@@ -507,30 +662,42 @@ void TDefPane::ParseWidgetLines(const std::vector<std::vector<std::string>>& lin
             while (idx < end && !lines[idx].empty() && lines[idx][0] != "END")
             {
                 const auto& ft = lines[idx];
-                if (ft[0] == "FIELD")
+                const auto& fq = quoted[idx];
+                // FIELD|TEXT x y w h <FONT f> <FLAGS e> <COLOR r g b> <DRAWMODE d> "string"
+                if (ft[0] == "FIELD" || ft[0] == "TEXT")
                 {
-                    // FIELD x y w h [FLAGS expr] [FONT "f"] [COLOR r g b] "fieldkey"
-                    SDefListField f;
+                    SDefFormatItem item;
+                    item.kind = ft[0] == "FIELD" ? SDefFormatItem::EKind::Field : SDefFormatItem::EKind::Text;
+                    item.format = w.style.text;
                     int64_t v = 0;
-                    if (ft.size()>1) { ParseNumber(ft[1], v); f.x = (int32_t)v; }
-                    if (ft.size()>2) { ParseNumber(ft[2], v); f.y = (int32_t)v; }
-                    if (ft.size()>3) { ParseNumber(ft[3], v); f.w = (int32_t)v; }
-                    if (ft.size()>4) { ParseNumber(ft[4], v); f.h = (int32_t)v; }
-                    const auto& fq = quoted[idx];
-                    for (size_t i = 5; i < ft.size(); )
+                    if (ft.size() > 1) { ParseNumber(ft[1], v); item.x = static_cast<int32_t>(v); }
+                    if (ft.size() > 2) { ParseNumber(ft[2], v); item.y = static_cast<int32_t>(v); }
+                    if (ft.size() > 3) { ParseNumber(ft[3], v); item.w = static_cast<int32_t>(v); }
+                    if (ft.size() > 4) { ParseNumber(ft[4], v); item.h = static_cast<int32_t>(v); }
+                    for (size_t k = 5; k < ft.size(); )
                     {
-                        if (!fq[i] && ft[i] == "FLAGS") { ++i; f.flags = EvalFlags(ft, i); }
-                        else if (!fq[i] && ft[i] == "FONT")  { if(i+1<ft.size()) f.font = ft[i+1]; i += 2; }
-                        else if (!fq[i] && ft[i] == "COLOR") {
-                            int64_t r=0,g=0,b=0;
-                            if(i+1<ft.size())ParseNumber(ft[i+1],r);
-                            if(i+2<ft.size())ParseNumber(ft[i+2],g);
-                            if(i+3<ft.size())ParseNumber(ft[i+3],b);
-                            f.color = {(uint8_t)r,(uint8_t)g,(uint8_t)b,true}; i += 4; }
-                        else if (fq[i]) { f.field = ft[i]; ++i; }   // the trailing "fieldkey"
-                        else { ++i; }
+                        if (fq[k])                         { item.name = ft[k]; ++k; }
+                        else if (ft[k] == "FONT")          { if (k + 1 < ft.size()) item.format.font = ft[k + 1]; k += 2; }
+                        else if (ft[k] == "FLAGS")         { ++k; item.format.flags = EvalFlags(ft, k); }
+                        else if (ft[k] == "DRAWMODE")      { ++k; item.format.drawmode = EvalFlags(ft, k); }
+                        else if (ft[k] == "COLOR")
+                        {
+                            int64_t r = 0, g = 0, b = 0;
+                            if (k + 1 < ft.size()) ParseNumber(ft[k + 1], r);
+                            if (k + 2 < ft.size()) ParseNumber(ft[k + 2], g);
+                            if (k + 3 < ft.size()) ParseNumber(ft[k + 3], b);
+                            item.format.color = {static_cast<uint8_t>(r), static_cast<uint8_t>(g), static_cast<uint8_t>(b)};
+                            k += 4;
+                        }
+                        else ++k;
                     }
-                    w.rowfields.push_back(std::move(f));
+                    w.format.push_back(std::move(item));
+                }
+                else
+                {
+                    // BITMAP items draw a bitmap field through the pane's
+                    // bitmap getter (vtable +0xa0); no in-scope list has one.
+                    log_warn("[defpane] list '%s': format item '%s' isn't supported", w.name.c_str(), ft[0].c_str());
                 }
                 ++idx;
             }
@@ -603,33 +770,92 @@ bool TDefPane::LoadDefFile(const char* name, bool collectPanels)
     return true;
 }
 
+// The constructors' layout, now that the art is loaded.
+void TDefPane::LayoutWidgets()
+{
+    for (SDefWidget& w : widgets)
+    {
+        const SDefStyle& st = w.style;
+        if (w.type == EDefWidget::Scrollbar)
+        {
+            // REVSYNC: 0x0042e02a-0x0042e0bf -- with a BGBITMAP, a horizontal
+            // bar is as tall as its art less the margins, a vertical one as
+            // wide (the Options sliders: 21 - 4 = 17, whatever the .def says).
+            if (const TBitmap* bm = st.bgbitmap.empty() ? nullptr : LookupBitmap(st.bgbitmap))
+            {
+                if (w.flags & kScrollHScroll)
+                    w.h = bm->height - st.margins.t - st.margins.b;
+                else
+                    w.w = bm->width - st.margins.l - st.margins.r;
+            }
+            // The parts lay out along the bar by VSCROLL (0x0042e2e6).
+            w.bar.x = w.x; w.bar.y = w.y; w.bar.w = w.w; w.bar.h = w.h;
+            w.bar.vertical = (w.flags & kScrollVScroll) != 0;
+        }
+        else if (w.type == EDefWidget::Listbox && st.hasScrollbar)
+        {
+            // REVSYNC: 0x004304a0 -- the list's scrollbar from its SCROLLBAR
+            // clause (a b c d): along a VLIST's right (RELRB: from the right),
+            // inset b at the top and d at the bottom; an HLIST's the
+            // transpose.
+            const SDefInsets& r = st.scrollRect;
+            SDefScrollbar& bar = w.bar;
+            bar.vertical = IsVList(w);
+            if (bar.vertical)
+            {
+                bar.x = w.x + (st.scrollRel ? w.w - r.l : r.l);
+                bar.y = w.y + r.t;
+                bar.w = w.x + (st.scrollRel ? w.w - r.r : r.r) - bar.x;
+                bar.h = w.h - r.b - r.t;
+            }
+            else
+            {
+                bar.y = w.y + (st.scrollRel ? w.h - r.l : r.l);
+                bar.x = w.x + r.t;
+                bar.h = w.y + (st.scrollRel ? w.h - r.r : r.r) - bar.y;
+                bar.w = w.w - r.b - r.t;
+            }
+            bar.minval = bar.maxval = bar.value = 0;
+            // REVSYNC: 0x00430c50 -- the page is the items the window shows
+            // while the value counts rows, so a track click moves the
+            // Options list 16 rows.
+            bar.page = ListGrid(w).Visible();
+        }
+    }
+}
+
 // =====================================================================
 // Asset + font lookup
 // =====================================================================
-PTBitmap TDefPane::LookupBitmap(const char* entry)
+TBitmap* TDefPane::LookupBitmap(const std::string& entry)
 {
     // Non-fatal name walk: TMulti::Object FatalErrors on a miss, which we can't
     // use when searching across several archives. Walk the name table directly
     // (numoffsets/names/offsets are public TMultiData fields).
+    if (entry.empty())
+        return nullptr;
     for (TMulti* dat : bitmapDats)
     {
         if (!dat) continue;
         for (int32_t c = 0; c < dat->numoffsets; ++c)
         {
             const char* p = reinterpret_cast<const char*>(static_cast<void*>(dat->names[c]));
-            if (p && stricmp(p, entry) == 0)
-                return reinterpret_cast<PTBitmap>(static_cast<void*>(dat->offsets[c]));
+            if (p && stricmp(p, entry.c_str()) == 0)
+                return reinterpret_cast<TBitmap*>(static_cast<void*>(dat->offsets[c]));
         }
     }
     return nullptr;
 }
 
+// The DEF's font by its FONT.DEF name (TFontTable: a WINFONT draws in GDI's
+// cell for it).
 const SFontAtlas* TDefPane::FontFor(const std::string& name)
 {
-    for (const SFontMap& fm : kFontMap)
-        if (name == fm.name)
-            return BuildTTFAtlas(TTFFilePath(fm.file).c_str(), fm.px);
-    return BuildTTFAtlas(TTFFilePath(kDefaultFontFile).c_str(), kDefaultFontPx);
+    if (!FontTable)
+        return nullptr;
+    if (const SFontAtlas* atlas = name.empty() ? nullptr : FontTable->Atlas(name.c_str()))
+        return atlas;
+    return FontTable->Atlas(kDefaultFont);
 }
 
 // =====================================================================
@@ -691,7 +917,8 @@ bool TDefPane::Open(const char* defName, const char* panelName, uint32_t defFlag
     //    live pictures draw their own (DrawField).
     for (SDefWidget& wid : widgets)
         if (wid.type == EDefWidget::Bitmap && !wid.field.empty() && !wid.fieldBitmap)
-            wid.fieldBitmap = LookupBitmap(wid.field.c_str());
+            wid.fieldBitmap = LookupBitmap(wid.field);
+    LayoutWidgets();
 
     // 5) The compose-to-target render surface (default RGBA8 format).
     surface = new TSurface(paneW, paneH);
@@ -750,10 +977,10 @@ void TDefPane::AddText(const char* name, int32_t x, int32_t y, int32_t w, int32_
     wid.name  = name ? name : "";
     wid.text  = text ? text : "";
     wid.x = x; wid.y = y; wid.w = w; wid.h = h;
-    wid.flags = flags;
-    wid.style.color = color;
+    wid.style.text.flags = flags;
+    wid.style.text.color = color;
     if (font)
-        wid.style.font = font;
+        wid.style.text.font = font;
     widgets.push_back(std::move(wid));
     SetDirty(true);
 }
@@ -762,7 +989,7 @@ bool TDefPane::AddSpriteButton(const char* name, const char* faceBase)
 {
     char face[64];
     std::snprintf(face, sizeof(face), "%sU", faceBase);
-    PTBitmap up = LookupBitmap(face);
+    TBitmap* up = LookupBitmap(face);
     if (!up)
     {
         log_warn("[defpane] sprite button '%s': no face '%s'", name, face);
@@ -809,9 +1036,10 @@ void TDefPane::ReleaseAssets()
     defflags  = 0;
     finishing = false;
     endRequested = false;
-    draggingSlider = -1;
-    arrowSlider = -1;
+    draggingBar = -1;
+    arrowBar = -1;
     arrowStep = 0;
+    focusWidget = -1;
 }
 
 TDefPane::~TDefPane() { ReleaseAssets(); }
@@ -827,7 +1055,7 @@ SDefWidget* TDefPane::Find(const char* name)
     return nullptr;
 }
 
-void TDefPane::SetFieldBitmap(const char* field, PTBitmap bm)
+void TDefPane::SetFieldBitmap(const char* field, TBitmap* bm)
 {
     if (!field) return;
     for (SDefWidget& w : widgets)
@@ -835,18 +1063,29 @@ void TDefPane::SetFieldBitmap(const char* field, PTBitmap bm)
             w.fieldBitmap = bm;
 }
 
-void TDefPane::SetListRows(const char* listName,
-                             std::vector<std::vector<std::string>> rows)
+// REVSYNC: 0x00430c50 -- the scrollbar runs over the rows (columns of an
+// HLIST) the items fill past the window: max((count - visible + n - 1) / n,
+// 0), n the items in a row (0x00430cc9-0x00430d12).
+void TDefPane::SetListCount(const char* listName, int32_t count)
 {
-    if (SDefWidget* w = Find(listName))
-    {
-        w->rows = std::move(rows);
-        // REVSYNC: list SetCount @ 0x00430c50 drops a selection past the end.
-        if (w->selrow >= static_cast<int32_t>(w->rows.size()))
-            w->selrow = -1;
-        w->scrolltop = 0;
-        SetDirty(true);
-    }
+    SDefWidget* w = Find(listName);
+    if (!w || w->type != EDefWidget::Listbox)
+        return;
+    w->count = (std::max)(0, count);
+    if (w->selitem >= w->count)
+        w->selitem = -1;
+    const SListGrid grid = ListGrid(*w);
+    const int32_t perRow = IsVList(*w) ? grid.cols : grid.rows;
+    w->bar.minval = 0;
+    w->bar.maxval = (std::max)(0, (w->count - grid.Visible() + perRow - 1) / perRow);
+    ScrollList(*w, w->bar.value);
+    SetDirty(true);
+}
+
+std::string TDefPane::FieldText(const std::string& field, int32_t index, SDefColor& colour)
+{
+    (void)field; (void)index; (void)colour;
+    return {};
 }
 
 void TDefPane::SetText(const char* name, const std::string& text)
@@ -867,10 +1106,10 @@ void TDefPane::SetHotKey(const char* name, int32_t vk)
         w->hotkey = vk;
 }
 
-void TDefPane::SelectListRow(const char* listName, int32_t row)
+void TDefPane::SelectListItem(const char* listName, int32_t item)
 {
     if (SDefWidget* w = Find(listName); w && w->type == EDefWidget::Listbox)
-        SetSelection(*w, row);
+        SetSelection(*w, item);
 }
 
 void TDefPane::SetSliderRange(const char* name, int32_t minval, int32_t maxval)
@@ -878,353 +1117,397 @@ void TDefPane::SetSliderRange(const char* name, int32_t minval, int32_t maxval)
     SDefWidget* w = Find(name);
     if (!w || w->type != EDefWidget::Scrollbar)
         return;
-    w->minval = minval;
-    w->maxval = (std::max)(minval, maxval);
-    w->value  = std::clamp(w->value, w->minval, w->maxval);
+    w->bar.minval = minval;
+    w->bar.maxval = (std::max)(minval, maxval);
+    w->bar.value  = std::clamp(w->bar.value, w->bar.minval, w->bar.maxval);
     SetDirty(true);
 }
 
 void TDefPane::SetSliderValue(const char* name, int32_t value)
 {
     if (SDefWidget* w = Find(name); w && w->type == EDefWidget::Scrollbar)
-        ChangeSlider(*w, value);
+        ChangeBar(*w, value);
 }
 
 void TDefPane::SetSliderPage(const char* name, int32_t page)
 {
     if (SDefWidget* w = Find(name); w && w->type == EDefWidget::Scrollbar)
-        w->page = page;
+        w->bar.page = page;
 }
 
-void TDefPane::ChangeSlider(SDefWidget& w, int32_t value)
+// A scrollbar's new value: a list scrolls; a SCROLLBAR raises its change.
+void TDefPane::ChangeBar(SDefWidget& w, int32_t value)
 {
-    value = std::clamp(value, w.minval, (std::max)(w.minval, w.maxval));
-    if (value == w.value)
+    if (w.type == EDefWidget::Listbox)
+    {
+        ScrollList(w, value);
         return;
-    w.value = value;
+    }
+    value = std::clamp(value, w.bar.minval, (std::max)(w.bar.minval, w.bar.maxval));
+    if (value == w.bar.value)
+        return;
+    w.bar.value = value;
     SetDirty(true);
     OnSliderChanged(w);
 }
 
-// REVSYNC: list SetSelection @ 0x00430b80: out-of-range rows select nothing;
-// a row outside the visible window scrolls to centre it; a change raises the
-// list event 5000.
-void TDefPane::SetSelection(SDefWidget& w, int32_t row)
+// =====================================================================
+// Lists
+// =====================================================================
+bool TDefPane::IsVList(const SDefWidget& w)
 {
-    const int32_t count = static_cast<int32_t>(w.rows.size());
-    if (row < 0 || row >= count)
-        row = -1;
-    const int32_t previous = w.selrow;
-    w.selrow = row;
+    return (w.flags & kListVList) || !(w.flags & kListHList);
+}
 
-    const int32_t rowh    = (w.style.itemh > 0) ? w.style.itemh : 18;
-    const int32_t visible = (std::max)(1, (w.h - w.style.rect.t - w.style.rect.b) / rowh);
-    if (row >= 0 && (row < w.scrolltop || row >= w.scrolltop + visible))
-        w.scrolltop = std::clamp(row - visible / 2, 0, (std::max)(0, count - visible));
+// REVSYNC: the list layout @ 0x004308b0 -- the cells fill the rect inside
+// RECT: as many whole ITEM-sized cells across and down as fit (an ITEM
+// wider or taller than the room is cut to it).
+TDefPane::SListGrid TDefPane::ListGrid(const SDefWidget& w)
+{
+    const SDefStyle& st = w.style;
+    SListGrid g;
+    g.cx = w.x + st.rect.l;
+    g.cy = w.y + st.rect.t;
+    const int32_t cw = w.w - st.rect.l - st.rect.r;
+    const int32_t ch = w.h - st.rect.t - st.rect.b;
+    g.itemw = (std::max)(1, (std::min)(cw, st.itemw));
+    g.itemh = (std::max)(1, (std::min)(ch, st.itemh));
+    g.cols  = (std::max)(1, cw / g.itemw);
+    g.rows  = (std::max)(1, ch / g.itemh);
+    return g;
+}
+
+// The first row shown (column of an HLIST): its scrollbar's value; the first
+// item is that row's (0x00430b28-0x00430b41).
+void TDefPane::ScrollList(SDefWidget& w, int32_t row)
+{
+    row = std::clamp(row, 0, (std::max)(0, w.bar.maxval));
+    const SListGrid grid = ListGrid(w);
+    const int32_t top = row * (IsVList(w) ? grid.cols : grid.rows);
+    if (row == w.bar.value && top == w.top)
+        return;
+    w.bar.value = row;
+    w.top = top;
+    SetDirty(true);
+    OnListScrolled(w);
+}
+
+// REVSYNC: list SetSelection @ 0x00430b80: an item out of range selects
+// nothing; one outside the window scrolls it to the window's middle row; a
+// change raises the list event 5000.
+void TDefPane::SetSelection(SDefWidget& w, int32_t item)
+{
+    if (item < 0 || item >= w.count)
+        item = -1;
+    const int32_t previous = w.selitem;
+    w.selitem = item;
+
+    const SListGrid grid = ListGrid(w);
+    if (item >= 0 && (item < w.top || item >= w.top + grid.Visible()))
+    {
+        const bool vlist = IsVList(w);
+        const int32_t line = item / (vlist ? grid.cols : grid.rows);
+        ScrollList(w, line - (vlist ? grid.rows : grid.cols) / 2);
+    }
     SetDirty(true);
 
-    if (row != previous)
-        OnListSelect(w, row);
+    if (item != previous)
+        OnListSelect(w, item);
+}
+
+// REVSYNC: the list hit test @ 0x004310b0 -- the item in the cell under the
+// pointer, -1 outside the cells or past the last item.
+int32_t TDefPane::ListItemAt(const SDefWidget& w, int32_t lx, int32_t ly)
+{
+    const SListGrid g = ListGrid(w);
+    if (lx < g.cx || ly < g.cy || lx >= g.cx + g.cols * g.itemw || ly >= g.cy + g.rows * g.itemh)
+        return -1;
+    const int32_t col = (lx - g.cx) / g.itemw;
+    const int32_t row = (ly - g.cy) / g.itemh;
+    const int32_t item = w.top + (IsVList(w) ? row * g.cols + col : col * g.rows + row);
+    return item < w.count ? item : -1;
+}
+
+void TDefPane::ClickListItem(SDefWidget& w, int32_t lx, int32_t ly)
+{
+    if (const int32_t item = ListItemAt(w, lx, ly); item >= 0)
+        SetSelection(w, item);
 }
 
 // =====================================================================
 // Rendering
 // =====================================================================
-void TDefPane::DrawNineSlice(PTBitmap bm, const SDefInsets& frame,
-                               int32_t x, int32_t y, int32_t w, int32_t h)
+
+// REVSYNC: the frame tiler @ 0x00429ac0 -- the art's FRAME insets cut it
+// into corners, edges and a centre; edges and centre are TILED (the last
+// tile cut short), never stretched, over the rect grown by MARGINS (the art
+// carries its drop shadow there); NOCENTER leaves the centre unpainted.
+void TDefPane::DrawFrame(TBitmap* bm, const SDefStyle& style, int32_t x, int32_t y, int32_t w, int32_t h)
 {
-    if (!bm || !surface) return;
-    if (frame.set && (frame.l || frame.t || frame.r || frame.b))
-        Renderer->DrawNineSliceToTarget(bm, frame.l, frame.t, frame.r, frame.b,
-                                        x, y, w, h, surface->Width(), surface->Height(),
-                                        DecodeFor(bm));
-    else
-        Renderer->DrawBitmapSubrectStretchedToTarget(bm, x, y, w, h, 0, 0,
-                                                     bm->width, bm->height,
-                                                     surface->Width(), surface->Height(),
-                                                     DecodeFor(bm));
-}
-
-void TDefPane::DrawText(const std::string& text, int32_t x, int32_t y,
-                          int32_t w, int32_t h, uint32_t flags,
-                          const SDefColor& color, const std::string& font)
-{
-    if (text.empty() || !surface) return;
-    const SFontAtlas* atlas = FontFor(font);
-    if (!atlas) return;
-
-    ETextAlign align = ETextAlign::Left;
-    if      (flags & (kTextflagRight  | kTextRight))  align = ETextAlign::Right;
-    else if (flags & (kTextflagCenter | kTextCenter)) align = ETextAlign::Center;
-
-    // Lines: TEXT_SINGLELINE draws one; otherwise the text word-wraps to the
-    // cell and breaks at '\n' (GDI DT_WORDBREAK, as retail's text engine).
-    // TEXT_ELIPSES cuts a single line that doesn't fit with "...".
-    std::vector<std::string> lines;
-    const bool wraps = !(flags & kTextSingleLine) &&
-                       (text.find('\n') != std::string::npos || TextWidth(atlas, text.c_str()) > w);
-    if (wraps)
-        WrapTextLines(atlas, text.c_str(), static_cast<float>(w), lines);
-    else
-        lines.push_back(text);
-    if (lines.size() == 1 && (flags & kTextElipses) && TextWidth(atlas, lines[0].c_str()) > w)
-    {
-        std::string& line = lines[0];
-        while (!line.empty() && TextWidth(atlas, (line + "...").c_str()) > w)
-            line.pop_back();
-        line += "...";
-    }
-
-    // The cell baseline is top-aligned at cellY+ascent; TEXT_VCENTER centres
-    // the block of lines in the cell.
-    const float lh = TextLineHeight(atlas);
-    int32_t cellY = y;
-    if (flags & kTextVCenter)
-        cellY = y + (int32_t)((h - lh * static_cast<float>(lines.size())) * 0.5f + 0.5f);
-
-    const float r = color.r / 255.0f, g = color.g / 255.0f, b = color.b / 255.0f;
+    if (!bm || !surface)
+        return;
+    const SDefInsets& f = style.frame;
+    const SDefInsets& m = style.margins;
+    const int32_t X0 = x - m.l, Y0 = y - m.t;
+    const int32_t W = w + m.l + m.r, H = h + m.t + m.b;
+    const int32_t mw = bm->width - f.l - f.r;     // the centre's size in the art
+    const int32_t mh = bm->height - f.t - f.b;
     const int32_t tw = surface->Width(), th = surface->Height();
-    for (size_t i = 0; i < lines.size(); ++i)
-    {
-        const int32_t ly = cellY + static_cast<int32_t>(lh * static_cast<float>(i));
-        if (flags & kTextShadow)
-            DrawTextShadowedToTarget(atlas, lines[i].c_str(), x, ly, w, h, align, r, g, b, tw, th);
-        else
-            DrawTextToTarget(atlas, lines[i].c_str(), x, ly, w, h, align, r, g, b, tw, th);
-    }
+    const EBitmapDecode decode = DecodeFor(bm);
+    const auto put = [&](int32_t dx, int32_t dy, int32_t sx, int32_t sy, int32_t sw, int32_t sh) {
+        if (sw > 0 && sh > 0)
+            Renderer->DrawBitmapSubrectToTarget(bm, dx, dy, sx, sy, sw, sh, tw, th, decode);
+    };
+    // One band of the frame: its left piece, the middle tiled across, its
+    // right piece.
+    const auto band = [&](int32_t dy, int32_t sy, int32_t sh, bool middle) {
+        put(X0, dy, 0, sy, f.l, sh);
+        if (middle && mw > 0)
+            for (int32_t xx = X0 + f.l; xx < X0 + W - f.r; xx += mw)
+                put(xx, dy, f.l, sy, (std::min)(mw, X0 + W - f.r - xx), sh);
+        put(X0 + W - f.r, dy, f.l + mw, sy, f.r, sh);
+    };
+    if (f.t > 0)
+        band(Y0, 0, f.t, true);
+    if (mh > 0)
+        for (int32_t yy = Y0 + f.t; yy < Y0 + H - f.b; yy += mh)
+            band(yy, f.t, (std::min)(mh, Y0 + H - f.b - yy), !style.nocenter);
+    if (f.b > 0)
+        band(Y0 + H - f.b, f.t + mh, f.b, true);
 }
 
-void TDefPane::DrawWidget(const SDefWidget& wid)
+// A style's chrome: tiled as a frame when the style has FRAME, else the art
+// once at its size.
+void TDefPane::DrawChrome(const SDefStyle& style, const std::string& bitmap,
+                          int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    TBitmap* bm = LookupBitmap(bitmap);
+    if (!bm || !surface)
+        return;
+    if (style.framed)
+        DrawFrame(bm, style, x, y, w, h);
+    else
+        Renderer->DrawBitmapToTarget(bm, x, y, surface->Width(), surface->Height(), DecodeFor(bm));
+}
+
+// REVSYNC: the widgets' background restore (DEF_ENGINE.md §1.3): the rect,
+// grown by `m` (the style's MARGINS where the widget's art overhangs it),
+// goes back to the pane's background surface (ParamBlit from +0x84; cleared
+// where there's none) before the widget draws, erasing what earlier widgets
+// drew there.
+void TDefPane::RestoreBackground(const SDefInsets& m, int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    if (!surface)
+        return;
+    x -= m.l; y -= m.t; w += m.l + m.r; h += m.t + m.b;
+    const int32_t tw = surface->Width(), th = surface->Height();
+    Renderer->ClearRectToTarget(x, y, w, h, tw, th);
+    if (!background)
+        return;
+    const int32_t x0 = (std::max)(x, 0), y0 = (std::max)(y, 0);
+    const int32_t x1 = (std::min)(x + w, background->width), y1 = (std::min)(y + h, background->height);
+    if (x1 > x0 && y1 > y0)
+        Renderer->DrawBitmapSubrectToTarget(background, x0, y0, x0, y0, x1 - x0, y1 - y0, tw, th,
+                                            DecodeFor(background));
+}
+
+// A scrollbar's, list's or edit's restore: when its chrome draws keyed or
+// blended, or it has none (0x0042eb30, 0x00431160, 0x004323b0).
+void TDefPane::RestoreUnderChrome(const SDefStyle& style, int32_t x, int32_t y, int32_t w, int32_t h)
+{
+    const TBitmap* bm = LookupBitmap(style.bgbitmap);
+    if (!bm || (ResolvedMode(style.drawmode, bm) & kChromeRestoreModes))
+        RestoreBackground(style.margins, x, y, w, h);
+}
+
+// Retail's text compose (0x004be2b0) in a widget's text format.
+void TDefPane::DrawString(const std::string& text, int32_t x, int32_t y, int32_t w,
+                          int32_t h, const SDefTextFormat& format, const SDefColor& color)
+{
+    if (text.empty() || !surface)
+        return;
+    if (const SFontAtlas* atlas = FontFor(format.font))
+        DrawTextComposed(atlas, text.c_str(), x, y, w, h, format.flags, color.r / 255.0f,
+                         color.g / 255.0f, color.b / 255.0f, surface->Width(), surface->Height());
+}
+
+void TDefPane::DrawWidget(const SDefWidget& wid, int32_t index)
 {
     const SDefStyle& st = wid.style;
-    const int32_t tw = surface->Width(), th = surface->Height();
-
     switch (wid.type)
     {
         case EDefWidget::Bitmap:
-        {
+            // REVSYNC: 0x0042ad10 -- the art at its size, never stretched.
+            if (wid.flags & kCtrlClearBg)
+                RestoreBackground(st.margins, wid.x, wid.y, wid.w, wid.h);
             if (!wid.field.empty())
                 DrawField(wid);
-            else if (!st.bgbitmap.empty())
-                if (PTBitmap bm = LookupBitmap(st.bgbitmap.c_str()))
-                    DrawNineSlice(bm, st.frame, wid.x, wid.y, wid.w, wid.h);
+            else if (TBitmap* bm = LookupBitmap(st.bgbitmap); bm && surface)
+                Renderer->DrawBitmapToTarget(bm, wid.x, wid.y, surface->Width(), surface->Height(), DecodeFor(bm));
             break;
-        }
         case EDefWidget::Frame:
-        {
-            if (!st.bgbitmap.empty())
-                if (PTBitmap bm = LookupBitmap(st.bgbitmap.c_str()))
-                    DrawNineSlice(bm, st.frame, wid.x, wid.y, wid.w, wid.h);
+            // REVSYNC: 0x0042b150 -- always through the frame tiler.
+            if (wid.flags & kCtrlClearBg)
+                RestoreBackground(st.margins, wid.x, wid.y, wid.w, wid.h);
+            DrawFrame(LookupBitmap(st.bgbitmap), st, wid.x, wid.y, wid.w, wid.h);
             break;
-        }
         case EDefWidget::Text:
-        {
-            DrawText(wid.text, wid.x + st.rect.l, wid.y, wid.w - st.rect.l - st.rect.r,
-                     wid.h, st.textflags | wid.flags, st.color, st.font);
+            DrawText(wid);
             break;
-        }
         case EDefWidget::Button:
-        {
-            if (wid.faceUp)
-            {
-                // Sprite button (title / death screens): U, D while pressed,
-                // S while hovered (MainMenu_SPEC §6.6).
-                PTBitmap face = wid.faceUp;
-                if (wid.pressed && wid.faceDown)       face = wid.faceDown;
-                else if (wid.hovered && wid.faceHover) face = wid.faceHover;
-                Renderer->DrawBitmapToTarget(face, wid.x, wid.y, tw, th, DecodeFor(face));
-                break;
-            }
-            if (wid.flags & kBtnToggle)
-            {
-                // Checkbox/toggle: a fixed-size icon (CheckU unchecked / CheckD
-                // checked) at native size, with the label to its right at the
-                // UPLABELRECT offset (e.g. 18,-1) — NOT a stretched 9-slice.
-                const std::string& box = wid.selected ? st.down : st.up;
-                if (PTBitmap bm = LookupBitmap(box.c_str()))
-                    Renderer->DrawBitmapToTarget(bm, wid.x, wid.y, tw, th, DecodeFor(bm));
-                if (!wid.text.empty())
-                {
-                    const int32_t* lr = st.uplabelrect;
-                    DrawText(wid.text, wid.x + lr[0], wid.y + lr[1],
-                             wid.w - lr[0], wid.h, st.uplabelflags,
-                             st.uplabelcolor, st.uplabelfont);
-                }
-                break;
-            }
-
-            const bool         down = wid.pressed;
-            const std::string& face = down ? st.down : st.up;
-            if (!face.empty())
-                if (PTBitmap bm = LookupBitmap(face.c_str()))
-                    DrawNineSlice(bm, st.frame, wid.x, wid.y, wid.w, wid.h);
-
-            // Label (up/down style). The label rect is the button rect plus the
-            // per-style offset rect (UPLABELRECT x y w h).
-            if (!wid.text.empty())
-            {
-                const int32_t* lr = down ? st.downlabelrect : st.uplabelrect;
-                const SDefColor lc = down ? st.downlabelcolor : st.uplabelcolor;
-                const uint32_t  lf = down ? st.downlabelflags  : st.uplabelflags;
-                const std::string& lfont = down ? st.downlabelfont : st.uplabelfont;
-                DrawText(wid.text, wid.x + lr[0], wid.y + lr[1],
-                         wid.w + lr[2], wid.h + lr[3], lf, lc, lfont);
-            }
+            DrawButton(wid);
             break;
-        }
         case EDefWidget::Scrollbar:
-            DrawScrollbar(wid);
+            // REVSYNC: 0x0042eb30 -- the bar's art, then its parts.
+            RestoreUnderChrome(st, wid.bar.x, wid.bar.y, wid.bar.w, wid.bar.h);
+            DrawChrome(st, st.bgbitmap, wid.bar.x, wid.bar.y, wid.bar.w, wid.bar.h);
+            DrawScrollbar(wid, index);
             break;
         case EDefWidget::Listbox:
-            DrawListbox(wid);
+            DrawListbox(wid, index);
             break;
         case EDefWidget::Edit:
             DrawEdit(wid);
             break;
         default:
-            // SCROLLBAR / DROPLIST rendering lands with the Options screen
-            // (next phase). Draw the bg chrome if the style names one so the
-            // layout reads.
-            if (!st.bgbitmap.empty())
-                if (PTBitmap bm = LookupBitmap(st.bgbitmap.c_str()))
-                    DrawNineSlice(bm, st.frame, wid.x, wid.y, wid.w, wid.h);
+            // DROPLIST: no in-scope screen has one.
             break;
     }
 }
 
-void TDefPane::DrawListbox(const SDefWidget& w)
+// REVSYNC: TEXT Draw @ 0x0042b700 -- the text in the rect inside RECT, in
+// the style's format (alignment adjusted by the control flags when it was
+// built); a FIELD's text from the pane's getter. TEXTFLAG_FRAME tiles the
+// style's BGBITMAP under it.
+void TDefPane::DrawText(const SDefWidget& w)
 {
     const SDefStyle& st = w.style;
+    // The rect grows by the MARGINS only with the frame (0x0042b725).
+    if (w.flags & kCtrlClearBg)
+        RestoreBackground((w.flags & kTextFrame) ? st.margins : SDefInsets{}, w.x, w.y, w.w, w.h);
+    if (w.flags & kTextFrame)
+        DrawFrame(LookupBitmap(st.bgbitmap), st, w.x, w.y, w.w, w.h);
+    SDefColor colour = st.text.color;
+    const std::string text = w.field.empty() ? w.text : FieldText(w.field, 0, colour);
+    const SDefInsets& r = st.rect;
+    DrawString(text, w.x + r.l, w.y + r.t, w.w - r.l - r.r, w.h - r.t - r.b, st.text, colour);
+}
+
+// REVSYNC: BUTTON Draw @ 0x0042cc30. Down (BTNFLAG_DOWN: a toggle on, a push
+// button held) with a DOWN face takes that face and the down label, else
+// the up ones; a state without a label draws none. The face is tiled when
+// the style has FRAME (NORMAL), else drawn at its size (TOGGLE, RADIO). The
+// label goes in the rect inside the state's label rect.
+void TDefPane::DrawButton(const SDefWidget& w)
+{
+    if (!surface)
+        return;
     const int32_t tw = surface->Width(), th = surface->Height();
-
-    // Background frame (e.g. VScrollRect 9-slice), unless the widget clears its
-    // own bg (CTRLFLAG_CLEARBG — the options controller list draws over chrome
-    // that already has a recess baked in).
-    if (!(w.flags & kCtrlClearBg) && !st.bgbitmap.empty())
-        if (PTBitmap bm = LookupBitmap(st.bgbitmap.c_str()))
-            DrawNineSlice(bm, st.frame, w.x, w.y, w.w, w.h);
-
-    // Content rect: RECT inset (the right inset reserves the scrollbar gutter).
-    const int32_t cx   = w.x + st.rect.l;
-    const int32_t cy   = w.y + st.rect.t;
-    const int32_t cw   = w.w - st.rect.l - st.rect.r;
-    const int32_t ch   = w.h - st.rect.t - st.rect.b;
-    const int32_t rowh = (st.itemh > 0) ? st.itemh : 18;
-
-    for (size_t r = 0; r < w.rows.size(); ++r)
+    if (w.faceUp)
     {
-        const int32_t ry = cy + (static_cast<int32_t>(r) - w.scrolltop) * rowh;
-        if (ry + rowh <= cy || ry >= cy + ch) continue;       // clip to content
+        // Sprite button (title / death screens): U, D while pressed, S while
+        // hovered (MainMenu_SPEC §6.6).
+        TBitmap* face = w.faceUp;
+        if (w.pressed && w.faceDown)       face = w.faceDown;
+        else if (w.hovered && w.faceHover) face = w.faceHover;
+        Renderer->DrawBitmapToTarget(face, w.x, w.y, tw, th, DecodeFor(face));
+        return;
+    }
 
-        if (static_cast<int32_t>(r) == w.selrow)
-            Renderer->DrawSolidRectToTarget(cx, ry, cw, rowh, tw, th,
-                                            st.selcolor.r, st.selcolor.g,
-                                            st.selcolor.b, 255);
-
-        // A row is one line (retail list items draw single-line).
-        const std::vector<std::string>& row = w.rows[r];
-        if (w.rowfields.empty())
-        {
-            if (!row.empty())
-                DrawText(row[0], cx + 2, ry, cw - 4, rowh,
-                         kTextLeft | kTextShadow | kTextVCenter | kTextSingleLine,
-                         st.color, st.font);
-        }
+    const SDefStyle& st = w.style;
+    const bool down = (w.flags & kBtnToggle) ? w.selected : w.pressed;
+    TBitmap* downFace = down ? LookupBitmap(st.down) : nullptr;
+    const bool downState = downFace != nullptr;
+    if (TBitmap* face = downState ? downFace : LookupBitmap(st.up))
+    {
+        if (ResolvedMode(st.drawmode, face) & kButtonRestoreModes)
+            RestoreBackground(st.margins, w.x, w.y, w.w, w.h);
+        if (st.framed)
+            DrawFrame(face, st, w.x, w.y, w.w, w.h);
         else
+            Renderer->DrawBitmapToTarget(face, w.x, w.y, tw, th, DecodeFor(face));
+    }
+    if (!(downState ? st.hasDownLabel : st.hasUpLabel))
+        return;
+    const SDefTextFormat& label = downState ? st.downlabel : st.uplabel;
+    const SDefInsets& r = down ? st.downlabelrect : st.uplabelrect;
+    DrawString(w.text, w.x + r.l, w.y + r.t, w.w - r.l - r.r, w.h - r.t - r.b, label, label.color);
+}
+
+// REVSYNC: LISTBOX Draw @ 0x00431410 -- the chrome (even with
+// CTRLFLAG_CLEARBG), its scrollbar's parts, then the items in the window,
+// each in its cell (DrawItem 0x00430db0): a VLIST fills the cells a row at
+// a time, an HLIST a column at a time; the selected item's cell is filled
+// with SELCOLOR; a USEFORMAT list draws its format items in the cell
+// (FormatDraw 0x0042f570, each cut to the cell), another its FIELD's text.
+void TDefPane::DrawListbox(const SDefWidget& w, int32_t index)
+{
+    if (!surface)
+        return;
+    const SDefStyle& st = w.style;
+    RestoreUnderChrome(st, w.x, w.y, w.w, w.h);
+    DrawChrome(st, st.bgbitmap, w.x, w.y, w.w, w.h);
+    // Its scrollbar has no art of its own: retail restores the bar's rect
+    // and redraws the list's chrome into it (0x0042ebf3), which leaves it
+    // as it is.
+    if (st.hasScrollbar)
+        DrawScrollbar(w, index);
+
+    const SListGrid g = ListGrid(w);
+    const bool vlist = IsVList(w);
+    const int32_t last = (std::min)(w.top + g.Visible(), w.count);
+    for (int32_t i = w.top; i < last; ++i)
+    {
+        const int32_t k = i - w.top;
+        const int32_t col = vlist ? k % g.cols : k / g.rows;
+        const int32_t row = vlist ? k / g.cols : k % g.rows;
+        const int32_t X = g.cx + col * g.itemw, Y = g.cy + row * g.itemh;
+        if (i == w.selitem && !(w.flags & kListViewOnly))
+            Renderer->DrawSolidRectToTarget(X, Y, g.itemw, g.itemh, surface->Width(), surface->Height(),
+                                            st.selcolor.r, st.selcolor.g, st.selcolor.b);
+        if (w.flags & kListUseFormat)
         {
-            for (size_t c = 0; c < w.rowfields.size() && c < row.size(); ++c)
+            for (const SDefFormatItem& f : w.format)
             {
-                const SDefListField& f = w.rowfields[c];
-                const std::string&   fnt = f.font.empty() ? st.font : f.font;
-                DrawText(row[c], cx + f.x, ry + f.y, f.w, (f.h ? f.h : rowh),
-                         f.flags | kTextVCenter | kTextSingleLine, f.color, fnt);
+                SDefColor colour = f.format.color;
+                const std::string text = f.kind == SDefFormatItem::EKind::Field ? FieldText(f.name, i, colour) : f.name;
+                DrawString(text, X + f.x, Y + f.y, (std::min)(f.x + f.w, g.itemw) - f.x,
+                           (std::min)(f.y + f.h, g.itemh) - f.y, f.format, colour);
             }
         }
-    }
-
-    if ((w.flags & kListVList) && !(w.flags & kListNoScroll))
-        DrawListScrollbar(w);
-}
-
-namespace {
-
-// The VLIST scrollbar's parts in pane coordinates (see kListBar*).
-struct SListBar
-{
-    int32_t x = 0, y = 0, h = 0;          // the strip
-    int32_t upY = 0, downY = 0;           // arrow tops
-    int32_t trackTop = 0, trackBottom = 0;
-    int32_t thumbY = 0, thumbH = 0;
-};
-
-SListBar ListBarLayout(const SDefWidget& w, int32_t arrowH)
-{
-    SListBar bar;
-    bar.x = w.x + w.w - kListBarRight;
-    bar.y = w.y + kListBarInset;
-    bar.h = w.h - 2 * kListBarInset;
-    bar.upY   = bar.y + kListBarUpY;
-    bar.downY = bar.y + bar.h - kListBarDownY;
-    bar.trackTop    = bar.upY + arrowH + kListBarThumbMargin;
-    bar.trackBottom = bar.downY - kListBarThumbMargin;
-
-    const int32_t rowh    = (w.style.itemh > 0) ? w.style.itemh : 18;
-    const int32_t visible = (std::max)(1, (w.h - w.style.rect.t - w.style.rect.b) / rowh);
-    const int32_t count   = static_cast<int32_t>(w.rows.size());
-    const int32_t track   = (std::max)(0, bar.trackBottom - bar.trackTop);
-    bar.thumbH = count > visible ? (std::max)(kListBarThumbMin, track * visible / count) : track;
-    bar.thumbH = (std::min)(bar.thumbH, track);
-    const int32_t travel  = track - bar.thumbH;
-    const int32_t maxTop  = (std::max)(0, count - visible);
-    bar.thumbY = bar.trackTop + (maxTop > 0 ? travel * w.scrolltop / maxTop : 0);
-    return bar;
-}
-
-}  // namespace
-
-// The list's own scrollbar (retail spawns a SCROLLBAR child for a VLIST):
-// the arrows in the gutter the VScrollRect art leaves on the right, the
-// thumb between them showing the scroll position.
-void TDefPane::DrawListScrollbar(const SDefWidget& w)
-{
-    const SDefStyle& st = w.style;
-    const int32_t tw = surface->Width(), th = surface->Height();
-    PTBitmap up    = LookupBitmap((st.up + "U").c_str());
-    PTBitmap down  = LookupBitmap((st.down + "U").c_str());
-    PTBitmap thumb = LookupBitmap((st.scrollthumb + "U").c_str());
-    const SListBar bar = ListBarLayout(w, up ? up->height : 0);
-
-    if (up)
-        Renderer->DrawBitmapToTarget(up, bar.x + kListBarArrowX, bar.upY, tw, th, DecodeFor(up));
-    if (down)
-        Renderer->DrawBitmapToTarget(down, bar.x + kListBarArrowX, bar.downY, tw, th, DecodeFor(down));
-    if (thumb && bar.thumbH > 0)
-    {
-        // The thumb art is a vertical 3-slice: its end rows stay, the middle
-        // stretches to the thumb's length.
-        const int32_t cap = thumb->height / 2;
-        Renderer->DrawNineSliceToTarget(thumb, 0, cap, 0, thumb->height - cap - 1,
-                                        bar.x + kListBarArrowX + (kListBarWidth - thumb->width) / 2,
-                                        bar.thumbY, thumb->width, bar.thumbH, tw, th,
-                                        DecodeFor(thumb));
+        else if (!w.field.empty())
+        {
+            SDefColor colour = st.text.color;
+            DrawString(FieldText(w.field, i, colour), X, Y, g.itemw, g.itemh, st.text, colour);
+        }
     }
 }
 
+// REVSYNC: EDIT Draw @ 0x004328b0 -- the frame inside the outer RECT
+// (unless EDITFLAG_NOFRAME or disabled), then the text inside both rects:
+// EDITCOLOR while edited, with the caret "|" in the on half of its blink;
+// EDITFLAG_CENTER / RIGHT move the alignment (0x004327fc).
 void TDefPane::DrawEdit(const SDefWidget& w)
 {
     const SDefStyle& st = w.style;
-    if (!st.bgbitmap.empty())
-        if (PTBitmap bm = LookupBitmap(st.bgbitmap.c_str()))
-            DrawNineSlice(bm, st.frame, w.x, w.y, w.w, w.h);
+    const SDefInsets& o = st.outerRect;
+    const SDefInsets& r = st.rect;
+    RestoreUnderChrome(st, w.x, w.y, w.w, w.h);
+    if (!(w.flags & kEditNoFrame) && !w.disabled)
+        DrawChrome(st, st.bgbitmap, w.x + o.l, w.y + o.t, w.w - o.l - o.r, w.h - o.t - o.b);
 
-    const int32_t cx = w.x + st.rect.l;
-    const int32_t cy = w.y + st.rect.t;
-    const int32_t cw = w.w - st.rect.l - st.rect.r;
-    const int32_t ch = w.h - st.rect.t - st.rect.b;
-    // While editing, the edit colour (yellow) + a simple caret.
-    const SDefColor col   = w.focused ? st.editcolor : st.color;
-    const std::string txt = w.focused ? (w.text + "_") : w.text;
-    DrawText(txt, cx, cy, cw, ch, st.textflags | kTextVCenter | kTextSingleLine, col, st.font);
+    std::string text = w.text;
+    if (w.focused)
+    {
+        const double pulses = (TTime::Time() - w.focusTime) * TTime::LegacyFramerate;
+        if (static_cast<int64_t>(pulses) % kCaretPeriod < kCaretOn)
+            text += '|';
+    }
+    SDefTextFormat format = st.text;
+    if (w.flags & kEditCenter)     format.flags = (format.flags & ~(TextFlag::Left | TextFlag::Right)) | TextFlag::Center;
+    else if (w.flags & kEditRight) format.flags = (format.flags & ~(TextFlag::Left | TextFlag::Center)) | TextFlag::Right;
+    DrawString(text, w.x + o.l + r.l, w.y + o.t + r.t, w.w - o.l - o.r - r.l - r.r,
+               w.h - o.t - o.b - r.t - r.b, format, w.focused ? st.editcolor : st.text.color);
 }
 
 // The BITMAP FIELD source (retail field getter 0x00436de0): the bitmap bound
@@ -1236,53 +1519,62 @@ void TDefPane::DrawField(const SDefWidget& wid)
                                      surface->Width(), surface->Height(), DecodeFor(wid.fieldBitmap));
 }
 
-void TDefPane::DrawScrollbar(const SDefWidget& w)
+// REVSYNC: the scrollbar's parts (0x0042e7d0, 0x0042e980, 0x0042e620): each
+// arrow, its "D" art while held, and the thumb at its size where the value
+// puts it (when the range is at least 1).
+void TDefPane::DrawScrollbar(const SDefWidget& w, int32_t index)
 {
-    const SDefStyle& st = w.style;
+    if (!surface)
+        return;
     const int32_t tw = surface->Width(), th = surface->Height();
-
-    // Track background (HScrollBar / VScrollBar 9-slice).
-    if (!st.bgbitmap.empty())
-        if (PTBitmap bm = LookupBitmap(st.bgbitmap.c_str()))
-            DrawNineSlice(bm, st.frame, w.x, w.y, w.w, w.h);
-
-    // The arrows and the thumb, centred across the bar.
-    const SSliderBar bar = SliderLayout(w);
-    const auto put = [&](PTBitmap bm, int32_t along)
-    {
+    const SDefStyle& st = w.style;
+    const SBarLayout bar = BarLayout(w);
+    const auto put = [&](TBitmap* up, const SDefScrollPart& part, bool held, int32_t x, int32_t y) {
+        TBitmap* bm = held ? LookupBitmap(part.bitmap + "D") : nullptr;
         if (!bm)
-            return;
-        const int32_t x = bar.vertical ? w.x + (w.w - bm->width) / 2 : along;
-        const int32_t y = bar.vertical ? along : w.y + (w.h - bm->height) / 2;
-        Renderer->DrawBitmapToTarget(bm, x, y, tw, th, DecodeFor(bm));
+            bm = up;
+        if (bm)
+            Renderer->DrawBitmapToTarget(bm, x, y, tw, th, DecodeFor(bm));
     };
-    put(bar.dec, (bar.vertical ? w.y : w.x) + 1);
-    put(bar.inc, bar.incStart);
-    put(bar.thumb, bar.thumbPos);
+    put(bar.up, st.scrollUp, arrowBar == index && arrowStep < 0, bar.upX, bar.upY);
+    put(bar.down, st.scrollDown, arrowBar == index && arrowStep > 0, bar.downX, bar.downY);
+    if (bar.showThumb)
+        put(bar.thumb, st.scrollThumb, draggingBar == index, bar.thumbX, bar.thumbY);
 }
 
-// SCROLLBAR arrow/thumb pieces are each a 2-state button: the .dat stores
-// "<base>U" (unpressed) / "<base>D" (pressed) while widgets.def names the
-// base; the layout measures the unpressed art.
-TDefPane::SSliderBar TDefPane::SliderLayout(const SDefWidget& w)
+// REVSYNC: the scrollbar layout @ 0x0042e240 and SetValue @ 0x0042e440:
+// the arrows where their placements put them; the thumb's track from a past
+// the bar's start to b short of its end, the thumb at value / range of the
+// way along it.
+// REVSYNC-DIVERGENCE: retail places the thumb by value / (max - min), not
+// (value - min) / (max - min); every DEF scrollbar's range starts at 0,
+// where the two agree.
+TDefPane::SBarLayout TDefPane::BarLayout(const SDefWidget& w)
 {
     const SDefStyle& st = w.style;
-    SSliderBar bar;
-    bar.vertical = (w.flags & kScrollVScroll) != 0;
-    bar.dec   = LookupBitmap((st.up + "U").c_str());
-    bar.inc   = LookupBitmap((st.down + "U").c_str());
-    bar.thumb = LookupBitmap((st.scrollthumb + "U").c_str());
-    const auto length = [&](PTBitmap bm) { return bm ? (bar.vertical ? bm->height : bm->width) : 0; };
+    const SDefScrollbar& b = w.bar;
+    SBarLayout bar;
+    bar.up    = LookupBitmap(st.scrollUp.bitmap + "U");
+    bar.down  = LookupBitmap(st.scrollDown.bitmap + "U");
+    bar.thumb = LookupBitmap(st.scrollThumb.bitmap + "U");
+    bar.upX   = PartX(b, st.scrollUp);
+    bar.upY   = PartY(b, st.scrollUp);
+    bar.downX = PartX(b, st.scrollDown);
+    bar.downY = PartY(b, st.scrollDown);
 
-    const int32_t start = bar.vertical ? w.y : w.x;
-    const int32_t size  = bar.vertical ? w.h : w.w;
-    bar.decEnd      = start + 1 + length(bar.dec);
-    bar.incStart    = start + size - 1 - length(bar.inc);
-    bar.travelStart = bar.decEnd + 1;
-    bar.thumbLen    = length(bar.thumb);
-    bar.travel      = (std::max)(0, bar.incStart - 1 - bar.travelStart - bar.thumbLen);
-    const int32_t range = w.maxval - w.minval;
-    bar.thumbPos = bar.travelStart + (range > 0 ? bar.travel * (w.value - w.minval) / range : 0);
+    const SDefScrollPart& thumb = st.scrollThumb;
+    const int32_t start = b.vertical ? b.y : b.x;
+    const int32_t size  = b.vertical ? b.h : b.w;
+    bar.trackStart = start + thumb.a;
+    bar.trackEnd   = start + size - thumb.b;
+    const int32_t range = b.maxval - b.minval;
+    const int32_t along = range > 0 ? bar.trackStart + (bar.trackEnd - bar.trackStart) * (b.value - b.minval) / range
+                                    : bar.trackStart;
+    const int32_t across = b.vertical ? b.x + (thumb.relR ? b.w - thumb.c : thumb.c)
+                                      : b.y + (thumb.relR ? b.h - thumb.c : thumb.c);
+    bar.thumbX = b.vertical ? across : along;
+    bar.thumbY = b.vertical ? along : across;
+    bar.showThumb = range >= 1 && bar.thumb;
     return bar;
 }
 
@@ -1308,111 +1600,86 @@ void TDefPane::PaintBackground()
                                      DecodeFor(background));
 }
 
-// REVSYNC: the button pane's draw, 0x00435de0 -- every widget in order.
+// REVSYNC: the button pane's draw, 0x00435de0 -- the widgets in order, the
+// hidden ones not at all. CTRLFLAG_DRAWTOBG widgets are drawn into the
+// pane's background (under every other), and the pane's topmost widget
+// (+0xa8: the EDIT being edited) last.
 void TDefPane::PaintWidgets()
 {
-    for (const SDefWidget& w : widgets)
-        DrawWidget(w);
+    const SDefWidget* topmost = EditingWidget();
+    for (int32_t pass = 0; pass < 2; ++pass)
+        for (size_t i = 0; i < widgets.size(); ++i)
+        {
+            const SDefWidget& w = widgets[i];
+            if (!w.hidden && &w != topmost && ((w.flags & kCtrlDrawToBg) != 0) == (pass == 0))
+                DrawWidget(w, static_cast<int32_t>(i));
+        }
+    if (topmost && !topmost->hidden)
+        DrawWidget(*topmost, static_cast<int32_t>(topmost - widgets.data()));
 }
 
 // =====================================================================
 // Input
 // =====================================================================
 
-// A click on a list's row selects it (raising the list event).
-void TDefPane::ClickListRow(SDefWidget& w, int32_t lx, int32_t ly)
-{
-    (void)lx;
-    const SDefStyle& st = w.style;
-    const int32_t cy   = w.y + st.rect.t;
-    const int32_t ch   = w.h - st.rect.t - st.rect.b;
-    const int32_t rowh = (st.itemh > 0) ? st.itemh : 18;
-    if (rowh <= 0 || ly < cy || ly >= cy + ch) return;
-    const int32_t row = (ly - cy) / rowh + w.scrolltop;
-    if (row >= 0 && row < static_cast<int32_t>(w.rows.size()))
-        SetSelection(w, row);
-}
-
-// A click on the list's scrollbar: an arrow scrolls one row, the track
-// above or below the thumb a page. True when the click was on the bar.
-bool TDefPane::ClickListScrollbar(SDefWidget& w, int32_t lx, int32_t ly)
-{
-    if (!(w.flags & kListVList) || (w.flags & kListNoScroll))
-        return false;
-    PTBitmap up = LookupBitmap((w.style.up + "U").c_str());
-    const SListBar bar = ListBarLayout(w, up ? up->height : 0);
-    if (lx < bar.x || lx >= bar.x + kListBarWidth || ly < bar.y || ly >= bar.y + bar.h)
-        return false;
-
-    const int32_t rowh    = (w.style.itemh > 0) ? w.style.itemh : 18;
-    const int32_t visible = (std::max)(1, (w.h - w.style.rect.t - w.style.rect.b) / rowh);
-    const int32_t maxTop  = (std::max)(0, static_cast<int32_t>(w.rows.size()) - visible);
-    int32_t top = w.scrolltop;
-    if (ly < bar.trackTop)
-        --top;
-    else if (ly >= bar.trackBottom)
-        ++top;
-    else if (ly < bar.thumbY)
-        top -= visible;
-    else if (ly >= bar.thumbY + bar.thumbH)
-        top += visible;
-    w.scrolltop = std::clamp(top, 0, maxTop);
-    return true;
-}
-
 // REVSYNC: the scrollbar's press (OPTIONS.md §8). On an arrow it waits for
 // the release, which steps by 1 (0x0042f249); on the thumb it drags
-// (0x0042f2e0); on the track it pages toward the pointer by the page size,
-// with a click (0x0042f16d-0x0042f1fa).
-void TDefPane::PressSlider(int32_t index, int32_t lx, int32_t ly)
+// (0x0042f2e0); elsewhere on the bar it pages toward the pointer, with a
+// click (0x0042f16d-0x0042f1fa).
+void TDefPane::PressBar(int32_t index, int32_t lx, int32_t ly)
 {
     SDefWidget& w = widgets[index];
-    const SSliderBar bar = SliderLayout(w);
-    const int32_t at = bar.vertical ? ly : lx;
-    if (bar.dec && at < bar.decEnd)
+    const SBarLayout bar = BarLayout(w);
+    if (HitBitmap(bar.up, bar.upX, bar.upY, lx, ly))
     {
-        arrowSlider = index;
+        arrowBar = index;
         arrowStep = -1;
     }
-    else if (bar.inc && at >= bar.incStart)
+    else if (HitBitmap(bar.down, bar.downX, bar.downY, lx, ly))
     {
-        arrowSlider = index;
+        arrowBar = index;
         arrowStep = 1;
     }
-    else if (bar.thumb && at >= bar.thumbPos && at < bar.thumbPos + bar.thumbLen)
+    else if (bar.showThumb && HitBitmap(bar.thumb, bar.thumbX, bar.thumbY, lx, ly))
     {
-        draggingSlider = index;
-        dragGrab = at - bar.thumbPos;
+        draggingBar = index;
+        dragGrab = w.bar.vertical ? ly - bar.thumbY : lx - bar.thumbX;
     }
     else
     {
+        const int32_t at = w.bar.vertical ? ly : lx;
+        const int32_t thumb = w.bar.vertical ? bar.thumbY : bar.thumbX;
         PlayClick();
-        ChangeSlider(w, at < bar.thumbPos ? w.value - w.page : w.value + w.page);
+        ChangeBar(w, at < thumb ? w.bar.value - w.bar.page : w.bar.value + w.bar.page);
     }
+    SetDirty(true);
 }
 
 // The held thumb follows the pointer, the place it was taken staying under
 // it; the value is the nearest to where the thumb sits.
-void TDefPane::DragSlider(SDefWidget& w, int32_t lx, int32_t ly)
+void TDefPane::DragBar(SDefWidget& w, int32_t lx, int32_t ly)
 {
-    const SSliderBar bar = SliderLayout(w);
-    if (bar.travel <= 0)
+    const SBarLayout bar = BarLayout(w);
+    const int32_t travel = bar.trackEnd - bar.trackStart;
+    if (travel <= 0)
         return;
-    const int32_t pos = std::clamp((bar.vertical ? ly : lx) - dragGrab - bar.travelStart, 0, bar.travel);
-    ChangeSlider(w, w.minval + (pos * (w.maxval - w.minval) + bar.travel / 2) / bar.travel);
+    const int32_t pos = std::clamp((w.bar.vertical ? ly : lx) - dragGrab, bar.trackStart, bar.trackEnd) - bar.trackStart;
+    ChangeBar(w, w.bar.minval + (pos * (w.bar.maxval - w.bar.minval) + travel / 2) / travel);
 }
 
-void TDefPane::ReleaseSliderArrow(int32_t lx, int32_t ly)
+void TDefPane::ReleaseBarArrow(int32_t lx, int32_t ly)
 {
-    if (arrowSlider >= 0 && arrowSlider < static_cast<int32_t>(widgets.size()))
+    if (arrowBar >= 0 && arrowBar < static_cast<int32_t>(widgets.size()))
     {
-        SDefWidget& w = widgets[arrowSlider];
-        const SSliderBar bar = SliderLayout(w);
-        const int32_t at = bar.vertical ? ly : lx;
-        if (w.Contains(lx, ly) && (arrowStep < 0 ? at < bar.decEnd : at >= bar.incStart))
-            ChangeSlider(w, w.value + arrowStep);
+        SDefWidget& w = widgets[arrowBar];
+        const SBarLayout bar = BarLayout(w);
+        const bool onArrow = arrowStep < 0 ? HitBitmap(bar.up, bar.upX, bar.upY, lx, ly)
+                                           : HitBitmap(bar.down, bar.downX, bar.downY, lx, ly);
+        if (onArrow)
+            ChangeBar(w, w.bar.value + arrowStep);
+        SetDirty(true);
     }
-    arrowSlider = -1;
+    arrowBar = -1;
     arrowStep = 0;
 }
 
@@ -1424,35 +1691,97 @@ SDefWidget* TDefPane::EditingWidget()
     return nullptr;
 }
 
+// The widget a click goes to (retail's base click 0x00436530 hit-tests in
+// DEF order): the first one shown under the pointer.
+int32_t TDefPane::WidgetAt(int32_t lx, int32_t ly) const
+{
+    for (size_t i = 0; i < widgets.size(); ++i)
+        if (!widgets[i].hidden && widgets[i].Contains(lx, ly))
+            return static_cast<int32_t>(i);
+    return -1;
+}
+
+bool TDefPane::InListBar(const SDefWidget& w, int32_t lx, int32_t ly)
+{
+    return w.type == EDefWidget::Listbox && w.style.hasScrollbar && lx >= w.bar.x && ly >= w.bar.y &&
+           lx < w.bar.x + w.bar.w && ly < w.bar.y + w.bar.h;
+}
+
 void TDefPane::OnMouseDown(int32_t lx, int32_t ly)
 {
-    draggingSlider = -1;
-    arrowSlider = -1;
+    draggingBar = -1;
+    arrowBar = -1;
     // REVSYNC: 0x00436530 -- a press outside the EDIT being edited ends its
     // editing.
     for (SDefWidget& w : widgets)
         if (w.focused && !w.Contains(lx, ly))
             w.focused = false;
 
-    for (size_t i = 0; i < widgets.size(); ++i)
-    {
-        SDefWidget& w = widgets[i];
-        if (w.disabled || !w.Contains(lx, ly)) continue;
-        switch (w.type)
-        {
-            case EDefWidget::Button:    w.pressed = true;           break;
-            case EDefWidget::Edit:      w.focused = true;           break;   // 0x00432ab0
-            case EDefWidget::Listbox:
-                if (!ClickListScrollbar(w, lx, ly))
-                    ClickListRow(w, lx, ly);
-                break;
-            case EDefWidget::Scrollbar:
-                PressSlider(static_cast<int32_t>(i), lx, ly);
-                break;
-            default: break;
-        }
-    }
+    const int32_t index = WidgetAt(lx, ly);
+    if (index < 0)
+        return;
     SetDirty(true);
+    SDefWidget& w = widgets[static_cast<size_t>(index)];
+    // REVSYNC: 0x004369f0 -- the press offers the widget the focus, with
+    // "frontend_move" unless it has it; only a CTRLFLAG_SELECTABLE one keeps
+    // it, so a DEF screen's widgets sound on every press.
+    if (!w.faceUp && index != focusWidget)
+    {
+        PLAY("frontend_move");
+        if (w.flags & kCtrlSelectable)
+            focusWidget = index;
+    }
+    if (w.disabled)
+        return;
+
+    switch (w.type)
+    {
+        case EDefWidget::Button:
+            // REVSYNC: 0x0042d4b0 -- a toggle changes on the press, with the
+            // click (a radio button only turns on) and its event (0xbb9 /
+            // 0xbba); a push button goes down until the release.
+            if (w.flags & kBtnToggle)
+            {
+                PlayClick();
+                const bool on = (w.flags & kBtnRadio) ? true : !w.selected;
+                if (on != w.selected)
+                {
+                    w.selected = on;
+                    if (on && (w.flags & kBtnRadio))
+                        for (SDefWidget& other : widgets)
+                            if (&other != &w && other.type == EDefWidget::Button && other.group == w.group)
+                                other.selected = false;
+                    const std::string name = w.name;
+                    Activate(name.c_str());
+                }
+            }
+            else
+                w.pressed = true;
+            break;
+        case EDefWidget::Edit:
+            // REVSYNC: 0x004329f0 -- editing begins (the EDIT takes the
+            // focus), the caret's blink from its start.
+            if (!(w.flags & kEditNoEdit) && !w.focused)
+            {
+                w.focused = true;
+                w.focusTime = TTime::Time();
+                focusWidget = index;
+            }
+            break;
+        case EDefWidget::Listbox:
+            // REVSYNC: list MouseClick @ 0x00431500 -- its scrollbar first,
+            // else the item under the pointer is selected.
+            if (InListBar(w, lx, ly))
+                PressBar(index, lx, ly);
+            else if (!(w.flags & kListViewOnly))
+                ClickListItem(w, lx, ly);
+            break;
+        case EDefWidget::Scrollbar:
+            PressBar(index, lx, ly);
+            break;
+        default:
+            break;
+    }
 }
 
 // REVSYNC: DefWidget_DispatchInput @ 0x004361f0. The EDIT being edited takes
@@ -1494,7 +1823,7 @@ void TDefPane::OnKey(int32_t vk, bool down)
     };
     for (const SDefWidget& w : widgets)
     {
-        if (w.type != EDefWidget::Button || w.disabled || !isKeyOf(w))
+        if (w.type != EDefWidget::Button || w.hidden || w.disabled || !isKeyOf(w))
             continue;
         const std::string name = w.name;
         if (!w.faceUp)
@@ -1504,35 +1833,61 @@ void TDefPane::OnKey(int32_t vk, bool down)
     }
 }
 
+// The release goes to what holds the mouse -- a push button held, a
+// scrollbar arrow -- else to the widget under the pointer.
+// REVSYNC: 0x0042d4b0 (release) -- a push button held comes up, and fires
+// with the click when the pointer is still on it.
 const char* TDefPane::OnMouseUp(int32_t lx, int32_t ly)
 {
-    draggingSlider = -1;
-    ReleaseSliderArrow(lx, ly);
+    draggingBar = -1;
+    SetDirty(true);
+    bool held = false;
     const char* activated = nullptr;
     for (SDefWidget& w : widgets)
     {
-        if (w.type != EDefWidget::Button) continue;
-        if (w.pressed && w.Contains(lx, ly))
+        if (w.type != EDefWidget::Button || !w.pressed) continue;
+        held = true;
+        if (w.Contains(lx, ly))
         {
             activated = w.name.c_str();
-            if (w.flags & kBtnToggle)        // checkbox: flip on click
-                w.selected = !w.selected;
-            if (!w.faceUp)                   // a DEF button (0x0042d4b0)
+            if (!w.faceUp)
                 PlayClick();
         }
         w.pressed = false;
     }
-    SetDirty(true);
-    return activated;
+    if (held)
+        return activated;
+    if (arrowBar >= 0)
+    {
+        ReleaseBarArrow(lx, ly);
+        return nullptr;
+    }
+
+    // REVSYNC: list MouseClick @ 0x00431572 (release) -- "click1" anywhere
+    // in the list, and on an item its selection and event 5002.
+    const int32_t index = WidgetAt(lx, ly);
+    if (index < 0)
+        return nullptr;
+    SDefWidget& list = widgets[static_cast<size_t>(index)];
+    if (list.type == EDefWidget::Listbox && !list.disabled && !InListBar(list, lx, ly))
+    {
+        PlayClick();
+        if (const int32_t item = ListItemAt(list, lx, ly); item >= 0)
+        {
+            SetSelection(list, item);
+            OnListClick(list, item);
+        }
+    }
+    return nullptr;
 }
 
 void TDefPane::OnMouseMove(int32_t lx, int32_t ly)
 {
-    if (draggingSlider >= 0 && draggingSlider < static_cast<int32_t>(widgets.size()))
-        DragSlider(widgets[draggingSlider], lx, ly);
+    if (draggingBar >= 0 && draggingBar < static_cast<int32_t>(widgets.size()))
+        DragBar(widgets[draggingBar], lx, ly);
 
     for (SDefWidget& w : widgets)
-        w.hovered = (w.type == EDefWidget::Button && !w.disabled && w.Contains(lx, ly));
+        w.hovered = (w.type == EDefWidget::Button && !w.hidden && !w.disabled && w.Contains(lx, ly));
 }
 
 void TDefPane::PlayClick() const
@@ -1593,6 +1948,9 @@ void TDefPane::Pulse()
 {
     if (finishing && FadeLevel() <= 0.0f)
         RequestEnd();
+    // The caret blinks while an EDIT is edited.
+    if (EditingWidget())
+        SetDirty(true);
 }
 
 void TDefPane::Compose()

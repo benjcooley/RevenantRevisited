@@ -490,10 +490,26 @@ class TMapPane : public TPane
       // Likewise for FindObjectsInRange (retail 0x00452060)
     using MapObjectsSeam = std::vector<TObjectInstance*> (*)(int32_t level, const SRect& maprect, int32_t objset);
     static inline MapObjectsSeam mapObjectsSeam = nullptr;
-      // Retail A/B fixtures only: when set, it hands FindObjectsInRange the
-      // objects its map iterator would (retail's seam at the iterator,
-      // 0x0044cf80 / 0x0044d080): `level`'s loaded objects of `objset`
-      // in the map rect, in walk order
+      // Retail A/B fixtures only: when set, it hands ForObjectsIn the objects
+      // its map iterator would (retail's seam at the iterator, 0x0044cf80 /
+      // 0x0044d080): `level`'s loaded objects of `objset` in the map rect, in
+      // walk order
+    template <class Visit>
+    static void ForObjectsIn(int32_t level, SRect maprect, int32_t objset, Visit&& visit)
+    {
+        if (mapObjectsSeam)
+        {
+            for (TObjectInstance* o : mapObjectsSeam(level, maprect, objset))
+                visit(o);
+            return;
+        }
+        for (TMapIterator i(level, &maprect, CHECK_NOINVENT, objset); i; i++)
+            visit(i.Item());
+    }
+      // Calls visit(object) for each object of `objset` in the map rect on
+      // `level`'s loaded sectors, faces included, no inventories, in walk
+      // order: retail's map iterator over a rect and a level (0x0044ceb0 /
+      // 0x0044cf80, flags 0xe0 or 0x6e0; 0x0044d080 steps it)
     TObjectInstance* ObjectInCube(PS3DRect cube, int32_t level, int32_t objset = OBJSET_ALL);
         // The first object on level inside the cube, faces included, from
         // the level's loaded sectors (a CUBE trigger's search)

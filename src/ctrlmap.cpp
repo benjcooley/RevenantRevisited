@@ -377,7 +377,7 @@ void TControlMap::Clear()
 // Gets a keycode id given the ascii string name
 int32_t TControlMap::GetKeyCode(char *name)
 {
-    if (name[1] == '\0' && (name[0] >= 'A' && name[0] <= 'Z'))
+    if (name[1] == '\0' && ((name[0] >= 'A' && name[0] <= 'Z') || (name[0] >= '0' && name[0] <= '9')))
         return name[0];
     if (name[1] == '\0' && (name[0] >= 'a' && name[0] <= 'z'))
         return name[0] - 'a' + 'A';
@@ -391,10 +391,11 @@ int32_t TControlMap::GetKeyCode(char *name)
 }
 
 // Gets a string name given the keycode id
+// REVSYNC: 0x004396b0 -- letters and digits name themselves.
 char *TControlMap::GetKeyName(int32_t keycode)
 {
     static char buf[2];
-    if (keycode >= 'A' && keycode <= 'Z')
+    if ((keycode >= 'A' && keycode <= 'Z') || (keycode >= '0' && keycode <= '9'))
     {
         buf[0] = (char)keycode;
         buf[1] = '\0';

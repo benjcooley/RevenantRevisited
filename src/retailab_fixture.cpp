@@ -211,6 +211,7 @@ void ReadCharData(const JsonValue& c, SCharData& cd)
     cd.combatrangemin = two[0], cd.combatrangemax = two[1];
     ReadInt(c["maxattackrange"], cd.maxattackrange);
     ReadInt(c["bleeder"], cd.bleeder);
+    ReadInt(c["health"], cd.health);                   // a character's MaxHealth
     ReadInt(c["mana"], cd.mana);                       // a character's MaxMana (retail +0x1e0)
     ReadText(c["bodytype"], cd.bodytype, sizeof(cd.bodytype));
     int32_t block[3] = {cd.blockfreq, cd.blockmin, cd.blockmax};
@@ -507,6 +508,11 @@ void SetMapObjects(std::vector<SMapObject> objects)
 size_t SeamCount()
 {
     return g_seams.size();
+}
+
+const std::vector<std::string>& Seams()
+{
+    return g_seams;
 }
 
 void WriteSeamsSince(JsonOut& j, size_t first)

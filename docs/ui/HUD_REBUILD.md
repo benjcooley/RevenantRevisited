@@ -598,6 +598,45 @@ retail slot, max health / mana, the class) and the fixture answers with
 it, so the A/B checks the interpreter, the formulas and the layout. The text
 is compared structurally against retail's GDI calls (`gdi_draws`).
 
+## 6g. P5 design: the DEF screens (Options)
+
+**What retail draws and does.** The DEF engine
+([forensics/DEF_ENGINE.md](forensics/DEF_ENGINE.md)) and the Options
+pane's controller list and key rebind
+([gameflow/forensics/OPTIONS_CONTROLS.md](../gameflow/forensics/OPTIONS_CONTROLS.md)),
+both from the disassembly and confirmed with `slots/hud/options.py`
+(retail's own Options pane, 0x0066fcc0, driven through its MouseClick,
+MouseMove and KeyPress). In short:
+- Every widget draws through the text compose with its own computed flags
+  and rect.
+- Frames are tiled, never stretched, and overhang their rect by MARGINS.
+- Scrollbars are their art's height, with the parts at their parsed places.
+- The controller list is a 2-column grid of key cells (the names are the
+  `name0..7` TEXT widgets beside it).
+- CLEARBG widgets restore their rect from the pane background, erasing what
+  earlier widgets drew there.
+- A key cell rebinds by a chord captured after a release on it.
+
+**Port.** `TDefPane` (`src/defpane.*`) was rewritten to those rules; lists
+take their text from the pane's field getter (`FieldText`), as retail's do.
+`TOptionsPane` gets the key cells (`Cont-A`), the names and the rebind
+state machine with its conflict pass. `Renderer::ClearRectToTarget` (a
+replace-blend quad) lets a restore set a rect back to the background.
+`hud_ab.py options` over `--test=ab-options` covers:
+- the title screen with several settings;
+- clicks on a toggle, a slider's track and arrow;
+- the list's arrow and track;
+- a held and a clicked key cell;
+- four rebinds.
+
+It compares the pixels, the text structurally (`text_draws`), the members,
+the rebind buffer and the capture state.
+
+**Retail bug, reported, not reproduced:** the alpha blitter drops blits
+under 4 px wide (0x004b3539), which leaves a 2 px gap in the list frame's
+edges. The fixture lists the dropped blits; the A/B reports their pixels
+as `known_retail_bugs.narrow_alpha` instead of comparing them.
+
 ## 7. Status
 
 - 2026-10-07: survey done; retail pipeline verified (§3); P0 started.
@@ -815,3 +854,25 @@ is compared structurally against retail's GDI calls (`gdi_draws`).
   - Found on the way: clearing a pane's buttons by count never ends
     (TPointerArray leaves holes); `TButtonPane::ClearButtons` (0x00436890)
     does it as Close does.
+- 2026-10-13: **P5: the Options screen done** (it was laid out by
+  approximation, stretched its frames and didn't rebind keys as retail did).
+  - `TDefPane` draws by retail's DEF engine rules (§6g,
+    forensics/DEF_ENGINE.md); `TOptionsPane` has retail's key cells, name
+    column and rebind; the port's control table is retail's (0x005d5500).
+    The other DEF screens (save, load, in-game menu, popups) draw by the same
+    rules.
+  - `hud_ab.py options`: 18/18 cases (title and in-game, settings, clicks,
+    list scrolling, cell selection, four rebinds), no defects. Every text
+    draw is structurally identical, and the members, rebind buffer and
+    capture state match retail after each case.
+  - Text, P6 in part: `DrawTextComposed` is retail's compose (0x004be2b0)
+    with its flags; GDI's advance widths (hdmx where the face has them) are
+    generated into `src/gdimetrics.inc` from the emulator's GDI
+    (`slots/hud/gdi_metrics.py`), and the A/B compares each line's place.
+  - Retail bug, reported, not reproduced: the 2D alpha blitter drops blits
+    under 4 px wide (0x004b3539); the Options list's frame loses 2 px of its
+    edges on the title screen. `known_retail_bugs.narrow_alpha` in the
+    report.
+  - Found on the way: digit keys had no name in the port's control map, so
+    "1".."6" bindings neither showed nor saved; GetKeyName / GetKeyCode name
+    them as retail's 0x004396b0 does.
