@@ -19,7 +19,7 @@ it has got.
 | Dialog choices | `talk … choose …`, digit keys | P0 | done (the opening's menus) |
 | Story checks | `expect`; every story-variable change logged | P0 | done |
 | Milestone saves | `save`, filed in the waypoint catalogue | P0 | done |
-| Travel between places | proven walks, real travel time (§5) | P1 | in progress |
+| Travel between places | proven walks, real travel time (§5) | P1 | same level done; through doors by their scripts (S1 passes) |
 | Doors, keys, levers | `use … with …`, transitions (§5.3) | P1 | — |
 | Town teleports | stones in the route graph (§5.3) | P1 | — |
 | Fights on the way | travel and evade (§5.5) | P1–P3 | — |
@@ -42,7 +42,7 @@ it has got.
 | Learning combos | Jong's lessons when due: AttackLevel, the lesson move landed (§8.5) | P4 | — |
 | Using combos in fights | chain attacks keyed inside their windows (§6.4) | P2 | — |
 | Grinding by level, back to town | §8.5 | P4 | — |
-| Story locations that change the town | the story-trigger map and gate (§9.4) | P5 | agent mapping |
+| Story locations that change the town | the story-trigger map and gate (§9.4) | P5 | mapped (STORY_TRIGGERS.md); gate to build |
 
 ## P0 Spine
 
@@ -63,7 +63,7 @@ it has got.
 
 | Status | Item | Last touched |
 |---|---|---|
-| [ ] | Walk field per level with the `Blocked` rule; regions by flood fill; world version | — |
+| [x] | Walk field per level with the game's standing test (`GetWalkHeightRadius`); regions; A*; `TSector::WalkmapVersion`; `TGameMap::FindSector` is a grid lookup (level 0 in ~0.5 s) | 2026-10-13 |
 | [ ] | Blocker overlay: closed doors and gates, NOWALK barriers, barrier effects; `nav-discrepancy` findings | — |
 | [ ] | Transition graph: exit.def exits with locks and keys | — |
 | [ ] | Script scan: `pos` on the player in CUBE, USE, ACTIVATE and DIALOG blocks; conditional edges tried live | — |
@@ -71,8 +71,8 @@ it has got.
 | [ ] | Encounters on the route: monsters already there (sight, LineOfSight), priced by the duel model | — |
 | [ ] | Travel modes: `travel` fights every monster on the leg; `evade` runs and fights ⌈N·share⌉, at least one; the policy's choice | — |
 | [ ] | Generator encounters on the route: exposure × slot frequency, real spawns through `TMonsterGen` (after P3) | — |
-| [ ] | Travel time from Locke's real walk and run speeds; run/walk pacing by fatigue; the leg's ticks run at the destination | — |
-| [ ] | Proofs in the log; a teleport without a proof is a violation | — |
+| [x] | Travel time from Locke's real speeds (`walkf` 5.71, `runf` 8.93 units a tick); run/walk pacing by fatigue; the walk's ticks pass before he arrives | 2026-10-13 |
+| [x] | Proofs in the log (path sampled every 256 units); the ledger accepts a jump only where a proven travel said he'd land | 2026-10-13 |
 | [ ] | Gate: the Keep chain's walks; tower door refused without key 42 | — |
 
 ## P2 Duel
@@ -123,7 +123,7 @@ it has got.
 | [ ] | `tools/shadow/ahkuilon.plan`, S0–S15 | — |
 | [ ] | Readiness levels from the duel model | — |
 | [ ] | Stage-end checks: NPCs alive, keep list, control | — |
-| [~] | Story-trigger map: `tools/shadow/storymap.py`, STORY_TRIGGERS.md (forensics agent running) | 2026-10-13 |
+| [x] | Story-trigger map: `tools/shadow/storymap.py`, STORY_TRIGGERS.md | 2026-10-13 |
 | [ ] | Story-trigger coverage gate: every required writer hit, town readers ran after | — |
 | [ ] | Script coverage report | — |
 | [ ] | Gate: new game to credits; every milestone saved and load-checked | — |
