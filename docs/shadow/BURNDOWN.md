@@ -122,6 +122,7 @@ it has got.
 
 | Status | Item | Last touched |
 |---|---|---|
+| [x] | Player walkthroughs gathered and checked against STORY.md: WALKTHROUGH.md (eight guides; the route, readiness, answers to STORY.md §8) | 2026-10-14 |
 | [ ] | `tools/shadow/ahkuilon.plan`, S0–S15 | — |
 | [ ] | Readiness levels from the duel model | — |
 | [ ] | Stage-end checks: NPCs alive, keep list, control | — |
@@ -137,6 +138,17 @@ it has got.
 | [ ] | 20-seed sweep | — |
 | [ ] | Waypoints load in retail (emulator or DOSBox lab) | — |
 | [ ] | A local CI target for machines with the game data | — |
+
+## Needs the walkthroughs turned up
+
+| Status | Item | Last touched |
+|---|---|---|
+| [ ] | Item-on-item combining (an ingredient onto an Empty Vial makes the vial, S9; also Angsaar): does the port support it? A verb `combine` | — |
+| [ ] | Bows in the duel: the longbow and ice arrows beat the Solifuge in every guide (S7) | — |
+| [ ] | Widowett must die for the amulet's chest (S5) | — |
+| [ ] | Spell recipes in talisman order: the port matches in order (`spell.cpp:371`); confirm retail does | — |
+| [ ] | `POISONCHANCE` is read from char.def but nothing applies it in the port's combat: forensics, then the duel | — |
+| [ ] | Retail's dragon-room save bug (Sidious and his loot come back on reload): the plan never saves there | — |
 
 ## Findings
 
