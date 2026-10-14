@@ -8,6 +8,7 @@
 #include "shadowledger.h"
 #include "shadowlog.h"
 #include "shadowloot.h"
+#include "shadowstate.h"
 #include "shadowtravel.h"
 
 #include "../container.h"
@@ -468,6 +469,7 @@ class TSaveRunner final : public TShadowStepRunner
         waypoint.fatigue = {Player->Fatigue(), Player->MaxFatigue()};
         waypoint.xp = {Player->Level(), Player->Exp(), Player->NextExp()};
         waypoint.gold = Player->GetInventoryAmount("Gold");
+        waypoint.state = ShadowStateJson(*Player);
         context.waypoints.push_back(waypoint);
         context.log.Event("save", "\"" + slot + "\"", [&](JsonOut& out) {
             out.FieldString("name", step.name);

@@ -44,6 +44,7 @@ struct SShadowWaypoint
     std::array<int32_t, 2> health{}, mana{}, fatigue{};   // value, maximum
     std::array<int32_t, 3> xp{};                          // level, experience, next level's
     int32_t               gold = 0;
+    std::string           state;    // all of him, as JSON (shadowstate.h)
 };
 
 // What a step works with while it runs.
@@ -105,6 +106,17 @@ void ShadowPressKey(int32_t vk);
 // fighting Locke.
 [[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeFightRunner(const SShadowStep& step,
                                                                  std::vector<TCharacter*> foes = {});
+// Locke's odds against `foes` together, as he is now (shadowfight.cpp):
+// trial duels on copies (§6.4), the game untouched. Worth taking when he
+// wins nearly every one without losing most of the health he has.
+struct SShadowOdds
+{
+    int32_t wins     = 0;
+    int32_t trials   = 0;
+    int32_t meanloss = 0;       // health, on average
+    bool    take     = false;
+};
+[[nodiscard]] SShadowOdds ShadowSizeUp(const std::vector<TCharacter*>& foes, int64_t tick);
 // Grinding for a level (shadowgrind.cpp).
 [[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeGrindRunner(const SShadowStep& step);
 // Whether anything near Locke is fighting him (§6.5).

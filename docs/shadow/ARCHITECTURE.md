@@ -316,6 +316,13 @@ than he can spare, or when they are worth little (monsters whose Value is
 far below his level give almost no experience, GRIND.md §1.2). Otherwise
 he travels and fights, and the route becomes part of the grind.
 
+**A guarded way.** Before a leg's fight, trial duels (§6.4,
+`ShadowSizeUp`) size up the monsters that meet him. If he would lose, he
+runs past and sizes up the share that would still catch him. If he would
+lose that too, the travel fails as *guarded*, as a player turns back:
+the grind leaves that site for later, and a plan step fails with the
+odds, which says the plan reached it under-levelled.
+
 This compresses the generators' clocks: in retail a generator that has
 been away from Locke for long only restarts its clock on the first pulse
 (GRIND.md §3.1), so a quick pass spawns less. That is the price of not
@@ -1032,6 +1039,16 @@ variables and the world. The check proves the round trip:
 - They must agree item for item, stat for stat, spell for spell, and Locke
   must be on the same level near the same place. Any difference is a
   save/load bug, reported by field.
+
+As built (`shadowstate.cpp`, `tools/shadow/shadow.py --check`): the state
+is one JSON object in `waypoints.json` per save. It holds every item
+where it is (`pack 4`, `belt 1`, `equip 2`, `pack 3 / Spell Pouch 0`),
+attributes, skills with their experience, level-up picks, known and quick
+spells, and every story variable. The reload must match it exactly,
+except that position may move 32 units, health and mana 2 points, and
+fatigue (which refills in seconds) only its maximum is compared. The
+first six saves of the plan, Rahul to Elahni's potions, come back
+unchanged.
 
 ## 11. Time
 

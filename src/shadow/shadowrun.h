@@ -33,6 +33,10 @@ struct SShadowOptions
     std::string until;              // --shadow-until=<stage>: stop after it
     uint32_t    seed    = 1;        // --seed
     bool        lenient = false;    // --shadow-lenient: log violations, don't stop
+    // --shadow-verify=<file>: no plan; once the save --quickstart names has
+    // loaded and settled, Locke's state (shadowstate.h) goes to <file> and
+    // the game quits -- the reload half of the save round trip (§10).
+    std::string verify;
 };
 
 class TShadowRun
@@ -62,6 +66,7 @@ class TShadowRun
     void Finish(int32_t code, const std::string& why);
     void WriteSummary(const std::string& why) const;
     void WriteWaypoints() const;
+    void Verify();
 
     // The window is there to be watched, not played: a draw costs tens of
     // milliseconds on a big level, so the simulation gets most of the frame
@@ -92,6 +97,7 @@ class TShadowRun
     std::vector<std::string>           stagesdone;
     std::set<int32_t>                  surveyed;   // levels whose chests are logged
     int32_t                            tidied = -1; // the ledger's items version the pack was put in order at
+    int32_t                            settled = 0; // verifying: idle ticks since the load
 
     // Turbo: the steps a frame runs, and when this frame's began.
     int32_t                               steps = 1;

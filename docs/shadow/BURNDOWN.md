@@ -143,7 +143,8 @@ it has got.
 |---|---|---|
 | [ ] | 20-seed sweep | — |
 | [ ] | Waypoints load in retail (emulator or DOSBox lab) | — |
-| [ ] | Save round trip: the ledger's snapshot plus equipment and known spells recorded at each save; `--shadow-verify=<slot>` writes it from a fresh load; shadow.py --check compares field by field | — |
+| [x] | Save round trip: Locke's whole state (every item where it is, bags and belt and equipment, stats, skills, picks, spells, quick spells, story variables) recorded at each save; `--shadow-verify=<file>` with `--quickstart=<slot>` writes it from a fresh load; `shadow.py --check` compares field by field. The plan's first six saves come back unchanged | 2026-10-14 |
+| [x] | A guarded way: trial duels size up a leg's fight; he runs past what he'd lose to, and turns back (travel fails as guarded) when even that is lost. Death ends the run | 2026-10-14 |
 | [ ] | Play styles (§8.4): `style` / `--shadow-style` = melee, hands, bow, spells, mixed: readying, duel tactics, level-up picks, shopping, spells | — |
 | [ ] | Bows in the duel: bow-mode shots while a monster closes (needed for the Solifuge anyway) | — |
 | [ ] | Spells in the duel (§6.8): CastByName, the static TSpell::Damage, buffs | — |

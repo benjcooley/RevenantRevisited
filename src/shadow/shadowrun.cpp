@@ -9,6 +9,7 @@
 
 #include "shadowloot.h"
 #include "shadowpack.h"
+#include "shadowstate.h"
 
 #include "../buysell.h"
 #include "../gameflow.h"
@@ -24,6 +25,7 @@
 #include <cctype>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <sstream>
 
 TShadowRun Shadow;
@@ -50,6 +52,13 @@ std::string Timestamp()
 bool TShadowRun::Configure(const SShadowOptions& given)
 {
     options = given;
+    if (!options.verify.empty())
+    {
+        SetDeterministicRun(true);
+        active = true;
+        log_info("[smoke] verifying the save: Locke's state to %s", options.verify.c_str());
+        return true;
+    }
     std::string error;
     if (!plan.Load(options.plan, error))
     {
@@ -117,6 +126,11 @@ void TShadowRun::Pulse()
     }
 
     ++tick;
+    if (!options.verify.empty())
+    {
+        Verify();
+        return;
+    }
     log.SetTick(tick);
     if (!begun)
         Begin();
@@ -129,6 +143,13 @@ void TShadowRun::Pulse()
     else if (ledger.Audit(*Player, tick, log) > 0 && !options.lenient)
     {
         Finish(2, "the ledger found a change with no cause");
+        return;
+    }
+
+    // Death ends the run (reloading the last waypoint is to come, §6.6).
+    if (Player->Health() <= 0 && ShadowGameIdle())
+    {
+        Finish(1, "Locke died");
         return;
     }
 
@@ -258,6 +279,27 @@ void TShadowRun::RunSteps()
     }
 }
 
+void TShadowRun::Verify()
+{
+    // The game's own settling first: the load done, control Locke's, and a
+    // second more for whatever the level's scripts do on arrival.
+    constexpr int32_t kSettleTicks = 24;
+    if (!ShadowGameIdle())
+    {
+        settled = 0;
+        return;
+    }
+    if (++settled < kSettleTicks)
+        return;
+    std::ofstream file(options.verify, std::ios::binary);
+    file << ShadowStateJson(*Player) << "\n";
+    finished = true;
+    exitcode = file ? 0 : 1;
+    if (!file)
+        log_error("[smoke] can't write %s", options.verify.c_str());
+    sapp_request_quit();
+}
+
 void TShadowRun::Finish(int32_t code, const std::string& why)
 {
     if (finished)
@@ -330,6 +372,7 @@ void TShadowRun::WriteWaypoints() const
         out.Key("xp").Begin('[').Value(w.xp[0]).Value(w.xp[1]).Value(w.xp[2]).End(']');
         out.Field("gold", w.gold);
         out.End('}');
+        out.Key("state").Raw(w.state);
         out.End('}');
     }
     out.End(']');

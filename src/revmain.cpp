@@ -1560,6 +1560,7 @@ void GetParameters(int argc, char **argv)
         "loadmap", "lang", "test", "level", "resolution", "res",
         "cinematic", "menu", "exec", "vfx-lighting-mode", "partsys-quality", "partsys-incoming-blend",
         "seed", "combattrace", "combattrace-rng", "shadow", "shadow-out", "shadow-stage", "shadow-until",
+        "shadow-verify",
         "vfx-review-speed", "vfx-review-watcher-rate", "vfx-review-ratio", "vfx-review-spacing",
         "vfx-review-gap", "vfx-review-offset", "vfx-review-effects",
         "vfx-review-spacing-overrides",
@@ -1620,6 +1621,13 @@ void GetParameters(int argc, char **argv)
             if (Shadow.Configure(shadow))
                 StartupQuickstart = true;
             else
+                sapp_request_quit();
+        }
+        // --shadow-verify=<file> with --quickstart=<slot>: the save's
+        // reload, checked against what the run recorded (§10).
+        else if (arg_param(cmd, "shadow-verify", shadow.verify))
+        {
+            if (!Shadow.Configure(shadow))
                 sapp_request_quit();
         }
     }

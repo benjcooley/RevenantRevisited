@@ -430,18 +430,44 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
                       met.end());
             if (!met.empty() && met.front().index < stop)
             {
-                const size_t fights = evade ? ShadowEvadeShare(met, context.nav.Gait(context.log).run)
-                                            : size_t(std::count_if(met.begin(), met.end(), [&](const SShadowEncounter& e) {
-                                                  return e.index == met.front().index;
-                                              }));
-                for (size_t k = 0; k < fights && k < met.size(); ++k)
-                    meeting.push_back(met[k].monster);
-                evaded = evade;
+                // Those that meet him first, or evading the share that
+                // still catches him. A fight he would lose he runs past
+                // instead, if what still catches him is one he'd win;
+                // failing that, the way is guarded and he turns back.
+                const size_t together = size_t(std::count_if(met.begin(), met.end(), [&](const SShadowEncounter& e) {
+                    return e.index == met.front().index;
+                }));
+                const size_t share = ShadowEvadeShare(met, context.nav.Gait(context.log).run);
+                auto foes = [&](size_t n) {
+                    std::vector<TCharacter*> out;
+                    for (size_t k = 0; k < n && k < met.size(); ++k)
+                        if (TCharacter* foe = met[k].monster.Get())
+                            out.push_back(foe);
+                    return out;
+                };
+                bool running = evade;
+                SShadowOdds odds = ShadowSizeUp(foes(running ? share : together), context.tick);
+                if (!odds.take && !running)
+                {
+                    running = true;
+                    odds = ShadowSizeUp(foes(share), context.tick);
+                }
+                if (!odds.take)
+                {
+                    guarded = true;
+                    failure = "the way to " + target + " is guarded: " + std::to_string(met.size()) +
+                              " monsters, and Locke wins " + std::to_string(odds.wins) + " of " +
+                              std::to_string(odds.trials) + " trials against those that would catch him";
+                    return EShadowStatus::Failed;
+                }
+                for (TCharacter* foe : foes(running ? share : together))
+                    meeting.push_back(foe);
+                evaded = running;
                 crossing.clear();
                 stop = met.front().index;
                 context.log.Event("encounter", std::to_string(met.size()) + " monsters on the way to " + target +
                                                    "; Locke fights " + std::to_string(meeting.size()) +
-                                                   (evade ? " (evading)" : ""));
+                                                   (running ? " (evading)" : ""));
             }
         }
         if (stop < path->points.size())

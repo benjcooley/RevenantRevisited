@@ -38,6 +38,10 @@ constexpr int32_t kDropTicks = 2 * kTicksPerSecond;
 // Drops land within about twice a body's radius, gold 30 off (DropLoot).
 constexpr int32_t kLootRange = 128;
 constexpr int32_t kMaxFoes = 32;
+// Sizing a fight up: this many trial duels, and what makes it one to take.
+constexpr int32_t kTrials = 24;
+constexpr int32_t kWinsNeeded = 22;             // of kTrials
+constexpr int32_t kWorstLossPct = 70;           // of his health, on average
 
 std::string Lower(const char* s)
 {
@@ -212,6 +216,23 @@ class TFightRunner final : public TShadowStepRunner
 std::unique_ptr<TShadowStepRunner> MakeFightRunner(const SShadowStep& step, std::vector<TCharacter*> foes)
 {
     return std::make_unique<TFightRunner>(step, foes);
+}
+
+SShadowOdds ShadowSizeUp(const std::vector<TCharacter*>& foes, int64_t tick)
+{
+    SShadowOdds odds;
+    int32_t lost = 0;
+    for (int32_t k = 0; k < kTrials; ++k)
+    {
+        TShadowDuel trial(TShadowDuel::EMode::Trial, SShadowTactics{}, uint32_t(tick * 31 + k));
+        const SShadowFightReport report = trial.Fight(*Player, foes, tick, nullptr, nullptr);
+        odds.wins += report.won;
+        lost += report.suffered;
+    }
+    odds.trials = kTrials;
+    odds.meanloss = lost / kTrials;
+    odds.take = odds.wins >= kWinsNeeded && odds.meanloss * 100 <= Player->Health() * kWorstLossPct;
+    return odds;
 }
 
 bool ShadowUnderAttack()

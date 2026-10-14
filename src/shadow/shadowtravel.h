@@ -100,6 +100,9 @@ class TShadowTravel
     EShadowStatus Pulse(SShadowContext& context, std::string& failure);
     // The object travelled to (nullptr for a point, or once it is gone).
     [[nodiscard]] TObjectInstance* Object() const { return object.Get(); }
+    // Failed because the way is held by monsters Locke wouldn't beat, even
+    // running past them: a player turns back there (§5.5).
+    [[nodiscard]] bool Guarded() const { return guarded; }
 
   private:
     enum class EStage : uint8_t { Plan, Walk, Arrive, Through, Crossing, Fighting, Done };
@@ -113,6 +116,7 @@ class TShadowTravel
 
     std::string      target;
     bool             evade  = false;
+    bool             guarded = false;
     EArrive          arrive = EArrive::Beside;
     bool             viaexit = false;   // through an exit: it takes him on
     bool             viadoor = false;   // ... a scripted door, used once he is there

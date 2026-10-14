@@ -30,7 +30,6 @@
 
 #include "shadowsteps.h"
 
-#include "shadowduel.h"
 #include "shadowencounters.h"
 #include "shadowledger.h"
 #include "shadowlog.h"
@@ -65,10 +64,6 @@ constexpr int32_t kRevisitTicks = 2 * 60 * kTicksPerSecond;
 constexpr int32_t kFarmNear = 650;
 constexpr int32_t kFarmFar = 800;
 constexpr int32_t kFarmTicks = 100 * kTicksPerSecond;
-// Sizing a fight up: this many trial duels, and what makes it one to take.
-constexpr int32_t kTrials = 24;
-constexpr int32_t kWinsNeeded = 22;             // of kTrials
-constexpr int32_t kWorstLossPct = 70;           // of his health, on average
 // He tops up below this share of his health, food first out of a fight;
 // with nothing to, he rests to this share. Health comes back about a point
 // a minute (GRIND.md §6.1): a rest is long, and has stuck when this long
@@ -338,7 +333,10 @@ class TGrindRunner final : public TShadowStepRunner
         const EShadowStatus status = travel->Pulse(context, why);
         if (status == EShadowStatus::Failed)
         {
-            // Somewhere he can't walk to: leave the site be for a while.
+            if (Player->Health() <= 0)
+                return Fail(why);
+            // Somewhere he can't walk to, or not past what guards the way:
+            // leave the site be for a while.
             context.log.Event("grind", "can't reach the site: " + why);
             visited.push_back({site.centre, context.tick});
             stage = EStage::Assess;
@@ -386,22 +384,13 @@ class TGrindRunner final : public TShadowStepRunner
     // Would he beat it as he is? Trial duels on copies (§6.4).
     bool SizeUp(TCharacter& monster, SShadowContext& context)
     {
-        int32_t wins = 0, lost = 0;
-        for (int32_t k = 0; k < kTrials; ++k)
-        {
-            TShadowDuel trial(TShadowDuel::EMode::Trial, SShadowTactics{}, uint32_t(context.tick * 31 + k));
-            const SShadowFightReport report = trial.Fight(*Player, {&monster}, context.tick, nullptr, nullptr);
-            wins += report.won;
-            lost += report.suffered;
-        }
-        const int32_t meanloss = lost / kTrials;
-        const bool take = wins >= kWinsNeeded && meanloss * 100 <= Player->Health() * kWorstLossPct;
+        const SShadowOdds odds = ShadowSizeUp({&monster}, context.tick);
         const std::string name = ToUtf8(monster.GetName() && monster.GetName()[0] ? monster.GetName()
                                                                                     : monster.GetTypeName());
-        context.log.Event("sizeup", name + ": won " + std::to_string(wins) + "/" + std::to_string(kTrials) +
-                                        ", losing " + std::to_string(meanloss) + " health on average: " +
-                                        (take ? "fight" : "leave it"));
-        return take;
+        context.log.Event("sizeup", name + ": won " + std::to_string(odds.wins) + "/" + std::to_string(odds.trials) +
+                                        ", losing " + std::to_string(odds.meanloss) + " health on average: " +
+                                        (odds.take ? "fight" : "leave it"));
+        return odds.take;
     }
 
     EShadowStatus Fight(SShadowContext& context)
@@ -521,6 +510,8 @@ class TGrindRunner final : public TShadowStepRunner
             if (status == EShadowStatus::Running)
                 return status;
             travel.reset();         // got there, or rests where he stands
+            restgain = context.tick;
+            resthealth = Player->Health();
         }
         if (Player->Health() * 100 >= Player->MaxHealth() * kRestedPct)
         {
@@ -530,12 +521,12 @@ class TGrindRunner final : public TShadowStepRunner
             stage = EStage::Assess;
             return EShadowStatus::Running;
         }
+        // A fight on the way to a quiet spot can set him back; only a rise
+        // counts as the rest working.
         if (Player->Health() > resthealth)
-        {
-            resthealth = Player->Health();
             restgain = context.tick;
-        }
-        else if (context.tick - restgain > kRestStuckTicks)
+        resthealth = Player->Health();
+        if (context.tick - restgain > kRestStuckTicks)
             return Fail("his health stopped coming back resting (" + std::to_string(Player->Health()) + "/" +
                         std::to_string(Player->MaxHealth()) + ")");
         return EShadowStatus::Running;
