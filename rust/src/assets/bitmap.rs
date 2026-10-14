@@ -18,6 +18,45 @@ pub struct Bitmap {
 }
 
 impl Bitmap {
+    /// FONT_DRAWMODE draws the keyed interior, then its anti-aliased edge.
+    /// The edge stream skips opaque interior pixels, so alias-only decoding
+    /// would hollow out glyphs; pixel-only decoding loses most large letters.
+    pub(crate) fn decode_glyph(data: Bytes<'_>, at: usize) -> Result<Self> {
+        let mut bitmap = Self::decode(data, at, false)?;
+        if data.u32(at + 16)? & 128 != 0 && data.relative(at + 32)?.is_some() {
+            bitmap.overlay_alias(data, at)?;
+        }
+        Ok(bitmap)
+    }
+    fn overlay_alias(&mut self, data: Bytes<'_>, at: usize) -> Result<()> {
+        let rgb565 = data.u32(at + 16)? & 4 != 0;
+        let start = data.relative(at + 32)?.context("missing alias stream")?;
+        let mut stream = Reader::new(data.slice(start, data.u32(at + 28)? as usize)?);
+        for y in 0..self.height {
+            let mut code = stream.u8()?;
+            if code == 255 {
+                break;
+            }
+            let mut x = 0;
+            while code != 254 {
+                ensure!(code != 255, "alias end-of-data inside row");
+                x += usize::from(code);
+                let run = usize::from(stream.u8()?);
+                ensure!(x + run <= self.width, "alias run exceeds bitmap width");
+                for _ in 0..run {
+                    let color = stream.u16()?;
+                    let coverage = u32::from(stream.u8()?);
+                    ensure!(coverage <= 31, "invalid alias coverage");
+                    self.pixels[y * self.width + x] =
+                        (coverage * 255 / 31) << 24 | decode_color(color, rgb565);
+                    x += 1;
+                }
+                code = stream.u8()?;
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn decode(data: Bytes<'_>, at: usize, alias: bool) -> Result<Self> {
         data.slice(at, 72)?;
         let width = data.i32(at)?;
@@ -39,30 +78,7 @@ impl Bitmap {
         };
         let rgb565 = flags & 4 != 0;
         if alias && flags & 128 != 0 {
-            let start = data.relative(at + 32)?.context("missing alias stream")?;
-            let mut stream = Reader::new(data.slice(start, data.u32(at + 28)? as usize)?);
-            for y in 0..height {
-                let mut code = stream.u8()?;
-                if code == 255 {
-                    break;
-                }
-                let mut x = 0;
-                while code != 254 {
-                    ensure!(code != 255, "alias end-of-data inside row");
-                    x += usize::from(code);
-                    let run = usize::from(stream.u8()?);
-                    ensure!(x + run <= width, "alias run exceeds bitmap width");
-                    for _ in 0..run {
-                        let color = stream.u16()?;
-                        let coverage = u32::from(stream.u8()?);
-                        ensure!(coverage <= 31, "invalid alias coverage");
-                        bitmap.pixels[y * width + x] =
-                            (coverage * 255 / 31) << 24 | decode_color(color, rgb565);
-                        x += 1;
-                    }
-                    code = stream.u8()?;
-                }
-            }
+            bitmap.overlay_alias(data, at)?;
             return Ok(bitmap);
         }
         let bits = flags & 7;
@@ -157,6 +173,23 @@ mod tests {
             [0xffddaa55, 0x88000000]
         );
         assert!(Bitmap::decode(Bytes(&data[..data.len() - 1]), 0, false).is_err());
+    }
+    #[test]
+    fn font_glyph_preserves_interior_and_overlays_alias_coverage() {
+        let mut data = fixture(0x82, &[0x7fff; 4]);
+        data[28..32].copy_from_slice(&9u32.to_le_bytes());
+        data[32..36].copy_from_slice(&48i32.to_le_bytes());
+        data.extend([1, 2, 0, 0x7c, 15, 0, 0x7c, 0, 254]);
+        assert_eq!(
+            Bitmap::decode_glyph(Bytes(&data), 0).unwrap().pixels,
+            [0xfff8f8f8, 0x7bf80000, 0x00f80000, 0xfff8f8f8]
+        );
+        assert_eq!(
+            Bitmap::decode(Bytes(&data), 0, true).unwrap().pixels,
+            [0, 0x7bf80000, 0x00f80000, 0]
+        );
+        data.truncate(data.len() - 1);
+        assert!(Bitmap::decode_glyph(Bytes(&data), 0).is_err());
     }
     #[test]
     fn separate_alpha_and_explicit_alias_path() {

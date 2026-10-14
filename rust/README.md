@@ -11,9 +11,10 @@ uses authored motion and terrain collision. Desktop frames present through wgpu
 and winit. The software renderer, CPU UI compositor, minifb presenter and backend
 selector have been removed.
 
-Combat, scripts, save games, sector streaming, gameplay effect controllers and
-gameplay-driven UI/audio remain outside this rendering implementation.
-Exploration stays inside the loaded neighborhood.
+An opt-in game mode adds title/loading screens, owned exploration sessions,
+pause/resume, options, and confirmed return-to-title/exit. Combat, scripts, save
+games, sector streaming, gameplay effect controllers and gameplay-driven UI/audio
+remain unported. Exploration stays inside the loaded neighborhood.
 
 ## Run
 
@@ -41,6 +42,50 @@ cannot load its LLVM library.
 ```sh
 ./scripts/cargo.sh run --release
 ```
+
+## Screens and gameflow
+
+```sh
+cargo run --release -- --game
+cargo run --release -- --game --quickstart --sector 0_2_25 --radius 1
+```
+
+`--game` opens the retail title menu. New Game loads the selected neighborhood,
+spawns Locke on valid ground, and opens the HUD. The title and progress bar use
+`menus.dat` and `loadbar.dat`; pause, options and confirmation dialogs use the
+retail font. Menus support mouse press/release and Up/Down/Enter/Escape. Load Game
+is disabled until saved-game support exists.
+
+During play, WASD or held right mouse moves; Shift/R runs; the wheel zooms.
+Escape pauses, and loss of window focus also pauses. F1 toggles the HUD, H toggles
+the sidebar, and E/K/B/I/M/P select its panes. F9 toggles mute; F12 saves a capture.
+Options change volume, mute and shadows when Apply is selected; Cancel discards the draft.
+Settings last for the application run. Quit Module returns to the title after
+confirmation; Exit Program confirms before closing a live game.
+
+Loading advances through catalog, sector, walkmap, player and interface phases,
+with a rendered progress screen between phases. Escape cancels loading. Errors
+return to the title and release partially loaded state. Pause and modal dialogs
+freeze the 24 Hz simulation; resuming discards paused time and mouse capture.
+Ending or restarting a session releases its world, player, HUD and source cache.
+
+This is an exploration session, not yet the retail campaign startup: it does not
+load `newgame.sav`, run the introduction or scripts, or initialize combat/quests.
+A death/restart transition is available for future combat integration.
+
+The asset-free flow/input tests run in the normal platform CI matrix. With retail
+data installed, exercise cancellation, failure recovery, asset release, pause
+timing, restart, native art and menu hit testing:
+
+```sh
+cargo test --test gameflow -- --ignored --test-threads=1
+cargo run -- --game --game-smoke --muted
+```
+
+The desktop smoke drives the real session and window loop through two games,
+pause/resume, options and confirmations, checks that modal screens do not tick,
+and writes `captures/game-*.png`. The retail integration test also writes
+`captures/screens-*.png` at 320×240, 640×480 and 1024×768.
 
 ## Linux and Windows
 

@@ -63,6 +63,13 @@ pub struct Pointer {
 }
 
 impl Pointer {
+    /// A screen transition cancels capture but retains physical button state.
+    /// Holding a button across a modal boundary cannot create a world press.
+    pub fn cancel_capture(&mut self) {
+        self.capture = [None; 3];
+        self.position = None;
+    }
+
     /// `down` is left/right/middle. Map window coordinates into the framebuffer
     /// with `render::camera::viewport_cursor` before updating this state.
     pub fn update(
@@ -207,6 +214,24 @@ fn native_facing([dx, dy]: [i64; 2]) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn screen_transition_requires_a_fresh_press() {
+        let mut pointer = Pointer::default();
+        let point = Some([10.0; 2]);
+        pointer.update(point, [true; 3], true, true);
+        pointer.cancel_capture();
+        let held = pointer.update(point, [true; 3], true, false);
+        for button in [held.left, held.right, held.middle] {
+            assert!(!button.held && !button.pressed && !button.released);
+            assert_eq!(button.target, None);
+        }
+        let release = pointer.update(point, [false; 3], true, false);
+        assert!(!release.left.released);
+        let fresh = pointer.update(point, [true; 3], true, false);
+        assert!(fresh.left.pressed_on(Target::World));
+        assert!(fresh.held_over(fresh.right, Target::World));
+    }
 
     #[test]
     fn press_capture_prevents_click_through_and_keeps_button_edges_separate() {

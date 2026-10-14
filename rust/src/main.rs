@@ -32,12 +32,23 @@ use std::{
 
 #[cfg(feature = "desktop")]
 mod desktop;
+#[cfg(feature = "desktop")]
+mod game_app;
 
 /// Revenant Revisited — Rust retail-sector renderer and data tools.
 #[derive(Parser, Debug)]
 #[command(version, about)]
 #[command(group(ArgGroup::new("actor_preview").args(["mesh", "walk"])))]
 struct Args {
+    /// Open the title screen and start an exploration session through New Game.
+    #[arg(long, conflicts_with_all = ["headless", "inspect", "validate", "mesh", "walk", "animate"])]
+    game: bool,
+    /// Start loading immediately in game mode.
+    #[arg(long, requires = "game", conflicts_with = "game_smoke")]
+    quickstart: bool,
+    /// Exercise the desktop screen/session lifecycle, capture screens, then exit.
+    #[arg(long, requires = "game", conflicts_with = "frames")]
+    game_smoke: bool,
     /// Existing Revenant install; otherwise REVENANT_DATA_PATH or ../data.
     #[arg(long)]
     data: Option<PathBuf>,
@@ -328,6 +339,12 @@ fn run(args: Args) -> Result<()> {
         .clone()
         .or_else(|| std::env::var_os("REVENANT_REVISITED_PATH").map(PathBuf::from));
     let mut vfs = Vfs::open(root, &args.module, overlay.as_deref())?;
+    if args.game {
+        #[cfg(feature = "desktop")]
+        return game_app::run(&args, &mut vfs);
+        #[cfg(not(feature = "desktop"))]
+        anyhow::bail!("--game requires the desktop feature");
+    }
     let mut assets = AssetCache::default();
     let catalog = Catalog::parse(&vfs.read("class.def")?)?;
     println!("Catalog: {} object types", catalog.len());
@@ -1021,6 +1038,28 @@ fn desktop(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn game_mode_is_separate_from_preview_and_validation_tools() {
+        for args in [
+            vec!["revenant", "--game"],
+            vec!["revenant", "--game", "--quickstart"],
+            vec!["revenant", "--game", "--game-smoke"],
+            vec!["revenant", "--game", "--frames", "5"],
+        ] {
+            assert!(Args::try_parse_from(args).is_ok());
+        }
+        for args in [
+            vec!["revenant", "--quickstart"],
+            vec!["revenant", "--game-smoke"],
+            vec!["revenant", "--game", "--walk"],
+            vec!["revenant", "--game", "--validate"],
+            vec!["revenant", "--game", "--headless", "out.png"],
+            vec!["revenant", "--game", "--quickstart", "--game-smoke"],
+        ] {
+            assert!(Args::try_parse_from(args).is_err());
+        }
+    }
 
     #[test]
     fn equipment_arguments_require_an_actor_and_valid_slot_path_pairs() {

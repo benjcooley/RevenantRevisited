@@ -7,6 +7,7 @@
 //! Native pane artwork and layout; gameplay values arrive separately.
 pub mod batch;
 mod canvas;
+pub mod screens;
 
 use crate::{
     assets::{bitmap::Bitmap, font::Font, multi::Multi, vfs::Vfs},
@@ -208,6 +209,10 @@ impl Hud {
             message: "WASD / RIGHT MOUSE: WALK    F1: HUD    H: SIDEBAR    F9: SOUND".into(),
             muted: false,
         })
+    }
+    pub fn cancel_capture(&mut self) {
+        self.pressed = None;
+        self.hover = None;
     }
     pub fn layout(&self, viewport: [usize; 2]) -> Layout {
         Layout::new(viewport, self.visible, self.sidebar)
