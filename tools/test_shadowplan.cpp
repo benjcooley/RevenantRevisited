@@ -16,16 +16,18 @@
 
 namespace {
 
-// A plan written to a file of its own, removed afterwards.
+// A plan written to a file of its own, removed afterwards. ctest runs each
+// test in a process of its own, in parallel, so the name carries the test's.
 class PlanFile
 {
   public:
     explicit PlanFile(const std::string& text)
     {
         static int count = 0;
+        const ::testing::TestInfo* test = ::testing::UnitTest::GetInstance()->current_test_info();
         path = std::filesystem::temp_directory_path() /
-               ("test_shadowplan_" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) + "_" +
-                std::to_string(count++) + ".plan");
+               ("test_shadowplan_" + std::string(test ? test->name() : "none") + "_" + std::to_string(count++) +
+                ".plan");
         std::ofstream(path, std::ios::binary) << text;
     }
     ~PlanFile() { std::filesystem::remove(path); }
