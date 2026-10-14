@@ -115,7 +115,7 @@ player's input does:
 | `PickUp(item)` | `TCharacter::Pickup` | `pickup` (item, gold) |
 | `Equip(item)` / `Unequip(item)` | `TPlayer::Equip` / the unequip path | `equip` |
 | `Consume(item)` | `item->Use(Player, -1)`, i.e. `TFood::Use` | `consume` (health, mana, item) |
-| `Buy(row)` / `Sell(row)` | the shop's keys (row 1–3, A, arrows, E), through the input queue | `shop` (item, gold) |
+| `Buy(row)` / `Sell(row)` | the shop script's stock (talk, answer Buy or Sell), then the shop's own `TBuySellPane::Buy` / `Sell` per item, no drawer keys | `shop` (item, gold) |
 | `SkipMovie()` | Escape, through the input queue | — |
 | `Train(attr)` | `TPlayer::TrainStat` | `train` (level-up markers) |
 | `Invent(talismans)` | the spell pane's invoke: `SpellBook.Reveal`, `TPlayer::LearnSpell` | `learn` |

@@ -3,13 +3,14 @@
 // *       shadowshop.cpp - Shadow Smoke buys and sells at a merchant        *
 // *************************************************************************
 //
-// A purchase as a player makes one (docs/playtest/GRIND.md §7.3,
-// docs/shadow/ARCHITECTURE.md §8.1): walk up to the merchant and talk; the
-// shop script greets and offers Buy, Sell and Exit (BSBUY2, BSSELL2,
-// BSEXIT2); the answer opens the shop drawer (TBuySellPane) on its first
-// page with nothing selected. Its own keys then do the rest: the arrow pages
-// three rows at a time, 1-3 selects a row of the page, A buys or sells the
-// selection (a buy keeps it selected), E closes the drawer, and the menu's
+// A purchase (docs/playtest/GRIND.md §7, docs/shadow/ARCHITECTURE.md §8.1):
+// Locke walks up to the merchant and talks; the shop script greets him and
+// offers Buy, Sell and Exit (BSBUY2, BSSELL2, BSEXIT2). The answer runs the
+// script's half of the shop: its stock or the customer's sellable items go
+// into TBuySellPane, and `buysellscreen` puts them up. The trade itself is
+// the shop's own Buy and Sell, called per item rather than through the
+// drawer's keys -- the stock, the prices, the gold and free-slot checks and
+// the sold-unique bookkeeping are all theirs. Then Exit, and the menu's
 // third answer ends the conversation.
 
 #include "shadowsteps.h"
@@ -23,7 +24,6 @@
 #include "../player.h"
 #include "../playscreen.h"
 #include "../revenant.h"
-#include "../revtypes.h"
 #include "../textencoding.h"
 
 #include <algorithm>
@@ -31,7 +31,6 @@
 
 namespace {
 
-constexpr int32_t kRowsShown = 3;               // TBuySellPane::shown
 constexpr int32_t kAnswerBuy = 1;               // the shop menu: Buy, Sell, Exit
 constexpr int32_t kAnswerSell = 2;
 constexpr int32_t kAnswerLeave = 3;
@@ -43,6 +42,17 @@ std::string Lower(std::string s)
 {
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
     return s;
+}
+
+// The row of `name` (display or type name), -1 for none.
+int32_t FindRow(const std::string& name)
+{
+    const std::vector<SBuySellItem>& items = BuySellPane.Items();
+    const std::string wanted = Lower(name);
+    for (size_t i = 0; i < items.size(); ++i)
+        if (Lower(items[i].name) == wanted || Lower(items[i].type) == wanted)
+            return int32_t(i);
+    return -1;
 }
 
 class TShopRunner final : public TShadowStepRunner
@@ -78,7 +88,6 @@ class TShopRunner final : public TShadowStepRunner
         }
 
         case EStage::Greeting:
-            // The shop's three answers; buy or sell.
             if (!DialogPane.IsShowingResponses())
                 return EShadowStatus::Running;
             ShadowPressKey('0' + (buying ? kAnswerBuy : kAnswerSell));
@@ -87,54 +96,33 @@ class TShopRunner final : public TShadowStepRunner
 
         case EStage::Opening:
             // The shop is in use from `buysellinit`, before the script adds
-            // its rows; it's open once `buysellscreen` has the drawer up.
+            // its rows; they are all in once `buysellscreen` puts them up.
             if (!BuySellPane.IsActive() || PlayScreen.Drawer() != TPlayScreen::EDrawer::BuySell)
                 return EShadowStatus::Running;
-            return FindRow(context);
-
-        case EStage::Paging:
-            if (pages != 0)
-            {
-                ShadowPressKey(pages > 0 ? VK_DOWN : VK_UP);
-                pages += pages > 0 ? -1 : 1;
-                return EShadowStatus::Running;
-            }
-            ShadowPressKey('1' + row % kRowsShown);
-            gold = Player->GetInventoryAmount("Gold");
-            held = Player->GetInventoryAmount(step.item.c_str());
+            if (FindRow(step.item) < 0)
+                return Close(context, step.target + (buying ? " doesn't sell " : " won't buy ") + step.item);
+            Announce(context);
             stage = EStage::Trading;
             return EShadowStatus::Running;
 
         case EStage::Trading:
-            if (done < step.count)
-            {
-                // One a tick, each checked: a buy needs the gold and a free
-                // slot; a sale takes the row away, so each sale reselects.
-                const int32_t nowgold = Player->GetInventoryAmount("Gold");
-                const int32_t nowheld = Player->GetInventoryAmount(step.item.c_str());
-                if (pressed && nowgold == gold && nowheld == held)
-                    return StopTrading(context, buying ? "the purchase didn't go through (gold? a free slot?)"
-                                                       : "the sale didn't go through");
-                gold = nowgold;
-                held = nowheld;
-                if (pressed)
-                    ++done;
-                if (done >= step.count)
-                    return StopTrading(context, "");
-                if (!buying && pressed)
-                    return FindRow(context);      // the sold row is gone; find the next
-                ShadowPressKey('A');
-                pressed = true;
-                return EShadowStatus::Running;
-            }
-            return StopTrading(context, "");
-
-        case EStage::Closing:
-            // Exit ends the shop (the drawer keeps its mode as it closes).
-            if (BuySellPane.IsActive())
-                return EShadowStatus::Running;
-            stage = EStage::Leaving;
-            [[fallthrough]];
+        {
+            // One a tick, each checked against the gold and the pack.
+            const int32_t row = FindRow(step.item);
+            if (done >= step.count || row < 0)
+                return Close(context, done >= step.count ? "" : "none left to sell");
+            const int32_t gold = Player->GetInventoryAmount("Gold");
+            const int32_t held = Player->GetInventoryAmount(step.item.c_str());
+            if (buying)
+                BuySellPane.Buy(BuySellPane.Items()[size_t(row)]);
+            else
+                BuySellPane.Sell(row);
+            if (Player->GetInventoryAmount("Gold") == gold && Player->GetInventoryAmount(step.item.c_str()) == held)
+                return Close(context, buying ? "the purchase didn't go through (gold? a free slot?)"
+                                             : "the sale didn't go through");
+            ++done;
+            return EShadowStatus::Running;
+        }
 
         case EStage::Leaving:
             if (!DialogPane.IsShowingResponses())
@@ -159,74 +147,38 @@ class TShopRunner final : public TShadowStepRunner
     }
 
   private:
-    enum class EStage : uint8_t { Go, Greeting, Opening, Paging, Trading, Closing, Leaving, Settling };
+    enum class EStage : uint8_t { Go, Greeting, Opening, Trading, Leaving, Settling };
 
-    // The row of the item, and the pages down to it from the first.
-    EShadowStatus FindRow(SShadowContext& context)
+    // The ledger is told the whole trade before the first of it.
+    void Announce(SShadowContext& context)
     {
-        const std::vector<SBuySellItem>& items = BuySellPane.Items();
-        const std::string wanted = Lower(step.item);
-        row = -1;
-        for (size_t i = 0; i < items.size(); ++i)
-            if (Lower(items[i].name) == wanted || Lower(items[i].type) == wanted)
-            {
-                row = int32_t(i);
-                break;
-            }
-        if (row < 0)
-        {
-            std::string rows;
-            for (const SBuySellItem& item : items)
-                rows += (rows.empty() ? "" : ", ") + ToUtf8(item.name.c_str()) + " [" + ToUtf8(item.type.c_str()) + "]";
-            return StopTrading(context, step.target + (buying ? " doesn't sell " : " won't buy ") + step.item +
-                                            " (rows: " + rows + ")");
-        }
-        const SBuySellItem& item = items[size_t(row)];
-        if (!announced)
-        {
-            const int32_t left = step.count - done;
-            if (buying)
-                context.ledger.AllowItems("buy " + step.item, {{Lower(item.type.empty() ? item.name : item.type), left}},
-                                          0, context.tick + kShopLimitTicks);
-            else
-                context.ledger.AllowItems("sell " + step.item, {}, item.price * left, context.tick + kShopLimitTicks);
-            context.log.Event(buying ? "buy" : "sell",
-                              ToUtf8(item.name.c_str()) + " x" + std::to_string(left) + " at " +
-                                  std::to_string(item.price) + " gold each");
-            announced = true;
-        }
-        // The drawer opens on its first page; a sale clears the selection and
-        // leaves the page where it was. Page from where it is to the row's.
-        pages = row / kRowsShown - page;
-        page = row / kRowsShown;
-        pressed = false;
-        stage = EStage::Paging;
-        return EShadowStatus::Running;
+        const SBuySellItem& item = BuySellPane.Items()[size_t(FindRow(step.item))];
+        if (buying)
+            context.ledger.AllowItems("buy " + step.item,
+                                      {{Lower(item.type.empty() ? item.name : item.type), step.count}}, 0,
+                                      context.tick + kShopLimitTicks);
+        else
+            context.ledger.AllowItems("sell " + step.item, {}, item.price * step.count, context.tick + kShopLimitTicks);
+        context.log.Event(buying ? "buy" : "sell", ToUtf8(item.name.c_str()) + " x" + std::to_string(step.count) +
+                                                       " at " + std::to_string(item.price) + " gold each");
     }
 
-    EShadowStatus StopTrading(SShadowContext& context, const std::string& why)
+    EShadowStatus Close(SShadowContext& context, const std::string& why)
     {
         failure = why;
         context.log.Event(buying ? "bought" : "sold",
                           step.item + " x" + std::to_string(done) + (why.empty() ? "" : ": " + why));
-        ShadowPressKey('E');
-        stage = EStage::Closing;
+        BuySellPane.Exit();
+        stage = EStage::Leaving;
         return EShadowStatus::Running;
     }
 
     TShadowTravel travel;
-    bool          buying    = true;
-    EStage        stage     = EStage::Go;
-    int32_t       age       = 0;
-    int32_t       row       = -1;
-    int32_t       page      = 0;
-    int32_t       pages     = 0;
-    int32_t       done      = 0;
-    int32_t       gold      = 0;
-    int32_t       held      = 0;
-    int32_t       settled   = 0;
-    bool          pressed   = false;
-    bool          announced = false;
+    bool          buying  = true;
+    EStage        stage   = EStage::Go;
+    int32_t       age     = 0;
+    int32_t       done    = 0;
+    int32_t       settled = 0;
     std::string   failure;
 };
 

@@ -99,6 +99,15 @@ class TBuySellPane : public TDefPane
 
     [[nodiscard]] const std::vector<SBuySellItem>& Items() const { return items; }
 
+    // The trade itself, as the Activate button runs it on the selection
+    // (Transact), for callers that trade without the drawer's keys (Shadow
+    // Smoke). Buy: one of the row, if the customer has the gold and a free
+    // slot (the stock is endless). Sell: the customer's item of row `index`,
+    // whose row then goes. Exit: the shop is done (0x00530570).
+    void Buy(const SBuySellItem& item);
+    void Sell(int32_t index);
+    void Exit();
+
     // TPane
     void Pulse() override;
     void Compose() override;
@@ -135,9 +144,6 @@ class TBuySellPane : public TDefPane
     void ScrollUp();                                                   // 0x0052fe90
     void ScrollDown();                                                 // 0x0052fee0
     void Transact();                                                   // 0x0052ff40
-    void Buy(const SBuySellItem& item);
-    void Sell(int32_t index);
-    void Exit();                                                       // 0x00530570
     void Say(const std::string& tag) const;
     void ClampSelection();
 

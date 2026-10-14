@@ -82,6 +82,11 @@ class TShadowLedger final : public TScript::IStepObserver
     // A verb is about to bring Locke these items (by lower-case name) and
     // this much gold: gains up to them are accepted until tick `until`.
     void AllowItems(std::string cause, std::map<std::string, int32_t> items, int32_t gold, int64_t until);
+    // Training is setting the level-up picks: they may change until `until`.
+    void AllowTraining(int64_t until) { traininguntil = until; }
+    // Food or a potion is about to give health and mana: up to these, above
+    // regeneration, until `until`.
+    void AllowVitals(std::string cause, int32_t health, int32_t mana, int64_t until);
 
     // Compares the player with the last snapshot and logs every change with
     // its cause. Returns the number of violations found.
@@ -122,5 +127,14 @@ class TShadowLedger final : public TScript::IStepObserver
     std::set<std::string>         scripts;          // run since the last audit
     std::vector<STravel>          travels;          // proven, not yet landed
     std::vector<SItems>           gifts;            // registered, not yet arrived
+    int64_t                       traininguntil = -1;
+    struct SVitals
+    {
+        std::string cause;
+        int32_t     health = 0;
+        int32_t     mana   = 0;
+        int64_t     until  = 0;
+    };
+    std::vector<SVitals>          meals;
     int32_t                       violations = 0;
 };

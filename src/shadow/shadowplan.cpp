@@ -320,6 +320,49 @@ bool ParseStep(const std::string& verb, TLineReader& in, SShadowStep& step, std:
         step.target = merchant->text;
         return true;
     }
+    if (verb == "equip" || verb == "unequip" || verb == "consume")
+    {
+        step.verb = verb == "equip" ? EShadowVerb::Equip : verb == "unequip" ? EShadowVerb::Unequip
+                                                                              : EShadowVerb::Consume;
+        const SToken* item = in.Take();
+        if (!item || !in.AtEnd())
+        {
+            error = "'" + verb + "' takes one item";
+            return false;
+        }
+        step.item = item->text;
+        return true;
+    }
+    if (verb == "train")
+    {
+        // The attributes by the stat page's short names or in full.
+        static const char* const kNames[][2] = {{"strn", "strength"}, {"cons", "constitution"},
+                                                {"agil", "agility"},  {"rflx", "reflexes"},
+                                                {"mind", "mind"},     {"luck", "luck"}};
+        step.verb = EShadowVerb::Train;
+        while (const SToken* t = in.Take())
+        {
+            const std::string word = Lower(t->text);
+            int32_t found = -1;
+            for (int32_t i = 0; i < 6; ++i)
+                if (word == kNames[i][0] || word == kNames[i][1])
+                    found = i;
+            if (found < 0)
+            {
+                error = "'train' takes attributes (strn cons agil rflx mind luck), not '" + t->text + "'";
+                return false;
+            }
+            step.attributes.push_back(found);
+        }
+        if (step.attributes.empty() || step.attributes.size() > 2)
+        {
+            error = "'train' takes one or two attributes";
+            return false;
+        }
+        if (step.attributes.size() == 1)
+            step.attributes.push_back(step.attributes[0]);
+        return true;
+    }
     if (verb == "talk")
     {
         step.verb = EShadowVerb::Talk;
@@ -396,6 +439,14 @@ std::string SShadowStep::Describe() const
         case EShadowVerb::Take:   out << "take " << target << (item.empty() ? "" : " with \"" + item + "\""); break;
         case EShadowVerb::Buy:    out << "buy \"" << item << "\" " << count << " from " << target; break;
         case EShadowVerb::Sell:   out << "sell \"" << item << "\" " << count << " to " << target; break;
+        case EShadowVerb::Equip:   out << "equip \"" << item << "\""; break;
+        case EShadowVerb::Unequip: out << "unequip \"" << item << "\""; break;
+        case EShadowVerb::Consume: out << "consume \"" << item << "\""; break;
+        case EShadowVerb::Train:
+            out << "train";
+            for (const int32_t a : attributes)
+                out << ' ' << a;
+            break;
         case EShadowVerb::Expect: out << "expect " << condition.Describe(); break;
         case EShadowVerb::Save:   out << "save \"" << name << '"'; break;
     }

@@ -61,4 +61,7 @@ stage potions "Elahni's potions"
     travel  healerin                    # Elahni's door
     buy     "Lesser Healing" 1 from ELAHNI1
     expect  have "Lesser Healing" >= 2
+    equip   "Short Sword"
+    consume "Apple"
+    train   strn agil                   # the next level-ups: Strength and Agility
     save    "first potions"

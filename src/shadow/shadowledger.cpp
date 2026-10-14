@@ -145,6 +145,11 @@ int32_t TShadowLedger::Explain(const std::string& item, int32_t gain, std::strin
     return gain;
 }
 
+void TShadowLedger::AllowVitals(std::string cause, int32_t health, int32_t mana, int64_t until)
+{
+    meals.push_back({std::move(cause), health, mana, until});
+}
+
 void TShadowLedger::BeforeLine(TScript& script, int32_t)
 {
     const TScriptProto* proto = script.GetScriptProto();
@@ -265,8 +270,14 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
         gain(kSkillNames[i], last.skills[i], now.skills[i]);
         gain((std::string(kSkillNames[i]) + " exp").c_str(), last.skillexp[i], now.skillexp[i]);
     }
-    if (now.levelup != last.levelup && !scripted && now.level == last.level)
-        Violation(log, "levelup", "the level-up markers changed with no cause");
+    if (now.levelup != last.levelup && now.level == last.level)
+    {
+        if (tick <= traininguntil)
+            log.Event("train", "the level-up picks are now " + std::string(kAttributeNames[now.levelup[0]]) + " and " +
+                                   kAttributeNames[now.levelup[1]]);
+        else if (!scripted)
+            Violation(log, "levelup", "the level-up markers changed with no cause");
+    }
 
     // ---- items ----
     std::set<std::string> names;
@@ -339,7 +350,21 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
     auto vital = [&](const char* field, int32_t was, int32_t is, int32_t value, int32_t rate, int32_t pct) {
         if (is <= was || scripted || levelled)
             return;
-        const int32_t bound = RegenBound(ticks, value, rate, pct);
+        int32_t bound = RegenBound(ticks, value, rate, pct);
+        // Food and potions: what they give, once.
+        const bool health = !strcmp(field, "health");
+        for (SVitals& meal : meals)
+        {
+            int32_t& gives = health ? meal.health : meal.mana;
+            if (gives <= 0 || !strcmp(field, "fatigue"))
+                continue;
+            const int32_t used = std::min(gives, std::max(0, is - was - bound));
+            gives -= used;
+            bound += used;
+            if (used > 0)
+                log.Event("gain", std::string(field) + " " + std::to_string(was) + " -> " + std::to_string(is) +
+                                      " by " + meal.cause);
+        }
         if (is - was > bound)
             Violation(log, "vital", std::string(field) + " " + std::to_string(was) + " -> " + std::to_string(is) +
                                     " in " + std::to_string(ticks) + " ticks (regeneration allows " +
@@ -355,5 +380,7 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
                   travels.end());
     gifts.erase(std::remove_if(gifts.begin(), gifts.end(), [&](const SItems& g) { return g.until < tick; }),
                 gifts.end());
+    meals.erase(std::remove_if(meals.begin(), meals.end(), [&](const SVitals& m) { return m.until < tick; }),
+                meals.end());
     return violations - before;
 }

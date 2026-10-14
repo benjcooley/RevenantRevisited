@@ -353,6 +353,59 @@ class TTakeRunner final : public TShadowStepRunner
     int32_t                   limit    = 0;
 };
 
+// The pack (§8.9, §8.10): equip and unequip through TPlayer::Equip, which
+// checks the slot with the game's own CanEquip; eat or drink through the
+// item's own Use (TFood::Use); the level-up picks through TrainStat, as the
+// Stats page's train buttons do.
+class TPackRunner final : public TShadowStepRunner
+{
+  public:
+    using TShadowStepRunner::TShadowStepRunner;
+
+    EShadowStatus Pulse(SShadowContext& context) override
+    {
+        if (step.verb == EShadowVerb::Train)
+        {
+            context.ledger.AllowTraining(context.tick + 1);
+            for (const int32_t attribute : step.attributes)
+                if (!Player->TrainStat(attribute))
+                    return Fail(std::string("can't train ") + kAttributeNames[attribute] + " (at 29 or more)");
+            return EShadowStatus::Done;
+        }
+        TObjectInstance* item = Player->FindObjInventory(step.item.c_str());
+        if (!item)
+            return Fail("Locke has no " + step.item);
+        switch (step.verb)
+        {
+            case EShadowVerb::Equip:
+                if (!Player->Equip(item, -1))
+                    return Fail("can't equip " + step.item);
+                context.log.Event("equip", step.item);
+                return EShadowStatus::Done;
+            case EShadowVerb::Unequip:
+            {
+                const int32_t slot = item->FindStat("EqSlot") >= 0 ? item->GetStat("EqSlot") : -1;
+                if (slot < 0 || !Player->Equip(nullptr, slot))
+                    return Fail("can't unequip " + step.item);
+                context.log.Event("unequip", step.item);
+                return EShadowStatus::Done;
+            }
+            case EShadowVerb::Consume:
+            {
+                const int32_t health = item->FindStat("Health") >= 0 ? item->GetStat("Health") : 0;
+                const int32_t mana = item->FindStat("Mana") >= 0 ? item->GetStat("Mana") : 0;
+                context.ledger.AllowVitals("consume " + step.item, health, mana, context.tick + 2);
+                context.log.Event("consume", step.item + ": up to " + std::to_string(health) + " health, " +
+                                                 std::to_string(mana) + " mana");
+                item->Use(Player, -1);
+                return EShadowStatus::Done;
+            }
+            default:
+                return Fail("not a pack step");
+        }
+    }
+};
+
 class TExpectRunner final : public TShadowStepRunner
 {
   public:
@@ -472,6 +525,10 @@ std::unique_ptr<TShadowStepRunner> MakeStepRunner(const SShadowStep& step)
         case EShadowVerb::Take:   return std::make_unique<TTakeRunner>(step);
         case EShadowVerb::Buy:
         case EShadowVerb::Sell:   return MakeShopRunner(step);
+        case EShadowVerb::Equip:
+        case EShadowVerb::Unequip:
+        case EShadowVerb::Train:
+        case EShadowVerb::Consume: return std::make_unique<TPackRunner>(step);
         case EShadowVerb::Expect: return std::make_unique<TExpectRunner>(step);
         case EShadowVerb::Save:   return std::make_unique<TSaveRunner>(step);
     }

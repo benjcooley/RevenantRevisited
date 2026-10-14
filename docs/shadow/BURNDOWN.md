@@ -107,7 +107,8 @@ it has got.
 | Status | Item | Last touched |
 |---|---|---|
 | [ ] | Retail `TFood::Use` (`0x0050e780`) | — |
-| [x] | `buy "<item>" [n] from <merchant>` / `sell ... to ...`: the merchant's real shop script and the drawer's own keys (pages, rows 1-3, A, E, then the menu's leave); the ledger allows exactly the purchase. Elahni sells Locke his second Lesser Healing for 250. Selling is written, not yet exercised | 2026-10-14 |
+| [x] | `buy "<item>" [n] from <merchant>` / `sell ... to ...`: the merchant's shop script sets up the stock (Buy/Sell answer), then the shop's own `TBuySellPane::Buy`/`Sell` per item and `Exit`, no drawer keys (the author's call, 2026-10-14); the ledger allows exactly the trade. Elahni sells Locke his second Lesser Healing for 250. Selling is written, not yet exercised | 2026-10-14 |
+| [x] | `equip`, `unequip` (TPlayer::Equip with the game's CanEquip), `consume` (the item's Use), `train` (TrainStat: the level-up picks); ledger causes for the picks and for what food gives | 2026-10-14 |
 | [ ] | Shopping list scored by the duel model; selling what is no longer useful (outgrown gear, spent keep-list items) | — |
 | [ ] | Level-up markers by style | — |
 | [ ] | Jong's lessons | — |
