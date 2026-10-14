@@ -538,10 +538,19 @@ The play loop gets them too. That closes the gap GRIND.md §10 lists.
 
 `TShadowPurse` shops when Locke is in town. In order:
 
-1. **Sell.** Sell every item that is not equipped, not a quest item (the
-   plan's keep list, plus `Value −1`), not better than what he wears,
-   and not a stack (selling a stack pays for one unit). Sell to the
-   merchant who buys that kind (GRIND.md §7.1).
+1. **Sell what is no longer useful.** That means:
+   - loot that is worse than what he wears;
+   - gear an upgrade has replaced (the old sword after the new one);
+   - spares beyond what the style needs (one backup weapon at most);
+   - keep-list items whose story use is behind him: the plan marks each
+     with the stage after which it may go.
+
+   Never sell anything equipped, anything the plan still needs, or
+   `Value −1` (unsellable). Never sell a stack while it is worth more
+   used than sold: selling a stack pays for one unit (GRIND.md §7.2).
+   Sell to the merchant who buys that kind (GRIND.md §7.1). A full pack
+   on a grind sends Locke to town early, so he never leaves loot behind
+   for want of room.
 2. **Healing stock.** The next grind session's expected health loss comes
    from the duel model against that site's monster mix. Buy enough Lesser
    Healing and Lesser Restoration to cover it, plus one spare. Healing
@@ -640,6 +649,35 @@ When Locke holds a combination that makes a spell he hasn't learned,
 Shadow knows the combinations from spell.def; a player would find them
 by trying. The new spell goes into a quick-spell slot if it is useful to
 the style: damage, a fist buff, healing, cure poison.
+
+### 8.7 Effects: poison and the rest
+
+Fights leave marks that outlast them, and Shadow lets them happen
+through the game's own state:
+
+- **Poison.** A poisoning attack (Arakna and Recluse cast SpiderPoison;
+  others carry poison damage) poisons Locke through the real spell or
+  damage path, which sets the character's poisoned flag. The poison then
+  bites through `PulseRecovery` while the ticks run, at 1.44 HP a second
+  less his resistance, and it can't kill (GRIND.md §6.1). Locke cures it
+  as a player does: a Cure Poison potion, an item with Poison, or the
+  Cure Poison spell once he has it. Otherwise he waits it out, if its
+  cost in health is less than the potion's in gold.
+- **Paralysis** sets `OF_PARALIZE` and holds Locke out of the fight:
+  the duel gives him no actions until the game clears it.
+- **Stat effects** (his buffs: Might, Fist Mastery, Swift Strike,
+  Regeneration, Troll Blood) go through the real `AddStatEffect` with
+  their TIME, so they expire on the real play clock. One is in force at
+  a time, as in the game. Tactics casts one before a hard fight when it
+  pays.
+- **Damage types.** Burn, freeze, magic and poison damage use the real
+  resistances, in `CalculateDamage` and `TSpell::Damage`.
+- **Monster spells** (Acolytes' heal, tornado and bolt; Druids; the
+  bosses) are cast through the real cast path at their `MAGICFREQ`, and
+  land as in §6.7.
+
+Knockback and stagger are positional, and the duel has no positions
+(§6.3), so it leaves them out.
 
 ## 9. The plan
 

@@ -8,6 +8,38 @@ README.md, then ARCHITECTURE.md, then this page, then
 Legend: `[ ]` open · `[~]` in progress · `[x]` done · `[!]` blocked (reason
 inline) · `[-]` cancelled. Dates are ISO.
 
+## What Locke does
+
+Every player activity the smoke must cover, where it lives and how far
+it has got.
+
+| Activity | How | Phase | Status |
+|---|---|---|---|
+| Scenes and cutscenes | `scene`; movies skipped with Escape | P0 | done (the opening) |
+| Dialog choices | `talk … choose …`, digit keys | P0 | done (the opening's menus) |
+| Story checks | `expect`; every story-variable change logged | P0 | done |
+| Milestone saves | `save`, filed in the waypoint catalogue | P0 | done |
+| Travel between places | proven walks, real travel time (§5) | P1 | in progress |
+| Doors, keys, levers | `use … with …`, transitions (§5.3) | P1 | — |
+| Town teleports | stones in the route graph (§5.3) | P1 | — |
+| Fights on the way | travel and evade (§5.5) | P1–P3 | — |
+| Fights | the duel model (§6) | P2 | — |
+| Getting poisoned, paralysed, buffed | real state through the duel (§8.7) | P2 | — |
+| Loot | real death drop, pick-up (§6.1) | P2 | — |
+| Monster generators | `TMonsterGen` (§7) | P3 | agent porting |
+| Levelling up | real `AwardKillExp` | P2 | — |
+| New stat points | `Train`: the level-up markers (§8.3) | P4 | — |
+| Buying armour, weapons, potions | the shop's keys (§8.1) | P4 | — |
+| Selling what is no longer useful | §8.1 | P4 | — |
+| Equipping gear | `Equip` (§3) | P4 | — |
+| Using potions and food | `Consume`, retail `TFood::Use` (§8.2) | P4 | agent porting `TFood::Use` |
+| Learning new spells | `Invent`: talisman combinations (§8.6) | P4 | — |
+| Readying spells | quick-spell slots (§8.6) | P4 | — |
+| Casting spells | `CastByName` in the duel (§6.7) | P2 | agent extracting the damage dice |
+| Jong's training | lessons when due (§8.5) | P4 | — |
+| Grinding by level, back to town | §8.5 | P4 | — |
+| Story locations that change the town | the story-trigger map and gate (§9.4) | P5 | agent mapping |
+
 ## P0 Spine
 
 | Status | Item | Last touched |
@@ -49,6 +81,7 @@ inline) · `[-]` cancelled. Dates are ISO.
 | [ ] | Tactics: rotation, counter timing, blocks, fatigue, potions, disengage; the 64-run size-up | — |
 | [ ] | Several monsters at once | — |
 | [ ] | Spells: `CastByName` and the pure part of `TSpell::Damage` | — |
+| [ ] | Effects: poison, paralysis, stat effects, damage types, monster spells (§8.7) | — |
 | [ ] | Calibration suite against the arena and player bot; tolerances | — |
 | [ ] | `--shadow-combat=real` | — |
 | [ ] | Gate: Rahul; the Keep chain complete | — |
@@ -67,7 +100,7 @@ inline) · `[-]` cancelled. Dates are ISO.
 |---|---|---|
 | [ ] | Retail `TFood::Use` (`0x0050e780`) | — |
 | [ ] | Public shop verbs (`Transact`, `Exit`); buy, sell | — |
-| [ ] | Shopping list scored by the duel model | — |
+| [ ] | Shopping list scored by the duel model; selling what is no longer useful (outgrown gear, spent keep-list items) | — |
 | [ ] | Level-up markers by style | — |
 | [ ] | Jong's lessons | — |
 | [ ] | Spell invention and quick-spell slots | — |
