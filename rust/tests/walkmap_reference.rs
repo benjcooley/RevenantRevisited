@@ -39,11 +39,12 @@ struct S3DPoint { int32_t x, y, z; S3DPoint(int32_t x, int32_t y, int32_t z):x(x
 #define GRIDSIZE 16
 #define GRIDMASK (~15)
 uint8_t DistTable[256][256];
-int32_t GetWalkHeight(const S3DPoint& p) {
+int32_t GetWalkHeight(const S3DPoint& p, int32_t level) {
+    if (level != 0 && level != 3) return 0;
     int x = (p.x + 8) >> 4, y = (p.y + 8) >> 4;
     if (x < 0 || x >= 64 || y < 0 || y >= 64) return 0;
     if (x == 21 || (y > 40 && x > 40)) return 0;
-    return 1 + ((x * 13 + y * 7) % 230);
+    return 1 + ((x * 13 + y * 7 + level * 17) % 230);
 }
 "#;
     let suffix = r#"
@@ -52,12 +53,13 @@ int main() {
     for (int x = 0; x < 256; ++x)
     for (int y = 0; y < 256; ++y)
         DistTable[x][y] = std::min(255, int(std::round(std::sqrt(double(x*x + y*y)))));
+    for (int level : {0, 3, 7})
     for (int x : {-9, 0, 7, 8, 127, 330, 511, 1008, 1016})
     for (int y : {0, 8, 255, 655, 1008})
     for (int radius : {-1, 0, 1, 8, 16, 32, 63, 111, 112, 113, 239, 240, 256, INT32_MAX}) {
         S3DPoint p(x,y,0); int hi, h; bool hole;
-        GetWalkHeightRadius(p, radius, hi, h, hole);
-        printf("%d %d %d %d %d %d\n", x, y, radius, h, hi, int(hole));
+        GetWalkHeightRadius(p, level, radius, hi, h, hole);
+        printf("%d %d %d %d %d %d %d\n", level, x, y, radius, h, hi, int(hole));
     }
 }
 "#;
@@ -79,30 +81,37 @@ int main() {
     let run = Command::new(binary).output()?;
     ensure!(run.status.success(), "native probe failed");
 
-    let mut map = WalkMap::new([SectorId::default()]);
-    let values = (0..64 * 64)
-        .map(|i| {
-            let (x, y) = (i % 64, i / 64);
-            if x == 21 || (y > 40 && x > 40) {
-                0
-            } else {
-                (1 + (x * 13 + y * 7) % 230) as u8
-            }
-        })
-        .collect();
-    map.stamp(
-        0,
-        Position::default(),
-        0,
-        &ImageryState {
-            name: "native reference".into(),
-            registration: [0; 3],
-            world_registration: [0; 3],
-            world_size: [64, 64, 0],
-            walkmap: values,
-        },
-        false,
-    )?;
+    // Distinct heights at the same coordinates catch accidental level reuse;
+    // level 7 stays unloaded and must have no walk surface in either engine.
+    let mut map = WalkMap::new([0, 3].map(|level| SectorId {
+        level,
+        ..SectorId::default()
+    }));
+    for level in [0, 3] {
+        let values = (0..64 * 64)
+            .map(|i| {
+                let (x, y) = (i % 64, i / 64);
+                if x == 21 || (y > 40 && x > 40) {
+                    0
+                } else {
+                    (1 + (x * 13 + y * 7 + level * 17) % 230) as u8
+                }
+            })
+            .collect();
+        map.stamp(
+            level,
+            Position::default(),
+            0,
+            &ImageryState {
+                name: "native reference".into(),
+                registration: [0; 3],
+                world_registration: [0; 3],
+                world_size: [64, 64, 0],
+                walkmap: values,
+            },
+            false,
+        )?;
+    }
     let output = String::from_utf8(run.stdout)?;
     let mut count = 0;
     for line in output.lines() {
@@ -110,15 +119,15 @@ int main() {
             .split_whitespace()
             .map(str::parse)
             .collect::<std::result::Result<_, _>>()?;
-        ensure!(row.len() == 6, "invalid native output");
+        ensure!(row.len() == 7, "invalid native output");
         let actual = map.probe(
-            0,
+            row[0],
             Position {
-                x: row[0],
-                y: row[1],
+                x: row[1],
+                y: row[2],
                 z: 0,
             },
-            row[2],
+            row[3],
         );
         assert_eq!(
             [
@@ -126,14 +135,15 @@ int main() {
                 actual.max_delta,
                 i32::from(actual.hole)
             ],
-            row[3..],
-            "position ({}, {}), radius {}",
+            row[4..],
+            "level {}, position ({}, {}), radius {}",
             row[0],
             row[1],
-            row[2]
+            row[2],
+            row[3]
         );
         count += 1;
     }
-    assert_eq!(count, 630);
+    assert_eq!(count, 1_890);
     Ok(())
 }
