@@ -39,8 +39,11 @@
 
 #pragma once
 
+#include "../revtypes.h"
+
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <random>
 #include <string>
 #include <utility>
@@ -122,6 +125,9 @@ class TShadowDuel
     // Writes the fight's timeline into `sink` as it runs: every action begun,
     // every blow's fall, and where both stand each tick (calibration work).
     void TraceInto(std::string* sink) { trace = sink; }
+    // A trial of a fight still to come: Locke as he will stand then, at `at`
+    // (where a walk meets them), not where he is.
+    void StandAt(const S3DPoint& at) { standat = at; }
 
   private:
     // What a fighter is doing. A blow and a move are both ATTACK actions to
@@ -241,4 +247,5 @@ class TShadowDuel
     std::map<const TObjectInstance*, int32_t> drunk;  // trial: the belt's potions the copy has drunk
     int32_t        phase = 0;                   // the bot's own clock against the fight's
     std::string*   trace = nullptr;
+    std::optional<S3DPoint> standat;
 };

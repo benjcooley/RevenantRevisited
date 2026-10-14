@@ -316,6 +316,15 @@ than he can spare, or when they are worth little (monsters whose Value is
 far below his level give almost no experience, GRIND.md §1.2). Otherwise
 he travels and fights, and the route becomes part of the grind.
 
+**Who finds him.** A monster joins a leg's fight when its AI's own look
+would find Locke at some point of the walk (`TCharacter::FindCharacters`
+with ENEMY, HEAR and SEE). That means he is within its COMBATRANGEMAX,
+edge to edge (`IsValidTarget`), and it hears him, which any noise does
+within HEARINGRANGE of its edge plus 32 (`Hearing`, `CanHearCharacter`),
+with or without a line of sight. Sight adds nothing to a walking Locke:
+`Sight` wants a glimpse of 99, and only an attacking Locke gives one off
+(`ResetStealthValues`).
+
 **A guarded way.** Before a leg's fight, trial duels (§6.4,
 `ShadowSizeUp`) size up the monsters that meet him. If he would lose, he
 runs past and sizes up the share that would still catch him. If he would
@@ -631,13 +640,15 @@ the stage's death count rises. Two deaths in one stage fail the run,
 because a balanced plan shouldn't lose a fight it chose to take twice.
 
 As built: a death is a dead Locke at the start of a tick, or a step that
-failed with him dead (the duel kills him inside a step). The newest save
+failed with him dead (the duel kills him inside a step). After the load,
+the run waits for the game to be idle and builds its walk fields again
+before the next step. The newest save
 is the plan's last `save` step, or the waypoint a `--shadow-stage` run
 started from. It is requested at once, within retail's 8-second death
 countdown, while the play screen is still up. The plan goes on at the
-step after that save. Deaths have become rare: trial duels size up every
-fight on the way, and he turns back from a guarded one (§5.5). A run that
-first dies will be the first to exercise the reload.
+step after that save. Deaths are rare: trial duels size up every fight on
+the way, where it will happen (`TShadowDuel::StandAt`), and he turns back
+from a guarded one (§5.5).
 
 ### 6.7 Calibration: is it realistic?
 

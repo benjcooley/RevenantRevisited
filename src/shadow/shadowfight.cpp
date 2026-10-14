@@ -95,7 +95,7 @@ class TFightRunner final : public TShadowStepRunner
                 std::string why;
                 const EShadowStatus status = travel.Pulse(context, why);
                 if (status == EShadowStatus::Failed)
-                    return Fail(why);
+                    return Fail(why, travel.Guarded());
                 if (status == EShadowStatus::Running)
                     return status;
             }
@@ -220,13 +220,15 @@ std::unique_ptr<TShadowStepRunner> MakeFightRunner(const SShadowStep& step, std:
     return std::make_unique<TFightRunner>(step, foes);
 }
 
-SShadowOdds ShadowSizeUp(const std::vector<TCharacter*>& foes, int64_t tick)
+SShadowOdds ShadowSizeUp(const std::vector<TCharacter*>& foes, int64_t tick, const S3DPoint* at)
 {
     SShadowOdds odds;
     int32_t lost = 0;
     for (int32_t k = 0; k < kTrials; ++k)
     {
         TShadowDuel trial(TShadowDuel::EMode::Trial, SShadowTactics{}, uint32_t(tick * 31 + k));
+        if (at)
+            trial.StandAt(*at);
         const SShadowFightReport report = trial.Fight(*Player, foes, tick, nullptr, nullptr);
         odds.wins += report.won;
         lost += report.suffered;

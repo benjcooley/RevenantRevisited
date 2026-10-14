@@ -252,7 +252,9 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
             });
             return;
         }
-        if (is > was && !scripted && tick <= progressuntil && strcmp(field, "gold") != 0)
+        // A registered cause first: an area's ALWAYS script may be running
+        // lines in the same tick without touching him.
+        if (is > was && tick <= progressuntil && strcmp(field, "gold") != 0)
         {
             log.Event("gain", text + " by " + progresscause, [&](JsonOut& out) {
                 out.FieldString("field", field);

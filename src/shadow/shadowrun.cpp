@@ -176,6 +176,11 @@ void TShadowRun::Pulse()
     {
         ledger.Start(*Player, tick);
         player = Player;
+        if (reloading)
+        {
+            nav.Forget();       // the old world's
+            settling = true;
+        }
         reloading = false;
     }
     else if (reloading)
@@ -213,6 +218,13 @@ void TShadowRun::Pulse()
         ShadowLogChests(Player->GetLevel(), log);
     }
 
+    // After a death's reload, the plan goes on once the game is Locke's again.
+    if (settling)
+    {
+        if (!ShadowGameIdle())
+            return;
+        settling = false;
+    }
     RunSteps();
 }
 

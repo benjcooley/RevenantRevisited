@@ -199,7 +199,7 @@ class TTravelRunner final : public TShadowStepRunner
     {
         std::string why;
         const EShadowStatus status = travel.Pulse(context, why);
-        return status == EShadowStatus::Failed ? Fail(why) : status;
+        return status == EShadowStatus::Failed ? Fail(why, travel.Guarded()) : status;
     }
 
   private:
@@ -224,7 +224,7 @@ class TApproachRunner final : public TShadowStepRunner
         {
             const EShadowStatus status = travel.Pulse(context, why);
             if (status == EShadowStatus::Failed)
-                return Fail(why);
+                return Fail(why, travel.Guarded());
             if (status == EShadowStatus::Running)
                 return status;
             if (!Act(context, why))
@@ -287,7 +287,7 @@ class TTakeRunner final : public TShadowStepRunner
             std::string why;
             const EShadowStatus status = travel.Pulse(context, why);
             if (status == EShadowStatus::Failed)
-                return Fail(why);
+                return Fail(why, travel.Guarded());
             if (status == EShadowStatus::Running)
                 return status;
             TObjectInstance* found = travel.Object();

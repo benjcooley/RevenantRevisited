@@ -65,6 +65,12 @@ class TShadowNav
     const SShadowGait& Gait(TShadowLog& log);
     // The trigger zones of Locke's level, read when he comes to it.
     const TShadowZones& Zones(TShadowLog& log);
+    // A load replaced the world: the field and the zones are built again.
+    void Forget()
+    {
+        field = TShadowWalkField{};
+        zones = TShadowZones{};
+    }
 
   private:
     TShadowWalkField           field;
@@ -121,9 +127,10 @@ class TShadowTravel
     bool OntoStrip(const TShadowWalkField& field, TExit& exit, S3DPoint& dest, std::string& failure) const;
     // The monsters that would see Locke on `path`, the target left out.
     [[nodiscard]] std::vector<SShadowEncounter> Encounters(const std::vector<S3DPoint>& path) const;
-    // Which of `met` he fights, sized up (§5.5); false, guarded, when he'd
-    // lose even running.
-    bool Meet(SShadowContext& context, const std::vector<SShadowEncounter>& met, std::string& failure);
+    // Which of `met` (on `path`) he fights, sized up where they meet him
+    // (§5.5); false, guarded, when he'd lose even running.
+    bool Meet(SShadowContext& context, const std::vector<SShadowEncounter>& met, const std::vector<S3DPoint>& path,
+              std::string& failure);
 
     std::string      target;
     bool             evade  = false;

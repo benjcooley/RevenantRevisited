@@ -81,7 +81,7 @@ class TShopRunner final : public TShadowStepRunner
             std::string why;
             const EShadowStatus status = travel.Pulse(context, why);
             if (status == EShadowStatus::Failed)
-                return Fail(why);
+                return Fail(why, travel.Guarded());
             if (status == EShadowStatus::Running)
                 return status;
             TObjectInstance* merchant = travel.Object();

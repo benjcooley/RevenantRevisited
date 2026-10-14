@@ -118,7 +118,7 @@ it has got.
 | [x] | The pack kept in order whenever its counts change (shadowpack.cpp, the game's AddToInventory): talismans into the Spell Pouch (the opening's three go in at once), potions onto belt boxes F5–F9 one kind a box (the Keep chest's Lesser Healing to box 1; bought ones merge onto it), scrolls and tradeable odd bits into Pouches of their own | 2026-10-14 |
 | [ ] | The duel drinks only from the belt (`ShadowBeltHealing`), once the calibrated duel lands | — |
 | [x] | `grind until level <n> \| skill <name> <n> [restock <routine>]`: sites scored by Value against his level, trial duels size each monster up, generators farmed from out of sight, food then potions below 60%, rest out of sight to 90% when nothing is left (never set off hurt), the restock routine when out of healing with the gold for it | 2026-10-14 |
-| [ ] | Gate: the forest grind to level 4 passes. Open: a level-1 Locke loses 15–25 health an Arakna fight for ~10 exp and ~30 gold, against 250-gold potions and 1 HP a minute, so he rests an hour every few fights. Waits on the duel calibration (is that what a player takes?) | — |
+| [x] | Gate: the forest grind to level 4 passes, barehanded, Hands 3 with it (run of 2026-10-14: about 3.5 hours of game time; rests below 35% only, sites he can't reach remembered five minutes) | 2026-10-14 |
 | [ ] | Barehanded practice for Baez (S6): weapon off, `grind until skill hands 3` in the forest, `expect skill hands >= 3` before the arena (the author: without Hands Locke can't beat him) | — |
 | [x] | Chest survey: every container of a level with its lock, key and contents, logged as Locke first reaches the level | 2026-10-14 |
 | [x] | `take <chest> [with "<key>"]`: walk up, the real `TContainer::Use` a tick (open, one item each, close); the ledger allows exactly what the chest held. The Keep's three unlocked chests give their 500 gold, a Lesser Healing and an Apple | 2026-10-14 |
@@ -135,6 +135,7 @@ it has got.
 | [ ] | Readiness levels from the duel model | — |
 | [ ] | Stage-end checks: NPCs alive, keep list, control | — |
 | [x] | Story-trigger map: `tools/shadow/storymap.py`, STORY_TRIGGERS.md | 2026-10-13 |
+| [ ] | Ledger: a change is put down to "a script" when any script line ran that tick, and an area's ALWAYS block runs most ticks (FORSTYXXTOMB in the forest). Narrow it to the lines that touch the player (their command and its object), so an ambient script can't cover a change. Registered causes (a fight's progress) already come first | — |
 | [x] | Story coverage: every script line run is recorded by file, OBJECT block and line, with its last tick, and every story change (coverage.json). shadow.py reports each change with the writer that made it (`MISTSTATE 1 -> 2 by Gus1 (town.s:2474)`), and whether the town has seen it: an automatic reader (ALWAYS, CUBE, PROXIMITY) ran after it. `--story-gate` fails on one it hasn't (after the deal, Gus's house's GUS2DUMMY waits for Locke to come by) | 2026-10-14 |
 | [ ] | Script coverage report | — |
 | [ ] | Gate: new game to credits; every milestone saved and load-checked | — |
@@ -147,8 +148,12 @@ it has got.
 | [ ] | Waypoints load in retail (emulator or DOSBox lab) | — |
 | [x] | Save round trip: Locke's whole state (every item where it is, bags and belt and equipment, stats, skills, picks, spells, quick spells, story variables) recorded at each save; `--shadow-verify=<file>` with `--quickstart=<slot>` writes it from a fresh load; `shadow.py --check` compares field by field. The plan's first six saves come back unchanged | 2026-10-14 |
 | [x] | A guarded way: trial duels size up a leg's fight; he runs past what he'd lose to, and turns back (travel fails as guarded) when even that is lost | 2026-10-14 |
-| [~] | Death → reload (§6.6): the newest save (the last `save` step, or a `--shadow-stage` run's start slot) is loaded within the death countdown and the plan goes on after it; a stage's second death fails the run. Written; no run has died since guarded ways (attempts to force one at level 1 were turned back) | 2026-10-14 |
+| [x] | Death → reload (§6.6): the newest save (the last `save` step, or a `--shadow-stage` run's start slot) is loaded within the death countdown; the run waits for the game to be idle and rebuilds its walk fields, then goes on after the save; a stage's second death fails the run. Exercised: Locke died to a Hopper his trials had been sized up from the wrong place, and the run reloaded "first potions" | 2026-10-14 |
 | [x] | `fight <type>` goes to the nearest living one of the type (it went to the last one's body) | 2026-10-14 |
+| [x] | Encounters are the AI's own look (FindCharacters ENEMY HEAR SEE): within COMBATRANGEMAX edge to edge and HEARINGRANGE (+ radius + 32), no line of sight needed; sight adds nothing to a walking Locke (Sight wants a glimpse of 99). The sight-range model had a Hopper "guard" every way from where Locke stood, though it never came for him | 2026-10-14 |
+| [x] | Trials of a walk's fight are fought where the walk meets the monsters (`TShadowDuel::StandAt`), not where Locke starts the leg | 2026-10-14 |
+| [x] | A step that fails on a guarded way says so (`Guarded()`); the grind's restock turns back instead of failing, and evading is tried only when fewer would catch him than meet him | 2026-10-14 |
+| [x] | Plan through S2: Jason freed for the Golden Sun Key, the camp's chests (the Earth talisman teaches Regeneration and Stone Skin); new game to "jason freed" in 261 s of wall time, eight waypoints, every round trip unchanged, no violations | 2026-10-14 |
 | [~] | Play styles (§8.4): `style` / `--shadow-style` = melee, hands, bow, spells, mixed. Done: the setting, the level-up picks (`train` alone takes the style's), the first forest grind barehanded for Baez in every style. To do: readying, duel tactics, shopping, spells | 2026-10-14 |
 | [ ] | Bows in the duel: bow-mode shots while a monster closes (needed for the Solifuge anyway) | — |
 | [ ] | Spells in the duel (§6.8): CastByName, the static TSpell::Damage, buffs | — |

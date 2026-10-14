@@ -73,11 +73,15 @@ class TShadowStepRunner
     virtual EShadowStatus Pulse(SShadowContext& context) = 0;
     // Why it failed.
     [[nodiscard]] const std::string& Failure() const { return failure; }
+    // It failed because the way was guarded: the travel turned back from
+    // monsters Locke wouldn't beat (§5.5). Stronger, later, it may not.
+    [[nodiscard]] bool Guarded() const { return guarded; }
 
   protected:
-    EShadowStatus Fail(std::string why)
+    EShadowStatus Fail(std::string why, bool guardedway = false)
     {
         failure = std::move(why);
+        guarded = guardedway;
         return EShadowStatus::Failed;
     }
 
@@ -85,6 +89,7 @@ class TShadowStepRunner
 
   private:
     std::string failure;
+    bool        guarded = false;
 };
 
 [[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeStepRunner(const SShadowStep& step);
@@ -118,7 +123,10 @@ struct SShadowOdds
     int32_t meanloss = 0;       // health, on average
     bool    take     = false;
 };
-[[nodiscard]] SShadowOdds ShadowSizeUp(const std::vector<TCharacter*>& foes, int64_t tick);
+// `at`: where he will stand when it comes to the fight (a walk's meeting
+// point); by default where he is.
+[[nodiscard]] SShadowOdds ShadowSizeUp(const std::vector<TCharacter*>& foes, int64_t tick,
+                                       const S3DPoint* at = nullptr);
 // Trying the spells he can make (shadowspells.cpp, §8.6).
 [[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeInventRunner(const SShadowStep& step);
 // The first combination of spell.def's that Locke holds the talismans for,

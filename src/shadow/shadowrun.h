@@ -123,6 +123,7 @@ class TShadowRun
     };
     SSavePoint                         lastsave;
     bool                               reloading = false;  // a death's load is under way
+    bool                               settling  = false;  // ... done; waiting for the game to be idle
     std::map<std::string, int32_t>     deaths;     // by stage
     static constexpr int32_t           kDeathsAllowed = 1;     // a stage's second death fails the run
 
