@@ -1560,7 +1560,7 @@ void GetParameters(int argc, char **argv)
         "loadmap", "lang", "test", "level", "resolution", "res",
         "cinematic", "menu", "exec", "vfx-lighting-mode", "partsys-quality", "partsys-incoming-blend",
         "seed", "combattrace", "combattrace-rng", "shadow", "shadow-out", "shadow-stage", "shadow-until",
-        "shadow-verify",
+        "shadow-verify", "shadow-style",
         "vfx-review-speed", "vfx-review-watcher-rate", "vfx-review-ratio", "vfx-review-spacing",
         "vfx-review-gap", "vfx-review-offset", "vfx-review-effects",
         "vfx-review-spacing-overrides",
@@ -1609,6 +1609,7 @@ void GetParameters(int argc, char **argv)
             arg_param(cmd, "shadow-out", shadow.out);
             arg_param(cmd, "shadow-stage", shadow.from);
             arg_param(cmd, "shadow-until", shadow.until);
+            arg_param(cmd, "shadow-style", shadow.style);
             shadow.lenient = arg_flag(cmd, "shadow-lenient");
             std::string seed;
             if (arg_param(cmd, "seed", seed))

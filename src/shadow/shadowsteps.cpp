@@ -368,7 +368,13 @@ class TPackRunner final : public TShadowStepRunner
         if (step.verb == EShadowVerb::Train)
         {
             context.ledger.AllowTraining(context.tick + 1);
-            for (const int32_t attribute : step.attributes)
+            std::vector<int32_t> picks = step.attributes;
+            if (picks.empty())
+            {
+                const std::array<int32_t, 2> style = ShadowStylePicks(context.plan.Style());
+                picks.assign(style.begin(), style.end());
+            }
+            for (const int32_t attribute : picks)
                 if (!Player->TrainStat(attribute))
                     return Fail(std::string("can't train ") + kAttributeNames[attribute] + " (at 29 or more)");
             return EShadowStatus::Done;

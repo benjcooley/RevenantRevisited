@@ -4,6 +4,7 @@
 # scripts (keep.s:479 is line 479 of keep.s).
 
 module Ahkuilon
+style  melee                            # --shadow-style plays the same plan as another (§8.4)
 
 routine restock "Healing at Elahni's"
     travel  healerin                    # her door from Misthaven (exit.def)
@@ -79,7 +80,7 @@ stage potions "Elahni's potions"
     expect  have "Lesser Healing" >= 2
     equip   "Short Sword"
     consume "Apple"
-    train   strn agil                   # the next level-ups: Strength and Agility
+    train                               # the next level-ups: the style's two
     save    "first potions"
 
 stage forest "The woods by the Keep, to level 4"
@@ -87,6 +88,12 @@ stage forest "The woods by the Keep, to level 4"
     # and north of the gate hold Araknids, Under and Mongrel Druhg and Kantha
     # generators (GRIND.md §3.3).
     travel  healerout                   # out of Elahni's
-    train   strn agil
+    # Barehanded: Baez (S6) is a fistfight Locke can't win without Hands
+    # (the author; WALKTHROUGH.md §5.2). Skill experience is the kill's, on
+    # the level table shifted one place (GRIND.md §1.5), so every kill here
+    # made with fists brings Hands 3 with level 4.
+    unequip "Short Sword"
     grind   until level 4 restock restock
+    expect  skill hands >= 3
+    equip   "Short Sword"
     save    "level 4"

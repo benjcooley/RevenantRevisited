@@ -64,6 +64,8 @@ def run_game(args: argparse.Namespace, run_dir: Path) -> int:
         command.append(f'--shadow-until={args.until}')
     if args.lenient:
         command.append('--shadow-lenient')
+    if args.style:
+        command.append(f'--shadow-style={args.style}')
     try:
         with open(run_dir / 'game.txt', 'w') as out:
             return subprocess.run(command, cwd=run_dir, stdout=out, stderr=subprocess.STDOUT,
@@ -165,6 +167,8 @@ def main() -> int:
     parser.add_argument('--stage', help='start at this stage, from the waypoint --start names')
     parser.add_argument('--start', help='the waypoint (catalogue name or directory) --stage starts from')
     parser.add_argument('--until', help='stop after this stage')
+    parser.add_argument('--style', choices=['melee', 'hands', 'bow', 'spells', 'mixed'],
+                        help="play the plan in this style instead of its own (ARCHITECTURE.md §8.4)")
     parser.add_argument('--lenient', action='store_true', help='log ledger violations instead of stopping')
     parser.add_argument('--check', action='store_true',
                         help="reload each save in a fresh game and compare Locke's state with the save's")

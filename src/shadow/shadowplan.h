@@ -23,7 +23,9 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -39,7 +41,7 @@ enum class EShadowVerb : uint8_t
     Sell,       // sell "<item>" [<n>] to <merchant>
     Equip,      // equip "<item>": into its equipment slot
     Unequip,    // unequip "<item>": back into the pack
-    Train,      // train <attribute> [<attribute>]: the next level-up's two picks
+    Train,      // train [<attribute> [<attribute>]]: the next level-up's two picks (none: the style's)
     Consume,    // consume "<item>": eat or drink it
     Fight,      // fight <target> [win]: Locke goes to it and fights it, and whoever joins
     Grind,      // grind until level <n> | skill <name> <n> [restock <routine>]: fight around here until then
@@ -47,6 +49,14 @@ enum class EShadowVerb : uint8_t
                 //   | expect have "<item>" [<op> <n>]
     Save,       // save "<name>": a waypoint save
 };
+
+// How the run plays (ARCHITECTURE.md §8.4): the plan's `style` line, or
+// --shadow-style.
+enum class EShadowStyle : uint8_t { Melee, Hands, Bow, Spells, Mixed };
+inline constexpr std::array<const char*, 5> kShadowStyleNames = {"melee", "hands", "bow", "spells", "mixed"};
+[[nodiscard]] std::optional<EShadowStyle> ShadowParseStyle(const std::string& name);
+// The level-up picks of a style: two attributes, 0 Strn .. 5 Luck.
+[[nodiscard]] std::array<int32_t, 2> ShadowStylePicks(EShadowStyle style);
 
 // A named spot the plan travels to: a point on a level, or an object found
 // by name when the step runs.
@@ -99,7 +109,7 @@ struct SShadowStep
     std::vector<int32_t> choices;       // scene, talk: the answer to each menu, in order
     SShadowCondition     condition;     // expect
     std::string          name;          // save: the waypoint's name
-    std::vector<int32_t> attributes;    // train: the picks (0 Strn .. 5 Luck)
+    std::vector<int32_t> attributes;    // train: the picks (0 Strn .. 5 Luck); none: the style's
 
     // "talk Gus1 choose 1 1 1", for the log.
     [[nodiscard]] std::string Describe() const;
@@ -130,10 +140,14 @@ class TShadowPlan
     // A routine: steps a stage's grind runs when it needs them (restocking),
     // written like a stage; nullptr when there is none.
     [[nodiscard]] const SShadowStage* FindRoutine(const std::string& name) const;
+    // The play style: the plan's, until the command line sets another.
+    [[nodiscard]] EShadowStyle Style() const { return style; }
+    void SetStyle(EShadowStyle s) { style = s; }
 
   private:
     std::string               path;
     std::string               module;
+    EShadowStyle              style = EShadowStyle::Melee;
     std::vector<SShadowPlace> places;
     std::vector<SShadowStage> stages;
     std::vector<SShadowStage> routines;

@@ -103,6 +103,7 @@ TEST(ShadowPlan, ReadsPlacesAndLockesVerbs)
         "module Ahkuilon\n"
         "place KeepGate level 0 1842 24388 451\n"
         "place Tavern object Gus1\n"
+        "style hands\n"
         "routine town \"Back for potions\"\n"
         "    travel  Tavern\n"
         "stage s \"Everything Locke does\"\n"
@@ -117,6 +118,7 @@ TEST(ShadowPlan, ReadsPlacesAndLockesVerbs)
         "    consume \"Apple\"\n"
         "    train   strength agil\n"
         "    train   cons\n"
+        "    train\n"
         "    fight   Rahul win\n"
         "    expect  maplevel = 0\n"
         "    grind   until level 4 restock town\n"
@@ -126,6 +128,8 @@ TEST(ShadowPlan, ReadsPlacesAndLockesVerbs)
     std::string error;
     ASSERT_TRUE(plan.Load(file.Path(), error)) << error;
 
+    EXPECT_EQ(plan.Style(), EShadowStyle::Hands);
+    EXPECT_EQ(ShadowStylePicks(EShadowStyle::Bow), (std::array<int32_t, 2>{2, 3}));
     const SShadowPlace* gate = plan.FindPlace("keepgate");
     ASSERT_NE(gate, nullptr);
     EXPECT_EQ(gate->level, 0);
@@ -135,7 +139,7 @@ TEST(ShadowPlan, ReadsPlacesAndLockesVerbs)
     EXPECT_EQ(plan.FindPlace("Tavern")->object, "Gus1");
 
     const std::vector<SShadowStep>& steps = plan.Stages()[0].steps;
-    ASSERT_EQ(steps.size(), 16u);
+    ASSERT_EQ(steps.size(), 17u);
     EXPECT_EQ(steps[0].verb, EShadowVerb::Travel);
     EXPECT_FALSE(steps[0].evade);
     EXPECT_TRUE(steps[1].evade);
@@ -153,16 +157,18 @@ TEST(ShadowPlan, ReadsPlacesAndLockesVerbs)
     EXPECT_EQ(steps[8].verb, EShadowVerb::Consume);
     EXPECT_EQ(steps[9].attributes, (std::vector<int32_t>{0, 2}));
     EXPECT_EQ(steps[10].attributes, (std::vector<int32_t>{1, 1}));
-    EXPECT_EQ(steps[11].verb, EShadowVerb::Fight);
-    EXPECT_TRUE(steps[11].mustwin);
-    EXPECT_EQ(steps[12].condition.subject, EShadowSubject::MapLevel);
-    EXPECT_EQ(steps[13].Describe(), "grind until level 4 restock town");
-    EXPECT_EQ(steps[13].goal.subject, EShadowSubject::Level);
-    EXPECT_EQ(steps[13].routine, "town");
-    EXPECT_EQ(steps[14].Describe(), "grind until skill hands 3");
-    EXPECT_EQ(steps[14].goal.compare, EShadowCompare::Ge);
-    EXPECT_EQ(steps[15].condition.subject, EShadowSubject::Skill);
-    EXPECT_EQ(steps[15].Describe(), "expect skill hands >= 3");
+    EXPECT_TRUE(steps[11].attributes.empty());
+    EXPECT_EQ(steps[11].Describe(), "train (the style's)");
+    EXPECT_EQ(steps[12].verb, EShadowVerb::Fight);
+    EXPECT_TRUE(steps[12].mustwin);
+    EXPECT_EQ(steps[13].condition.subject, EShadowSubject::MapLevel);
+    EXPECT_EQ(steps[14].Describe(), "grind until level 4 restock town");
+    EXPECT_EQ(steps[14].goal.subject, EShadowSubject::Level);
+    EXPECT_EQ(steps[14].routine, "town");
+    EXPECT_EQ(steps[15].Describe(), "grind until skill hands 3");
+    EXPECT_EQ(steps[15].goal.compare, EShadowCompare::Ge);
+    EXPECT_EQ(steps[16].condition.subject, EShadowSubject::Skill);
+    EXPECT_EQ(steps[16].Describe(), "expect skill hands >= 3");
 }
 
 TEST(ShadowPlan, ConditionsCompare)
@@ -202,6 +208,8 @@ TEST(ShadowPlan, RefusesMistakesByLine)
     EXPECT_EQ(LoadError("module A\nstage a\n  grind until skill swimming 3\n"),
               "3: 'skill' takes a skill (attack defense invoke hands knife sword bludgeon axes bows stealth "
               "lockpick), not 'swimming'");
+    EXPECT_EQ(LoadError("module A\nstyle sneaky\n"), "2: 'style' takes one of melee, hands, bow, spells, mixed");
+    EXPECT_EQ(LoadError("module A\nstage a\n  train strn agil luck\n"), "3: 'train' takes up to two attributes");
     EXPECT_EQ(LoadError("module A\nstage a\n  grind until level\n"),
               "3: 'grind' takes 'until level <n>' or 'until skill <name> <n>', then 'restock <routine>' or nothing");
 }

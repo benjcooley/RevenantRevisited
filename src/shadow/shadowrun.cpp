@@ -65,6 +65,16 @@ bool TShadowRun::Configure(const SShadowOptions& given)
         log_error("[smoke] %s", error.c_str());
         return false;
     }
+    if (!options.style.empty())
+    {
+        const std::optional<EShadowStyle> style = ShadowParseStyle(options.style);
+        if (!style)
+        {
+            log_error("[smoke] --shadow-style: '%s' isn't melee, hands, bow, spells or mixed", options.style.c_str());
+            return false;
+        }
+        plan.SetStyle(*style);
+    }
     if (!options.until.empty() && plan.FindStage(options.until) < 0)
     {
         log_error("[smoke] --shadow-until: the plan has no stage '%s'", options.until.c_str());
@@ -183,10 +193,13 @@ void TShadowRun::Begin()
     }
     const TModule* module = ModuleManager.Active();
     const std::string modulename = module ? module->dirname : "";
-    log.Event("run", plan.Path() + ", seed " + std::to_string(options.seed) + ", build " + kBuildName,
+    const std::string style = kShadowStyleNames[size_t(plan.Style())];
+    log.Event("run", plan.Path() + ", seed " + std::to_string(options.seed) + ", style " + style + ", build " +
+                         kBuildName,
               [&](JsonOut& out) {
                   out.FieldString("plan", plan.Path());
                   out.Field("seed", options.seed);
+                  out.FieldString("style", style);
                   out.FieldString("module", modulename);
                   out.FieldString("build", kBuildName);
                   out.FieldString("sha", kBuildSha);
@@ -327,6 +340,7 @@ void TShadowRun::WriteSummary(const std::string& why) const
         << "  " << why << "\n\n"
         << "plan      " << plan.Path() << "\n"
         << "seed      " << options.seed << "\n"
+        << "style     " << kShadowStyleNames[size_t(plan.Style())] << "\n"
         << "build     " << kBuildName << "\n"
         << "game time " << tick / 24 / 60 << " min " << tick / 24 % 60 << " s (" << tick << " ticks)\n"
         << "wall time " << (int64_t)wall << " s\n";

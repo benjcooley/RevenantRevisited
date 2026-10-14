@@ -37,6 +37,7 @@ struct SShadowOptions
     // loaded and settled, Locke's state (shadowstate.h) goes to <file> and
     // the game quits -- the reload half of the save round trip (§10).
     std::string verify;
+    std::string style;              // --shadow-style=<melee|hands|bow|spells|mixed>: over the plan's
 };
 
 class TShadowRun
