@@ -960,6 +960,9 @@ class TObjectInstance : protected SObjectDef
     virtual bool AddToInventory(const char *name, int32_t number = 1, int32_t slot = -1);
         // REVSYNC: 0x0046f940 (vtable 0x54). A new object of type 'name',
         // amount 'number', through AddToInventory above.
+    bool AddToInventoryByUniqueId(uint32_t uniqueid, int32_t number = 1, int32_t slot = -1);
+        // REVSYNC: 0x0046f7e0 (vtable 0x50). The same for the type with that
+        // unique id (class.def's third column).
     void PlaceInInventory(TObjectInstance* inst, int32_t slot);
         // Puts inst, in no inventory, at `slot` as it stands: no pouch, no
         // merge, no room made. AddToInventory's last step; also a fixture's
@@ -1019,6 +1022,11 @@ class TObjectInstance : protected SObjectDef
     virtual int32_t CursorType(TObjectInstance* with = nullptr) { return CURSOR_NONE; }
         // Returns type of cursor that should appear when mouse arrow is over the object
         // (not const: the overrides read stats through non-const accessors)
+    [[nodiscard]] bool CanCombine(const TObjectInstance* with) const;
+        // REVSYNC: 0x004704d0 (vtable 0xb8; no class overrides it). `with`
+        // makes something with this: two carried items of one class and owner,
+        // both "Combining", their types one apart; or two ingredients of one
+        // nonzero "CombineID" whose "TargetID"s differ and aren't both set.
     virtual void UseRange(int32_t &mindist, int32_t &maxdist, int32_t &minang, int32_t &maxang)
         { mindist = 20; maxdist = 50; minang = 0; maxang = 255; }
         // Valid locations character can be standing in order to use the object
@@ -1274,6 +1282,9 @@ class TObjectInstance : protected SObjectDef
         // Number of objects in the array
     int32_t RealNumInventoryItems();
         // Number of *used* objects in the array
+    void CompactInventory();
+        // REVSYNC: 0x0046ff80. The carried items take slots 0, 1, 2, ... in
+        // inventory order, closing the gaps (a right click on no item).
     int32_t InventNum() const { return inventnum; }
     int32_t InvIndex() const { return invindex; }
     void SetInventNum(short i) { inventnum = i; }
