@@ -72,12 +72,14 @@ SShadowSnapshot SShadowSnapshot::Take(TPlayer& player, int64_t tick)
     s.level = player.Level();
     s.exp = player.Exp();
     s.attacklevel = player.AttackLevel();
+    // The stats as kept: what equipment and stat effects add on top come
+    // and go with them, and are no one's to explain.
     for (int32_t i = 0; i < NUM_PLRSTATS; ++i)
-        s.stats[i] = player.PlyrStat(i);
+        s.stats[i] = player.BaseObjStat(PLRSTAT_FIRST + i);
     for (int32_t i = 0; i < NUM_SKILLS; ++i)
     {
-        s.skills[i] = player.Skill(i);
-        s.skillexp[i] = player.SkillExp(i);
+        s.skills[i] = player.BaseObjStat(SK_FIRST + i);
+        s.skillexp[i] = player.BaseObjStat(SKE_FIRST + i);
     }
     s.levelup = player.LevelUpStats();
     const TGameState& states = ScriptManager.GameStates();

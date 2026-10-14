@@ -123,7 +123,9 @@ TEST(ShadowPlan, ReadsPlacesAndLockesVerbs)
         "    expect  maplevel = 0\n"
         "    grind   until level 4 restock town\n"
         "    grind   until skill Hands 3\n"
-        "    expect  skill hands >= 3\n");
+        "    expect  skill hands >= 3\n"
+        "    sell    junk to CRONUS1\n"
+        "    invent\n");
     TShadowPlan plan;
     std::string error;
     ASSERT_TRUE(plan.Load(file.Path(), error)) << error;
@@ -139,7 +141,7 @@ TEST(ShadowPlan, ReadsPlacesAndLockesVerbs)
     EXPECT_EQ(plan.FindPlace("Tavern")->object, "Gus1");
 
     const std::vector<SShadowStep>& steps = plan.Stages()[0].steps;
-    ASSERT_EQ(steps.size(), 17u);
+    ASSERT_EQ(steps.size(), 19u);
     EXPECT_EQ(steps[0].verb, EShadowVerb::Travel);
     EXPECT_FALSE(steps[0].evade);
     EXPECT_TRUE(steps[1].evade);
@@ -169,6 +171,9 @@ TEST(ShadowPlan, ReadsPlacesAndLockesVerbs)
     EXPECT_EQ(steps[15].goal.compare, EShadowCompare::Ge);
     EXPECT_EQ(steps[16].condition.subject, EShadowSubject::Skill);
     EXPECT_EQ(steps[16].Describe(), "expect skill hands >= 3");
+    EXPECT_TRUE(steps[17].junk);
+    EXPECT_EQ(steps[17].Describe(), "sell junk to CRONUS1");
+    EXPECT_EQ(steps[18].verb, EShadowVerb::Invent);
 }
 
 TEST(ShadowPlan, ConditionsCompare)

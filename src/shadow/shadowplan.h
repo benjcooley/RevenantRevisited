@@ -103,6 +103,7 @@ struct SShadowStep
     std::string          item;          // use: what to use on the target; take: the key; buy, sell: what
     int32_t              count = 1;     // buy, sell: how many
     bool                 upto  = false; // buy: `count` is what he should end up holding
+    bool                 junk  = false; // sell: whatever he has no use for (`sell junk to <merchant>`)
     SShadowCondition     goal;          // grind: what it goes on until (a level or a skill, >=)
     std::string          routine;       // grind: the routine that restocks him
     bool                 evade = false; // travel: run past the leg's monsters (§5.5)

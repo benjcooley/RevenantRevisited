@@ -320,7 +320,8 @@ bool ParseStep(const std::string& verb, TLineReader& in, SShadowStep& step, std:
             error = "'" + verb + "' needs an item";
             return false;
         }
-        step.item = item->text;
+        step.junk = verb == "sell" && !item->quoted && Lower(item->text) == "junk";
+        step.item = step.junk ? "" : item->text;
         step.upto = verb == "buy" && in.TakeKeyword("upto");
         if (const SToken* n = in.Peek(); n && !n->quoted)
             if (const std::optional<int32_t> count = ParseInt(n->text))
@@ -562,7 +563,12 @@ std::string SShadowStep::Describe() const
         case EShadowVerb::Use:    out << "use " << target << (item.empty() ? "" : " with \"" + item + "\""); break;
         case EShadowVerb::Take:   out << "take " << target << (item.empty() ? "" : " with \"" + item + "\""); break;
         case EShadowVerb::Buy:    out << "buy \"" << item << "\" " << (upto ? "upto " : "") << count << " from " << target; break;
-        case EShadowVerb::Sell:   out << "sell \"" << item << "\" " << count << " to " << target; break;
+        case EShadowVerb::Sell:
+            if (junk)
+                out << "sell junk to " << target;
+            else
+                out << "sell \"" << item << "\" " << count << " to " << target;
+            break;
         case EShadowVerb::Equip:   out << "equip \"" << item << "\""; break;
         case EShadowVerb::Unequip: out << "unequip \"" << item << "\""; break;
         case EShadowVerb::Consume: out << "consume \"" << item << "\""; break;

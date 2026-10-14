@@ -648,6 +648,12 @@ The play loop gets them too. That closes the gap GRIND.md §10 lists.
    site's monsters, using the style rule (§8.4).
 5. **Jewellery.** By its STATLINE's value to the duel, when gold is left.
 
+As built so far (`shadowpurse.cpp`): step 1 as `sell junk to <merchant>`.
+That is every weapon but the one in hand and the best spare, and armour no
+better than what he wears in its slot. Potions, food, bags, talismans,
+scrolls, keys and jewellery are never junk. The shop's own `Sell` takes
+an unworn piece of a type first (`FindItemToSell`).
+
 Each candidate purchase is scored by the duel model's gain in expected
 kills per hour, divided by its price. The purse buys greedily down the
 list while gold lasts, and always leaves the reserve for the next

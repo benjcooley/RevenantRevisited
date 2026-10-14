@@ -9,13 +9,14 @@
 
 #include "shadowloot.h"
 #include "shadowpack.h"
+#include "shadowpurse.h"
 #include "shadowstate.h"
 
-#include "../buysell.h"
 #include "../gameflow.h"
 #include "../logging.h"
 #include "../module.h"
 #include "../player.h"
+#include "../playscreen.h"
 #include "../revenant.h"
 #include "../revutils.h"
 
@@ -164,10 +165,14 @@ void TShadowRun::Pulse()
     }
 
     // Whatever came into or left the pack, it is put in order as a player
-    // keeps it -- not mid-trade, while the shop lists the pack (§8.9).
-    if (!finished && ledger.ItemsVersion() != tidied && ShadowGameIdle() && !BuySellPane.IsActive())
+    // keeps it, and the best armour is put on -- not mid-trade, while the
+    // shop's drawer lists the pack (§8.9, §8.10). (The shop pane stays
+    // armed after a visit: its script sets it up again with each menu.)
+    if (!finished && ledger.ItemsVersion() != tidied && ShadowGameIdle() &&
+        PlayScreen.Drawer() != TPlayScreen::EDrawer::BuySell)
     {
         ShadowTidyPack(*Player, log);
+        ShadowReadyArmour(*Player, log);
         tidied = ledger.ItemsVersion();
     }
 
