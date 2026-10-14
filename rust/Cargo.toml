@@ -1,0 +1,37 @@
+[package]
+name = "revenant"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "An idiomatic Rust port of Revenant Revisited"
+publish = false
+
+[features]
+default = ["desktop"]
+desktop = ["dep:cpal", "dep:winit"]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.5", features = ["derive"] }
+cpal = { version = "0.16", optional = true }
+winit = { version = "0.30", optional = true }
+png = "0.18"
+zip = { version = "2.4", default-features = false, features = ["deflate"] }
+wgpu = { version = "26", default-features = false, features = ["std", "parking_lot", "metal", "vulkan", "dx12", "wgsl"] }
+pollster = "0.4"
+bytemuck = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3"
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[profile.release]
+lto = "thin"
+
+
+[[example]]
+name = "gpu-smoke"
+required-features = ["desktop"]
