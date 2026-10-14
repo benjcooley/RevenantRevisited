@@ -13,7 +13,9 @@
 //   rates, and a level-up refills them;
 // - an exit: a jump that lands on an exit.def target;
 // - a travel Shadow proved (TShadowTravel): it registers where Locke will
-//   land before it teleports him, and the jump must land there.
+//   land before it teleports him, and the jump must land there;
+// - a take from a chest (and later a pick-up or a purchase): it registers
+//   what it will bring, and gains beyond that are violations.
 //
 // The story variables (state.def) are part of the snapshot too: each change
 // is logged with the script that made it, which is how a run shows where
@@ -77,6 +79,9 @@ class TShadowLedger final : public TScript::IStepObserver
     // A proven travel is about to put Locke at `landing` on `level`; the
     // jump is accepted until tick `until`.
     void AllowTravel(const S3DPoint& landing, int32_t level, int64_t until);
+    // A verb is about to bring Locke these items (by lower-case name) and
+    // this much gold: gains up to them are accepted until tick `until`.
+    void AllowItems(std::string cause, std::map<std::string, int32_t> items, int32_t gold, int64_t until);
 
     // Compares the player with the last snapshot and logs every change with
     // its cause. Returns the number of violations found.
@@ -95,16 +100,27 @@ class TShadowLedger final : public TScript::IStepObserver
     [[nodiscard]] bool LandedOnExit(const SShadowSnapshot& now, std::string& exitname) const;
     [[nodiscard]] bool LandedOnTravel(const SShadowSnapshot& now);
 
+    // How much of a gain open allowances explain: takes it from them and
+    // returns the rest, and the causes it came from.
+    int32_t Explain(const std::string& item, int32_t gain, std::string& causes);
+
     struct STravel
     {
         S3DPoint landing{};
         int32_t  level = 0;
         int64_t  until = 0;
     };
+    struct SItems
+    {
+        std::string                    cause;
+        std::map<std::string, int32_t> items;   // "gold" for gold
+        int64_t                        until = 0;
+    };
 
     SShadowSnapshot               last;
     bool                          started    = false;
     std::set<std::string>         scripts;          // run since the last audit
     std::vector<STravel>          travels;          // proven, not yet landed
+    std::vector<SItems>           gifts;            // registered, not yet arrived
     int32_t                       violations = 0;
 };

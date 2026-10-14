@@ -5,10 +5,14 @@
 
 #include "shadowsteps.h"
 
+#include "shadowledger.h"
 #include "shadowlog.h"
+#include "shadowloot.h"
 #include "shadowtravel.h"
 
+#include "../container.h"
 #include "../dialog.h"
+#include "../inventory.h"
 #include "../gameflow.h"
 #include "../inputqueue.h"
 #include "../mappane.h"
@@ -269,6 +273,92 @@ class TApproachRunner final : public TShadowStepRunner
     bool          acted = false;
 };
 
+// Goes to a chest and empties it as a player clicks it (§8.8): the real
+// TContainer::Use, one a tick -- the first opens it, each after takes one
+// item, and the last, with nothing left, closes it. A locked one takes its
+// key first. The ledger is told what the chest holds before anything moves.
+class TTakeRunner final : public TShadowStepRunner
+{
+  public:
+    explicit TTakeRunner(const SShadowStep& step)
+        : TShadowStepRunner(step), travel(step.target, false, TShadowTravel::EArrive::Beside)
+    {
+    }
+
+    EShadowStatus Pulse(SShadowContext& context) override
+    {
+        if (!there)
+        {
+            std::string why;
+            const EShadowStatus status = travel.Pulse(context, why);
+            if (status == EShadowStatus::Failed)
+                return Fail(why);
+            if (status == EShadowStatus::Running)
+                return status;
+            TObjectInstance* found = travel.Object();
+            if (!found || found->ObjClass() != OBJCLASS_CONTAINER)
+                return Fail(step.target + " isn't a chest");
+            chest = found;
+            const SShadowChest held = ShadowReadChest(*static_cast<TContainer*>(found));
+            handle = held.Handle();
+            limit = 4 + held.gold + int32_t(held.contents.size()) * 2;
+            for (const auto& [name, amount] : held.contents)
+                limit += amount;
+            context.ledger.AllowItems("take " + handle, held.contents, held.gold, context.tick + limit + 48);
+            context.log.Event("take", handle + ": " + std::to_string(held.gold) + " gold, " +
+                                          std::to_string(held.contents.size()) + " kinds of item");
+            // What a take fills is the inventory pane's container: the pack,
+            // as when a player has it open.
+            if (!Inventory.GetContainer())
+                Inventory.SetContainer(Player);
+            there = true;
+            return EShadowStatus::Running;
+        }
+
+        auto* box = static_cast<TContainer*>(chest.Get());
+        if (!box)
+            return Fail(handle + " is gone");
+        if (box->Locked())
+        {
+            if (step.item.empty() || triedkey)
+                return Fail(handle + " is locked (key " + std::to_string(box->KeyId()) + ")");
+            TObjectInstance* key = Player->FindObjInventory(step.item.c_str());
+            if (!key)
+                return Fail("Locke has no " + step.item);
+            box->Use(Player, key->GetMapIndex());
+            triedkey = true;
+            return EShadowStatus::Running;
+        }
+        const int32_t before = box->NumObjects();
+        if (before == 0 && (!box->Openable() || !box->IsOpen()))
+        {
+            context.log.Event("taken", handle + " is empty");
+            return EShadowStatus::Done;
+        }
+        if (++uses > limit)
+            return Fail(handle + " still holds " + std::to_string(before) + " things after " +
+                        std::to_string(limit) + " uses");
+        const bool wasopen = box->IsOpen();
+        box->Use(Player, -1);
+        if (wasopen && before > 0 && box->NumObjects() == before)
+        {
+            context.log.Event("finding", handle + ": the pack is full; " + std::to_string(before) +
+                                             " things left in it");
+            return EShadowStatus::Done;
+        }
+        return EShadowStatus::Running;
+    }
+
+  private:
+    TShadowTravel             travel;
+    TSafeRef<TObjectInstance> chest;
+    std::string               handle;
+    bool                      there    = false;
+    bool                      triedkey = false;
+    int32_t                   uses     = 0;
+    int32_t                   limit    = 0;
+};
+
 class TExpectRunner final : public TShadowStepRunner
 {
   public:
@@ -379,6 +469,7 @@ std::unique_ptr<TShadowStepRunner> MakeStepRunner(const SShadowStep& step)
         case EShadowVerb::Travel: return std::make_unique<TTravelRunner>(step);
         case EShadowVerb::Talk:   return std::make_unique<TApproachRunner>(step);
         case EShadowVerb::Use:    return std::make_unique<TApproachRunner>(step);
+        case EShadowVerb::Take:   return std::make_unique<TTakeRunner>(step);
         case EShadowVerb::Expect: return std::make_unique<TExpectRunner>(step);
         case EShadowVerb::Save:   return std::make_unique<TSaveRunner>(step);
     }

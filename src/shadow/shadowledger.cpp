@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstring>
 #include <sstream>
 
 namespace {
@@ -122,6 +123,28 @@ bool TShadowLedger::LandedOnTravel(const SShadowSnapshot& now)
     return true;
 }
 
+void TShadowLedger::AllowItems(std::string cause, std::map<std::string, int32_t> items, int32_t gold, int64_t until)
+{
+    if (gold > 0)
+        items["gold"] += gold;
+    gifts.push_back({std::move(cause), std::move(items), until});
+}
+
+int32_t TShadowLedger::Explain(const std::string& item, int32_t gain, std::string& causes)
+{
+    for (SItems& gift : gifts)
+    {
+        const auto it = gift.items.find(item);
+        if (it == gift.items.end() || it->second <= 0 || gain <= 0)
+            continue;
+        const int32_t taken = std::min(gain, it->second);
+        it->second -= taken;
+        gain -= taken;
+        causes += (causes.empty() ? "" : ", ") + gift.cause;
+    }
+    return gain;
+}
+
 void TShadowLedger::BeforeLine(TScript& script, int32_t)
 {
     const TScriptProto* proto = script.GetScriptProto();
@@ -207,6 +230,19 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
         if (is == was)
             return;
         const std::string text = std::string(field) + " " + std::to_string(was) + " -> " + std::to_string(is);
+        // A registered gift (a take) names the gain better than "a script
+        // ran this tick" does; scripts like a teleport stone's run every tick.
+        std::string given;
+        if (is > was && !strcmp(field, "gold") && Explain("gold", is - was, given) == 0)
+        {
+            log.Event("gain", text + " by " + given, [&](JsonOut& out) {
+                out.FieldString("field", field);
+                out.Field("was", was);
+                out.Field("is", is);
+                out.FieldString("cause", given);
+            });
+            return;
+        }
         if (is < was || scripted)
             log.Event(is < was ? "loss" : "gain", text + (scripted ? " by " + scriptcause : ""), [&](JsonOut& out) {
                 out.FieldString("field", field);
@@ -248,7 +284,15 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
             continue;
         const std::string utf8 = ToUtf8(name.c_str());
         const std::string text = utf8 + " " + std::to_string(was) + " -> " + std::to_string(is);
-        if (scripted)
+        std::string given;
+        if (is > was && Explain(name, is - was, given) == 0)
+            log.Event("gain", text + " by " + given, [&](JsonOut& out) {
+                out.FieldString("item", utf8);
+                out.Field("was", was);
+                out.Field("is", is);
+                out.FieldString("cause", given);
+            });
+        else if (scripted)
             log.Event(is < was ? "loss" : "gain", text + " by " + scriptcause, [&](JsonOut& out) {
                 out.FieldString("item", utf8);
                 out.Field("was", was);
@@ -309,5 +353,7 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
     scripts.clear();
     travels.erase(std::remove_if(travels.begin(), travels.end(), [&](const STravel& t) { return t.until < tick; }),
                   travels.end());
+    gifts.erase(std::remove_if(gifts.begin(), gifts.end(), [&](const SItems& g) { return g.until < tick; }),
+                gifts.end());
     return violations - before;
 }

@@ -21,6 +21,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -82,6 +83,7 @@ class TShadowRun
     std::unique_ptr<TShadowStepRunner> runner;
     std::vector<SShadowWaypoint>       waypoints;
     std::vector<std::string>           stagesdone;
+    std::set<int32_t>                  surveyed;   // levels whose chests are logged
 
     // Turbo: the steps a frame runs, and when this frame's began.
     int32_t                               steps = 1;

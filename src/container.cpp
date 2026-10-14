@@ -149,6 +149,11 @@ int32_t TContainer::NumObjects()
     return RealNumInventoryItems();
 }
 
+bool TContainer::IsOpen() const
+{
+    return state == OPEN;
+}
+
 bool TContainer::CanTrade()
 {
     return !(ObjClass() == OBJCLASS_INVCONTAINER && !stricmp(GetName(), "Swag Bag"));

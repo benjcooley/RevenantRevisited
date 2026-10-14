@@ -7,6 +7,8 @@
 
 #include "buildinfo.h"
 
+#include "shadowloot.h"
+
 #include "../gameflow.h"
 #include "../logging.h"
 #include "../module.h"
@@ -126,6 +128,14 @@ void TShadowRun::Pulse()
     {
         Finish(2, "the ledger found a change with no cause");
         return;
+    }
+
+    // The chests of each level Locke comes to, once: where the plan's chest
+    // tours come from (ARCHITECTURE.md §8.8).
+    if (!finished && !surveyed.count(Player->GetLevel()) && ShadowGameIdle())
+    {
+        surveyed.insert(Player->GetLevel());
+        ShadowLogChests(Player->GetLevel(), log);
     }
 
     RunSteps();

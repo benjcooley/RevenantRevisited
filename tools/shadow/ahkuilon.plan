@@ -29,6 +29,12 @@ stage rand "Rand, in the Keep's jail"
 
 stage tendrick "Tendrick in the throne room"
     travel  jailexit                    # back out of the jail (exit.def:111)
+    # The Keep's unlocked chests: 500 gold, a Lesser Healing and an Apple
+    # (the run's chest survey; GRIND.md §4.4). The Gothic Leg Plate and the
+    # Wyrmm's Tooth Sword (key 33) stay locked for now.
+    take    Chest@10532,11000           # 250 gold
+    take    Chest@10864,10720           # 100 gold, a Lesser Healing
+    take    ChestE@13042,10898          # 150 gold, an Apple
     # TendrickT (keep.s:1016-1140): eastern and yhagoro loop; innocent and
     # executed go on to a last menu, whose first answer loops back to the
     # first menu and whose second finishes. Every branch, then on: the

@@ -262,13 +262,13 @@ bool ParseStep(const std::string& verb, TLineReader& in, SShadowStep& step, std:
         }
         return true;
     }
-    if (verb == "use")
+    if (verb == "use" || verb == "take")
     {
-        step.verb = EShadowVerb::Use;
+        step.verb = verb == "use" ? EShadowVerb::Use : EShadowVerb::Take;
         const SToken* target = in.Take();
         if (!target)
         {
-            error = "'use' needs something to use";
+            error = "'" + verb + "' needs something to " + verb;
             return false;
         }
         step.target = target->text;
@@ -277,14 +277,14 @@ bool ParseStep(const std::string& verb, TLineReader& in, SShadowStep& step, std:
             const SToken* item = in.Take();
             if (!item)
             {
-                error = "'use ... with' needs an item";
+                error = "'" + verb + " ... with' needs an item";
                 return false;
             }
             step.item = item->text;
         }
         if (!in.AtEnd())
         {
-            error = "'use' takes an object, then 'with <item>' or nothing";
+            error = "'" + verb + "' takes an object, then 'with <item>' or nothing";
             return false;
         }
         return true;
@@ -362,6 +362,7 @@ std::string SShadowStep::Describe() const
         case EShadowVerb::Travel: out << "travel " << target << (evade ? " evade" : ""); break;
         case EShadowVerb::Talk:   out << "talk " << target; break;
         case EShadowVerb::Use:    out << "use " << target << (item.empty() ? "" : " with \"" + item + "\""); break;
+        case EShadowVerb::Take:   out << "take " << target << (item.empty() ? "" : " with \"" + item + "\""); break;
         case EShadowVerb::Expect: out << "expect " << condition.Describe(); break;
         case EShadowVerb::Save:   out << "save \"" << name << '"'; break;
     }

@@ -26,7 +26,7 @@ it has got.
 | Fights | the duel model (§6) | P2 | — |
 | Getting poisoned, paralysed, buffed | real state through the duel (§8.7) | P2 | — |
 | Looting monsters | real death drop, `Pickup` of every item (§8.8) | P2 | — |
-| Opening chests, picking locks | `Take` / `UseOn` through `TContainer::Use`, `CheckKeyUse` (§8.8) | P4 | — |
+| Opening chests, picking locks | `take` through `TContainer::Use`; keys by `with`; lockpicks to come (§8.8) | P4 | chests done (the Keep's 500 gold); lockpicks open |
 | Monster generators | `TMonsterGen` (§7) | P3 | agent porting |
 | Levelling up | real `AwardKillExp` | P2 | — |
 | New stat points | `Train`: the level-up markers (§8.3) | P4 | — |
@@ -114,7 +114,9 @@ it has got.
 | [ ] | Spell invention and quick-spell slots | — |
 | [ ] | The pack: talismans into the Spell Pouch, healing on the belt, pouches for consumables (§8.9) | — |
 | [ ] | Grind sites, linger rules, return to town | — |
-| [ ] | Chest survey per level; chest tours by value per minute; locked chests by key or lockpicks; traps (§8.8) | — |
+| [x] | Chest survey: every container of a level with its lock, key and contents, logged as Locke first reaches the level | 2026-10-14 |
+| [x] | `take <chest> [with "<key>"]`: walk up, the real `TContainer::Use` a tick (open, one item each, close); the ledger allows exactly what the chest held. The Keep's three unlocked chests give their 500 gold, a Lesser Healing and an Apple | 2026-10-14 |
+| [ ] | Chest tours planned by value per minute of travel; lockpicks on locked chests; traps (§8.8) | — |
 | [ ] | Loot every kill: pick up the death drop; a full pack keeps the best per slot (§8.8) | — |
 | [ ] | Gate: level 1 to 6 with shopping trips | — |
 
