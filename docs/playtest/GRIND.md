@@ -1189,14 +1189,26 @@ from rules.def (Rules `+0x74` … `+0x88`, parsed at `0x0048c30f`):
 `TFood::Use` `0x0050e780` handles both (the FOOD and POTION vtables
 `0x005b2cd4` and `0x005b2ee4`, slot `0xbc`):
 
+- The base Use runs first (the item's and the user's USE triggers). A dead
+  character can't eat; nothing is used with another object (`with` must
+  be −1), nor an item whose state isn't 0.
 - Health += the item's Health and Mana += its Mana, each capped at the
   maximum.
-- An item with Poison ≠ 0 cures poison.
+- An item with Poison ≠ 0 cures poison: the user's Poisoned mark is
+  cleared, and every effect within 0x80 of the user whose spell has the
+  user as its first target and DT_POISON as its damage type is ended
+  (`KillThisEffect`), so a running Poison spell stops re-poisoning.
 - The item's Fatigue stat is **never applied**.
-- The amount drops by one, and the item is deleted at the last unit.
-  Nothing is left behind, whatever the manual says about apple cores and
-  bottles.
-- The text bar shows `FOODGOOD1`.
+- The player hears "food" for an item whose imagery has an inventory icon
+  (`GetInvImage(0, 0)`), else "potion".
+- In an inventory, the amount drops by one, and the last unit is deleted
+  from its owner by name (`DeleteFromInventory(name, 1)`). Nothing is left
+  behind, whatever the manual says about apple cores and bottles. An item
+  on the map is not used up.
+- The text bar shows `FOODGOOD1` ("The item was consumed. You feel
+  rejuvenated.") when the user is the player.
+
+Ported 2026-10-13 (`TFood::Use`, src/food.cpp); a potion is a `TFood`.
 
 | Item | Where | Buy / sell, gp | Effect |
 |---|---|---|---|

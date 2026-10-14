@@ -823,7 +823,7 @@ first. Each is fixed in the game, retail first:
 
 | Gap | Fix |
 |---|---|
-| `TFood::Use` is the 1998 stub: no decrement, no delete, no poison cure, no FOODGOOD1 | port `0x0050e780` (GRIND.md §6.2) |
+| `TFood::Use` is the 1998 stub: no decrement, no delete, no poison cure, no FOODGOOD1 | port `0x0050e780` (GRIND.md §6.2): done |
 | No monster generators | `TMonsterGen` (§7) |
 | `RequestSave` doesn't refuse while control is off; only the menu does | the gate moves into the session, as retail's `0x0047e850` path has it |
 | `Teleport` doesn't set OF_ONEXIT: landing on a strip activates it | as retail: verify in the emulator, then match |

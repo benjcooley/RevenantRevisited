@@ -65,7 +65,7 @@ inline) · `[-]` cancelled. Dates are ISO.
 
 | Status | Item | Last touched |
 |---|---|---|
-| [ ] | Retail `TFood::Use` (`0x0050e780`) | — |
+| [x] | Retail `TFood::Use` (`0x0050e780`): health and mana to the cap, poison cured (and its spell effects ended), one fewer, the last deleted, FOODGOOD1 | 2026-10-13 |
 | [ ] | Public shop verbs (`Transact`, `Exit`); buy, sell | — |
 | [ ] | Shopping list scored by the duel model | — |
 | [ ] | Level-up markers by style | — |
