@@ -125,11 +125,12 @@ class TGameModeImpl final : public IRuntimeMode
 
     bool HandleKey(int32_t key, bool down) override
     {
-      // F9: developer reload of the last slot saved or loaded; retail had no
-      // quick load. (Quick Save is retail's control, Ctrl+Backspace, through
-      // the control map below.) Fires on key-down only and consumes the key
-      // so it doesn't fall through to the gameplay command path.
-        if (down && key == VK_F9) {
+      // Shift+F9: developer reload of the last slot saved or loaded; retail
+      // had no quick load. (Quick Save is retail's control, Ctrl+Backspace,
+      // and F9 alone is its Belt Use 5, both through the control map below.)
+      // Fires on key-down only and consumes the key so it doesn't fall
+      // through to the gameplay command path.
+        if (down && key == VK_F9 && ShiftDown) {
             GameFlow.Session().RequestReloadLastSlot();
             return true;
         }

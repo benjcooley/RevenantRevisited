@@ -1771,22 +1771,6 @@ constexpr uint32_t Square32(int32_t v)
 {
     return static_cast<uint32_t>(v) * static_cast<uint32_t>(v);
 }
-
-// The objects FindObjectsInRange looks at: `level`'s loaded sectors that
-// meet the map rect, and their objects of `objset` in it, faces included,
-// no inventories (retail's iterator flags 0x6e0).
-template <class Visit>
-void ForObjectsIn(int32_t level, SRect rect, int32_t objset, Visit&& visit)
-{
-    if (TMapPane::mapObjectsSeam)
-    {
-        for (TObjectInstance* o : TMapPane::mapObjectsSeam(level, rect, objset))
-            visit(o);
-        return;
-    }
-    for (TMapIterator i(level, &rect, CHECK_NOINVENT, objset); i; i++)
-        visit(i.Item());
-}
 }  // namespace
 
 // REVSYNC: TMapPane::FindObjectsInRange @ 0x00452060 (MAP_QUERIES.md §2.1)

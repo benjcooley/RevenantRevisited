@@ -11,6 +11,7 @@
 #include "logging.h"
 #include "player.h"
 #include "revenant.h"   // DialogList, TextBar
+#include "sound.h"
 #include "textbar.h"
 
 #include <cstdlib>
@@ -34,7 +35,9 @@ const char* SrcName(EDragSource s)
     return "?";
 }
 
-constexpr int32_t kDragThresholdPx = 4;
+// REVSYNC: InventoryPane MouseMove 0x00538c10 / TBarInvPane 0x0052d6e0 -- a
+// move of 2 pixels or more on either axis from the press turns it into a drag.
+constexpr int32_t kDragThresholdPx = 2;
 
 void ClampGrabToVisual(const SDragBitmapLayer* layers, int32_t layer_count,
                        int32_t& grab_x, int32_t& grab_y)
@@ -108,9 +111,10 @@ bool CommitMove(TObjectInstance* item, EDragSource src, int32_t srcIdx,
 
 // Sound file for UI inventory actions. The important ownership rule is now
 // pinned: drag sounds belong to the transaction manager, not individual slots.
-// Retail names are not confirmed from the currently extracted InventoryPane /
-// TEquipPane bodies; using the available open.wav UI sound as a placeholder
-// until a retail capture or sound-registry pass identifies the exact cue.
+// REVSYNC-DIVERGENCE: retail's pack and belt moves ask for "pop"
+// (InventoryPane 0x005388ed, TBarInvPane 0x0052d425), which no shipped sound
+// directory has, so they are silent; TEquipPane's cue (0x005363e0) isn't read
+// yet. open.wav stands in until the UI track settles it.
 constexpr const char* kActionSound = "data/open.wav";
 
 } // namespace
@@ -259,14 +263,30 @@ bool UpdateDrag(int32_t mouse_x, int32_t mouse_y)
     return true;
 }
 
-bool CompleteClick()
+// REVSYNC: InventoryPane MouseClick 0x00538210 / TBarInvPane 0x0052cfb0, left
+// button up on the cell the press was on, the item not dragged: the main
+// player uses it (vtable 0xbc, Use(player, -1); 0x005388d2 / 0x0052d409).
+// An item that isn't used is put back into its own slot, which moves nothing,
+// with a "pop" (0x005388e0 / 0x0052d425) -- a sound the shipped game doesn't
+// have, so it is silent.
+// REVSYNC-DIVERGENCE: an item released on another cell without a drag (across
+// a cell's edge, within 2 pixels) is moved there with the "pop" in retail; the
+// port's click does nothing there.
+bool CompleteClick(EDragSource dest, int32_t dest_slot)
 {
     if (g_state.source == EDragSource::None || !g_state.pending)
         return false;
 
-    log_info("[drag] click %s slot=%d", SrcName(g_state.source), g_state.source_idx);
+    const EDragSource source = g_state.source;
+    const int32_t slot = g_state.source_idx;
+    TObjectInstance* const item = g_state.item.Get();
+    log_info("[drag] click %s slot=%d", SrcName(source), slot);
     ClearDragBitmap();
-    g_state = SUIDragState{};
+    g_state = SUIDragState{};       // let go first: the use may delete the item
+
+    const bool itemCell = source == EDragSource::Inventory || source == EDragSource::BarInv;
+    if (item && Player && itemCell && dest == source && dest_slot == slot && !item->Use(Player, -1))
+        PLAY("pop");
     return true;
 }
 
@@ -275,7 +295,7 @@ bool CompleteDrag(EDragSource dest, int32_t dest_slot, bool commit)
     if (g_state.source == EDragSource::None) return false;
     if (!g_state.dragging)
     {
-        CompleteClick();
+        CompleteClick(dest, dest_slot);
         return false;
     }
     const EDragSource oldSrc = g_state.source;

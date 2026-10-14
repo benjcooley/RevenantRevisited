@@ -701,7 +701,15 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         }
         if (UIDragState::IsPending())
         {
-            UIDragState::CompleteClick();
+            // A click: released on the pack or belt cell it was pressed on,
+            // the manager has the item used.
+            int32_t cell = -1;
+            if (drag.source == EDragSource::BarInv && s.bottomBarOpen)
+                cell = HitBarInvSlot(x, y);
+            else if (drag.source == EDragSource::Inventory && s.sidebarState == HUD_SIDEBAR_OPEN &&
+                     s.bottomSlot == HUD_BOT_INV)
+                cell = HitInvSlot(x, y, Inventory.FirstSlot());
+            UIDragState::CompleteClick(cell >= 0 ? drag.source : EDragSource::None, cell);
             return true;
         }
 

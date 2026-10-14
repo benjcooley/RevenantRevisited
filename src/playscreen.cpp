@@ -1938,6 +1938,11 @@ void TPlayScreen::Command(GAMECOMMAND command)
         if (Player)         // 0x30-0x37 (0x0047d900): Dodge(0..7)
             Player->Dodge(command - GAMECMD_DODGELEFT);
         break;
+    case GAMECMD_BELTUSE1: case GAMECMD_BELTUSE2: case GAMECMD_BELTUSE3:
+    case GAMECMD_BELTUSE4: case GAMECMD_BELTUSE5:
+        if (Player)         // 0x18-0x1c (0x0047d882): UseBelt(0..4) 0x0051e420
+            Player->UseBelt(command - GAMECMD_BELTUSE1);
+        break;
     case GAMECMD_USE:               // 0xe: Use 0x004d01e0
         if (Player)
             Player->TryUse();

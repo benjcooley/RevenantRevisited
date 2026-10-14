@@ -786,6 +786,10 @@ TARGETS = {
 from combat_targets import TARGETS as COMBAT_TARGETS  # noqa: E402
 TARGETS.update(COMBAT_TARGETS)
 
+# Items: eating and drinking (targets_items.py, docs/gameplay/forensics/CONSUMABLES.md).
+from targets_items import TARGETS as ITEM_TARGETS  # noqa: E402
+TARGETS.update(ITEM_TARGETS)
+
 
 # =====================================================================
 # Driver

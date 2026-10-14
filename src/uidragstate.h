@@ -19,8 +19,9 @@
 //   2. Mouse motion past the wiggle threshold -> UpdateDrag(...) promotes the
 //      pending grab to a real drag and attaches the icon at the original
 //      click offset.
-//   3. Mouse-up before promotion -> CompleteClick() clears the pending grab
-//      and leaves use/click behavior distinct from drag/drop.
+//   3. Mouse-up before promotion -> CompleteClick(cell under the release)
+//      clears the pending grab; on the pressed pack or belt cell the main
+//      player uses the item.
 //   4. Mouse-up after promotion -> CompleteDrag(dest, dest_slot) moves the
 //      item in the main player's inventory, if the destination takes it.
 //   5. Either way, state returns to idle.
@@ -45,9 +46,9 @@
 //              payload 0x00656398, the talisman code)
 //   QuickSpell quick-spell ring 1..4 (a destination only: spells drop there)
 //
-// The manager is the one place a drop mutates the inventory and plays the
-// action sound; slots only start drags and name destinations. A spell drop
-// moves nothing: the ring it lands on copies the spell, silently.
+// The manager is the one place a drop or a click mutates the inventory and
+// plays the action sound; slots only start drags and name destinations. A
+// spell drop moves nothing: the ring it lands on copies the spell, silently.
 //
 // *************************************************************************
 
@@ -119,8 +120,12 @@ bool BeginSpellDrag(int32_t row, const char* talismans, PTBitmap icon,
 // Returns true when the manager is tracking this pointer sequence.
 bool UpdateDrag(int32_t mouse_x, int32_t mouse_y);
 
-// Finish a pending click without converting it into a drag/drop.
-bool CompleteClick();
+// Finish a pending click without converting it into a drag/drop. `dest` and
+// `dest_slot` name the cell under the release (EDragSource::None: none). A
+// press and release on one pack or belt cell uses its item: the main player
+// eats a food, drinks a potion, opens a pouch (docs/gameplay/forensics/
+// CONSUMABLES.md §7.1, §7.2).
+bool CompleteClick(EDragSource dest = EDragSource::None, int32_t dest_slot = -1);
 
 // Drop on (dest, dest_slot). With `commit`, an item drag moves the item in
 // the main player's inventory when the destination takes it. Either way
