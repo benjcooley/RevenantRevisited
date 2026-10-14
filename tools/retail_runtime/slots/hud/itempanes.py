@@ -113,7 +113,7 @@ class ItemPaneKit:
         return zlib.compress(bytes(alpha), 9).hex()
 
     def _track_alpha(self, name, this, a):
-        if self.alpha is None or name != 'Put':
+        if self.alpha is None or name not in ('Put', 'PutSubrect'):
             return
         if self.scene.screen_surface(this) == 'display':
             dx, dy, clip = 0, 0, (-SCREEN[0], -SCREEN[1], SCREEN[0], SCREEN[1])
@@ -124,24 +124,32 @@ class ItemPaneKit:
         bitmap = a[2]
         fields = struct.unpack('<18I', self.vm.uc.mem_read(bitmap, 72))
         width, height, flags, drawmode = fields[0], fields[1], fields[4], fields[5]
+        # A Put is the whole bitmap; a PutSubrect (x, y, bitmap, sx, sy, w,
+        # h, mode) a rect of it.
+        if name == 'Put':
+            src, passed = (0, 0, width, height), a[3]
+        else:
+            src, passed = tuple(s32(v) for v in a[3:7]), a[7]
         # DM_USEDEFAULT adds the bitmap's own mode to the flags passed with
         # it (an arrow button's DM_USEDEFAULT | DM_ALPHA reaches the alpha
         # blit, 0x004b3510, whatever its bitmap's mode).
-        mode = a[3] | (drawmode if a[3] & DM_USEDEFAULT else 0)
+        mode = passed | (drawmode if passed & DM_USEDEFAULT else 0)
         if not (mode & DM_ALPHA and flags & BM_ALPHA and fields[9] and fields[10]):
             return
         coverage = self.vm.uc.mem_read(bitmap + 40 + fields[10], width * height)
         left, top = dx + s32(a[0]), dy + s32(a[1])
-        for y in range(height):
+        for y in range(src[3]):
             py = top + y
             sy = self.origin[1] + py
-            if not (0 <= sy < SCREEN[1] and clip[1] <= py < clip[3]):
+            by = src[1] + y
+            if not (0 <= sy < SCREEN[1] and clip[1] <= py < clip[3] and 0 <= by < height):
                 continue
-            for x in range(width):
+            for x in range(src[2]):
                 px = left + x
                 sx = self.origin[0] + px
-                if (0 <= sx < SCREEN[0] and clip[0] <= px < clip[2]
-                        and 0 < (coverage[y * width + x] & 0x1f) < OPAQUE_ALPHA):
+                bx = src[0] + x
+                if (0 <= sx < SCREEN[0] and clip[0] <= px < clip[2] and 0 <= bx < width
+                        and 0 < (coverage[by * width + bx] & 0x1f) < OPAQUE_ALPHA):
                     self.alpha[sy * SCREEN[0] + sx] = 1
 
     def _track_glyph_alias(self, uc, address, size, user):

@@ -6,6 +6,7 @@
 #include "logoscreen.h"
 
 #include "buildinfo.h"
+#include "font.h"         // TextFlag
 #include "gameflow.h"
 #include "logging.h"
 #include "multi.h"
@@ -50,8 +51,6 @@ constexpr int32_t  kVersionX     = 15;
 constexpr int32_t  kVersionY     = 450;
 constexpr int32_t  kVersionW     = WIDTH - 2 * kVersionX;
 constexpr int32_t  kVersionH     = 40;
-constexpr uint32_t kTextLeft     = 0x0001;
-constexpr uint32_t kTextVCenter  = 0x0040;
 
 // --menu auto-press delay: long enough for the menu to be on screen (and in a
 // filmstrip) before the button fires. Pulses run at 24 Hz.
@@ -94,7 +93,7 @@ bool TLogoScreen::Initialize()
     std::snprintf(version, sizeof(version), "RevenantRevisited %s %s %s",
                   kBuildVersion, kBuildBranch, kBuildShortSha);
     menu.AddText("version", kVersionX, kVersionY, kVersionW, kVersionH, version,
-                 kTextLeft | kTextVCenter, SDefColor{175, 72, 255, true}, "Med");
+                 TextFlag::Left | TextFlag::VCenter, SDefColor{175, 72, 255}, "Med");
 
     menu.SetOnActivate([this](TDefPane&, const SDefWidget& widget, int32_t) {
         Activate(ButtonFromName(widget.name.c_str()));

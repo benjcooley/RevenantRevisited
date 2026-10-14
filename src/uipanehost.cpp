@@ -9,6 +9,10 @@
 
 #include "uipanehost.h"
 
+#include "font.h"
+#include "jsonout.h"
+#include "textencoding.h"
+
 #include "logging.h"
 #include "screen.h"
 #include "time.h"
@@ -115,4 +119,26 @@ bool SAbItem::Place(TObjectInstance* owner, int32_t slot) const
         if (!contents[index].Place(placed, static_cast<int32_t>(index)))
             return false;
     return true;
+}
+
+void WriteTextDraws(JsonOut& json, const std::vector<STextDraw>& text)
+{
+    json.Key("text").Begin('[');
+    for (const STextDraw& draw : text)
+    {
+        json.Begin('{');
+        json.FieldString("text", ToUtf8(draw.text.c_str()));
+        json.FieldString("face", draw.face);
+        json.Field("x", draw.x).Field("y", draw.y).Field("w", draw.w).Field("h", draw.h);
+        json.FieldString("align", draw.align == ETextAlign::Center ? "center"
+                                  : draw.align == ETextAlign::Right ? "right" : "left");
+        json.Key("color").Begin('[').Value(draw.r).Value(draw.g).Value(draw.b).End(']');
+        json.FieldBool("shadowed", draw.shadowed).FieldBool("wrapped", draw.wrapped);
+        json.Key("lines").Begin('[');
+        for (const STextLine& line : draw.lines)
+            json.Begin('[').Value(line.x).Value(line.y).String(ToUtf8(line.text.c_str())).End(']');
+        json.End(']');
+        json.End('}');
+    }
+    json.End(']');
 }

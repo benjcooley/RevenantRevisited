@@ -435,7 +435,33 @@ def surface_origins(primitives, pane):
             d = p['drawparam']
             x, y, w, h, sx, sy = d[10:16]
             origins[p['src']] = (x - sx, y - sy, (x, y, x + w, y + h))
+        elif p['primitive'] == 'Quad' and p.get('texture') and p['texture'] not in origins:
+            # An overlay pane's surface, drawn 1:1 by its texture's quad.
+            sx, sy = p['src'][:2]
+            w, h = p['size']
+            origins[p['texture']] = (p['x'] - sx, p['y'] - sy, (p['x'], p['y'], p['x'] + w, p['y'] + h))
     return origins
+
+
+def known_bug_mask(result, pane):
+    """The screen pixels of the retail bugs a fixture reports
+    (`known_bugs`), which the port doesn't reproduce: {kind: mask}.
+    `narrow_alpha`: the blits retail's alpha blitter dropped for being under
+    4 px wide (0x004b3539), each on its surface."""
+    origins = surface_origins(result['primitives'], pane)
+    masks = {}
+    for kind, drops in result.get('known_bugs', {}).items():
+        mask = np.zeros((SCREEN[1], SCREEN[0]), dtype=bool)
+        for drop in drops:
+            dx, dy, clip = origins.get(drop['dst'], (None, None, None))
+            if dx is None:
+                continue
+            x, y, w, h = drop['rect']
+            x0, y0 = max(x + dx, clip[0]) + pane[0], max(y + dy, clip[1]) + pane[1]
+            x1, y1 = min(x + dx + w, clip[2]) + pane[0], min(y + dy + h, clip[3]) + pane[1]
+            mask[max(y0, 0):max(y1, 0), max(x0, 0):max(x1, 0)] = True
+        masks[kind] = mask
+    return masks
 
 
 def text_draws(result):
@@ -459,6 +485,9 @@ def text_draws(result):
         if gdi['format'] & DT_CALCRECT:
             continue                    # a measure: it lays nothing out
         dx, dy, clip = origins.get(p['dst'], (None, None, None))
+        # The GDI pass drew at its own rect: the text surface's (0, 0), or
+        # the compose's place when it drew on its surface directly.
+        gx, gy = (gdi['rect'][0], gdi['rect'][1]) if gdi['rect'] else (gdi['x'], gdi['y'])
         if dx is None:
             raise RuntimeError(f'retail text {p["text"]!r} lands on {p["dst"]}, never shown')
         x, y, w, h = p['rect']
@@ -467,8 +496,9 @@ def text_draws(result):
                           align=TEXT_ALIGN.get(p['format'] & 7, hex(p['format'] & 7)),
                           color=[color >> 16 & 0xff, color >> 8 & 0xff, color & 0xff], shadowed=shadowed,
                           wrapped=bool(gdi['format'] & 0x10),
-                          lines=[[lx + x + dx, ly + y + dy, line, width] for lx, ly, line, width in gdi['layout']],
-                          clip=list(clip), cell=int(gdi['font'].rsplit(' ', 1)[-1])))
+                          lines=[[lx - gx + x + dx, ly - gy + y + dy, line, width]
+                                 for lx, ly, line, width in gdi['layout']],
+                          clip=list(clip), cell=gdi['cell']))
     return draws
 
 
@@ -533,9 +563,9 @@ def text_draw_mask(draws, pane):
 
 def compare_text(retail, port):
     """Retail's text composes against the port's text draws (the A/B host's
-    `text`, STextDraw): each must be there, the same font, place, colour and
-    lines. -> {matched, missing, extra, mismatched: [{text, field: [retail,
-    port]}]}"""
+    `text`, STextDraw): each must be there, the same font, rect, colour and
+    lines -- each line's text and where its cell lands. -> {matched,
+    missing, extra, mismatched: [{text, field: [retail, port]}]}"""
     unmatched = list(port)
     result = dict(matched=0, missing=[], extra=[], mismatched=[])
     for draw in retail:
@@ -549,8 +579,8 @@ def compare_text(retail, port):
                       rect=(draw['rect'], [mine['x'], mine['y'], mine['w'], mine['h']]),
                       align=(draw['align'], mine['align']), color=(draw['color'], mine['color']),
                       shadowed=(draw['shadowed'], mine['shadowed']), wrapped=(draw['wrapped'], mine['wrapped']))
-        if draw['wrapped']:
-            fields['lines'] = ([line for _x, _y, line, _w in draw['lines']], mine.get('lines', []))
+        # Each line drawn and where its cell lands.
+        fields['lines'] = ([[x, y, line] for x, y, line, _w in draw['lines']], mine.get('lines', []))
         wrong = {k: list(v) for k, v in fields.items() if v[0] != v[1]}
         if wrong:
             result['mismatched'].append(dict(text=draw['text'][:40], **wrong))
@@ -561,7 +591,7 @@ def compare_text(retail, port):
 
 
 def pane_target(args, workdir, cases, fixture, run_port, retail_case, report,
-                masks=(('alpha', ALPHA_TOLERANCE),), text=None):
+                masks=(('alpha', ALPHA_TOLERANCE),), text=None, state=None):
     """A pane's A/B over `cases`: run_port(case) -> (shown, frame);
     retail_case(case, shown) -> the fixture's case; report(shown) -> what the
     case's result records of it. Every pixel outside its GDI text must match
@@ -571,7 +601,10 @@ def pane_target(args, workdir, cases, fixture, run_port, retail_case, report,
     `text` 'compose' (retail's 0x004be2b0 composes, text_draws) or 'gdi' (its
     straight GDI calls, gdi_draws) -- masks where that text can draw and
     compares it with the port's text draws (compare_text): a mismatch is a
-    defect."""
+    defect. `state(result, shown)` lists what the pane holds differently
+    from retail after the case (a mismatch fails it). Pixels of a retail bug
+    the fixture reports (known_bug_mask) aren't compared; the case records
+    them under `known_retail_bugs`."""
     cases = [c for c in cases if not args.only or c['name'] in args.only]
     retail = Fixture(SLOT / fixture, '--serve')
     results, timing = [], dict(port_seconds=0.0, retail_seconds=0.0)
@@ -600,9 +633,19 @@ def pane_target(args, workdir, cases, fixture, run_port, retail_case, report,
                 mask, band, cells = gdi_text_cells(result['text_calls'])
             retail_rgb = retail_frame(workdir / 'retail' / f'{name}.rgb565')
             port_rgb = port_frame(port_png)
+            bugs = known_bug_mask(result, pane)
+            if bugs:
+                differing = np.abs(retail_rgb - port_rgb).max(axis=-1) > 0
+                entry['known_retail_bugs'] = {kind: dict(pixels=int(m.sum()), differing=int((m & differing).sum()))
+                                              for kind, m in bugs.items() if m.any()}
+                for m in bugs.values():
+                    mask = mask | m
+            if state:
+                entry['state'] = state(result, shown)
             tolerance = np.zeros((SCREEN[1], SCREEN[0]), dtype=np.int32)
             for key, value in masks:
-                tolerance = np.maximum(tolerance, np.where(screen_mask(result['blend'][key]), value, 0))
+                if key in result['blend']:
+                    tolerance = np.maximum(tolerance, np.where(screen_mask(result['blend'][key]), value, 0))
             diff, delta = compare(retail_rgb, port_rgb, mask, band, tolerance)
             rows = slice(max(0, pane[1] - 16), min(SCREEN[1], pane[1] + pane[3] + 16))
             triptych(workdir / f'{name}.triptych.png', retail_rgb, port_rgb, delta, mask, band, tolerance, rows)
@@ -840,9 +883,80 @@ def target_statpane(args, workdir):
                        lambda shown: dict(format=shown['format'], levelup=shown['levelup']), text='gdi')
 
 
+# =====================================================================
+# options
+# =====================================================================
+
+OPTION_DEFAULTS = dict(Realtime=1, Auto=1, Dialog=1, Face=1, Enhanced=1, Limit=1, NoCombatRes=0, Violence=4,
+                       Music=96, Sound=127, Gamma=4)
+
+
+def click(x, y):
+    return [('down', x, y), ('up', x, y)]
+
+
+OPTIONS_CASES = [
+    dict(name='title'),
+    dict(name='title-settings', settings=dict(Realtime=0, Auto=0, Dialog=1, Face=0, Enhanced=0, Limit=0,
+                                              NoCombatRes=1, Violence=2, Music=40, Sound=60, Gamma=1)),
+    dict(name='title-zero', settings={k: 0 for k in OPTION_DEFAULTS}),
+    dict(name='from-game', from_game=1),
+    dict(name='click-toggle', input=click(62, 186)),
+    dict(name='click-track', input=click(445, 140)),
+    dict(name='click-arrow', input=click(426, 74)),
+    dict(name='click-row', input=click(150, 290)),
+    # The controller list: its scrollbar's down arrow (552,374) and track,
+    # a key cell held, and rebinding (VK 17 CTRL, 65 A, 90 Z, 27 ESC).
+    dict(name='list-arrow', input=click(558, 379)),
+    dict(name='list-arrows', input=click(558, 379) * 3),
+    dict(name='list-track', input=click(558, 330)),
+    dict(name='cell-down', input=[('down', 300, 235)]),
+    dict(name='cell-click', input=click(450, 275)),
+    dict(name='rebind-held', input=click(300, 235) + [('key', 17, 1)]),
+    dict(name='rebind-chord', input=click(300, 235) + [('key', 17, 1), ('key', 65, 1), ('key', 65, 0),
+                                                       ('key', 17, 0)]),
+    dict(name='rebind-scrolled', input=click(558, 379) * 2 + click(450, 335) + [('key', 90, 1), ('key', 90, 0)]),
+    dict(name='rebind-escape', input=click(300, 255) + [('key', 27, 1), ('key', 27, 0)]),
+    dict(name='rebind-four', input=click(300, 235) + [('key', 16, 1), ('key', 17, 1), ('key', 18, 1),
+                                                      ('key', 90, 1)]),
+]
+
+
+def target_options(args, workdir):
+    def settings(case):
+        return dict(OPTION_DEFAULTS, **case.get('settings', {}))
+
+    def run_port(case):
+        spec = ('settings=' + ','.join(f'{k}:{v}' for k, v in settings(case).items())
+                + f';from_game={case.get("from_game", 0)}')
+        if case.get('input'):
+            spec += ';input=' + '|'.join(f'{kind}:{x},{y}' for kind, x, y in case['input'])
+        return run_port_pane(args.port, 'ab-options', spec, case['name'], workdir)
+
+    def retail_case(case, shown):
+        return dict(settings=settings(case), from_game=case.get('from_game', 0),
+                    input=[list(e) for e in case.get('input', [])])
+
+    def state(result, shown):
+        wrong = [f'{name}: retail {value}, port {shown["members"].get(name)}'
+                 for name, value in result['members'].items() if shown['members'].get(name) != value]
+        if result['rebind'] != shown['rebind']:
+            wrong.append(f'capture: retail {result["rebind"]}, port {shown["rebind"]}')
+        if result['bindings'] != shown['bindings']:
+            changed = [i for i, (a, b) in enumerate(zip(result['bindings'], shown['bindings'])) if a != b]
+            wrong.append(f'bindings: {len(result["bindings"])} retail / {len(shown["bindings"])} port keys, '
+                         f'differ at control:code {sorted({(i // 9, i % 9 // 3) for i in changed})[:8]}')
+        return wrong
+
+    return pane_target(args, workdir, OPTIONS_CASES, 'options.py', run_port, retail_case,
+                       lambda shown: dict(members=shown['members'], rebind=shown['rebind']), text='compose',
+                       state=state, masks=(('alpha', ALPHA_TOLERANCE), ('screen', SCREEN_TOLERANCE),
+                                           ('composed', COMPOSED_TOLERANCE)))
+
+
 TARGETS = {'statusbar': target_statusbar, 'bottombar': target_bottombar, 'inventory': target_inventory,
            'spellpane': target_spellpane, 'automap': target_automap, 'spellbook': target_spellbook,
-           'statpane': target_statpane}
+           'statpane': target_statpane, 'options': target_options}
 
 
 def main():
@@ -860,7 +974,7 @@ def main():
     results = report['results']
     text_wrong = lambda r: bool(r.get('text') and (r['text']['missing'] or r['text']['extra']  # noqa: E731
                                                   or r['text']['mismatched']))
-    failing = [r for r in results if r.get('error') or r.get('defects') or text_wrong(r)]
+    failing = [r for r in results if r.get('error') or r.get('defects') or text_wrong(r) or r.get('state')]
     print(f'{args.target}: {len(results) - len(failing)}/{len(results)} cases match '
           f'(port {report["timing"]["port_seconds"]}s, retail {report["timing"]["retail_seconds"]}s); '
           f'report {workdir / "report.json"}')
@@ -880,6 +994,10 @@ def main():
                       + (f', extra {t["extra"]}' if t['extra'] else ''))
                 for wrong in t['mismatched']:
                     print(f'      {json.dumps(wrong)}')
+            for wrong in r.get('state') or []:
+                print(f'    state: {wrong}')
+            for kind, bug in (r.get('known_retail_bugs') or {}).items():
+                print(f'    known retail bug {kind}: {bug["differing"]} of {bug["pixels"]} pixels differ (not compared)')
     sys.exit(1 if failing else 0)
 
 

@@ -9,8 +9,9 @@ tools/retail_ab/hud_ab.py compares the screen pixels drawn from those
 texels within the composition tolerance.
 
 `BlendMap` follows the primitives a pane calls, per surface:
-- a Put whose draw mode (its own, or the bitmap's for DM_USEDEFAULT) has
-  DM_ALPHA marks the texels its bitmap's partial-alpha texels blend into;
+- a Put or PutSubrect whose draw mode (its own, or the bitmap's for
+  DM_USEDEFAULT) has DM_ALPHA marks the texels its bitmap's partial-alpha
+  texels blend into;
 - a Box clears its rect;
 - a surface-to-surface ParamBlit copies the source rect's marks;
 - a Quad (`0x00414d70`) marks the screen pixels it draws from marked texels.
@@ -56,6 +57,12 @@ class BlendMap:
 
     def put(self, surface, x, y, bitmap, mode):
         width, height = struct.unpack('<II', self.vm.uc.mem_read(bitmap, 8))
+        self.put_subrect(surface, x, y, bitmap, 0, 0, width, height, mode)
+
+    def put_subrect(self, surface, x, y, bitmap, sx, sy, w, h, mode):
+        """A Put of the bitmap's (sx, sy, w, h) at (x, y) (PutSubrect,
+        `0x004bd5e0`; a Put is the whole bitmap)."""
+        width, height = struct.unpack('<II', self.vm.uc.mem_read(bitmap, 8))
         flags, drawmode = self.vm.u32(bitmap + TBITMAP_FLAGS), self.vm.u32(bitmap + TBITMAP_DRAWMODE)
         if mode & DM_USEDEFAULT:
             mode = drawmode
@@ -64,13 +71,13 @@ class BlendMap:
         sw, sh, marks = self._surface(surface)
         pixels = struct.unpack(f'<{width * height}H',
                                self.vm.uc.mem_read(bitmap + TBITMAP_HEADER, width * height * 2))
-        for j in range(height):
-            ty = y + j
-            if not 0 <= ty < sh:
+        for j in range(h):
+            ty, fy = y + j, sy + j
+            if not (0 <= ty < sh and 0 <= fy < height):
                 continue
-            for i in range(width):
-                tx = x + i
-                if 0 <= tx < sw and 0 < pixels[j * width + i] >> 12 < 15:
+            for i in range(w):
+                tx, fx = x + i, sx + i
+                if 0 <= tx < sw and 0 <= fx < width and 0 < pixels[fy * width + fx] >> 12 < 15:
                     marks[ty * sw + tx] = 1
 
     def box(self, surface, left, top, width, height):

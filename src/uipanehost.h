@@ -27,8 +27,10 @@
 #include <string>
 #include <vector>
 
+class JsonOut;
 class TObjectInstance;
 class TPane;
+struct STextDraw;
 
 class TTestPaneHost
 {
@@ -85,3 +87,8 @@ struct SAbItem
 
 // `text` split at each `separator` (a trailing one makes an empty last part).
 std::vector<std::string> SplitAbField(const std::string& text, char separator);
+
+// The text draws a host recorded (SetTextDrawRecorder) as the A/B reads
+// them: a "text" array of {text, face, x, y, w, h, align, color, shadowed,
+// wrapped, lines: [[x, y, line], ...]}.
+void WriteTextDraws(JsonOut& json, const std::vector<STextDraw>& text);

@@ -15,8 +15,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <iterator>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 TFontTable* FontTable = nullptr;
 
@@ -99,32 +101,37 @@ TFont* TFontTable::Bitmap(const char* nm)
 
 namespace {
 
-// GDI's cell for each FONT.DEF WINFONT. Retail makes them with
+// GDI's metrics for each FONT.DEF WINFONT. Retail makes them with
 // CreateFontA(+size): a cell height, which GDI maps to the largest em size
 // whose cell, from the face's VDMX table, fits it ("Arial" 12: a 9 px em, 9
-// above the baseline and 3 below). Measured from the Windows faces' VDMX by
-// the HUD emulator (tools/retail_runtime/slots/hud/ttf.py), whose text
-// layout the A/B compares with the port's.
-struct SGdiCellEntry
+// above the baseline and 3 below), and lays text out with the face's widths
+// at that size (hinted, hdmx, where the face has them). Generated from the
+// Windows faces by the HUD emulator (gdi_metrics.py), whose text layout the
+// A/B compares with the port's.
+struct SGdiMetrics
 {
     const char* face;
     int32_t height;
     bool bold;
     SGdiFontCell cell;
+    uint8_t widths[0xe0];
 };
-constexpr SGdiCellEntry kGdiCells[] = {
-    { "Arial", 12, false, { 9, 9, 3 } },                // Small, Numbers, Version
-    { "Arial", 16, true, { 14, 13, 3 } },               // Med
-    { "Times New Roman", 18, false, { 15, 13, 4 } },    // SpellTitle
-    { "Times New Roman", 20, false, { 18, 16, 4 } },    // Dialog
-    { "Times New Roman", 20, true, { 18, 16, 4 } },     // Large
+constexpr SGdiMetrics kGdiMetrics[] = {
+#include "gdimetrics.inc"
 };
 
 const SGdiFontCell* GdiCellFor(const TGenericFont& f)
 {
-    for (const SGdiCellEntry& e : kGdiCells)
-        if (!stricmp(e.face, f.facename) && e.height == f.height && e.bold == f.bold)
-            return &e.cell;
+    static std::vector<SGdiFontCell> cells = [] {
+        std::vector<SGdiFontCell> all;
+        for (const SGdiMetrics& m : kGdiMetrics)
+            all.push_back({ m.cell.ppem, m.cell.ascent, m.cell.descent, m.widths });
+        return all;
+    }();
+    for (size_t i = 0; i < std::size(kGdiMetrics); ++i)
+        if (!stricmp(kGdiMetrics[i].face, f.facename) && kGdiMetrics[i].height == f.height
+            && kGdiMetrics[i].bold == f.bold)
+            return &cells[i];
     return nullptr;
 }
 

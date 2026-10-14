@@ -6,6 +6,7 @@
 #include "optionspane.h"
 
 #include "ctrlmap.h"      // TControlMap / SControlEntry / KEYSPERCODE
+#include "dialog.h"       // DialogList: the keys' display names
 #include "gameoptions.h"  // the settings the pane edits, SaveOptions
 #include "logging.h"
 #include "mappane.h"      // MapPane: OK re-sets the ambient with the gamma offset
@@ -14,15 +15,19 @@
 #include "sound.h"        // ApplyMusicVolume / ApplyEffectsVolume, level ranges
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 namespace {
 
-// TEXT_LEFT | TEXT_SHADOW for the controller-row columns.
-constexpr uint32_t kRowFlags = 0x0001 | 0x0400;
-
 constexpr int32_t kKeysPerControl = CODESPERCOMMAND * KEYSPERCODE;
+
+// The controller list shows two cells a control, its first two codes (Key 1,
+// Key 2); its eight rows are labelled by the TEXT widgets name0..name7.
+constexpr int32_t kCellsPerControl = 2;
+constexpr int32_t kNameLabels      = 8;
 
 // The toggles and the copies they edit (retail events 0xbb9 / 0xbba, by name).
 struct SToggleBinding
@@ -56,13 +61,34 @@ constexpr SSliderBinding kSliders[] = {
     { "Gamma",    &SOptionsPaneValues::gamma,    4,                1 },
 };
 
-// Render one code's keys ("CTRL-A", "F1", or "-" when unbound) into buf.
-const char* KeyToString(int32_t* keys, char* buf, int32_t buflen)
+// A key slot holding nothing: 0 in the bindings, -1 in the chord being
+// captured.
+bool NoKey(int32_t key) { return key == 0 || key == -1; }
+
+// REVSYNC: the options pane's field getter @ 0x0053b5d0, "key"
+// (0x0053b660-0x0053b79e) -- a code's keys joined with "-" in the order they
+// were pressed: each by its display name, the dialog line tagged "KEY" + its
+// key name (english.def KEYCTRL = "Cont"), or the key name itself when
+// there's no such line; a key without a name shows as "-". No keys: "-".
+std::string KeyCellText(const int32_t* keys)
 {
-    int32_t n = 0;
-    while (n < KEYSPERCODE && keys[n] != 0) ++n;
-    if (n == 0) { std::snprintf(buf, buflen, "-"); return buf; }
-    return ControlMap.MakeKeyString(n, keys, buf, buflen);
+    if (NoKey(keys[0]))
+        return "-";
+    std::string text;
+    for (int32_t k = 0; k < KEYSPERCODE; ++k)
+    {
+        if (NoKey(keys[k]))
+            continue;
+        std::string key = "-";
+        if (const char* name = ControlMap.GetKeyName(keys[k]))
+        {
+            key = DialogList.DisplayName((std::string("KEY") + name).c_str());
+            if (key.rfind("KEY", 0) == 0)
+                key = name;
+        }
+        text += text.empty() ? key : "-" + key;
+    }
+    return text;
 }
 
 }  // namespace
@@ -89,6 +115,9 @@ bool TOptionsPane::OpenOptions(bool fromGame, int32_t x, int32_t y)
     // every control's keys into the rebind buffer (0x00439060; the code
     // flags are not copied).
     InitDefaultControlMap();
+    capturing  = false;
+    rebindItem = -1;
+    chord      = {-1, -1, -1};
     const int32_t controls = ControlMap.NumControls();
     bindings.assign(static_cast<size_t>(controls) * kKeysPerControl, 0);
     for (int32_t i = 0; i < controls; ++i)
@@ -113,17 +142,6 @@ int32_t* TOptionsPane::BindingKeys(int32_t control, int32_t code)
 // the music level applies.
 void TOptionsPane::OnOpened()
 {
-    // The name0..name7 "Up/Down/..." TEXT widgets are a dead earlier-design
-    // overlay; the live controller list replaces them (retail does not draw
-    // them — see the reference screenshot / OptionsDef_SPEC §4.6).
-    for (int32_t i = 0; i < 8; ++i)
-    {
-        char n[8];
-        std::snprintf(n, sizeof(n), "name%d", i);
-        if (SDefWidget* lbl = Find(n))
-            lbl->text.clear();
-    }
-
     // Retail disables "Enhanced" on a device without MODULATE2X/4X; every
     // device the port runs on has them.
     for (const SToggleBinding& t : kToggles)
@@ -136,7 +154,10 @@ void TOptionsPane::OnOpened()
         SetSliderValue(s.name, values.*s.field);
     }
 
-    RefreshControllerList();
+    // The controller list: two cells a control (0x00430c50(NumControls * 2)),
+    // and the names of the controls in its window.
+    SetListCount("controller", Controls() * kCellsPerControl);
+    RefreshNames();
 }
 
 void TOptionsPane::OnSliderChanged(const SDefWidget& slider)
@@ -145,12 +166,12 @@ void TOptionsPane::OnSliderChanged(const SDefWidget& slider)
     {
         if (slider.name != s.name)
             continue;
-        values.*s.field = slider.value;
+        values.*s.field = slider.bar.value;
         // The music changes while the slider moves (0x0049a5c0). Retail's
         // gamma slider set the display ramp live too (0x004a98f0); the port
         // has no gamma ramp (OPTIONS.md §9).
         if (s.field == &SOptionsPaneValues::music)
-            ApplyMusicVolume(slider.value);
+            ApplyMusicVolume(slider.bar.value);
         return;
     }
 }
@@ -201,9 +222,7 @@ void TOptionsPane::Apply()
 
     // The rebind buffer back into the control map, keys only (0x00439060 /
     // 0x00439110), and [Controls] saved (0x00439dc0).
-    const int32_t controls = (std::min)(ControlMap.NumControls(),
-                                        static_cast<int32_t>(bindings.size() / kKeysPerControl));
-    for (int32_t i = 0; i < controls; ++i)
+    for (int32_t i = 0; i < Controls(); ++i)
     {
         SControlEntry ce{};
         ControlMap.GetControlEntry(i, &ce);
@@ -220,63 +239,166 @@ void TOptionsPane::Apply()
              GammaLevel);
 }
 
-void TOptionsPane::RefreshControllerList()
+int32_t TOptionsPane::Controls() const
 {
-    SDefWidget* ctrl = Find("controller");
-    if (!ctrl) return;
-
-    // Three columns aligned to the headers (Control Name @70, Key 1 @300,
-    // Key 2 @455); Key 2 in the field-yellow. x is relative to the row content
-    // origin (listbox left + RECT inset).
-    const int32_t cx = ctrl->x + ctrl->style.rect.l;
-    auto col = [&](int32_t paneX, int32_t cw, bool yellow) {
-        SDefListField f;
-        f.x = paneX - cx; f.y = 0; f.w = cw; f.h = ctrl->style.itemh;
-        f.flags = kRowFlags;
-        f.color = yellow ? SDefColor{255, 255, 100, true} : SDefColor{255, 255, 255, true};
-        return f;
-    };
-    ctrl->rowfields = { col(70, 220, false), col(300, 140, false), col(455, 120, true) };
-
-    const int32_t controls = (std::min)(ControlMap.NumControls(),
-                                        static_cast<int32_t>(bindings.size() / kKeysPerControl));
-    std::vector<std::vector<std::string>> rows;
-    rows.reserve(static_cast<size_t>(controls));
-    char k1[64], k2[64];
-    for (int32_t i = 0; i < controls; ++i)
-    {
-        SControlEntry ce{};
-        ControlMap.GetControlEntry(i, &ce);
-        rows.push_back({ ce.name ? ce.name : "",
-                         KeyToString(BindingKeys(i, 0), k1, sizeof(k1)),
-                         KeyToString(BindingKeys(i, 1), k2, sizeof(k2)) });
-    }
-    ctrl->rows = std::move(rows);
+    return (std::min)(ControlMap.NumControls(), static_cast<int32_t>(bindings.size() / kKeysPerControl));
 }
 
+// The cell being rebound shows the chord so far while it's captured.
+std::string TOptionsPane::FieldText(const std::string& field, int32_t index, SDefColor& colour)
+{
+    const int32_t control = index / kCellsPerControl;
+    if (field != "key" || index < 0 || control >= Controls())
+        return TDefPane::FieldText(field, index, colour);
+    if (capturing && index == rebindItem)
+        return KeyCellText(chord.data());
+    return KeyCellText(BindingKeys(control, index % kCellsPerControl));
+}
+
+void TOptionsPane::OnListScrolled(const SDefWidget& list)
+{
+    if (list.name == "controller")
+        RefreshNames();
+}
+
+// name0..name7 show the names of the controls in the list's rows, from its
+// first.
+void TOptionsPane::RefreshNames()
+{
+    const SDefWidget* list = Find("controller");
+    const int32_t first = list ? list->top / kCellsPerControl : 0;
+    for (int32_t k = 0; k < kNameLabels; ++k)
+    {
+        char label[8];
+        std::snprintf(label, sizeof(label), "name%d", k);
+        SControlEntry ce{};
+        const int32_t control = first + k;
+        if (control < Controls())
+            ControlMap.GetControlEntry(control, &ce);
+        // Localized through the "Control Names" lines ("Invoke 1" ->
+        // INVOKE1), the table's name without one.
+        SetText(label, ce.name ? DialogList.DisplayName(ce.name) : std::string());
+    }
+}
+
+// REVSYNC: MouseClick @ 0x0053ba50 -- every click ends the capture's
+// display; the target and the chord so far stay.
+void TOptionsPane::MouseClick(int32_t button, int32_t x, int32_t y)
+{
+    capturing = false;
+    TDefPane::MouseClick(button, x, y);
+}
+
+// REVSYNC: event 5002 @ 0x0053aa90 -- the mouse released on a key cell arms
+// the capture for it.
+void TOptionsPane::OnListClick(const SDefWidget& list, int32_t item)
+{
+    if (list.name != "controller")
+        return;
+    capturing = true;
+    rebindItem = list.selitem;
+    (void)item;
+}
+
+// REVSYNC: KeyPress @ 0x0053b9e0 -- while the controller list has a
+// selection every key goes to the rebind (no button keys); otherwise the
+// pane's own handling.
 void TOptionsPane::OnKey(int32_t vk, bool down)
 {
-    if (!down || vk <= 0) return;
-
-    // Rebind: when a controller row is selected, the next keypress becomes its
-    // primary binding (Key 1) in the rebind buffer; "ok" commits it. Single-key
-    // for now; chord capture (CTRL-/SHIFT-) is a refinement.
-    SDefWidget* ctrl = Find("controller");
-    const int32_t controls = static_cast<int32_t>(bindings.size() / kKeysPerControl);
-    if (!(ctrl && ctrl->selrow >= 0 && ctrl->selrow < controls))
-    {
+    const SDefWidget* list = Find("controller");
+    if (list && list->selitem >= 0)
+        Rebind(vk, down);
+    else
         TDefPane::OnKey(vk, down);
-        return;
+}
+
+// REVSYNC: Rebind @ 0x0053ba80 -- a chord is up to KEYSPERCODE keys held
+// together, in the order pressed. Its first key's release commits it and
+// ends the selection; a key past the last replaces it and commits at once,
+// the selection staying. A key down again while held changes nothing.
+// Modifiers are keys like any other, and every key can be bound.
+void TOptionsPane::Rebind(int32_t vk, bool down)
+{
+    bool commit = false;
+    if (!down)
+    {
+        if (chord[0] == vk)
+        {
+            capturing = false;
+            SelectListItem("controller", -1);
+            commit = true;
+        }
     }
+    else if (rebindItem >= 0)
+    {
+        if (!capturing)
+        {
+            // A target without a capture (a click elsewhere ended it): a
+            // fresh chord.
+            chord = {vk, -1, -1};
+            capturing = true;
+        }
+        else
+        {
+            int32_t n = 0;
+            while (n < KEYSPERCODE && chord[n] != -1)
+            {
+                if (chord[n] == vk)
+                    return;
+                ++n;
+            }
+            if (n < KEYSPERCODE)
+                chord[n] = vk;
+            else
+            {
+                capturing = false;
+                chord[KEYSPERCODE - 1] = vk;
+                commit = true;
+            }
+        }
+    }
+    if (commit)
+        ClearConflicts();
 
-    int32_t* keys = BindingKeys(ctrl->selrow, 0);
-    keys[0] = vk;
-    keys[1] = 0;
-    keys[2] = 0;
-    RefreshControllerList();
     SetDirty(true);
-
+    if (capturing || rebindItem < 0)
+        return;
+    // Not capturing with a target: the chord goes into its cell.
+    int32_t* keys = BindingKeys(rebindItem / kCellsPerControl, rebindItem % kCellsPerControl);
+    for (int32_t k = 0; k < KEYSPERCODE; ++k)
+        keys[k] = chord[k] != -1 ? chord[k] : 0;
     SControlEntry ce{};
-    ControlMap.GetControlEntry(ctrl->selrow, &ce);
-    log_info("[options] rebound '%s' -> vk 0x%x (until ok)", ce.name ? ce.name : "?", vk);
+    ControlMap.GetControlEntry(rebindItem / kCellsPerControl, &ce);
+    log_info("[options] '%s' key %d: %s (until ok)", ce.name ? ce.name : "?", rebindItem % kCellsPerControl + 1,
+             KeyCellText(keys).c_str());
+    chord = {-1, -1, -1};
+    rebindItem = -1;
+}
+
+// REVSYNC: 0x0053bb22-0x0053bc00 -- before a chord goes in, every code of
+// every control sharing a mode with the target's that the chord matches is
+// cleared (its other codes and the third, unshown code included). An empty
+// chord slot matches any key, so a single key clears every code it starts.
+void TOptionsPane::ClearConflicts()
+{
+    if (rebindItem < 0)
+        return;
+    SControlEntry target{};
+    ControlMap.GetControlEntry(rebindItem / kCellsPerControl, &target);
+    for (int32_t control = 0; control < Controls(); ++control)
+    {
+        SControlEntry ce{};
+        ControlMap.GetControlEntry(control, &ce);
+        if (!(ce.mode & target.mode))
+            continue;
+        for (int32_t code = 0; code < CODESPERCOMMAND; ++code)
+        {
+            int32_t* keys = BindingKeys(control, code);
+            bool match = true;
+            for (int32_t k = 0; k < KEYSPERCODE; ++k)
+                match = match && (chord[k] == -1 || keys[k] == chord[k]);
+            if (match)
+                std::fill(keys, keys + KEYSPERCODE, 0);
+        }
+    }
 }

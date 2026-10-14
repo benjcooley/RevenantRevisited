@@ -160,11 +160,14 @@ struct SGdiFontCell
     int32_t ppem = 0;
     int32_t ascent = 0;
     int32_t descent = 0;
+    // GDI's advance width of each Windows-1252 byte 0x20..0xff at that size
+    // (0: the face's own); none: the face's widths.
+    const uint8_t* widths = nullptr;
 };
 // The stand-in for a retail GDI font: rasterized at the cell's em size, its
 // lines `ascent + descent` apart with the baseline `ascent` under a cell's
-// top, as DrawTextA lays them; each glyph's advance is the face's advance
-// width at that size, rounded half to even (GDI's unhinted width -- the
+// top, as DrawTextA lays them; each glyph's advance is GDI's (`widths`), else
+// the face's advance width at that size, rounded half to even (the
 // stand-ins share the Windows faces' advance widths).
 const SFontAtlas* BuildTTFAtlas(const char* path, const SGdiFontCell& cell, const char* face);
 void DestroyAllTTFAtlases();
@@ -250,21 +253,54 @@ void DrawTextShadowedAtBaseline(const SFontAtlas* atlas, const char* text,
                                 int32_t target_w, int32_t target_h,
                                 ETextEncoding encoding = kGameTextEncoding);
 
+// Retail's text compose flags (0x004be2b0), which widgets.def defines as
+// TEXT_*: the DEF screens pass a style's text flags straight through.
+namespace TextFlag
+{
+inline constexpr uint32_t Left = 0x0001;
+inline constexpr uint32_t Center = 0x0002;
+inline constexpr uint32_t Right = 0x0004;
+inline constexpr uint32_t Top = 0x0010;         // a single line at the rect's top
+inline constexpr uint32_t Bottom = 0x0020;      // a single line at its bottom
+inline constexpr uint32_t VCenter = 0x0040;     // a single line centred in it
+inline constexpr uint32_t SingleLine = 0x0080;  // a single line; alone, y is its baseline
+inline constexpr uint32_t NoDraw = 0x0100;      // measure only
+inline constexpr uint32_t NoBaseline = 0x0200;
+inline constexpr uint32_t Shadow = 0x0400;      // the black drop shadow (SFontAtlas::shadow)
+inline constexpr uint32_t Elipses = 0x2000;
+}
+
+// REVSYNC: 0x004be2b0 -- retail's text compose, as GDI DrawTextA laid it in
+// (x, y, w, h): left, centred (Center) or right-aligned (Right) in w; word-
+// wrapped (DT_WORDBREAK | DT_EDITCONTROL: a line every lineStep, whole lines
+// only, the first always) unless a single-line flag picks one line at the
+// top, bottom, centre or (SingleLine alone) on the baseline y; shadowed with
+// Shadow. Returns how many lines it lays out; NoDraw only counts them.
+int32_t DrawTextComposed(const SFontAtlas* atlas, const char* text, int32_t x, int32_t y, int32_t w, int32_t h,
+                         uint32_t flags, float r, float g, float b, int32_t target_w, int32_t target_h,
+                         ETextEncoding encoding = kGameTextEncoding);
+
 // A wrapped block as retail's DrawTextA with DT_WORDBREAK | DT_EDITCONTROL
-// lays it in its rect (x, y, w, h): `text` wrapped to w (WrapTextLines), a
-// line every SFontAtlas::lineStep from the rect's top, each aligned in w,
-// and only the lines that fit whole in h (the first always). Shadowed as
-// DrawTextShadowedToTarget when `shadowed`. Returns the height drawn, as
-// DrawTextA does.
+// lays it (the compose without a single-line flag), shadowed when
+// `shadowed`. Returns the height drawn, as DrawTextA does.
 int32_t DrawTextWrappedToTarget(const SFontAtlas* atlas, const char* text,
                                 int32_t x, int32_t y, int32_t w, int32_t h,
                                 ETextAlign align, float r, float g, float b, bool shadowed,
                                 int32_t target_w, int32_t target_h,
                                 ETextEncoding encoding = kGameTextEncoding);
 
+// A line of a text draw and where its cell starts (the top-left of the cell
+// the glyphs sit in, the baseline SFontAtlas::cellBaseline below).
+struct STextLine
+{
+    std::string text;
+    int32_t x = 0, y = 0;
+};
+
 // A text draw as the canonical helpers make it, for the retail A/B hosts:
 // the A/B compares it with retail's own text compose (0x004be2b0, which
-// the emulator records the same way) -- string, font, place and colour.
+// the emulator records the same way) -- string, font, place, colour and
+// where each line lands.
 struct STextDraw
 {
     std::string text;
@@ -274,8 +310,8 @@ struct STextDraw
     uint8_t r = 0, g = 0, b = 0;
     bool shadowed = false;
     bool baseline = false;                  // y is the baseline, not the cell's top
-    bool wrapped = false;                   // DrawTextWrappedToTarget's rect
-    std::vector<std::string> lines;         // `wrapped`: the lines drawn, in order
+    bool wrapped = false;                   // laid out in the rect, word-wrapped
+    std::vector<STextLine> lines;           // the lines drawn, in order
 };
 // While set, every canonical text draw is appended to `recorder` (an A/B
 // host's; null stops it).

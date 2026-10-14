@@ -10,8 +10,9 @@
 //
 // This replaces hand-coding each of those screens: every coordinate, asset,
 // colour, alignment and flag comes from the shipped `.def` data (mounted out of
-// `data/resources.rvr`). See recon/discovered/port_status/DefWidgetEngine.md and
-// docs/ui/forensics/{Options,SaveGame,LoadGame,InGameMenu,Popup}Def_SPEC.md.
+// `data/resources.rvr`). How retail draws each widget -- the rect, flags and
+// draw mode of every call -- is docs/ui/forensics/DEF_ENGINE.md; the screens
+// are docs/ui/forensics/{Options,SaveGame,LoadGame,InGameMenu,Popup}Def_SPEC.md.
 //
 // Retail DEF screens are panes: DefScreen_Open (0x00435150) initializes a
 // TButtonPane and loads the widgets into it; the game then pushes it as an
@@ -24,7 +25,7 @@
 
 #pragma once
 
-#include "bitmap.h"   // PTBitmap / TBitmap
+#include "bitmap.h"   // TBitmap
 #include "screen.h"   // TPane
 
 #include <cstdint>
@@ -37,70 +38,112 @@ class TMulti;
 class TSurface;
 struct SFontAtlas;
 
-// Widget classes, in the retail registry order (DefWidgetEngine.md §"Widget
-// class roster"). Droplist is parsed but unused by the in-scope screens.
+// Widget classes, in the retail registry order (DEF_ENGINE.md §1.1).
+// Droplist is parsed but unused by the in-scope screens.
 enum class EDefWidget : uint8_t
 {
     Bitmap, Frame, Text, Button, Scrollbar, Listbox, Edit, Droplist, Unknown
 };
 
+// widgets.def DM_USEDEFAULT: draw with the bitmap's (or the font's) own mode.
+inline constexpr uint32_t kDefDrawDefault = 0x80000000u;
+
 struct SDefColor
 {
     uint8_t r = 255, g = 255, b = 255;
-    bool    set = false;
 };
 
-// l/t/r/b pixel quad — used for FRAME 9-slice insets, MARGINS, RECT, and the
-// UPLABELRECT/DOWNLABELRECT label-offset rects.
+// An l t r b quad: FRAME insets, MARGINS, RECT insets, label rects.
 struct SDefInsets
 {
     int32_t l = 0, t = 0, r = 0, b = 0;
-    bool    set = false;
+};
+
+// How a widget draws its text (`FONT name <COLOR r g b> <FLAGS f>
+// <DRAWMODE d>`): a TEXT, LISTBOX or EDIT style's text, a button label, a
+// list format item. Flags are retail's compose flags (TextFlag, widgets.def
+// TEXT_*). Labels and EDIT text default to TEXT_LEFT (0x00429ffa); a TEXT
+// style to TEXT_LEFT | TEXT_SHADOW (DefaultStyle).
+struct SDefTextFormat
+{
+    std::string font  = "Med";
+    SDefColor   color;
+    uint32_t    flags = 0x0001;
+    uint32_t    drawmode = kDefDrawDefault;
+};
+
+// A scrollbar's arrow or thumb: the art is "<bitmap>U", "<bitmap>D" while
+// held. An arrow (`UP|DOWN name <RELR> a <RELB> b`) sits a across (from the
+// right with RELR) and b down (from the bottom with RELB). The thumb
+// (`THUMB name a b <RELBR> c`) travels from a past the bar's start to b
+// short of its end, c in from the side (the far side with RELBR).
+struct SDefScrollPart
+{
+    std::string bitmap;
+    int32_t     a = 0, b = 0, c = 0;
+    bool        relR = false, relB = false;   // the thumb's RELBR is relR
 };
 
 // A resolved widget style. One per (type, variant) is parsed from widgets.def
-// (and any screen-local STYLE override, e.g. popup.def); per-widget attribute
-// overrides are merged on top when the widget instance is parsed. Not every
-// field applies to every widget type — unused fields keep their defaults.
+// (and any screen-local STYLE override, e.g. popup.def); a widget copies its
+// type's and parses the rest of its line over the copy. Not every field
+// applies to every widget type.
 struct SDefStyle
 {
-    // Common chrome / text
-    std::string bgbitmap;                 // BGBITMAP, or FRAME-widget BITMAP
-    SDefInsets  frame;                    // FRAME l t r b (9-slice insets)
-    SDefInsets  margins;                  // MARGINS l t r b
-    SDefInsets  rect;                     // RECT l t r b (content inset)
-    bool        nocenter = false;
-    std::string font     = "Med";
-    SDefColor   color{255, 255, 255, true};
-    uint32_t    textflags = 0;
-    uint32_t    drawmode  = 0;
+    // The chrome: BGBITMAP (a FRAME widget's BITMAP), tiled as a frame when
+    // the style has FRAME, else drawn once at its size.
+    std::string bgbitmap;
+    bool        framed = false;
+    SDefInsets  frame;                        // FRAME l t r b
+    SDefInsets  margins;                      // MARGINS: the frame overhangs the rect by these
+    bool        nocenter = false;             // NOCENTER: the frame's centre is left unpainted
+    uint32_t    drawmode = kDefDrawDefault;
 
-    // BUTTON
-    std::string up, down;                 // up / down face bitmaps
-    std::string uplabelfont   = "Med";
-    std::string downlabelfont = "Med";
-    SDefColor   uplabelcolor{255, 255, 255, true};
-    SDefColor   downlabelcolor{0, 0, 0, true};
-    uint32_t    uplabelflags   = 0;
-    uint32_t    downlabelflags = 0;
-    int32_t     uplabelrect[4]   = {0, 0, 0, 0};   // x y w h offsets
-    int32_t     downlabelrect[4] = {0, 0, 0, 0};
+    SDefInsets     rect;                      // RECT: the text / content inset
+    SDefInsets     outerRect;                 // EDIT: the RECT after BGBITMAP (frame and text)
+    SDefTextFormat text;
+    SDefColor      selcolor{0, 112, 74};      // LISTBOX selection
+    SDefColor      editcolor{255, 255, 0};    // EDIT text while edited
 
-    // LISTBOX / EDIT / SCROLLBAR
-    SDefColor   selcolor{0, 112, 74, true};        // listbox selection fill
-    SDefColor   editcolor{255, 255, 0, true};      // edit caret/text colour
-    int32_t     itemw = 0, itemh = 0;              // ITEM w h (row size)
-    std::string scrollup, scrolldown, scrollthumb; // scrollbar piece bitmaps
+    // BUTTON: faces and the label of each state (a state without a label
+    // draws none).
+    std::string    up, down;
+    bool           hasUpLabel = false, hasDownLabel = false;
+    SDefTextFormat uplabel, downlabel;
+    SDefInsets     uplabelrect, downlabelrect;
+
+    // LISTBOX: the item cell, and its scrollbar (`SCROLLBAR <RELRB> a b c d`
+    // then the parts).
+    int32_t     itemw = 0, itemh = 0;
+    bool        hasScrollbar = false;
+    bool        scrollRel = false;
+    SDefInsets  scrollRect;                   // a b c d as l t r b
+
+    // SCROLLBAR, a list's scrollbar.
+    SDefScrollPart scrollUp, scrollDown, scrollThumb;
 };
 
-// A LISTBOX per-row column format (the inner FIELD lines in a BEGIN…END block).
-struct SDefListField
+// A LISTBOX row-format item (the lines of its BEGIN ... END block), drawn in
+// each item's cell. FIELD asks the pane for the text (FieldText), TEXT draws
+// `name` as it is, BITMAP draws a bitmap field.
+struct SDefFormatItem
 {
-    int32_t     x = 0, y = 0, w = 0, h = 0;
-    uint32_t    flags = 0;
-    std::string font;
-    SDefColor   color{255, 255, 255, true};
-    std::string field;                    // data key (e.g. "gamelist_name")
+    enum class EKind : uint8_t { Field, Text, Bitmap };
+
+    EKind          kind = EKind::Field;
+    int32_t        x = 0, y = 0, w = 0, h = 0;
+    SDefTextFormat format;                    // defaults: the list's text
+    std::string    name;
+};
+
+// A scrollbar's state: a SCROLLBAR widget's own, or a list's (its rect from
+// the style's SCROLLBAR clause; the value is the top row).
+struct SDefScrollbar
+{
+    int32_t x = 0, y = 0, w = 0, h = 0;
+    bool    vertical = true;
+    int32_t value = 0, minval = 0, maxval = 1000;   // retail defaults
+    int32_t page = 100;                              // how far a track click moves it
 };
 
 // One parsed widget instance.
@@ -109,27 +152,29 @@ struct SDefWidget
     EDefWidget  type = EDefWidget::Unknown;
     int32_t     x = 0, y = 0, w = 0, h = 0;        // POS, pane-local
     std::string name, text, field;
-    uint32_t    flags = 0;
-    int32_t     maxlen = 0;                        // EDIT MAXLEN
+    uint32_t    flags = 0;                         // the control word (the line's first FLAGS)
+    int32_t     group = -1;                        // GROUP: radio buttons
+    int32_t     maxlen = 20;                       // EDIT MAXLEN
     int32_t     hotkey = 0;                        // BUTTON key (retail button +0x70)
     SDefStyle   style;                             // resolved + overridden
-    std::vector<SDefListField> rowfields;          // LISTBOX row format
+    std::vector<SDefFormatItem> format;            // LISTBOX row format
 
     // Runtime state
-    bool        pressed  = false;
+    bool        hidden   = false;                  // CTRLFLAG_HIDDEN: neither drawn nor hit
+    bool        disabled = false;                  // CTRLFLAG_DISABLED
+    bool        pressed  = false;                  // a push button held (BTNFLAG_DOWN)
     bool        hovered  = false;
-    bool        disabled = false;
-    bool        selected = false;                  // toggle/checkbox checked state
+    bool        selected = false;                  // a toggle on (BTNFLAG_DOWN)
     bool        focused  = false;                  // EDIT is being edited
-    PTBitmap    fieldBitmap = nullptr;             // BITMAP bound via SetField
-    PTBitmap    faceUp    = nullptr;               // sprite BUTTON faces (AddSpriteButton):
-    PTBitmap    faceDown  = nullptr;               //   up / pressed / hover; when set they
-    PTBitmap    faceHover = nullptr;               //   replace the style's frame + label
-    std::vector<std::vector<std::string>> rows;    // LISTBOX data rows
-    int32_t     selrow    = -1;
-    int32_t     scrolltop = 0;
-    int32_t     value = 0, minval = 0, maxval = 100; // SCROLLBAR
-    int32_t     page  = 100;                       // SCROLLBAR (+0xa0): a track click's step
+    double      focusTime = 0.0;                   // when its editing began (the caret's blink)
+    TBitmap*    fieldBitmap = nullptr;             // BITMAP bound via SetFieldBitmap
+    TBitmap*    faceUp    = nullptr;               // sprite BUTTON faces (AddSpriteButton):
+    TBitmap*    faceDown  = nullptr;               //   up / pressed / hover; when set they
+    TBitmap*    faceHover = nullptr;               //   replace the style's frame + label
+    int32_t     count   = 0;                       // LISTBOX items
+    int32_t     top     = 0;                       // LISTBOX first item shown (a row's first)
+    int32_t     selitem = -1;                      // LISTBOX selected item, -1 none
+    SDefScrollbar bar;                             // SCROLLBAR; a LISTBOX's own
 
     [[nodiscard]] bool Contains(int32_t px, int32_t py) const
     {
@@ -186,10 +231,9 @@ class TDefPane : public TPane
     // pane-local). Returns false (and logs) if the up face is missing.
     bool AddSpriteButton(const char* name, const char* faceBase);
 
-    // A static text label (retail draws code-built labels with the same text
-    // engine as DEF TEXT widgets). `flags` are the TEXT_* bits from
-    // widgets.def (e.g. TEXT_LEFT 0x1 | TEXT_VCENTER 0x40); `font` is a DEF
-    // font name ("Med", "Large", "small").
+    // A static text label, drawn as a DEF TEXT widget: `flags` are its text
+    // flags (TextFlag / widgets.def TEXT_*, e.g. TEXT_LEFT | TEXT_VCENTER);
+    // `font` a FONT.DEF name ("Med", "Large", "small").
     void AddText(const char* name, int32_t x, int32_t y, int32_t w, int32_t h,
                  const char* text, uint32_t flags, const SDefColor& color,
                  const char* font);
@@ -205,6 +249,8 @@ class TDefPane : public TPane
     // first and ends when it reaches 0.
     void Finish(int32_t result);
     [[nodiscard]] bool IsFinishing() const { return finishing; }
+    // Open and done fading in (at once without DEF_FADE).
+    [[nodiscard]] bool FadedIn() const;
 
     // TPane
     void Close() override;
@@ -218,17 +264,19 @@ class TDefPane : public TPane
 
     // Data binding
     [[nodiscard]] SDefWidget* Find(const char* name);
-    void SetFieldBitmap(const char* field, PTBitmap bm);  // BITMAP FIELD source
-    void SetListRows(const char* listName,
-                     std::vector<std::vector<std::string>> rows);
+    void SetFieldBitmap(const char* field, TBitmap* bm);  // BITMAP FIELD source
+    // REVSYNC: list SetCount @ 0x00430c50 -- `count` items, shown from the
+    // top; a selection past the end is dropped. Their text comes from
+    // FieldText.
+    void SetListCount(const char* listName, int32_t count);
     // A TEXT or EDIT widget's text (retail widget SetText, vtable +0x18).
     void SetText(const char* name, const std::string& text);
     // A BUTTON's key (retail button +0x70, set through vtable +0x24).
     void SetHotKey(const char* name, int32_t vk);
-    // REVSYNC: list SetSelection @ 0x00430b80 -- select `row` (-1 = none) of
-    // list `listName`, scroll it into view, and raise OnListSelect when the
-    // selection changed.
-    void SelectListRow(const char* listName, int32_t row);
+    // REVSYNC: list SetSelection @ 0x00430b80 -- select `item` (-1 = none)
+    // of list `listName`, scroll it into view, and raise OnListSelect when
+    // the selection changed.
+    void SelectListItem(const char* listName, int32_t item);
     // REVSYNC: scrollbar SetRange @ 0x0042e3d0 -- a SCROLLBAR's range; the
     // value is clamped into it without an event.
     void SetSliderRange(const char* name, int32_t minval, int32_t maxval);
@@ -242,16 +290,26 @@ class TDefPane : public TPane
   protected:
     // Subclass hooks (retail OnControl, vtable slot 37, by event).
     // OnOpened: the widgets are built (event 1). OnActivate: a button was
-    // clicked (event 3000; the default forwards to the handler).
-    // OnListSelect: a list's selection changed (event 5000). OnSliderChanged:
-    // a SCROLLBAR's value changed, by the player or SetSliderValue (event
-    // 4000). OnKey: a key (retail DispatchInput 0x004361f0: the EDIT being
-    // edited, then the buttons' keys).
+    // clicked, or a toggle flipped (events 3000, 0xbb9 / 0xbba; the default
+    // forwards it to the handler). OnListSelect: a list's selection changed
+    // (event 5000). OnListScrolled: a list's first item changed (5001).
+    // OnListClick: the mouse was released on a list's item (5002).
+    // OnSliderChanged: a SCROLLBAR's value changed, by the player or
+    // SetSliderValue (event 4000). OnKey: a key (retail DispatchInput
+    // 0x004361f0: the EDIT being edited, then the buttons' keys).
     virtual void OnOpened() {}
     virtual void OnActivate(const SDefWidget& widget, int32_t buttonIndex);
-    virtual void OnListSelect(const SDefWidget& list, int32_t row) { (void)list; (void)row; }
+    virtual void OnListSelect(const SDefWidget& list, int32_t item) { (void)list; (void)item; }
+    virtual void OnListScrolled(const SDefWidget& list) { (void)list; }
+    virtual void OnListClick(const SDefWidget& list, int32_t item) { (void)list; (void)item; }
     virtual void OnSliderChanged(const SDefWidget& slider) { (void)slider; }
     virtual void OnKey(int32_t vk, bool down);
+
+    // The pane's field getter (retail vtable +0xa4): the text of `field` for
+    // item `index` (a list's item; 0 for a TEXT widget), which may change
+    // `colour` for this draw. Empty draws nothing.
+    [[nodiscard]] virtual std::string FieldText(const std::string& field, int32_t index, SDefColor& colour);
+
     // Draws a BITMAP FIELD widget (retail field getter, vtable slot 40,
     // 0x00436de0): the bound bitmap. Panes with live pictures override it.
     virtual void DrawField(const SDefWidget& widget);
@@ -268,8 +326,6 @@ class TDefPane : public TPane
     // Compose-time helpers for subclasses (valid inside Paint / DrawField).
     [[nodiscard]] TSurface* Surface() const { return surface; }
     [[nodiscard]] uint32_t DefFlags() const { return defflags; }
-    // Open and done fading in (at once without DEF_FADE).
-    [[nodiscard]] bool FadedIn() const;
     // Retail's "click1": once, at full volume, not positioned
     // (0x0049b990(id, 0x7f, 1, 0, 0x50, 700)).
     void PlayClick() const;
@@ -295,46 +351,67 @@ class TDefPane : public TPane
                                      size_t& i) const;
     [[nodiscard]] const SDefStyle& ResolveStyle(EDefWidget type,
                                                 uint32_t flags) const;
+    // The widgets' layout once the art is loaded (the constructors'): a
+    // SCROLLBAR's size from its art, a list's grid and scrollbar.
+    void LayoutWidgets();
 
     // --- assets (defpane.cpp) ---
-    [[nodiscard]] PTBitmap        LookupBitmap(const char* entry);
+    [[nodiscard]] TBitmap*          LookupBitmap(const std::string& entry);
     [[nodiscard]] const SFontAtlas* FontFor(const std::string& name);
     TMulti* LoadDat(const std::string& name);
 
     // --- rendering (defpane.cpp) ---
-    void DrawWidget(const SDefWidget& w);
-    void DrawListbox(const SDefWidget& w);
-    void DrawListScrollbar(const SDefWidget& w);
+    void DrawWidget(const SDefWidget& w, int32_t index);
+    void DrawText(const SDefWidget& w);
+    void DrawButton(const SDefWidget& w);
+    void DrawListbox(const SDefWidget& w, int32_t index);
     void DrawEdit(const SDefWidget& w);
-    void DrawScrollbar(const SDefWidget& w);
-    void DrawText(const std::string& text, int32_t x, int32_t y, int32_t w,
-                  int32_t h, uint32_t flags, const SDefColor& color,
-                  const std::string& font);
+    void DrawScrollbar(const SDefWidget& w, int32_t index);
+    void RestoreBackground(const SDefInsets& margins, int32_t x, int32_t y, int32_t w, int32_t h);
+    void RestoreUnderChrome(const SDefStyle& style, int32_t x, int32_t y, int32_t w, int32_t h);
+    void DrawChrome(const SDefStyle& style, const std::string& bitmap,
+                    int32_t x, int32_t y, int32_t w, int32_t h);
+    void DrawFrame(TBitmap* bm, const SDefStyle& style, int32_t x, int32_t y,
+                   int32_t w, int32_t h);
+    void DrawString(const std::string& text, int32_t x, int32_t y, int32_t w,
+                    int32_t h, const SDefTextFormat& format, const SDefColor& color);
 
-    // --- input helpers (defpane.cpp) ---
-    void ClickListRow(SDefWidget& w, int32_t lx, int32_t ly);
-    bool ClickListScrollbar(SDefWidget& w, int32_t lx, int32_t ly);
-    void SetSelection(SDefWidget& w, int32_t row);
-    // A SCROLLBAR's parts along its axis (x across a horizontal one, y down
-    // a vertical one), in pane coordinates: the arrows at the ends, then the
-    // span the thumb travels as the value goes from minval to maxval.
-    struct SSliderBar
+    // --- lists (defpane.cpp) ---
+    // A list's grid (retail layout 0x004308b0): the cells start at (cx,cy),
+    // cols x rows of itemw x itemh.
+    struct SListGrid
     {
-        bool     vertical = false;
-        PTBitmap dec = nullptr, inc = nullptr, thumb = nullptr;   // "<base>U" art
-        int32_t  decEnd = 0;            // the decrement arrow ends here
-        int32_t  incStart = 0;          // the increment arrow starts here
-        int32_t  travelStart = 0;       // the thumb's position at minval
-        int32_t  travel = 0;            // its run to maxval
-        int32_t  thumbPos = 0, thumbLen = 0;
+        int32_t cx = 0, cy = 0, itemw = 1, itemh = 1, cols = 1, rows = 1;
+        [[nodiscard]] int32_t Visible() const { return cols * rows; }
     };
-    [[nodiscard]] SSliderBar SliderLayout(const SDefWidget& w);
-    void PressSlider(int32_t index, int32_t lx, int32_t ly);
-    void DragSlider(SDefWidget& w, int32_t lx, int32_t ly);
-    void ReleaseSliderArrow(int32_t lx, int32_t ly);
-    void ChangeSlider(SDefWidget& w, int32_t value);   // clamp, set, raise OnSliderChanged
-    void DrawNineSlice(PTBitmap bm, const SDefInsets& frame, int32_t x,
-                       int32_t y, int32_t w, int32_t h);
+    [[nodiscard]] static SListGrid ListGrid(const SDefWidget& w);
+    [[nodiscard]] static bool IsVList(const SDefWidget& w);
+    void ScrollList(SDefWidget& w, int32_t row);     // the first row shown, clamped
+    [[nodiscard]] static int32_t ListItemAt(const SDefWidget& w, int32_t lx, int32_t ly);
+    [[nodiscard]] static bool InListBar(const SDefWidget& w, int32_t lx, int32_t ly);
+    [[nodiscard]] int32_t WidgetAt(int32_t lx, int32_t ly) const;
+    void ClickListItem(SDefWidget& w, int32_t lx, int32_t ly);
+    void SetSelection(SDefWidget& w, int32_t item);
+
+    // --- scrollbars (defpane.cpp) ---
+    // A scrollbar's parts in pane coordinates (retail layout 0x0042e240 and
+    // SetValue 0x0042e440): each piece's top-left, the thumb's along its
+    // track.
+    struct SBarLayout
+    {
+        TBitmap* up = nullptr;       // "<base>U" art
+        TBitmap* down = nullptr;
+        TBitmap* thumb = nullptr;
+        int32_t  upX = 0, upY = 0, downX = 0, downY = 0, thumbX = 0, thumbY = 0;
+        int32_t  trackStart = 0, trackEnd = 0;    // the thumb's run along the bar
+        bool     showThumb = false;
+    };
+    [[nodiscard]] SBarLayout BarLayout(const SDefWidget& w);
+    void PressBar(int32_t index, int32_t lx, int32_t ly);
+    void DragBar(SDefWidget& w, int32_t lx, int32_t ly);
+    void ReleaseBarArrow(int32_t lx, int32_t ly);
+    void ChangeBar(SDefWidget& w, int32_t value);    // clamp, set, raise the change
+
     [[nodiscard]] SDefWidget* EditingWidget();
 
     // --- state ---
@@ -345,15 +422,17 @@ class TDefPane : public TPane
     std::vector<TMulti*>      bitmapDats;                  // search order
     std::string               targetPanel;                 // PANEL name to build
     std::string               bgDatName;
-    PTBitmap                  background = nullptr;
+    TBitmap*                  background = nullptr;
     TSurface*                 surface    = nullptr;
     int32_t paneW = 0, paneH = 0;
     TActivateHandler onActivate;
-    int32_t draggingSlider = -1;                 // widget whose thumb is held
-    int32_t dragGrab = 0;                        // where on the thumb it was taken
-    int32_t arrowSlider = -1, arrowStep = 0;     // the arrow pressed (-1 / +1), stepped on release
-    bool    open  = false;
 
+    int32_t draggingBar = -1;                    // widget whose thumb is held
+    int32_t dragGrab = 0;                        // where on the thumb it was taken
+    int32_t arrowBar = -1, arrowStep = 0;        // the arrow held (-1 up / +1 down), stepped on release
+    int32_t focusWidget = -1;                    // retail +0xa0: the widget with the focus
+
+    bool    open  = false;
     // DEF flags and the DEF_FADE transition (retail +0x60, +0xb8..+0xc0).
     uint32_t defflags      = 0;
     double   fadeStartTime = 0.0;                // when the current fade began
