@@ -10,6 +10,7 @@ check fails.
 
     tools/shadow/shadow.py                          # the whole plan, seed 1
     tools/shadow/shadow.py --until opening --check  # one stage, then check its save
+    tools/shadow/shadow.py --stage s1 --start "left the keep" --until s1
 """
 from __future__ import annotations
 
@@ -47,6 +48,11 @@ def run_game(args: argparse.Namespace, run_dir: Path) -> int:
     shutil.copy2(args.binary, binary)
     command = [str(binary), '--headless', f'--max-runtime={args.max_runtime}',
                f'--shadow={args.plan.resolve()}', f'--shadow-out={run_dir / "out"}', f'--seed={args.seed}']
+    if args.stage:
+        # Start at a stage, from a waypoint's save copied into this run's slots.
+        waypoint = waypoints.Catalogue().get('port', args.start)
+        shutil.copytree(waypoint.slot_dir, save / 'Save' / 'Single' / waypoint.slot, dirs_exist_ok=True)
+        command += [f'--shadow-stage={args.stage}', f'--quickstart={waypoint.slot}']
     if args.until:
         command.append(f'--shadow-until={args.until}')
     if args.lenient:
@@ -90,6 +96,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('plan', type=Path, nargs='?', default=PLAN)
     parser.add_argument('--seed', type=int, default=1)
+    parser.add_argument('--stage', help='start at this stage, from the waypoint --start names')
+    parser.add_argument('--start', help='the waypoint (catalogue name or directory) --stage starts from')
     parser.add_argument('--until', help='stop after this stage')
     parser.add_argument('--lenient', action='store_true', help='log ledger violations instead of stopping')
     parser.add_argument('--check', action='store_true', help='load-check each save in a fresh game')
@@ -100,6 +108,8 @@ def main() -> int:
     parser.add_argument('--ini', type=Path, default=INI)
     parser.add_argument('--max-runtime', type=int, default=3600, help='seconds of wall time')
     args = parser.parse_args()
+    if bool(args.stage) != bool(args.start):
+        parser.error('--stage and --start go together')
 
     run_dir = args.run_dir.resolve()
     run_dir.mkdir(parents=True, exist_ok=True)

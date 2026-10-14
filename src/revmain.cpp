@@ -1559,7 +1559,7 @@ void GetParameters(int argc, char **argv)
         "chunkcachesize", "driver", "device", "videocap", "fastlock",
         "loadmap", "lang", "test", "level", "resolution", "res",
         "cinematic", "menu", "exec", "vfx-lighting-mode", "partsys-quality", "partsys-incoming-blend",
-        "seed", "combattrace", "combattrace-rng", "shadow", "shadow-out", "shadow-until",
+        "seed", "combattrace", "combattrace-rng", "shadow", "shadow-out", "shadow-stage", "shadow-until",
         "vfx-review-speed", "vfx-review-watcher-rate", "vfx-review-ratio", "vfx-review-spacing",
         "vfx-review-gap", "vfx-review-offset", "vfx-review-effects",
         "vfx-review-spacing-overrides",
@@ -1598,13 +1598,15 @@ void GetParameters(int argc, char **argv)
         }
     }
 
-  // --shadow=<plan>: Shadow Smoke plays the plan from a new game, headless
-  // and deterministic (docs/shadow/README.md). Without --seed it plays seed 1.
+  // --shadow=<plan>: Shadow Smoke plays the plan from a new game, or from
+  // --shadow-stage=<id> on the save --quickstart=<slot> names, headless and
+  // deterministic (docs/shadow/README.md). Without --seed it plays seed 1.
     {
         SShadowOptions shadow;
         if (arg_param(cmd, "shadow", shadow.plan))
         {
             arg_param(cmd, "shadow-out", shadow.out);
+            arg_param(cmd, "shadow-stage", shadow.from);
             arg_param(cmd, "shadow-until", shadow.until);
             shadow.lenient = arg_flag(cmd, "shadow-lenient");
             std::string seed;

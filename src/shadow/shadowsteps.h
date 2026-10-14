@@ -21,7 +21,10 @@
 #include <string>
 #include <vector>
 
+class TShadowLedger;
 class TShadowLog;
+class TShadowNav;
+class TShadowPlan;
 
 enum class EShadowStatus : uint8_t { Running, Done, Failed };
 
@@ -46,6 +49,9 @@ struct SShadowWaypoint
 struct SShadowContext
 {
     TShadowLog&                   log;
+    TShadowLedger&                ledger;
+    TShadowNav&                   nav;
+    const TShadowPlan&            plan;
     int64_t                       tick = 0;
     const SShadowStage&           stage;
     std::vector<SShadowWaypoint>& waypoints;

@@ -16,6 +16,7 @@
 #include "shadowlog.h"
 #include "shadowplan.h"
 #include "shadowsteps.h"
+#include "shadowtravel.h"
 
 #include <chrono>
 #include <cstdint>
@@ -27,6 +28,7 @@ struct SShadowOptions
 {
     std::string plan;               // --shadow=<plan>
     std::string out;                // --shadow-out=<dir>; default <SavePath>/shadow/<run>
+    std::string from;               // --shadow-stage=<stage>: start at it (with --quickstart=<its save>)
     std::string until;              // --shadow-until=<stage>: stop after it
     uint32_t    seed    = 1;        // --seed
     bool        lenient = false;    // --shadow-lenient: log violations, don't stop
@@ -67,6 +69,7 @@ class TShadowRun
     TShadowPlan    plan;
     TShadowLog     log;
     TShadowLedger  ledger;
+    TShadowNav     nav;
     bool           active   = false;
     bool           begun    = false;
     bool           finished = false;

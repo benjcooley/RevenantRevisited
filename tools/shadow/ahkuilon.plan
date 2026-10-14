@@ -12,3 +12,11 @@ stage opening "Locke wakes in the Keep"
     scene   choose 1 2 3 1 2 3
     expect  RAHULSTATE = 1              # keep.s:660
     save    "opening"
+
+stage s1 "Gus's deal: passage to Arakna for the ring"
+    # The tavern door (exit.def:20); master.s's door block takes Locke in.
+    use     barin
+    # Gus1 (town.s:2348-2497): any first answer; Cav; Deal.
+    talk    Gus1  choose 1 1 1
+    expect  MISTSTATE = 2               # town.s:2474
+    save    "gus deal"

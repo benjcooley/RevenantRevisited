@@ -114,9 +114,9 @@ class TSector final
 
     // Sector
 
-    int32_t SectorLevel() { return level; }
-    int32_t SectorX() { return sectorx; }
-    int32_t SectorY() { return sectory; }
+    int32_t SectorLevel() const { return level; }
+    int32_t SectorX() const { return sectorx; }
+    int32_t SectorY() const { return sectory; }
     void GetMaxScreenRect(RSRect r);
     void GetMaxMapRect(RSRect r);
 

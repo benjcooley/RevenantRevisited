@@ -239,6 +239,51 @@ bool ParseStep(const std::string& verb, TLineReader& in, SShadowStep& step, std:
         step.verb = EShadowVerb::Scene;
         return ParseChoices(in, step.choices, error);
     }
+    if (verb == "travel")
+    {
+        step.verb = EShadowVerb::Travel;
+        const SToken* target = in.Take();
+        if (!target)
+        {
+            error = "'travel' needs a place or an object";
+            return false;
+        }
+        step.target = target->text;
+        step.evade = in.TakeKeyword("evade");
+        if (!in.AtEnd())
+        {
+            error = "'travel' takes a place or an object, then 'evade' or nothing";
+            return false;
+        }
+        return true;
+    }
+    if (verb == "use")
+    {
+        step.verb = EShadowVerb::Use;
+        const SToken* target = in.Take();
+        if (!target)
+        {
+            error = "'use' needs something to use";
+            return false;
+        }
+        step.target = target->text;
+        if (in.TakeKeyword("with"))
+        {
+            const SToken* item = in.Take();
+            if (!item)
+            {
+                error = "'use ... with' needs an item";
+                return false;
+            }
+            step.item = item->text;
+        }
+        if (!in.AtEnd())
+        {
+            error = "'use' takes an object, then 'with <item>' or nothing";
+            return false;
+        }
+        return true;
+    }
     if (verb == "talk")
     {
         step.verb = EShadowVerb::Talk;
@@ -308,7 +353,9 @@ std::string SShadowStep::Describe() const
     {
         case EShadowVerb::Start:  out << "start " << target; break;
         case EShadowVerb::Scene:  out << "scene"; break;
+        case EShadowVerb::Travel: out << "travel " << target << (evade ? " evade" : ""); break;
         case EShadowVerb::Talk:   out << "talk " << target; break;
+        case EShadowVerb::Use:    out << "use " << target << (item.empty() ? "" : " with \"" + item + "\""); break;
         case EShadowVerb::Expect: out << "expect " << condition.Describe(); break;
         case EShadowVerb::Save:   out << "save \"" << name << '"'; break;
     }
@@ -325,6 +372,7 @@ bool TShadowPlan::Load(const std::string& planpath, std::string& error)
 {
     path = planpath;
     module.clear();
+    places.clear();
     stages.clear();
 
     std::ifstream file(planpath);
@@ -367,6 +415,43 @@ bool TShadowPlan::Load(const std::string& planpath, std::string& error)
                 return fail("'module' takes one name");
             module = name->text;
         }
+        else if (word == "place")
+        {
+            const SToken* name = in.Take();
+            if (!name || name->quoted)
+                return fail("'place' needs a name");
+            if (FindPlace(name->text))
+                return fail("a second place '" + name->text + "'");
+            SShadowPlace place;
+            place.name = name->text;
+            if (in.TakeKeyword("object"))
+            {
+                const SToken* object = in.Take();
+                if (!object || !in.AtEnd())
+                    return fail("'place <name> object' takes one object name");
+                place.object = object->text;
+            }
+            else if (in.TakeKeyword("level"))
+            {
+                std::vector<int32_t> numbers;
+                while (const SToken* t = in.Take())
+                {
+                    const std::optional<int32_t> n = t->quoted ? std::nullopt : ParseInt(t->text);
+                    if (!n)
+                        return fail("'place <name> level' takes numbers: <level> <x> <y> [<z>]");
+                    numbers.push_back(*n);
+                }
+                if (numbers.size() < 3 || numbers.size() > 4)
+                    return fail("'place <name> level' takes <level> <x> <y> [<z>]");
+                place.level = numbers[0];
+                place.x = numbers[1];
+                place.y = numbers[2];
+                place.z = numbers.size() > 3 ? numbers[3] : 0;
+            }
+            else
+                return fail("'place <name>' takes 'level <level> <x> <y> [<z>]' or 'object <name>'");
+            places.push_back(std::move(place));
+        }
         else if (word == "stage")
         {
             const SToken* id = in.Take();
@@ -400,6 +485,14 @@ bool TShadowPlan::Load(const std::string& planpath, std::string& error)
     if (stages.empty())
         return fail("no stages");
     return true;
+}
+
+const SShadowPlace* TShadowPlan::FindPlace(const std::string& name) const
+{
+    for (const SShadowPlace& place : places)
+        if (Lower(place.name) == Lower(name))
+            return &place;
+    return nullptr;
 }
 
 int32_t TShadowPlan::FindStage(const std::string& id) const

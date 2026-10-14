@@ -57,6 +57,15 @@ bool TShadowRun::Configure(const SShadowOptions& given)
         log_error("[smoke] --shadow-until: the plan has no stage '%s'", options.until.c_str());
         return false;
     }
+    if (!options.from.empty())
+    {
+        stage = plan.FindStage(options.from);
+        if (stage < 0)
+        {
+            log_error("[smoke] --shadow-stage: the plan has no stage '%s'", options.from.c_str());
+            return false;
+        }
+    }
     if (options.out.empty())
     {
         const std::string stem = std::filesystem::path(options.plan).stem().string();
@@ -187,7 +196,7 @@ void TShadowRun::RunSteps()
             runner = MakeStepRunner(next);
         }
 
-        SShadowContext context{log, tick, stages[stage], waypoints};
+        SShadowContext context{log, ledger, nav, plan, tick, stages[stage], waypoints};
         const EShadowStatus status = runner->Pulse(context);
         if (status == EShadowStatus::Running)
             return;

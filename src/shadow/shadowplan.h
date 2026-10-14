@@ -9,10 +9,13 @@
 // one step to a line:
 //
 //     module Ahkuilon
+//     place  KeepGate level 0 1842 24388 451
 //     stage keep "The Keep"
 //         start   newgame
-//         scene   choose 3 3 3 3 3 3 3 3 3
+//         scene   choose 1 2 3 1 2 3
 //         expect  RAHULSTATE = 1
+//         travel  RandK
+//         talk    RandK choose 1
 //         save    "opening"
 //
 // `#` starts a comment. Words are case-insensitive; quoted text keeps its
@@ -28,9 +31,23 @@ enum class EShadowVerb : uint8_t
 {
     Start,      // start newgame
     Scene,      // scene [choose n ...]: a scene plays; its menus get these answers
-    Talk,       // talk <npc> [choose n ...]: Locke talks to the NPC, then as scene
+    Travel,     // travel <place|object> [evade]: a proven walk there
+    Talk,       // talk <npc> [choose n ...]: Locke goes to the NPC and talks, then as scene
+    Use,        // use <object> [with "<item>"]: Locke goes to it and uses it
     Expect,     // expect <state> <op> <n> | expect level <op> <n> | expect have "<item>" [<op> <n>]
     Save,       // save "<name>": a waypoint save
+};
+
+// A named spot the plan travels to: a point on a level, or an object found
+// by name when the step runs.
+struct SShadowPlace
+{
+    std::string name;
+    int32_t     level  = 0;
+    int32_t     x      = 0;
+    int32_t     y      = 0;
+    int32_t     z      = 0;
+    std::string object;         // when set, the place is wherever this object is
 };
 
 enum class EShadowCompare : uint8_t { Eq, Ne, Lt, Le, Gt, Ge };
@@ -59,7 +76,9 @@ struct SShadowStep
 {
     EShadowVerb          verb = EShadowVerb::Scene;
     int32_t              line = 0;      // in the plan file
-    std::string          target;        // start: "newgame"; talk: the NPC
+    std::string          target;        // start: "newgame"; travel, talk, use: a place or an object
+    std::string          item;          // use: what to use on the target
+    bool                 evade = false; // travel: run past the leg's monsters (§5.5)
     std::vector<int32_t> choices;       // scene, talk: the answer to each menu, in order
     SShadowCondition     condition;     // expect
     std::string          name;          // save: the waypoint's name
@@ -88,9 +107,12 @@ class TShadowPlan
     [[nodiscard]] const std::vector<SShadowStage>& Stages() const { return stages; }
     // The index of the stage with this id, -1 when there is none.
     [[nodiscard]] int32_t FindStage(const std::string& id) const;
+    // The place with this name, nullptr when there is none.
+    [[nodiscard]] const SShadowPlace* FindPlace(const std::string& name) const;
 
   private:
     std::string               path;
     std::string               module;
+    std::vector<SShadowPlace> places;
     std::vector<SShadowStage> stages;
 };

@@ -6,6 +6,7 @@
 #include "shadowsteps.h"
 
 #include "shadowlog.h"
+#include "shadowtravel.h"
 
 #include "../dialog.h"
 #include "../gameflow.h"
@@ -31,9 +32,6 @@ constexpr int32_t kSceneStartTicks = 20 * kTicksPerSecond;
 constexpr int32_t kSettleTicks = 2 * kTicksPerSecond;
 // No scene in the game runs this long.
 constexpr int32_t kSceneLimitTicks = 30 * 60 * kTicksPerSecond;
-// How close Locke stands to whoever he talks to. Travel gets him there
-// (from P1); until then a talk needs him there already.
-constexpr int32_t kTalkReach = 160;
 
 void PressKey(int32_t vk)
 {
@@ -56,7 +54,12 @@ std::vector<std::string> MenuTexts()
 class TSceneWatch
 {
   public:
-    explicit TSceneWatch(std::vector<int32_t> answers) : answers(std::move(answers)) {}
+    // `mustplay`: a scene has to start (a `scene` step); otherwise none
+    // starting is fine (what a `use` sets off may be no scene at all).
+    explicit TSceneWatch(std::vector<int32_t> answers, bool mustplay = true)
+        : answers(std::move(answers)), mustplay(mustplay)
+    {
+    }
 
     EShadowStatus Pulse(SShadowContext& context, std::string& failure)
     {
@@ -124,6 +127,8 @@ class TSceneWatch
 
         if (!started)
         {
+            if (!mustplay && age > kSettleTicks)
+                return EShadowStatus::Done;
             if (age > kSceneStartTicks)
             {
                 failure = "no scene started";
@@ -151,6 +156,7 @@ class TSceneWatch
     }
 
     std::vector<int32_t> answers;
+    bool    mustplay  = true;
     size_t  next      = 0;
     int32_t age       = 0;
     int32_t settled   = 0;
@@ -182,38 +188,82 @@ class TSceneRunner final : public TShadowStepRunner
     TSceneWatch watch;
 };
 
-class TTalkRunner final : public TShadowStepRunner
+class TTravelRunner final : public TShadowStepRunner
 {
   public:
-    explicit TTalkRunner(const SShadowStep& step) : TShadowStepRunner(step), watch(step.choices) {}
+    explicit TTravelRunner(const SShadowStep& step) : TShadowStepRunner(step), travel(step.target, step.evade) {}
 
     EShadowStatus Pulse(SShadowContext& context) override
     {
-        if (!talked)
-        {
-            if (!ShadowGameIdle())
-                return EShadowStatus::Running;
-            TObjectInstance* npc = MapPane.FindClosestObject(step.target.c_str(), Player);
-            if (!npc)
-                return Fail("no " + step.target + " near Locke");
-            const S3DPoint at = npc->Pos();
-            const S3DPoint locke = Player->Pos();
-            const int32_t distance = (int32_t)std::hypot(double(at.x - locke.x), double(at.y - locke.y));
-            if (npc->GetLevel() != Player->GetLevel() || distance > kTalkReach)
-                return Fail(step.target + " is " + std::to_string(distance) + " away; Locke can't reach");
-            context.log.Event("talk", step.target);
-            npc->Use(Player, -1);
-            talked = true;
-            return EShadowStatus::Running;
-        }
         std::string why;
-        const EShadowStatus status = watch.Pulse(context, why);
-        return status == EShadowStatus::Failed ? Fail("talking to " + step.target + ": " + why) : status;
+        const EShadowStatus status = travel.Pulse(context, why);
+        return status == EShadowStatus::Failed ? Fail(why) : status;
     }
 
   private:
-    TSceneWatch watch;
-    bool        talked = false;
+    TShadowTravel travel;
+};
+
+// Goes to an object, then acts on it: talks to an NPC (and answers its
+// menus), or uses a door, a lever, a chest, with an item or without.
+class TApproachRunner final : public TShadowStepRunner
+{
+  public:
+    explicit TApproachRunner(const SShadowStep& step)
+        : TShadowStepRunner(step), travel(step.target, false),
+          watch(step.choices, step.verb == EShadowVerb::Talk)
+    {
+    }
+
+    EShadowStatus Pulse(SShadowContext& context) override
+    {
+        std::string why;
+        if (!acted)
+        {
+            const EShadowStatus status = travel.Pulse(context, why);
+            if (status == EShadowStatus::Failed)
+                return Fail(why);
+            if (status == EShadowStatus::Running)
+                return status;
+            if (!Act(context, why))
+                return Fail(why);
+            acted = true;
+            return EShadowStatus::Running;
+        }
+        const EShadowStatus status = watch.Pulse(context, why);
+        return status == EShadowStatus::Failed ? Fail(step.Describe() + ": " + why) : status;
+    }
+
+  private:
+    bool Act(SShadowContext& context, std::string& why)
+    {
+        TObjectInstance* target = travel.Object();
+        if (!target)
+            target = ShadowFindObject(step.target, Player->GetLevel(), Player->Pos());
+        if (!target)
+        {
+            why = "no " + step.target + " here";
+            return false;
+        }
+        int32_t with = -1;
+        if (!step.item.empty())
+        {
+            TObjectInstance* item = Player->FindObjInventory(step.item.c_str());
+            if (!item)
+            {
+                why = "Locke has no " + step.item;
+                return false;
+            }
+            with = item->GetMapIndex();
+        }
+        context.log.Event(step.verb == EShadowVerb::Talk ? "talk" : "use", step.Describe());
+        target->Use(Player, with);
+        return true;
+    }
+
+    TShadowTravel travel;
+    TSceneWatch   watch;
+    bool          acted = false;
 };
 
 class TExpectRunner final : public TShadowStepRunner
@@ -320,7 +370,9 @@ std::unique_ptr<TShadowStepRunner> MakeStepRunner(const SShadowStep& step)
     {
         case EShadowVerb::Start:  return std::make_unique<TStartRunner>(step);
         case EShadowVerb::Scene:  return std::make_unique<TSceneRunner>(step);
-        case EShadowVerb::Talk:   return std::make_unique<TTalkRunner>(step);
+        case EShadowVerb::Travel: return std::make_unique<TTravelRunner>(step);
+        case EShadowVerb::Talk:   return std::make_unique<TApproachRunner>(step);
+        case EShadowVerb::Use:    return std::make_unique<TApproachRunner>(step);
         case EShadowVerb::Expect: return std::make_unique<TExpectRunner>(step);
         case EShadowVerb::Save:   return std::make_unique<TSaveRunner>(step);
     }

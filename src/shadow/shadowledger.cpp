@@ -106,6 +106,22 @@ void TShadowLedger::Stop()
     started = false;
 }
 
+void TShadowLedger::AllowTravel(const S3DPoint& landing, int32_t level, int64_t until)
+{
+    travels.push_back({landing, level, until});
+}
+
+bool TShadowLedger::LandedOnTravel(const SShadowSnapshot& now)
+{
+    const auto landed = std::find_if(travels.begin(), travels.end(), [&](const STravel& t) {
+        return t.level == now.maplevel && Distance2D(t.landing, now.pos) <= kExitSlack;
+    });
+    if (landed == travels.end())
+        return false;
+    travels.erase(landed);
+    return true;
+}
+
 void TShadowLedger::BeforeLine(TScript& script, int32_t)
 {
     const TScriptProto* proto = script.GetScriptProto();
@@ -170,6 +186,11 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
         if (scripted)
             log.Event("moved", text + " by " + scriptcause, [&](JsonOut& out) {
                 out.FieldString("cause", scriptcause);
+                out.Key("to").Begin('[').Value(now.pos.x).Value(now.pos.y).Value(now.pos.z).Value(now.maplevel).End(']');
+            });
+        else if (LandedOnTravel(now))
+            log.Event("moved", text + " by a proven travel", [&](JsonOut& out) {
+                out.FieldString("cause", "travel");
                 out.Key("to").Begin('[').Value(now.pos.x).Value(now.pos.y).Value(now.pos.z).Value(now.maplevel).End(']');
             });
         else if (LandedOnExit(now, exitname))
@@ -286,5 +307,7 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
 
     last = now;
     scripts.clear();
+    travels.erase(std::remove_if(travels.begin(), travels.end(), [&](const STravel& t) { return t.until < tick; }),
+                  travels.end());
     return violations - before;
 }

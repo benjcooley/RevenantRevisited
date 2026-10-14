@@ -11,15 +11,14 @@
 //   game, and may give, take, move and raise anything;
 // - the game clock: health, mana and fatigue regenerate at the rules.def
 //   rates, and a level-up refills them;
-// - an exit: a jump that lands on an exit.def target.
+// - an exit: a jump that lands on an exit.def target;
+// - a travel Shadow proved (TShadowTravel): it registers where Locke will
+//   land before it teleports him, and the jump must land there.
 //
 // The story variables (state.def) are part of the snapshot too: each change
 // is logged with the script that made it, which is how a run shows where
 // the story advanced (docs/shadow/ARCHITECTURE.md §9.5). Only a script may
 // change one.
-//
-// (Shadow's own verbs register what they will change once they change
-// Locke themselves: travel, from P1.)
 //
 // Losses (damage taken, items gone) never help Locke: they are logged, and
 // an item lost without a cause is a finding, not a violation. A gain or a
@@ -75,6 +74,10 @@ class TShadowLedger final : public TScript::IStepObserver
     // Removes the step observer.
     void Stop();
 
+    // A proven travel is about to put Locke at `landing` on `level`; the
+    // jump is accepted until tick `until`.
+    void AllowTravel(const S3DPoint& landing, int32_t level, int64_t until);
+
     // Compares the player with the last snapshot and logs every change with
     // its cause. Returns the number of violations found.
     int32_t Audit(TPlayer& player, int64_t tick, TShadowLog& log);
@@ -90,9 +93,18 @@ class TShadowLedger final : public TScript::IStepObserver
     void Violation(TShadowLog& log, const char* what, const std::string& text);
     [[nodiscard]] std::string ScriptCause() const;
     [[nodiscard]] bool LandedOnExit(const SShadowSnapshot& now, std::string& exitname) const;
+    [[nodiscard]] bool LandedOnTravel(const SShadowSnapshot& now);
+
+    struct STravel
+    {
+        S3DPoint landing{};
+        int32_t  level = 0;
+        int64_t  until = 0;
+    };
 
     SShadowSnapshot               last;
     bool                          started    = false;
     std::set<std::string>         scripts;          // run since the last audit
+    std::vector<STravel>          travels;          // proven, not yet landed
     int32_t                       violations = 0;
 };
