@@ -35,6 +35,8 @@ class TContainer : public TObjectInstance
 
     int32_t NumObjects();
         // Count the number of objects in the container
+    [[nodiscard]] bool IsOpen() const;
+        // Open (state OPEN): a use takes an item out rather than opening it
 
     bool CheckKeyUse(TObjectInstance* user, TObjectInstance* inst);
         // Try to use inst to unlock this object

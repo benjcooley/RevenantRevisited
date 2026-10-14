@@ -175,7 +175,7 @@ bool TGameMap::InitializeTransient(int32_t lvl, int32_t min_sx, int32_t min_sy,
     transient = true;       // set before allocation: even failed construction discards
     for (int32_t sy = min_sy; sy <= max_sy; ++sy)
         for (int32_t sx = min_sx; sx <= max_sx; ++sx)
-            sectors.push_back(new TSector(level, sx, sy));
+            AddSector(new TSector(level, sx, sy));
     FinishLoad();
     return true;
 }
@@ -197,7 +197,7 @@ bool TGameMap::LoadSectors(int32_t count)
                       level, c.sx, c.sy);
             continue;
         }
-        sectors.push_back(sec);
+        AddSector(sec);
         loadedobjs += sec->NumItems();
     }
 
@@ -272,6 +272,7 @@ void TGameMap::Release(ESectorRelease how)
     }
 
     sectors.clear();
+    grid.clear();
     level = -1;
     transient = false;
     loadedobjs = 0;
@@ -289,10 +290,21 @@ void TGameMap::Flush() const
 
 TSector* TGameMap::FindSector(int32_t sx, int32_t sy) const
 {
-    for (TSector* sec : sectors)
-        if (sec && sec->SectorX() == sx && sec->SectorY() == sy)
-            return sec;
-    return nullptr;
+    if (grid.empty() || sx < 0 || sy < 0 || sx >= kGridSide || sy >= kGridSide)
+        return nullptr;
+    return grid[size_t(sy) * kGridSide + size_t(sx)];
+}
+
+void TGameMap::AddSector(TSector* sec)
+{
+    sectors.push_back(sec);
+    const int32_t sx = sec->SectorX();
+    const int32_t sy = sec->SectorY();
+    if (sx < 0 || sy < 0 || sx >= kGridSide || sy >= kGridSide)
+        return;
+    if (grid.empty())
+        grid.assign(size_t(kGridSide) * kGridSide, nullptr);
+    grid[size_t(sy) * kGridSide + size_t(sx)] = sec;
 }
 
 TSector* TGameMap::SectorAt(const S3DPoint& pos) const

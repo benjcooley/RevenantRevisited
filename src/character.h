@@ -48,6 +48,31 @@ struct SHasSeen
     bool noautocombat;          // Prevents player from toggling autocombat
 };
 
+// The dice of one blow (COMBAT_HIT.md §3.1), as TCharacter::RollAttack
+// throws them: the damage before its TOHITDAMAGE tier, the to-hit and the
+// roll. -1 is a die not thrown yet.
+struct SAttackRoll
+{
+    int32_t damage = -1;
+    int32_t tohit = -1;
+    int32_t roll = -1;
+
+    [[nodiscard]] bool Hits() const { return tohit >= roll; }
+      // A blow that fails its roll only glances (ResolveHit)
+    [[nodiscard]] int32_t Tiered() const;
+      // The damage scaled by the TOHITDAMAGE tier its margin (to-hit less
+      // the roll) falls in, at least 1: what the attack carries
+};
+
+// A blow weighed against the target's guard (TCharacter::WeighBlow).
+struct SBlowOutcome
+{
+    int32_t damage  = 0;        // at least 1
+    int32_t tohit   = 0;        // less the guard's 50 when it counted
+    bool    hit     = false;    // the roll made: a hit, not a glance
+    bool    blocked = false;    // the guard turned a hit into a glance
+};
+
 // the default invoke animation delay
 #define INVOKE_DELAY    20
 
@@ -334,6 +359,25 @@ class TCharacter : public TComplexObject
         TCharacter* targ);
       // REVSYNC: 0x004d1120 -- whether attack `attacknum` can be made now at `targ` (null: none,
       // `tdist` then 10000), fixing the out-values on the way
+    [[nodiscard]] SAttackRoll RollAttack(TCharacter& target, const SCharAttackData& attack, int32_t dmgpcnt,
+        bool targetopen, SAttackRoll thrown = {});
+      // The dice of `attack` at `target`, as IsValidAttack throws them, with
+      // no animation read: `targetopen` is a target facing away or swinging
+      // itself, `dmgpcnt` the attack choice's RollDamagePercent (the
+      // player's StrengthMod instead). A die `thrown` already stays.
+    [[nodiscard]] static int32_t RollDamagePercent();
+      // The damage percentage an attack choice throws before its search:
+      // random(1, 50) + random(1, 50)
+    [[nodiscard]] static SBlowOutcome WeighBlow(int32_t damage, int32_t tohit, int32_t roll, bool guarding);
+      // ResolveHit's arithmetic for a blow carrying `damage` (tiered) at
+      // `tohit` against `roll`: a target guarding it (blocking or dodging,
+      // facing the blow) takes 50 off the to-hit, and the damage is tiered
+      // again; a failed roll glances; at least 1 either way
+    void LandBlow(TCharacter& target, int32_t damage, bool lands, TActionBlock* action);
+      // ResolveHit's end: `target`'s Damage when the blow lands (it owns
+      // `action`; one that doesn't land is freed), a bow-mode player drawn
+      // back into combat, and a player's experience for the blow (each award
+      // returns unless the target is dead)
     bool FindButtonAttack(int32_t button, int32_t dmgpcnt, int32_t &attacknum, int32_t &impactnum,
         int32_t &damage, int32_t &tohit, int32_t &roll, bool isaction, TCharacter* targ);
       // REVSYNC: 0x004d1dd0 -- the first valid attack on `button`: responses, then

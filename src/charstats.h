@@ -105,4 +105,11 @@
 
 #define SK_WEAPONSKILLS (SK_HANDS)      // Where are the weapon skills
 
+// The attributes and the skills by name, in stat order (PLRSTAT_*, SK_*),
+// as the observation and Shadow Smoke's log write them.
+inline constexpr const char* kAttributeNames[NUM_PLRSTATS] = { "strn", "cons", "agil", "rflx", "mind", "luck" };
+inline constexpr const char* kSkillNames[NUM_SKILLS] = {
+    "attack", "defense", "invoke", "hands", "knife", "sword", "bludgeon", "axes", "bows", "stealth", "lockpick",
+};
+
 #endif

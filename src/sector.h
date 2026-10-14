@@ -114,9 +114,9 @@ class TSector final
 
     // Sector
 
-    int32_t SectorLevel() { return level; }
-    int32_t SectorX() { return sectorx; }
-    int32_t SectorY() { return sectory; }
+    int32_t SectorLevel() const { return level; }
+    int32_t SectorX() const { return sectorx; }
+    int32_t SectorY() const { return sectory; }
     void GetMaxScreenRect(RSRect r);
     void GetMaxMapRect(RSRect r);
 
@@ -180,12 +180,15 @@ class TSector final
       { return walkmap ? walkmap[(y << (SECTORWSHIFT - WALKMAPSHIFT)) + x] : 0; }
       // Returns walkmap value given sector position
     void SetWalkmap(int32_t x, int32_t y, int32_t height)
-      { if (walkmap) walkmap[(y << (SECTORWSHIFT - WALKMAPSHIFT)) + x] = (uint16_t)height; }
+      { if (walkmap) { walkmap[(y << (SECTORWSHIFT - WALKMAPSHIFT)) + x] = (uint16_t)height; ++walkmapversion; } }
       // Sets walkmap at x, y to have height of height
     void WalkmapHandler(int32_t mode, uint8_t *walk, int32_t zpos, int32_t x, int32_t y, int32_t width, int32_t length, int32_t stride, bool override = false);
       // Handler for various walkmap manipulations (clips world wm pos to sector)
     void ClearWalkmap();
       // Sets walkmap to 0
+    [[nodiscard]] static uint64_t WalkmapVersion() { return walkmapversion; }
+      // Counts every change to any sector's walkmap: a cached analysis of
+      // the ground (Shadow Smoke's walk field) is stale once it moves on
 
   // Preloaded sector system
     static bool LoadPreloadSectors(int32_t level, int32_t numrects, SRect *rects);
@@ -205,6 +208,7 @@ class TSector final
       // Are we in the preload area?
 
   private:
+    static inline uint64_t walkmapversion = 0;
     uint16_t *walkmap;
     int32_t  level, sectorx, sectory;
     bool preloaded = false;
