@@ -407,8 +407,8 @@ void ReleaseOnContainerIcon()
 // and the belt (0x0052d0b8..0x0052d26d), with nothing held: a talisman the
 // player carries himself goes into his Spell Pouch ("pouch"; EQUIPUNABLE
 // when he has none), anything else is equipped in its own slot, and with no
-// item there the container's carried items close up. Not ported: the item
-// information of the stats mode (0x0065c9e0, 0x0047eff0).
+// item there the container's carried items close up. With Ctrl held the
+// side panel shows the item's sheet instead (0x00538267; uisidebartest.cpp).
 void RightClick(TObjectInstance* container, TObjectInstance* item)
 {
     TPlayer* const player = Player;
@@ -459,6 +459,11 @@ void Cancel()
 void ReleaseUnclaimed()
 {
     Cancel();
+}
+
+TObjectInstance* HeldItem()
+{
+    return IsItemPane(g_state.source) ? g_state.item.Get() : nullptr;
 }
 
 bool IsActive()

@@ -159,6 +159,11 @@ void Cancel();
 // after routing the button-up.
 void ReleaseUnclaimed();
 
+// The item grabbed in the inventory, the belt or the doll, else null. The
+// map reads it when the button comes up over it (retail's map pane reads the
+// item panes' held slots, 0x0044fce3, and gets the release first).
+[[nodiscard]] TObjectInstance* HeldItem();
+
 // Quick predicates. IsActive() includes a grab not yet dragged;
 // IsDragging() is true only after promotion past the wiggle threshold.
 bool IsActive();

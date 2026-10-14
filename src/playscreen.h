@@ -198,6 +198,11 @@ class TPlayScreen : public TScreen
     void HideLowerPanes();
     void ShowLowerPanes();
 
+    void ShowStatPane();
+      // REVSYNC: 0x0047eff0 -- the side panel's upper slot shows the stats
+      // pane, the panel opening if it is shut. What the pane shows (the
+      // player, or an item) stays: StatPane.SetObject picks it.
+
     // The map view on screen (retail MapPane's rect): what the world renders
     // into, inside the HUD's side and bottom panels.
     void GetMapViewRect(int32_t& x, int32_t& y, int32_t& w, int32_t& h) const;

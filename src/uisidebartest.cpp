@@ -38,6 +38,7 @@
 #include "renderer.h"
 #include "revdefs.h"
 #include "revenant.h"
+#include "statpane.h"
 #include "surface.h"
 #include "testconfig.h"
 #include "testmodes.h"
@@ -716,6 +717,40 @@ static bool InEquipPane(int32_t x, int32_t y)
     return x >= pane_x && x < pane_x + kPaneW && y >= pane_y && y < pane_y + kTopH;
 }
 
+// REVSYNC: the right button up with Ctrl held, on the inventory
+// (0x00538267..0x00538333) and the belt (0x0052cff9..0x0052d0b5), before
+// anything else they do: the item under the pointer shows on the stats pane
+// (ShowStatPane 0x0047eff0, StatPane.SetObject 0x005496a0); with none, the
+// player does again when the stats pane is up already. Never an equip or a
+// compaction. Off the belt's boxes, nothing.
+static bool ShowItemInfoAt(int32_t x, int32_t y)
+{
+    const SHudState& s = GetHudState();
+    TObjectInstance* item = nullptr;
+    if (InInvPane(x, y))
+    {
+        TObjectInstance* const shown = Inventory.GetContainer();
+        if (!shown)
+            return false;
+        const int32_t slot = HitInvSlot(x, y, Inventory.FirstSlot());
+        item = slot >= 0 ? shown->GetInventorySlot(slot) : nullptr;
+    }
+    else if (const int32_t bs = s.bottomBarOpen && Player ? HitBarInvSlot(x, y) : -1; bs >= 0)
+        item = Player->GetInventorySlot(kInvSlotBeltFirst + bs);
+    else
+        return false;
+
+    if (item)
+    {
+        log_info("[ui-sidebar] item info: %s", item->GetName());
+        PlayScreen.ShowStatPane();
+        StatPane.SetObject(item);
+    }
+    else if (s.topSlot == HUD_TOP_STATS)
+        StatPane.SetObject(Player);
+    return true;
+}
+
 bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
 {
     SHudState& s = GetHudState();
@@ -764,6 +799,8 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
     // worn there with its sound; the port leaves a release off the boxes.
     if (button == MB_RIGHTUP)
     {
+        if (CtrlDown)
+            return ShowItemInfoAt(x, y);
         if (UIDragState::IsActive())
             return false;
         if (InInvPane(x, y))
@@ -784,6 +821,25 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         return false;
     }
 
+    // ---- Right press on the equip pane: a worn item's sheet ------------
+    // REVSYNC: TEquipPane::MouseClick 0x005363f7..0x00536475 -- Ctrl or not,
+    // the item worn in the slot under the pointer shows on the stats pane.
+    if (button == MB_RIGHTDOWN)
+    {
+        if (s.sidebarState != HUD_SIDEBAR_OPEN || s.topSlot != HUD_TOP_EQUIP || !Player)
+            return false;
+        const int32_t es = HitEquipSlot(x, y);
+        if (es < 0)
+            return false;
+        if (TObjectInstance* const worn = Player->GetEquip(es))
+        {
+            log_info("[ui-sidebar] item info: %s", worn->GetName());
+            PlayScreen.ShowStatPane();
+            StatPane.SetObject(worn);
+        }
+        return true;
+    }
+
     if (button != MB_LEFTDOWN) return false;
 
     // ---- Sidebar tab strip (TAKES PRECEDENCE over chrome-pane slots) -
@@ -798,15 +854,18 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         else                          { s.bottomSlot = mode; region = "bottom"; }
         s.sidebarState = HUD_SIDEBAR_OPEN;
 
-        // Retail dispatch pairs only the upper-region convenience presets:
-        // case 7/0xa = Book+Spell, case 9 = Equip+Inv. Lower-region
-        // commands 0xb/0xc update only DAT_0065d1bc, so clicking Inv/Map
-        // must not yank the upper pane away from Stats/Book/Equip.
-        bool paired = false;
-        if (s.topSlot == HUD_TOP_BOOK && g_buttons[i].region == 0)
-        { s.bottomSlot = HUD_BOT_SPELL; paired = true; }
-        else if (s.topSlot == HUD_TOP_EQUIP && g_buttons[i].region == 0)
-        { s.bottomSlot = HUD_BOT_INV;   paired = true; }
+        // REVSYNC: TSideTabsPane::OnControl 0x0053d790, a tab turned on
+        // (0xbb9): Book and Spell show the book over the spell maker, Stats
+        // and Equip their pane over the inventory, Inv and Map only theirs.
+        bool paired = true;
+        if (mode == HUD_TOP_BOOK && g_buttons[i].region == 0)
+            s.bottomSlot = HUD_BOT_SPELL;
+        else if (g_buttons[i].region == 0)
+            s.bottomSlot = HUD_BOT_INV;
+        else if (mode == HUD_BOT_SPELL)
+            s.topSlot = HUD_TOP_BOOK;
+        else
+            paired = false;
 
         log_info("[ui-sidebar] click btn %d (%s/mode %d)%s -> top=%d bottom=%d",
                  i, region, mode, paired ? " [paired]" : "",
