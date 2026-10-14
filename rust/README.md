@@ -515,8 +515,9 @@ Terrain tests cover hidden/undrawable imagery, inventory and `NOWALK` exclusion,
 registration, sector seams, stamp priority, holes, stair gradients, radius bounds,
 fixed ticks, and fast diagonal collision. The optional `walkmap_reference` test
 compiles the sibling C++ radius function in a small harness using `CXX` or `c++`
-and compares 630 probes, including cell edges, holes, and radius clamp/bypass
-boundaries. The native function is compiled unchanged against a synthetic height
+and compares 1,890 probes across two loaded levels and an unloaded level,
+including cell edges, holes, and radius clamp/bypass boundaries.
+The native function is compiled unchanged against a synthetic height
 field and the rounded distance table. The retail walk test checks a move followed
 by a stop at Misthaven terrain.
 Motion tests cover all record layouts and state-table versions, malformed offsets,
