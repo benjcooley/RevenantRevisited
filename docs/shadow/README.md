@@ -9,6 +9,7 @@ checks every change to him.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): the design.
 - [BURNDOWN.md](BURNDOWN.md): the live checklist.
+- [CALIBRATION.md](CALIBRATION.md): the duel model against real fights.
 
 ## Running it
 
@@ -34,6 +35,18 @@ build/Revenant --headless --shadow=tools/shadow/ahkuilon.plan
 | `--shadow-out=<dir>` | where the run writes its log (default `<save path>/shadow/<plan>-s<seed>-<time>`) |
 | `--shadow-lenient` | log ledger violations instead of stopping |
 | `--seed=N` | the game's random stream and Shadow's own (default 1) |
+
+The duel harness of the calibration (CALIBRATION.md) takes the place of a
+plan: after the `--exec` lines have set the game up, it throws trial duels
+and writes `duels.jsonl` to `--shadow-out`.
+
+| Flag | Meaning |
+|---|---|
+| `--shadow-duel=<foe type>[,...]` | the duel harness: Locke against the nearest of each type |
+| `--shadow-duel-runs=N` | trial duels, seeds 1..N (default 200) |
+| `--shadow-duel-trace=N` | the first N duels' timelines, `trace-<seed>.txt` |
+
+`tools/shadow/calibrate.py` drives it, and the arena beside it.
 
 The run writes `shadow.jsonl`, `summary.txt` and `waypoints.json`, and the
 milestone saves go to the waypoint catalogue

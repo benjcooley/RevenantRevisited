@@ -23,7 +23,7 @@ it has got.
 | Doors, keys, levers | `use … with …`, transitions (§5.3) | P1 | — |
 | Town teleports | stones in the route graph (§5.3) | P1 | — |
 | Fights on the way | travel and evade (§5.5) | P1–P3 | written; first exercised on the way to the Druhg camp |
-| Fights | the duel model (§6) | P2 | working (Rahul) |
+| Fights | the duel model (§6), calibrated against the arena (CALIBRATION.md) | P2 | working (Rahul); 10 of 16 calibration cells pass |
 | Getting poisoned, paralysed, buffed | real state through the duel (§8.7) | P2 | — |
 | Looting monsters | real death drop, `Pickup` of every item (§8.8) | P2 | done |
 | Opening chests, picking locks | `take` through `TContainer::Use`; keys by `with`; lockpicks to come (§8.8) | P4 | chests done (the Keep's 500 gold); lockpicks open |
@@ -82,17 +82,17 @@ it has got.
 | Status | Item | Last touched |
 |---|---|---|
 | [x] | `TCharacter::RollAttack` extracted from `IsValidAttack` (and `RollDamagePercent` from the four attack choices): C3 port output byte-identical before and after (5206/5206 against retail); arena fights identical draw for draw | 2026-10-13 |
-| [x] | Duel timeline (TShadowDuel): monster cadence (ATTACKFREQ), RandomAttack's pick, OnAttacked's guard, RETREATAT; Locke's blows by IsValidAttack's animation-free tests, fatigue; one fight in one tick | 2026-10-14 |
+| [x] | Duel timeline (TShadowDuel), rebuilt against real fights. Fighters are points on open ground; actions play their animations' length and root motion from the imagery. The monster runs the AI's attack branch: its moves (PLAYANIM) as well as its blows, the timer's second decrement reading the attack before the try, OnAttacked's guard and the forced one, RETREATAT for RETREATFOR. Locke's blow is FindButtonAttack's walk, the tier compounding and his StrengthMod in. A blow strikes by reach and arc at its impact frame, and a landed blow plays its flinch. One fight in one tick | 2026-10-14 |
 | [x] | Outcomes through the game: `WeighBlow`/`LandBlow` extracted from ResolveHit (Damage, the kill, skill and stealth awards); the bodies drop their loot and Locke picks it up; the ledger's progress cause. `LastAttack` for Jong still to do | 2026-10-14 |
-| [~] | Tactics: rotation, chains first, guard a seen blow (35%), never the fatigued blow, a potion under 35% health. Disengage and the 64-run size-up (trial mode is built) to do | 2026-10-14 |
+| [~] | Tactics: the player bot's habits (hold off at reach + 24, come in when open on a 12-tick window at 60%, back off, step out of or guard (35%) or roll (15%) a seen blow, eight keys and the facing they leave), rotation, a belt potion under 35% health (`ShadowBeltHealing`). Disengage to do | 2026-10-14 |
 | [ ] | Combos: chain attacks keyed inside `chainexptime` (§6.4) | — |
 | [x] | Interrupts: anything fighting Locke in the live world is fought first (Rahul, as the opening ends) | 2026-10-14 |
-| [x] | Several monsters at once: each its own timer, at most three in reach | 2026-10-14 |
+| [x] | Several monsters at once: each its own AI, at most three in reach; Locke fights the nearest. Not calibrated yet (the matrix is one on one) | 2026-10-14 |
 | [~] | Spells: `CastByName` and the pure part of `TSpell::Damage` (static `TSpell::Damage(caster, target, spelldata, variant)`, done; the duel side waits) | 2026-10-13 |
-| [ ] | Effects: poison, paralysis, stat effects, damage types, monster spells (§8.7) | — |
-| [ ] | Calibration suite against the arena and player bot; tolerances | — |
+| [ ] | Effects: poison, paralysis, stat effects, damage types, monster spells (§8.7). Calibration shows the cost: an Arakna's SpiderPoison makes its fight 33 health and one death in four at level 1, the model 3.5 (CALIBRATION.md §5.1) | — |
+| [x] | Calibration suite (CALIBRATION.md): `--shadow-duel` harness, `tools/shadow/calibrate.py`, 16 arena cells (levels 1, 4, 8; fists and sword) with the player bot; gates on win, duration, hit rates, damage per blow, health lost. 10 of 16 pass; open: monster spells (Arakna), barehanded positioning against Mongrel and Thrush Druhgs | 2026-10-14 |
 | [ ] | `--shadow-combat=real` | — |
-| [x] | Gate: from a new game through Rahul (won barehanded, 214 ticks), Rand, Tendrick, the Keep's exit, Gus's deal and the first potions: 23 min 24 s of game in 30 s, six waypoints, no violations | 2026-10-14 |
+| [x] | Gate: from a new game through Rahul (won barehanded; 2130 ticks with the calibrated model, 214 before), Rand, Tendrick, the Keep's exit, Gus's deal and the first potions: 23 min 42 s of game in 20 s, six waypoints, no violations | 2026-10-14 |
 
 ## P3 Generators
 
