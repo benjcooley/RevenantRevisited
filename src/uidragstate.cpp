@@ -145,12 +145,13 @@ void ReleaseFromPane(TObjectInstance* container, int32_t slot, TObjectInstance* 
 // A worn item let go over a cell (the inventory 0x00538992..0x00538ae5, the
 // belt 0x0052d4e4..0x0052d5ba): onto an empty cell it comes off and moves
 // there; onto an item that may be worn in its place, the two trade places.
-// Not ported: the walk-root refresh after a light source (0x004cf000).
+// A light source then sets the walk root back (SetWalkMode 0x004cf000).
 void ReleaseWorn(TObjectInstance* container, int32_t slot, TObjectInstance* worn, int32_t eqslot)
 {
     TPlayer* const player = Player;
     if (player->GetEquip(eqslot) != worn)
         return;
+    const bool light = worn->ObjClass() == OBJCLASS_LIGHTSOURCE;
     TObjectInstance* const there = container->GetInventorySlot(slot);
     if (!there)
     {
@@ -159,6 +160,8 @@ void ReleaseWorn(TObjectInstance* container, int32_t slot, TObjectInstance* worn
     }
     else if (player->CanEquip(there, eqslot))
         player->Equip(there, eqslot);
+    if (light)
+        player->SetWalkMode();
 }
 
 // The grab is over: no ghost, nothing held.
@@ -178,10 +181,9 @@ SUIDragState& Get() { return g_state; }
 // and of the item panes' right button up (0x0053849e..0x005384ed,
 // 0x0052d1d5..0x0052d24e): the item's "eqslot" stat names its slot; -1 puts
 // EQUIPUNABLE on the text bar, past the slots does nothing, else CanEquip
-// (0x00519300), Equip (0x005199b0) and the item's sound. An item without the
-// stat reads 0 and CanEquip refuses it, silently. Not ported: the walk-root
-// refresh after equipping a light source (SetWalkMode 0x004cf000), which
-// needs the torch roots (GetTorchRoot, TPlayer vtable +0x30c).
+// (0x00519300), Equip (0x005199b0) and the item's sound; a light source
+// then sets the walk root (SetWalkMode 0x004cf000: "torch"). An item without
+// the stat reads 0 and CanEquip refuses it, silently.
 bool EquipInOwnSlot(TObjectInstance* item)
 {
     TPlayer* player = Player;
@@ -193,10 +195,14 @@ bool EquipInOwnSlot(TObjectInstance* item)
         TextBar.Print("%s", DialogList.GetLine("EQUIPUNABLE"));
         return false;
     }
-    if ((uint32_t)slot >= NUM_EQ_SLOTS || !player->CanEquip(item, slot) || !player->Equip(item, slot))
+    if ((uint32_t)slot >= NUM_EQ_SLOTS || !player->CanEquip(item, slot))
         return false;
-    item->PlayItemSound();
-    return true;
+    const bool equipped = player->Equip(item, slot);
+    if (equipped)
+        item->PlayItemSound();
+    if (item->ObjClass() == OBJCLASS_LIGHTSOURCE)
+        player->SetWalkMode();
+    return equipped;
 }
 
 bool BeginDrag(EDragSource src, int32_t slot_idx,

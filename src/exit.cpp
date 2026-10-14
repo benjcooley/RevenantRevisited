@@ -178,6 +178,30 @@ bool IsScriptedDoorType(const char *type)
 
 }  // namespace
 
+bool TExit::IsScriptedDoor() const
+{
+    return IsScriptedDoorType(GetTypeName());
+}
+
+SRect TExit::StripRect()
+{
+    int32_t regx = 0, regy = 0, regz = 0, width = 0, length = 0, height = 0;
+    GetExitStrip(regx, regy, regz, width, length, height);
+    SRect strip;
+    strip.left = pos.x - regx * GRIDSIZE;
+    strip.top = pos.y - regy * GRIDSIZE;
+    strip.right = strip.left + width * GRIDSIZE;
+    strip.bottom = strip.top + length * GRIDSIZE;
+    return strip;
+}
+
+bool TExit::IsOnStrip(const S3DPoint& at)
+{
+    int32_t regx = 0, regy = 0, regz = 0, width = 0, length = 0, height = 0;
+    GetExitStrip(regx, regy, regz, width, length, height);
+    return OnStrip(at, regx, regy, width, length);
+}
+
 // REVSYNC: 0x0050c880
 bool TExit::Initialize()
 {
@@ -191,6 +215,15 @@ void TExit::Close()
     WriteExitList();
     exitlist.clear();
     exitlistdirty = false;
+}
+
+std::vector<TExit::STarget> TExit::Targets()
+{
+    std::vector<STarget> targets;
+    targets.reserve(exitlist.size());
+    for (const SExitRef& ref : exitlist)
+        targets.push_back({ref.name, ref.target, ref.level});
+    return targets;
 }
 
 // REVSYNC: WriteExitList @ 0x0050cca0. Retail wrote the module's exit.def

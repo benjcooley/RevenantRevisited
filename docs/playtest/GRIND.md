@@ -560,7 +560,13 @@ Its Pulse `0x00516c30` does this for each slot:
 When it runs:
 
 - **Only while the generator is off screen.** OnScreen `0x00517660` clears
-  `+0xf0`, and OffScreen `0x00517640` sets it.
+  `+0xf0`, and OffScreen `0x00517640` sets it. The map pane's animate pass
+  (`0x00458750`) calls them each drawn frame: off screen is the generator's
+  screen rect missing the 640×480 view, grown by 192 pixels on every side
+  and anchored on the 64-pixel update grid. A generator whose sector the
+  pass doesn't reach keeps its last state. In world units that is roughly
+  450–500 up or down the screen from the view centre (along x + y) and 300
+  each of x and −y across it, about 420 [C, measured in the port].
 - Only in a loaded sector.
 - Not in the editor, on a multiplayer client, or with the `0x668110`
   "dummies" toggle set.
@@ -569,7 +575,9 @@ What a spawn does (`0x00517240`):
 
 - It makes up to 20 tries for a walkable spot 50–150 units from the
   generator.
-- The monster gets a random facing and full char.def health [L].
+- The monster gets a random facing and full char.def health: the spawn
+  doesn't touch health, so it starts at its type's (a spawned Kantha has
+  70) [C].
 - It gets treasure by the slot's treasure type (§4.1).
 
 Every shipped slot's frequency is 7000–9100, which is **70–91 s**. Caps are
@@ -581,7 +589,6 @@ characters within 300 units of the spot.
 
 Unconfirmed:
 
-- How far "off screen" reaches in world units.
 - Whether retail keeps a 3×3 or a 5×5 block of 1024-unit sectors loaded
   around the camera (EXITS.md).
 - Whether a fading corpse counts toward the cap. Likely, since the count
@@ -594,11 +601,13 @@ Four slots can never spawn, because their names match no type [L]:
 - an empty generator at (15699, 20671), level 0;
 - `"ogrok   "` on level 32.
 
-**The port has no generators** [C, from reading the code]: there is no
-MonsterGen class; `addmonstertype` is `CmdNotPorted`
-(`src/command.cpp:4448`). A port grind runs out of monsters where retail
-keeps trickling them in. Plan parity tests around this. Its corpses drop
-their loot and fade out as retail's do ([FINDINGS.md](FINDINGS.md) F8, F9).
+**The port has generators** (`TMonsterGen`, `src/monstergen.cpp`) [C]: the
+pulse, spawn, kit, sector and save layout, and the `addmonstertype`,
+`delmonstertype`, `maxmonsters` and `monstertypes` commands, as above. It
+pulses the generators of the 3×3 sector window around the camera. It has
+no multiplayer, so a server's player-distance test and spawn throttle
+aren't ported. Its corpses drop their loot and fade out as retail's do
+([FINDINGS.md](FINDINGS.md) F8, F9).
 
 **The base map's supply** (hostile = `Aggressive` 1 and Value ≥ 0):
 
@@ -1189,14 +1198,26 @@ from rules.def (Rules `+0x74` … `+0x88`, parsed at `0x0048c30f`):
 `TFood::Use` `0x0050e780` handles both (the FOOD and POTION vtables
 `0x005b2cd4` and `0x005b2ee4`, slot `0xbc`):
 
+- The base Use runs first (the item's and the user's USE triggers). A dead
+  character can't eat; nothing is used with another object (`with` must
+  be −1), nor an item whose state isn't 0.
 - Health += the item's Health and Mana += its Mana, each capped at the
   maximum.
-- An item with Poison ≠ 0 cures poison.
+- An item with Poison ≠ 0 cures poison: the user's Poisoned mark is
+  cleared, and every effect within 0x80 of the user whose spell has the
+  user as its first target and DT_POISON as its damage type is ended
+  (`KillThisEffect`), so a running Poison spell stops re-poisoning.
 - The item's Fatigue stat is **never applied**.
-- The amount drops by one, and the item is deleted at the last unit.
-  Nothing is left behind, whatever the manual says about apple cores and
-  bottles.
-- The text bar shows `FOODGOOD1`.
+- The player hears "food" for an item whose imagery has an inventory icon
+  (`GetInvImage(0, 0)`), else "potion".
+- In an inventory, the amount drops by one, and the last unit is deleted
+  from its owner by name (`DeleteFromInventory(name, 1)`). Nothing is left
+  behind, whatever the manual says about apple cores and bottles. An item
+  on the map is not used up.
+- The text bar shows `FOODGOOD1` ("The item was consumed. You feel
+  rejuvenated.") when the user is the player.
+
+Ported 2026-10-13 (`TFood::Use`, src/food.cpp); a potion is a `TFood`.
 
 | Item | Where | Buy / sell, gp | Effect |
 |---|---|---|---|
@@ -1436,7 +1457,7 @@ taught moves.
 | `objects[].dead` | health below 1: a corpse that is fading out (§3.1) | the health stat | `Health() < 1` |
 | `objects[].items` | for an item on the ground: its name, amount and item numbers | as items | as items |
 | `objects[].open`, `locked`, `contents` | a container's state and what it holds (taking from a chest is one item per click) | container stats (`Openable`, `LOCK`), inventory `+0x68` / `+0x78` | `TContainer` |
-| `objects[].generator` | a MonsterGen helper's slots (type, frequency, cap, elapsed) and whether it is active | its slots (in the layout Load `0x00516e00` reads), `+0xec`, `+0xf0` | — (not ported) |
+| `objects[].generator` | a MonsterGen helper's slots (type, frequency, cap, elapsed) and whether it is active | its slots (in the layout Load `0x00516e00` reads), `+0xec`, `+0xf0` | `TMonsterGen` (`src/monstergen.h`) |
 | `shop` | while the buy/sell drawer is up: buy or sell, the rows as `{name, type, price, amount}`, the first row in view, the selection, the customer's gold | TBuySellScreen `0x0065a3b8`: type `+0x17c` (bit 1 buy, bit 2 sell), first row `+0x180`, selection `+0x188`, row count `+0x194` (int16), rows `+0x198` (0x48-byte records: display name `+0x04`, type name `+0x08`, price `+0x38`, amount `+0x3c`), in use `+0x1b0` | `BuySellPane` (`src/buysell.*`) |
 
 None of these reads changes a game. Each is a stat or list lookup, with no
@@ -1502,8 +1523,6 @@ and times its level-ups as heals.
      and walk to the next; once the first is off screen, its clock runs.
      Then come back. R1's four Kantha generators and R2b's araknid
      generators are the first farm. Track each site's last visit.
-   - The port has no generators, so in the port this loop ends when the map
-     is empty.
 4. **Fight** (§2.4–2.5; [PLAN.md](PLAN.md) §11).
    - Rotate A, S and D: the third press of one key in a row gets roll 100.
    - Strike while the monster is mid-attack or turned away (+25 to-hit).
@@ -1591,7 +1610,7 @@ marked.
 
 | Gap | Retail | Port |
 |---|---|---|
-| Monster generators | MonsterGen respawns (§3.1) | not ported: `addmonstertype` is `CmdNotPorted` (`src/command.cpp:4448`) |
+| Monster generators | MonsterGen respawns (§3.1) | ported (`TMonsterGen`); a multiplayer server's player-distance test and spawn throttle aren't |
 | Death loot | the inventory drops to the floor; the corpse fades out from 10 s and goes at 14.2 s | the same since FINDINGS F8, F9; the items' flight isn't drawn |
 | U and G keys | Use and Get (§4.2) | the same since FINDINGS F10 |
 | A pickup into a full pack | the item is lost (§4.3) | the same since FINDINGS F11 |
@@ -1602,10 +1621,10 @@ marked.
 
 ## 11. Open questions
 
-1. **Generators.** How far "off screen" reaches in world units, and whether
-   retail loads a 3×3 or 5×5 block of sectors. Check the respawn cadence in
-   the emulator: stand off screen from an R1 Kantha generator for about
-   75 s. Also whether a fading corpse counts toward a generator's cap.
+1. **Generators.** Whether retail loads a 3×3 or 5×5 block of sectors.
+   Check the respawn cadence in the emulator: stand off screen from an R1
+   Kantha generator for about 75 s. Also whether a fading corpse counts
+   toward a generator's cap. (How far off screen reaches: §3.1.)
 2. **Floor drops.** Do they survive a save and reload? They should, being
    sector objects.
 3. **Full pack.** Answered: the item is lost, gone from the map and not
@@ -1691,9 +1710,8 @@ marked.
   - the shop rows;
   - screen positions for the equip-pane slots and the belt boxes.
 - **In the director:** `monster_brief`'s inverted DAMAGEMODS sign.
-- **In the port:** no generators, no death drop, no U or G keys, no boss
-  AI.
-- **Unconfirmed in retail:** generator reach and the sector window; floor
+- **In the port:** no death drop, no U or G keys, no boss AI.
+- **Unconfirmed in retail:** the sector window; floor
   drops across a save; a full-pack pickup; the order of chest steps; belt
   pouches; Restart after a load; which monsters take the grapples; the
   Band of Shadows parse.

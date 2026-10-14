@@ -323,6 +323,12 @@ target_include_directories(test_playerstats PRIVATE
 target_compile_definitions(test_playerstats PRIVATE SOKOL_${SOKOL_BACKEND})
 target_link_libraries(test_playerstats PRIVATE GTest::gtest_main)
 
+# Shadow Smoke's plan format (docs/shadow/ARCHITECTURE.md §9.1).
+add_executable(test_shadowplan
+  tools/test_shadowplan.cpp
+  src/shadow/shadowplan.cpp)
+target_link_libraries(test_shadowplan PRIVATE GTest::gtest_main)
+
 # Sound file decoding and lengths (audio_backend's decoders; no playback
 # device). miniz reads the shipped voices when REVENANT_DATA_PATH is set.
 add_executable(test_audio_decode
@@ -419,7 +425,8 @@ foreach(test IN ITEMS
     test_audio_decode
     test_classiclighting
     test_particlefx
-    test_playerstats)
+    test_playerstats
+    test_shadowplan)
   gtest_discover_tests(${test} TEST_PREFIX "${test}." DISCOVERY_MODE PRE_TEST)
 endforeach()
 

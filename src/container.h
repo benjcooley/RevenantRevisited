@@ -35,6 +35,8 @@ class TContainer : public TObjectInstance
 
     int32_t NumObjects();
         // Count the number of objects in the container
+    [[nodiscard]] bool IsOpen() const;
+        // Open (state OPEN): a use takes an item out rather than opening it
 
     bool CheckKeyUse(TObjectInstance* user, TObjectInstance* inst);
         // Try to use inst to unlock this object
@@ -45,6 +47,11 @@ class TContainer : public TObjectInstance
     OBJSTATFUNC(Locked)
     OBJSTATFUNC(KeyId)
     OBJSTATFUNC(PickDifficulty)
+    OBJSTATFUNC(Explosive)
+    OBJSTATFUNC(Poisonous)
+    OBJSTATFUNC(CombineID)
+    OBJSTATFUNC(TargetID)
+    OBJSTATFUNC(Regen)
 
     virtual bool AddToInventory(TObjectInstance* inst, int32_t slot = -1);
         // Add inst to this object's inventory, in the given slot (first free slot if none specified)
@@ -52,6 +59,19 @@ class TContainer : public TObjectInstance
   private:
     bool UseCarried(TObjectInstance* user, TObjectInstance* inst);
         // Used by the user who carries it: shown or closed, combined, or inst put in
+    bool TakeOut(TObjectInstance* user);
+        // Used alone on the ground: an item out, or shut when empty
+    bool PutIn(TObjectInstance* user, TObjectInstance* inst);
+        // inst used on it on the ground: inst goes in
+    bool Shut(TObjectInstance* user);
+        // An openable container closes
+    void SpringTraps(TObjectInstance* user);
+        // Opening it: the Explosive and Poisonous traps on the user
+    bool Finish();
+        // The end of a use that did something (retail 0x004dd33f)
+
+    int32_t regentime = 0;      // retail +0xdc: the game frame a Regen cycle ended
+    int32_t regencursor = 0;    // retail +0xe0: the item a Regen container hands out next
 };
 
 DEFINE_BUILDER("CONTAINER", TContainer)
