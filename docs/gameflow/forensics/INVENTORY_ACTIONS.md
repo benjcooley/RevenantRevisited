@@ -384,6 +384,27 @@ refresh for slots 4 and 7, then `0x0051c660`. Returns 1. [C]
 
 The port's `TPlayer::Equip` (`src/player.cpp:964`) follows this layout.
 
+### 5.4 The torch walk: SetWalkMode `0x004cf000`
+
+`TPlayer` vtable `+0x30c` (`0x0051b3f0`) is the walk root: "torch" with a
+LIGHTSOURCE in equipment slot 6, else "walk". `SetWalkMode` (any
+character): nothing while held in an interactive move (unless charflags
+`0x80000`) or dead; a root that is a walking one (`IsWalkMode`) **and**
+the walk root stays; any other is rebuilt as a copy of the old root under
+the mode's name (combat `+0x304`, bow `+0x308`, animate `+0x30c`), a step
+under way turned into its step, and started at once. So a combat or bow
+root is rebuilt on every call. [C]
+
+Callers on the item side: `Equip` after `equipment[slot] = item` when the
+root is a walking one and the item is a light source (`0x00519c24`); the
+panes' equip (`0x005384ed`, `0x0052d244`, `0x00536659`) for a light source
+once CanEquip passed; a worn light source dropped on a cell (`0x00538ae0`,
+`0x0052d5b5`). [C]
+
+Locke's imagery has no "torch", "torchf" or "torchr" state (checked in the
+port, 2026-10-14), so `HasActionAni("torch")` fails and the walk never
+changes in the shipped game; the calls are ported as they are. [C]
+
 ## 6. The hover cursor
 
 ### 6.1 Who calls it
@@ -558,6 +579,62 @@ bag again instead of closing it. [C]
 first tries a "Pouch" whose first item has the new item's class
 (INVENTORY.md §2 step 2). [C]
 
+### 8.3a Opening, traps and the ground half (`0x004dc218..0x004dd365`)
+
+Read 2026-10-14. The carried half above ends, as every successful exit of
+`Use` does, at `0x004dd33f`: `if (!GetAnimator()) SetCommandDone(true);
+return 1`. [C]
+
+**Opening** (Openable, state 0):
+
+- An item used on it shut: the player reads `FULLCONTCLOSED` (the shown
+  name) if the language has it, else `"%s %s %s"` of BASETHE, the shown
+  name and CONTISCLOSED ("The Chest is closed."); returns 0 for anyone. [C]
+- Else `SetState(1)`; the lid sound by the **type** name, only when it
+  holds "Chest": "Lab" `LabChestOpen`, "ForChest" `StoneOpen`, "Pot"
+  `ClayOpen` (no shipped type has "Chest" and "Pot"), else `TreasureOpen`,
+  played unplaced like "pouch"; the traps; the player reads
+  `FULLCONTOPEN` or `"%s %s"` of the shown name and CONTOPENED ("Chest
+  opened."). [C]
+- **Explosive**: an EFFECT "fireflash" at the container, z + 50, facing the
+  main player; the user's facing set from a sum of the container's and
+  his own coordinates (a retail slip); `KnockBack(&<unset local>, -1)`,
+  `Burn()`, `Damage(random(5, 15), DT_BURN)`. [C]
+- **Poisonous**: an EFFECT "poisoncloud" (class.def has none, the cloud is
+  "poison": nothing spawns); the same facing; `Flail()`,
+  `SetPoisoned(1)`, `Damage(random(5, 15), 20)` — 1998's DAMAGE_POISON,
+  which CalculateDamage treats as physical. [C]
+- Nothing disarms a trap: it fires on every opening. [C]
+
+**On the ground, used alone** (`0x004dcac0..0x004dd23a`): the first item
+(in inventory order) goes to the inventory **pane's shown container**
+through `AddToInventory(item, -1)`, room tested with
+`FindFreeInventorySlot() < 0xff` (else CONTFULL, "Can't carry any more.");
+the player reads `FULLCONTTAKEN` (item, container) / `FULLCONTTAKENREV`
+(container, item) / `"%s %s %s."` of the item, CONTTAKENFROM and the
+container ("Gold taken from Chest."); `TakenObject` = the item. Anyone but
+the player only goes to the network. No sound. [C]
+
+A container with the **Regen** object stat (`vtable 0x240`, "RGEN", 0..10000)
+is a dispenser: it hands out a copy of its next item (amount and object
+stats copied; cursor `+0xe0`), and after the last one rests until
+`Regen * 24` game frames have passed since (`+0xdc`). Which shipped map
+containers set it: UNCONFIRMED. [C]
+
+Empty (or resting): an openable container shuts (state 0, the lid's
+`...Close` sound, `FULLCONTCLOSED` or "Chest closed."); any other returns
+0. [C]
+
+**On the ground, used with an item** (`0x004dd23a`): nothing for an
+ingredient (CombineID); else `AddToInventory(inst, -1)` with no room
+test, `FULLCONTPUTIN` / `FULLCONTPUTINREV` / "Sword put in Chest.",
+`DroppedObject` = the item. [C]
+
+The FULL* tags are in no shipped `.def`: hooks for another word order. All
+names are shown names (`0x0046e7f0`). Stats registered at
+`0x004dbf4a..0x004dc16c`: Locked, KeyId, PickDifficulty, Explosive,
+Poisonous, CombineID, TargetID, Regen (object stats 0..7). [C]
+
 ### 8.4 Scrolls `0x00520eb0`
 
 With no `with` and the player as user: the scroll pane (`0x0066dcb0`),
@@ -570,9 +647,11 @@ or the book pane (`0x0066db18`) for a type name containing "Book" or
 
 ### 8.5 The rest
 
-- MONEY `0x00515e70`: a `with` of the same class and type is removed from
-  the map and deleted, and this pile takes both amounts; returns 1. No cap
-  (1998 `money.cpp:125` capped at MAXMONEYIMAGE). [C]
+- MONEY `0x00515e70`: the base Use first; a `with` of the same class and
+  type is removed from the map and deleted, and this pile takes both
+  amounts; returns 1. No cap (1998 `money.cpp:125` capped at
+  MAXMONEYIMAGE). CursorType `0x00515f10`: the hand for a `with` of the
+  same class and type, unless this pile is invisible. [C]
 - WEAPON `0x00528d80`: `with` named "Poison Vial" in state 0 on a Type 1
   weapon: the vial goes to state 1 (`+0x18`), "%s envenomed."; 1. [C]
 - TOOL `0x005240c0`: the base, as 0/1 (1998 `tool.cpp:20` returned FALSE
@@ -615,6 +694,12 @@ begins (`BeginCursorFrame`) rather than inside the cursor's draw: the port
 draws a frame's HUD again for captures (the mirror pass), which before
 showed no hover cursor at all.
 
+Since 2026-10-14 also: container opening (lid sounds, traps, lines), the
+half on the ground (take, Regen dispensers, shut, put in), money and tool
+Use (§8.3a, §8.5: `TContainer`, `TMoney`, `TTool`), and the torch walk
+(§5.4: `TCharacter::SetWalkMode`, `TPlayer::Equip`, `EquipInOwnSlot`,
+`ReleaseWorn`).
+
 Deviations:
 
 - Two ingredients that combine (§8.3) are deleted; retail took them out of
@@ -622,6 +707,13 @@ Deviations:
 - The belt's right up off its boxes does nothing; retail read equipment
   slot 10 there (`0x10a`), so it compacted the inventory, or re-equipped
   what is worn in that slot with its sound.
+- A trap's user is knocked back from the container and turned by
+  KnockBack; retail knocked him back from a point it never set and turned
+  him by a sum of coordinates (§8.3a). A non-character user springs no
+  trap (retail would have crashed).
+- A money pile isn't used on itself (retail deleted it).
+- A character's damage modifier reads 0 for a damage type past the table
+  (the poison trap's 20); retail read past it.
 - After removals, `CompactInventory`'s order can differ from retail's: the
   port's inventory array leaves holes that new items fill, retail's closed
   up on every removal.
@@ -631,10 +723,7 @@ Not ported yet:
 | Behaviour | Retail |
 |---|---|
 | Right up in stats mode: the item's information | `0x00538267..0x00538333`, `0x0052cff9..` |
-| The walk-root refresh after (un)equipping a light source | `0x004cf000` |
-| Container Use: opening (sounds by type, the Explosive and Poisonous traps, the dialog lines) and the half on the ground | `0x004dc22a..0x004dc87d`, `0x004dcac0..` |
 | Base Use combining (no shipped item has a nonzero "Combining") | `0x004706bc..0x004708dc` |
-| Money Use without the 1998 cap; Tool Use calling the base | `0x00515e70`, `0x005240c0` |
 | Dragging an item from the HUD onto the map or a world object (`TMapPane` still reads `TInventory::GetHeldSlot`, which is -1) | not covered here |
 | Multiplayer: the CanCombine gate, the network messages | `0x0066829c` |
 

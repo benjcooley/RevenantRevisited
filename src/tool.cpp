@@ -17,9 +17,11 @@ TObjectClass ToolClass("TOOL", OBJCLASS_TOOL, 0);
 DEFSTAT(Tool, Value, VAL, 0, 0, 0, 1000000)
 DEFSTAT(Tool, Pick, PICK, 1, 0, 0, 100)
 
+// REVSYNC: TTool::Use @ 0x005240c0 -- only the scripts (the base Use); a
+// pick works as what a locked container is used with (CheckKeyUse).
 bool TTool::Use(TObjectInstance* user, int32_t with)
 {
-    return false;
+    return TObjectInstance::Use(user, with);
 }
 
 int32_t TTool::CursorType(TObjectInstance* with)

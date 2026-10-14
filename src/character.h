@@ -635,8 +635,10 @@ class TCharacter : public TComplexObject
       // Return offense modifier
     virtual int32_t FatigueModifier() { return (Fatigue() * 4 / MaxFatigue()) - 4; }
       // Return fatigue modifier
-    virtual int32_t DamageModifier(int32_t damagetype) { return chardata->damagemods[damagetype]; }
-      // Returns percentage of damage
+    virtual int32_t DamageModifier(int32_t damagetype)
+        { return (uint32_t)damagetype < (uint32_t)NUMDAMAGETYPES ? chardata->damagemods[damagetype] : 0; }
+      // Returns percentage of damage. Retail read past the table for retail's
+      // poison trap's damage type 20 (TContainer::SpringTraps); the port reads 0.
     virtual int32_t WeaponType() { return chardata->weapontype; }
     int32_t CombatTargetWeaponType() override { return Fighting() ? Fighting()->WeaponType() : -1; }
       // REVSYNC: 0x0040b133..0x0040b174 -- a combat or bow root's object, its
