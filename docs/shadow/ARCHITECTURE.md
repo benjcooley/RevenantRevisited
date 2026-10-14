@@ -668,14 +668,25 @@ Constitution is chosen instead while armour Locke could afford needs
 more of it. Mind is chosen once the plan's spells need more mana than
 Locke has. A marker that reaches 29 moves on, as the game does.
 
-### 8.4 Style
+### 8.4 Play style
 
-The plan sets a style: `hands`, `weapons` or `mixed`. GRIND.md §9.1 is
-the default: fists first-class. Locke keeps a share of kills barehanded
-all game, because Baez in the arena must be beaten with fists. He
-switches to a weapon against monsters with a high `hand` resistance, and
-once a weapon's damage is several times 12. Jong's lessons force the
-Training Sword anyway.
+A run plays one style, set by the plan's `style` line or `--shadow-style`.
+The same plan smoked in each style reaches different code: melee combos,
+bows and arrows, the spell system. The style decides:
+
+| | Melee | Hands | Bow | Spells | Mixed |
+|---|---|---|---|---|---|
+| Ready | the best weapon | fists | a bow and arrows, a melee weapon for close quarters | the best weapon as a fallback | weapon or fists by the target |
+| In the duel | weapon attacks and combos (§6.4) | hand attacks and grapples | bow-mode shots while the monster closes, melee once it is in reach | casts first (damage, then buffs and heals), melee when out of mana | by expected damage per second against this target |
+| Level-up picks (§8.3) | Strength, Agility | Strength, Agility | Agility, Reflexes | Mind, Constitution | Strength, Mind |
+| Shopping (§8.1) | weapons, armour | armour | bows, arrows, armour | mana potions; Restoration over Healing | all of it, by the duel's score |
+| Spells (§8.6) | buffs (Might, Swift Strike) | fist buffs (Fist Mastery, Shadow Fist) | buffs | every spell the talismans make, damage first | damage and buffs |
+
+Whatever the style, the story's own demands come first: Baez in the arena
+is fought barehanded (`GIVEWEAPONS` takes every weapon, STORY.md S6), and
+Jong's lessons hand over the Training Sword. GRIND.md §9.1 argues for
+keeping a share of kills barehanded in every style, so Hands is never
+untrained for the arena.
 
 ### 8.5 Grinding
 
@@ -997,9 +1008,19 @@ That is the format `tools/playtest/waypoints.py` reads (`waypoint.json`,
 `slot/`), with `story: "shadow"`, the seed and the plan's hash, so
 `play.py --from` and `autotest.py` can start from any of them.
 
-Each waypoint is load-checked before it is kept. A fresh process loads
-it, runs 48 ticks, and requires the play screen, Locke alive, and the
-same level and position.
+Each waypoint is load-checked before it is kept. The save is the game's
+own (`SaveGame.Save`, retail's format), so it holds everything the game
+keeps: the pack and its bags, potion stacks, what Locke wears and wields,
+his stats, skills and level-up picks, the spells he knows, the story
+variables and the world. The check proves the round trip:
+
+- At the save, the run records the ledger's whole snapshot of Locke (§4)
+  plus his equipment by slot and the spells he knows.
+- A fresh process loads the slot (`--shadow-verify=<slot>`), runs 48
+  ticks, and writes the same snapshot.
+- They must agree item for item, stat for stat, spell for spell, and Locke
+  must be on the same level near the same place. Any difference is a
+  save/load bug, reported by field.
 
 ## 11. Time
 
