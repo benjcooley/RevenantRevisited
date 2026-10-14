@@ -206,7 +206,8 @@ std::optional<S3DPoint> TShadowWalkField::NearestStandable(const S3DPoint& p, in
     return best;
 }
 
-std::optional<TShadowWalkField::SPath> TShadowWalkField::FindPath(const S3DPoint& from, const S3DPoint& to) const
+std::optional<TShadowWalkField::SPath> TShadowWalkField::FindPath(const S3DPoint& from, const S3DPoint& to,
+                                                                  const TStepCost& extra) const
 {
     const SCell a = CellOf(from);
     const SCell b = CellOf(to);
@@ -245,7 +246,9 @@ std::optional<TShadowWalkField::SPath> TShadowWalkField::FindPath(const S3DPoint
                 if ((!dx && !dy) || !Connects(cx, cy, dx, dy))
                     continue;
                 const size_t n = Index(cx + dx, cy + dy);
-                const int32_t next = cost + ((dx && dy) ? kDiagonal : kStraight);
+                int32_t next = cost + ((dx && dy) ? kDiagonal : kStraight);
+                if (extra)
+                    next += extra(PointOf(cx + dx, cy + dy));
                 const auto known = g.find(n);
                 if (known != g.end() && known->second <= next)
                     continue;

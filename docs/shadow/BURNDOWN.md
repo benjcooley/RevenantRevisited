@@ -67,8 +67,8 @@ it has got.
 | [ ] | Blocker overlay: closed doors and gates, NOWALK barriers, barrier effects; `nav-discrepancy` findings | — |
 | [x] | Through exits: `travel <exit>` steps onto a strip, or walks up to a scripted door and uses it; waits for the jump; a locked exit is refused with its key number | 2026-10-14 |
 | [ ] | Automatic routing across levels (exit graph); today the plan names each exit, which doubles as the walkthrough | — |
-| [ ] | Script scan: `pos` on the player in CUBE, USE, ACTIVATE and DIALOG blocks; conditional edges tried live | — |
-| [ ] | A* within regions; cube cost and route splitting at crossings | — |
+| [ ] | Script scan for routing: `pos` on the player in CUBE, USE, ACTIVATE and DIALOG blocks; conditional edges tried live (until then the plan names each scripted transition) | — |
+| [x] | Trigger zones (TShadowZones: every literal CUBE and player-named PROXIMITY of the level's area scripts and master.s, with an owner on the level); A* steers around them; a walk that can't stops in the zone, lets it fire, then goes on (tested on BAYNE1's tavern cube) | 2026-10-14 |
 | [ ] | Encounters on the route: monsters already there (sight, LineOfSight), priced by the duel model | — |
 | [ ] | Travel modes: `travel` fights every monster on the leg; `evade` runs and fights ⌈N·share⌉, at least one; the policy's choice | — |
 | [ ] | Generator encounters on the route: exposure × slot frequency, real spawns through `TMonsterGen` (after P3) | — |

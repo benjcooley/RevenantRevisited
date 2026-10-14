@@ -38,6 +38,13 @@ constexpr int32_t kApproachSlack = 64;
 constexpr int32_t kObjectRadius = 24;
 // The proof samples the path this often.
 constexpr int32_t kProofSpacing = 256;
+// A step into a trigger zone costs this much more (A* units; a straight
+// step is 10): a walk goes up to about 60 cells out of its way to keep out.
+constexpr int32_t kZoneStepCost = 600;
+// More stops in zones on one travel than this is a loop.
+constexpr int32_t kMaxCrossings = 8;
+// After a zone fires: control back for this long means its scene is over.
+constexpr int32_t kZoneSettle = 2 * 24;
 // Through an exit: how long it may take to set off once he is on it, and
 // how far he must have gone for it to count.
 constexpr int32_t kExitTicks = 10 * 24;
@@ -169,6 +176,13 @@ const SShadowGait& TShadowNav::Gait(TShadowLog& log)
         out.Field("recovery_milli", (int64_t)std::lround(g.recovery * 1000));
     });
     return *gait;
+}
+
+const TShadowZones& TShadowNav::Zones(TShadowLog& log)
+{
+    if (zones.Level() != Player->GetLevel())
+        zones.Build(Player->GetLevel(), log);
+    return zones;
 }
 
 TObjectInstance* ShadowFindObject(const std::string& name, int32_t level, const S3DPoint& near)
@@ -346,13 +360,49 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
         region = field->RegionAt(from);
         if (!Destination(context, dest, failure))
             return EShadowStatus::Failed;
-        const std::optional<TShadowWalkField::SPath> path = field->FindPath(from, dest);
+        // Keep out of the trigger zones on the way: the ones he starts in or
+        // is going to don't count.
+        const TShadowZones& zones = context.nav.Zones(context.log);
+        std::vector<int32_t> avoid;
+        for (int32_t z = 0; z < (int32_t)zones.Zones().size(); ++z)
+            if (!zones.Zones()[z].Contains(from) && !zones.Zones()[z].Contains(dest))
+                avoid.push_back(z);
+        const auto inzone = [&](const S3DPoint& p) {
+            for (const int32_t z : avoid)
+                if (zones.Zones()[z].Contains(p))
+                    return z;
+            return -1;
+        };
+        std::optional<TShadowWalkField::SPath> path =
+            field->FindPath(from, dest, [&](const S3DPoint& p) { return inzone(p) >= 0 ? kZoneStepCost : 0; });
         if (!path)
         {
             failure = "no walk to " + target + " (Locke's region " + std::to_string(region) + ", the target's " +
                       std::to_string(field->RegionAt(dest)) + ")";
             return EShadowStatus::Failed;
         }
+        // A zone it can't keep out of: walk as far as its edge, and stop
+        // there to let it fire.
+        crossing.clear();
+        for (size_t i = 0; i < path->points.size(); ++i)
+            if (const int32_t z = inzone(path->points[i]); z >= 0)
+            {
+                if (++crossings > kMaxCrossings)
+                {
+                    failure = "the walk to " + target + " keeps stopping in trigger zones";
+                    return EShadowStatus::Failed;
+                }
+                crossing = zones.Zones()[z].Describe();
+                path->points.resize(i + 1);
+                double length = 0.0;
+                for (size_t k = 1; k < path->points.size(); ++k)
+                    length += std::hypot(double(path->points[k].x - path->points[k - 1].x),
+                                         double(path->points[k].y - path->points[k - 1].y));
+                path->length = (int32_t)std::lround(length);
+                dest = path->points.back();
+                viaexit = viadoor = false;
+                break;
+            }
         const SShadowGait& gait = context.nav.Gait(context.log);
         pace = PaceLeg(path->length, Player->Fatigue(), Player->MaxFatigue(), gait);
 
@@ -364,6 +414,8 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
                 std::to_string(region),
             [&](JsonOut& out) {
                 out.FieldString("target", ToUtf8(target.c_str()));
+                if (!crossing.empty())
+                    out.FieldString("stops_in", crossing);
                 out.Field("level", level);
                 WritePoint(out, "from", from);
                 WritePoint(out, "to", dest);
@@ -389,7 +441,7 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
                 }
                 out.End(']');
             });
-        if (path->length < kThere)
+        if (path->length < kThere && crossing.empty())
         {
             stage = EStage::Done;
             return EShadowStatus::Done;
@@ -412,7 +464,7 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
             return EShadowStatus::Running;
         // An NPC may have walked on meanwhile: stand by it where it is now,
         // by a walk that still holds.
-        if (object)
+        if (object && crossing.empty())
         {
             S3DPoint now;
             if (!Destination(context, now, failure))
@@ -432,6 +484,13 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
         // back what walking would have.
         if (pace.fatigue < Player->Fatigue())
             Player->SetFatigue(pace.fatigue);
+        if (!crossing.empty())
+        {
+            context.log.Event("crossing", crossing + ": Locke stops in it on the way to " + target);
+            waited = 0;
+            stage = EStage::Crossing;
+            return EShadowStatus::Running;
+        }
         if (viaexit)
         {
             if (viadoor)
@@ -468,6 +527,22 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
         context.log.Event("through", target + ": level " + std::to_string(Player->GetLevel()));
         stage = EStage::Done;
         return EShadowStatus::Done;
+
+    case EStage::Crossing:
+        // The zone fires (or its script has nothing to do now); once the
+        // game is Locke's again for a moment, the travel goes on from
+        // wherever it left him.
+        if (!ShadowGameIdle())
+        {
+            waited = 0;
+            return EShadowStatus::Running;
+        }
+        if (++waited < kZoneSettle)
+            return EShadowStatus::Running;
+        crossing.clear();
+        waited = 0;
+        stage = EStage::Plan;
+        return EShadowStatus::Running;
 
     case EStage::Done:
         return EShadowStatus::Done;

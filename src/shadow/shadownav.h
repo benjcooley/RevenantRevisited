@@ -26,6 +26,7 @@
 #include "../revtypes.h"
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <vector>
 
@@ -53,9 +54,13 @@ class TShadowWalkField
     // `range` units, on its ground; none if there is no such cell.
     [[nodiscard]] std::optional<S3DPoint> NearestStandable(const S3DPoint& p, int32_t range,
                                                            int32_t region = 0) const;
+    // What stepping onto a cell costs beyond its distance (A* units: 10 a
+    // straight step), for steering a walk around places.
+    using TStepCost = std::function<int32_t(const S3DPoint& cell)>;
     // A walk from `from` to `to` over connected cells; none when the two
     // aren't in one region.
-    [[nodiscard]] std::optional<SPath> FindPath(const S3DPoint& from, const S3DPoint& to) const;
+    [[nodiscard]] std::optional<SPath> FindPath(const S3DPoint& from, const S3DPoint& to,
+                                                const TStepCost& extra = {}) const;
 
   private:
     struct SCell

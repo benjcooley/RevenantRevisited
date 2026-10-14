@@ -13,6 +13,7 @@
 
 #include "shadownav.h"
 #include "shadowsteps.h"
+#include "shadowzones.h"
 
 #include "../object.h"
 #include "../saferef.h"
@@ -53,10 +54,13 @@ class TShadowNav
     const TShadowWalkField* Field(TShadowLog& log);
     // Locke's gait, measured once (logged).
     const SShadowGait& Gait(TShadowLog& log);
+    // The trigger zones of Locke's level, read when he comes to it.
+    const TShadowZones& Zones(TShadowLog& log);
 
   private:
     TShadowWalkField           field;
     std::optional<SShadowGait> gait;
+    TShadowZones               zones;
 };
 
 // The object `name` names on `level` nearest `near`: an instance name, else
@@ -84,7 +88,7 @@ class TShadowTravel
     [[nodiscard]] TObjectInstance* Object() const { return object.Get(); }
 
   private:
-    enum class EStage : uint8_t { Plan, Walk, Arrive, Through, Done };
+    enum class EStage : uint8_t { Plan, Walk, Arrive, Through, Crossing, Done };
 
     // Where Locke should end up for the target as it stands now: next to an
     // object, on an exit's strip, or on the place. False with `failure` set.
@@ -106,4 +110,8 @@ class TShadowTravel
     S3DPoint         dest{};
     SShadowPace      pace;
     int32_t          waited = 0;
+    // A zone the walk can't go around: the leg stops in it, lets it fire as
+    // a walker would, and travel goes on from there.
+    std::string      crossing;
+    int32_t          crossings = 0;
 };
