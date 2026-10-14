@@ -85,6 +85,11 @@ void PulseStartupExec()
     RunConsoleCommand(cmd);
 }
 
+bool StartupExecPending()
+{
+    return StartupExec[0] && (!g_parsed || g_sleepTicks > 0 || !g_queue.empty());
+}
+
 int32_t RunConsoleCommand(const std::string& cmd)
 {
     // CommandInterpreter expects a line-terminated buffer it may tokenize in
