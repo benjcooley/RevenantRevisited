@@ -41,6 +41,11 @@ void ToggleUIBottomPanel();
 // emits left_down/left_up will switch that slot.
 bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y);
 bool HandleMouseMoveUISidebarModeConsumed(int32_t button, int32_t x, int32_t y);
+
+// Each drawn frame while the pointer is off the map: the cursor's corner
+// picture for the item under the pointer in the inventory, the belt or the
+// equip pane, with no button held (the item panes' Animate).
+void AnimateUISidebarItemCursor(int32_t x, int32_t y);
 void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y);
 
 // The side tab button (0..5, strip order) whose rect holds screen point

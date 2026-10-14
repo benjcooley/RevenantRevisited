@@ -23,6 +23,8 @@ class TArmor : public TObjectInstance
     STATFUNC(Combining)
     STATFUNC(ResistPoison)
     STATFUNC(Stealth)
+    STATFUNC(MinStrength)
+    STATFUNC(MinConstitution)
 };
 
 DEFINE_BUILDER("ARMOR", TArmor)

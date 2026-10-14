@@ -22,7 +22,9 @@ class TContainer : public TObjectInstance
     TContainer(TObjectImagery* newim) : TObjectInstance(newim) { }
     TContainer(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { }
 
-    virtual bool Use(TObjectInstance* user, int32_t with = -1);
+    bool Use(TObjectInstance* user, int32_t with = -1) override;
+        // REVSYNC: 0x004dc180 (INVCONTAINER's too); in the user's inventory,
+        // UseCarried
     int32_t CursorType(TObjectInstance* inst = nullptr) override;
     bool CanTrade() override;
         // REVSYNC: 0x004dd3a0 -- every container, whatever its Value, but the
@@ -48,6 +50,10 @@ class TContainer : public TObjectInstance
 
     virtual bool AddToInventory(TObjectInstance* inst, int32_t slot = -1);
         // Add inst to this object's inventory, in the given slot (first free slot if none specified)
+
+  private:
+    bool UseCarried(TObjectInstance* user, TObjectInstance* inst);
+        // Used by the user who carries it: shown or closed, combined, or inst put in
 };
 
 DEFINE_BUILDER("CONTAINER", TContainer)

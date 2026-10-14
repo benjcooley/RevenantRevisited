@@ -27,6 +27,7 @@
 
 #include "bitmap.h"
 #include "bitmapatlas.h"
+#include "cursor.h"
 #include "display.h"
 #include "hudstate.h"
 #include "inventory.h"
@@ -537,16 +538,47 @@ int32_t UISideTabButtonAt(int32_t x, int32_t y)
     return -1;
 }
 
-// Hit-test the inventory 4x3 grid. Returns the carried slot number
-// (page + col*3 + row) when (x,y) is inside a cell, -1 otherwise.
+// The inventory pane's screen origin: the side panel's lower slot.
+static void InvPaneOrigin(int32_t& x, int32_t& y)
+{
+    const int32_t dw = Display.Width();
+    x = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
+    y = kTopH;
+}
+
+// Whether the side panel shows the inventory pane and (x, y) is on it.
+static bool InInvPane(int32_t x, int32_t y)
+{
+    const SHudState& s = GetHudState();
+    if (s.sidebarState != HUD_SIDEBAR_OPEN || s.bottomSlot != HUD_BOT_INV)
+        return false;
+    int32_t pane_x = 0, pane_y = 0;
+    InvPaneOrigin(pane_x, pane_y);
+    return x >= pane_x && x < pane_x + kPaneW && y >= pane_y && y < pane_y + kBotH;
+}
+
+// REVSYNC: 0x005385f2..0x00538610 -- the inventory's container icon, the
+// backpack or the bag shown at (10, 10): 10..30 across, 10..29 down.
+static bool OnInvContainerIcon(int32_t x, int32_t y)
+{
+    if (!InInvPane(x, y))
+        return false;
+    int32_t pane_x = 0, pane_y = 0;
+    InvPaneOrigin(pane_x, pane_y);
+    const int32_t lx = x - pane_x;
+    const int32_t ly = y - pane_y;
+    return lx >= 10 && lx <= 30 && ly >= 10 && ly < 30;
+}
+
+// Hit-test the inventory 4x3 grid. Returns the slot number of the shown
+// container (page + col*3 + row) when (x,y) is inside a cell, -1 otherwise.
 // Per InventoryPane_SPEC: origin pane-local (8, 42), pitch 45x44,
 // interior 40x40, column-major.
 static bool HitInvSlotRect(int32_t x, int32_t y, int32_t page,
                            int32_t& slot, int32_t& sx, int32_t& sy)
 {
-    const int32_t dw     = Display.Width();
-    const int32_t inv_x  = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
-    const int32_t inv_y  = kTopH;
+    int32_t inv_x = 0, inv_y = 0;
+    InvPaneOrigin(inv_x, inv_y);
     constexpr int32_t kOriginX  = 8;
     constexpr int32_t kOriginY  = 42;
     constexpr int32_t kPitchX   = 45;
@@ -688,80 +720,64 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
 {
     SHudState& s = GetHudState();
 
-    // ---- MouseUp: commit / cancel an in-flight drag -------------------
+    // ---- Left button up: where an item grabbed in a pane lands --------
+    // Retail sends a release to every pane, and each item pane acts on the
+    // part that is over its own cells (UIDragState::Release). The equip pane
+    // takes a drop anywhere on it (0x005363e0): the item goes to its own
+    // slot, not the cell under the cursor.
     if (button == MB_LEFTUP)
     {
-        if (!UIDragState::IsActive()) return false;
-        const SUIDragState& drag = UIDragState::Get();
-        if (drag.source != EDragSource::Inventory &&
-            drag.source != EDragSource::BarInv &&
-            drag.source != EDragSource::Equip)
+        const EDragSource held = UIDragState::Get().source;
+        const bool itemGrab = held == EDragSource::Inventory || held == EDragSource::BarInv ||
+                              held == EDragSource::Equip;
+        if (held != EDragSource::None && !itemGrab)
+            return false;               // a spell: the book and the rings take it
+        if (OnInvContainerIcon(x, y))
         {
+            UIDragState::ReleaseOnContainerIcon();
+            return true;
+        }
+        if (!itemGrab)
             return false;
-        }
-        if (UIDragState::IsPending())
-        {
-            UIDragState::CompleteClick();
-            return true;
-        }
 
-        // Drop targets in priority order: Equip → BarInv → Inventory grid.
-        // First one to hit wins; the manager refuses a drop the destination
-        // can't take. The equip pane takes a drop anywhere on it (retail
-        // 0x005363e0): the item goes to its own slot, not the cell under
-        // the cursor.
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP &&
-            InEquipPane(x, y))
+        EDragSource dest = EDragSource::None;
+        int32_t cell = -1;
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP && InEquipPane(x, y))
         {
-            UIDragState::CompleteDrag(EDragSource::Equip, HitEquipSlot(x, y), true);
-            return true;
+            dest = EDragSource::Equip;
+            cell = HitEquipSlot(x, y);
         }
-        if (s.bottomBarOpen)
-        {
-            const int32_t bs = HitBarInvSlot(x, y);
-            if (bs >= 0)
-            {
-                UIDragState::CompleteDrag(EDragSource::BarInv, bs, true);
-                return true;
-            }
-        }
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
-        {
-            const int32_t dest_slot = HitInvSlot(x, y, Inventory.FirstSlot());
-            if (dest_slot >= 0)
-            {
-                UIDragState::CompleteDrag(EDragSource::Inventory, dest_slot, true);
-                return true;
-            }
-        }
-        // Released somewhere uninteresting → cancel (the source's slot
-        // keeps its item — no move committed).
-        UIDragState::Cancel();
+        else if (s.bottomBarOpen && (cell = HitBarInvSlot(x, y)) >= 0)
+            dest = EDragSource::BarInv;
+        else if (InInvPane(x, y) && (cell = HitInvSlot(x, y, Inventory.FirstSlot())) >= 0)
+            dest = EDragSource::Inventory;
+        UIDragState::Release(dest, cell);
         return true;
     }
 
-    // ---- Right button up on a pack item: equip it ---------------------
-    // REVSYNC: InventoryPane MouseClick 0x00538210, button 5 (right up) with
-    // nothing held: the item goes to its own equipment slot, or the text bar
-    // says EQUIPUNABLE. Not ported: a talisman of the player's goes into his
-    // Spell Pouch instead, and the item info of "stats mode"
-    // (DAT_0065c9e0, 0x005496a0).
+    // ---- Right button up on an item cell, nothing held -----------------
+    // The inventory (0x00538210) and the belt (0x0052cfb0) with button 5:
+    // UIDragState::RightClick. On the inventory pane off its cells the shown
+    // container closes up, as on an empty cell; the other panes see that
+    // release too. Deviation: retail's belt read equipment slot 10 (0x10a)
+    // off its boxes, so it closed up the inventory, or re-equipped what is
+    // worn there with its sound; the port leaves a release off the boxes.
     if (button == MB_RIGHTUP)
     {
         if (UIDragState::IsActive())
             return false;
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
+        if (InInvPane(x, y))
         {
+            TObjectInstance* const shown = Inventory.GetContainer();
             const int32_t slot = HitInvSlot(x, y, Inventory.FirstSlot());
-            if (slot >= 0)
+            UIDragState::RightClick(shown, shown && slot >= 0 ? shown->GetInventorySlot(slot) : nullptr);
+            return slot >= 0;
+        }
+        if (s.bottomBarOpen && Player)
+        {
+            if (const int32_t bs = HitBarInvSlot(x, y); bs >= 0)
             {
-                TObjectInstance* item = Player ? Player->GetInventorySlot(slot) : nullptr;
-                if (item && item->ObjClass() != OBJCLASS_TALISMAN)
-                {
-                    const bool equipped = UIDragState::EquipInOwnSlot(item);
-                    log_info("[ui-sidebar] right-click inv slot=%d '%s' -> %s",
-                             slot, item->GetName(), equipped ? "equipped" : "not equipped");
-                }
+                UIDragState::RightClick(Player, Player->GetInventorySlot(kInvSlotBeltFirst + bs));
                 return true;
             }
         }
@@ -798,15 +814,17 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         return true;
     }
 
-    // ---- Item slots: click-down on an item starts a drag. The items are
-    // the main player's: carried slot, belt slot 0x10b + n, equipment.
+    // ---- Item slots: click-down on an item starts a grab. The inventory's
+    // items are the shown container's; the belt's (slot 0x10b + n) and the
+    // doll's, the main player's.
     // ---- Inventory grid ------------------------------------------------
     if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
     {
         int32_t slot = -1, sx = 0, sy = 0;
         if (HitInvSlotRect(x, y, Inventory.FirstSlot(), slot, sx, sy))
         {
-            TObjectInstance* item = Player ? Player->GetInventorySlot(slot) : nullptr;
+            TObjectInstance* const shown = Inventory.GetContainer();
+            TObjectInstance* item = shown ? shown->GetInventorySlot(slot) : nullptr;
             UIDragState::BeginDrag(EDragSource::Inventory, slot,
                                    item, x, y,
                                    nullptr, x - sx, y - sy);
@@ -854,6 +872,33 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
 void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
 {
     (void)HandleMouseClickUISidebarModeConsumed(button, x, y);
+}
+
+// REVSYNC: the item panes' Animate -- the inventory 0x00537f90, the belt
+// 0x0052cd80, the doll 0x00536970: with no button held, the item under the
+// pointer picks the cursor's corner picture (CursorOverObject 0x0043a820),
+// the mouth over food, the eye over a scroll, the hand over a bag.
+void AnimateUISidebarItemCursor(int32_t x, int32_t y)
+{
+    if (mousebutton || !Player)
+        return;
+    const SHudState& s = GetHudState();
+    TObjectInstance* item = nullptr;
+    if (InInvPane(x, y))
+    {
+        TObjectInstance* const shown = Inventory.GetContainer();
+        const int32_t slot = HitInvSlot(x, y, Inventory.FirstSlot());
+        if (shown && slot >= 0)
+            item = shown->GetInventorySlot(slot);
+    }
+    else if (const int32_t bs = s.bottomBarOpen ? HitBarInvSlot(x, y) : -1; bs >= 0)
+        item = Player->GetInventorySlot(kInvSlotBeltFirst + bs);
+    else if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+    {
+        if (const int32_t es = HitEquipSlot(x, y); es >= 0)
+            item = Player->GetEquip(es);
+    }
+    CursorOverObject(item);
 }
 
 bool HandleMouseMoveUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)

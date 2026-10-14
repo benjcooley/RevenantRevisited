@@ -22,6 +22,7 @@
 #include "renderer.h"
 #include "revenant.h"
 #include "revtypes.h"
+#include "uisidebartest.h"
 
 #include <sokol_app.h>
 
@@ -173,11 +174,14 @@ class TGameModeImpl final : public IRuntimeMode
         return false;
     }
 
-    // The map's cursor, after the world is drawn.
+    // The cursor for what is under the pointer, after the world is drawn:
+    // the map's, or the item panes'.
     void Animate() override
     {
         if (PlayScreen.MapHasPointer(cursorx, cursory))
             MapPane.Animate(true);
+        else
+            AnimateUISidebarItemCursor(cursorx, cursory);
     }
 };
 

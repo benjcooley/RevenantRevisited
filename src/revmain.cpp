@@ -3012,6 +3012,9 @@ static void AppFrame()
         return;
     }
 
+    // The cursor's corner picture starts over each frame (cursor.h).
+    BeginCursorFrame();
+
     // The frame's simulation: one step, or under Shadow Smoke's turbo as
     // many as fit its budget, each a whole frame's worth -- the time step,
     // the input, the tick, the update list -- so input given during a step

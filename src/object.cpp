@@ -31,6 +31,7 @@
 #include <sys/stat.h>
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>
 #include <memory>
 #include <set>
 #include <string>
@@ -1321,23 +1322,13 @@ bool TObjectInstance::Holds(const TObjectInstance* item) const
     return false;
 }
 
-// REVSYNC: 0x0046f940. Retail found the type in its name-sorted table of
-// every class's types; the port asks each class in turn, which finds the
-// same type while names are unique. Deviation: an object that can't be
-// added is deleted (retail kept it, unowned).
-bool TObjectInstance::AddToInventory(const char *name, int32_t number, int32_t slot)
-{
-    TObjectClass* cl = nullptr;
-    int32_t ot = -1;
-    for (int32_t i = 0; i < MAXOBJECTCLASSES && ot < 0; i++)
-    {
-        cl = TObjectClass::GetClass(i);
-        if (cl)
-            ot = cl->FindObjType(name);
-    }
-    if (ot < 0)
-        return false;
+namespace {
 
+// A new object of class cl's type ot, `number` of them, put in owner's
+// inventory at `slot` by AddToInventory. Deviation: an object that can't be
+// added is deleted (retail kept it, unowned).
+bool AddNewToInventory(TObjectInstance* owner, TObjectClass* cl, int32_t ot, int32_t number, int32_t slot)
+{
     SObjectDef def = {};
     def.objclass = cl->ClassId();
     def.objtype = ot;
@@ -1349,9 +1340,34 @@ bool TObjectInstance::AddToInventory(const char *name, int32_t number, int32_t s
     if (number != 1)
         inst->SetAmount(number);
 
-    if (AddToInventory(inst, slot))
+    if (owner->AddToInventory(inst, slot))
         return true;
     delete inst;
+    return false;
+}
+
+} // namespace
+
+// REVSYNC: 0x0046f940. Retail found the type in its name-sorted table of
+// every class's types; the port asks each class in turn, which finds the
+// same type while names are unique.
+bool TObjectInstance::AddToInventory(const char *name, int32_t number, int32_t slot)
+{
+    for (int32_t i = 0; i < MAXOBJECTCLASSES; i++)
+        if (TObjectClass* cl = TObjectClass::GetClass(i))
+            if (const int32_t ot = cl->FindObjType(name); ot >= 0)
+                return AddNewToInventory(this, cl, ot, number, slot);
+    return false;
+}
+
+// REVSYNC: 0x0046f7e0. Retail searched its table of every type sorted by
+// unique id; the port asks each class in turn.
+bool TObjectInstance::AddToInventoryByUniqueId(uint32_t uniqueid, int32_t number, int32_t slot)
+{
+    for (int32_t i = 0; i < MAXOBJECTCLASSES; i++)
+        if (TObjectClass* cl = TObjectClass::GetClass(i))
+            if (const int32_t ot = cl->FindObjType(uniqueid); ot >= 0)
+                return AddNewToInventory(this, cl, ot, number, slot);
     return false;
 }
 
@@ -1540,6 +1556,19 @@ int32_t TObjectInstance::RealNumInventoryItems()
     return num;
 }
 
+// REVSYNC: CompactInventory @ 0x0046ff80. Not ported (multiplayer): the
+// network message. Retail's array closed up on every removal, the port's
+// leaves holes for new items to fill, so after removals the order can differ.
+void TObjectInstance::CompactInventory()
+{
+    int32_t next = 0;
+    for (TInventoryIterator i(this); i && next < kInvSlotEquipFirst; i++)
+        if (i->InventNum() < kInvSlotEquipFirst)
+            i->SetInventNum(short(next++));
+    if (this == Inventory.GetContainer())
+        Inventory.Update();
+}
+
 TObjectInstance* TObjectInstance::GetInventory(int32_t index) const
 {
     return inventory[index];
@@ -1608,6 +1637,22 @@ TObjectInstance* TObjectInstance::FindObjInventory(int32_t objclass, int32_t typ
             return i.Item();
 
     return nullptr;
+}
+
+// REVSYNC: CanCombine @ 0x004704d0 (vtable 0xb8).
+bool TObjectInstance::CanCombine(const TObjectInstance* with) const
+{
+    if (!with)
+        return false;
+    if ((with->GetFlags() & OF_INVENTORY) && with->GetOwner() == owner && with->ObjClass() == ObjClass() &&
+        GetStat("Combining") && with->GetStat("Combining") && std::abs(ObjType() - with->ObjType()) == 1)
+        return true;
+    const int32_t combineid = GetStat("CombineID");
+    if (!combineid || with->GetStat("CombineID") != combineid)
+        return false;
+    const int32_t target = GetStat("TargetID");
+    const int32_t withtarget = with->GetStat("TargetID");
+    return !(target && withtarget) && withtarget != target;
 }
 
 // REVSYNC: Use @ 0x004705f0. Using an object on this one starts a USE named
