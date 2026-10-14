@@ -81,14 +81,14 @@ it has got.
 
 | Status | Item | Last touched |
 |---|---|---|
-| [ ] | `TCharacter::RollAttack` extracted from `IsValidAttack`; katas C1/C2 unchanged | — |
+| [x] | `TCharacter::RollAttack` extracted from `IsValidAttack` (and `RollDamagePercent` from the four attack choices): C3 port output byte-identical before and after (5206/5206 against retail); arena fights identical draw for draw | 2026-10-13 |
 | [ ] | Duel timeline: monster cadence, attack choice, blocks, retreat; Locke's blows, fatigue | — |
 | [ ] | Outcomes through `Damage`, the award functions, `DropLoot`, `LastAttack` | — |
 | [ ] | Tactics: rotation, counter timing, blocks, fatigue, potions, disengage; the 64-run size-up | — |
 | [ ] | Combos: chain attacks keyed inside `chainexptime` (§6.4) | — |
 | [ ] | Interrupts: a monster fighting Locke in the live world starts a fight first (§6.5) | — |
 | [ ] | Several monsters at once | — |
-| [ ] | Spells: `CastByName` and the pure part of `TSpell::Damage` | — |
+| [~] | Spells: `CastByName` and the pure part of `TSpell::Damage` (static `TSpell::Damage(caster, target, spelldata, variant)`, done; the duel side waits) | 2026-10-13 |
 | [ ] | Effects: poison, paralysis, stat effects, damage types, monster spells (§8.7) | — |
 | [ ] | Calibration suite against the arena and player bot; tolerances | — |
 | [ ] | `--shadow-combat=real` | — |

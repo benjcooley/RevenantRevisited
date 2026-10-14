@@ -398,27 +398,59 @@ animation, no movement, and no collision.
 ### 6.2 One implementation of the blow
 
 `ResolveHit` and `IsValidAttack` mix the arithmetic of a blow with the
-animation state they read. Their pure parts become functions of their own,
-which both the game and the duel model call:
+animation state they read. Their pure parts are functions of their own,
+which both the game and the duel model call, so the model can't drift from
+the game.
+
+**The dice.** The dice are thrown by `TCharacter::RollAttack`, which `IsValidAttack`
+calls where it used to throw them inline; everything that needs
+animation state stays in `IsValidAttack`:
 
 ```cpp
-// The dice, as IsValidAttack throws them when an attack is chosen
-// (COMBAT_HIT.md §1-3): damage (tiered), to-hit, roll.
+// The dice of one blow (COMBAT_HIT.md §3.1): the damage before its tier,
+// the to-hit and the roll; -1 is a die not thrown yet.
+struct SAttackRoll { int32_t damage = -1, tohit = -1, roll = -1;
+                     bool Hits() const; int32_t Tiered() const; };
+
 SAttackRoll TCharacter::RollAttack(TCharacter& target, const SCharAttackData& attack,
                                    int32_t dmgpcnt, bool targetopen, SAttackRoll thrown = {});
-// ResolveHit's arithmetic: a guarding target facing the blow takes 50 off
-// the to-hit and the damage is tiered again; a failed roll is a glance; at
-// least 1; a guarding player takes nothing from a glance.
+static int32_t TCharacter::RollDamagePercent();   // random(1,50) + random(1,50)
+```
+
+- `targetopen` is what `IsValidAttack` reads from the animation: the
+  target faces away (`FaceAngleTo` ≥ 0x30) or is swinging itself. The duel
+  model hands in its own answer.
+- `dmgpcnt` is the attack choice's `RollDamagePercent`, drawn before the
+  search (`ButtonAttack`, `RandomAttack`, `SpecificAttack`,
+  `ButtonAction`); for the player `IsValidAttack` passes `StrengthMod`
+  instead, but the two draws are still made.
+- `thrown` keeps dice already fixed: a search throws once for all its
+  candidates, and a repeated button fixes the roll at 100. Both sides' luck
+  and defence are read whatever is left to throw, as retail reads them.
+- `Tiered()` applies the TOHITDAMAGE tier. `IsValidAttack` applies it to
+  the damage it carries every time a candidate gets that far (retail's
+  compounding); `ResolveHit` undoes and re-tiers it for a block.
+
+`IsValidAttack`'s results and draws are unchanged, draw for draw: the
+attack-choice kata (C3) gives byte-identical port output before and after
+(5206/5206 against retail), and twelve arena fights (Locke's AI and the
+player bot against Araknids, a Druid's spells; seeds 1-3) trace
+identically, every draw included.
+
+**The blow.** `ResolveHit`'s arithmetic and its end become two more:
+
+```cpp
+// A guarding target facing the blow takes 50 off the to-hit and the
+// damage is tiered again; a failed roll is a glance; at least 1; a guarding
+// player takes nothing from a glance.
 SBlowOutcome TCharacter::WeighBlow(TCharacter& target, int32_t damage, int32_t tohit,
                                    int32_t roll, bool guarding) const;
-// ResolveHit's end: Damage, then a player's KillExp, SkillExp, StealthExp.
+// Damage, then a player's KillExp, SkillExp and StealthExp.
 void TCharacter::LandBlow(TCharacter& target, int32_t damage, TActionBlock* action);
 ```
 
-`IsValidAttack` and `ResolveHit` call them where they compute the same
-things today, draw for draw, and the dojo katas (C1, C2 and the attack
-choice) prove it. The duel model then can't drift from the game: it calls
-the same code.
+`ResolveHit` calls them where it computes the same things today, and the
+same katas and arena traces prove it unchanged.
 
 ### 6.3 The timeline
 
@@ -551,9 +583,12 @@ that fails only in the duel model.
 `Cast(spell, target)` calls the real `CastByName`: cooldown, mana, the
 Invoke skill roll and Invoke experience, as in play. It then applies the
 spell's damage with the pure part of `TSpell::Damage`, extracted the same
-way as §6.2 (`random(min,max)`, resistances, `SpellDamageInc`), through
-the real `Damage` and `AwardKillExp`. Buff spells set the same stat
-effect the real spell does. Missile flight is not modelled; a cast
+way as §6.2: `TSpell::Damage(caster, target, spelldata, variant)`, static,
+needs no spell object (`random(min,max)` cut by magic resistance,
+`SpellDamageInc`, a player target's `DmgResMagical`), through the real
+`Damage` and `AwardKillExp`; the spell's own `Damage(target)` calls it.
+Buff spells set the same stat effect the real spell does. Missile flight
+is not modelled; a cast
 reaches its target at the spell's cast time plus a flight time of
 distance over missile speed.
 
@@ -996,7 +1031,7 @@ first. Each is fixed in the game, retail first:
 | `RequestSave` doesn't refuse while control is off; only the menu does | the gate moves into the session, as retail's `0x0047e850` path has it |
 | `Teleport` doesn't set OF_ONEXIT: landing on a strip activates it | as retail: verify in the emulator, then match |
 | NOWALK extract leaves holes outside the sector window | re-stamp neighbours on any loaded level |
-| Hit dice inside `IsValidAttack` | `RollAttack` (§6.2) |
+| Hit dice inside `IsValidAttack` | `RollAttack` (§6.2): done |
 
 ## 13. Outputs
 
