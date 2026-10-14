@@ -55,3 +55,10 @@ stage s1 "Gus's deal: passage to Arakna for the ring"
     talk    Gus1  choose 1 1 1
     expect  MISTSTATE = 2               # town.s:2474
     save    "gus deal"
+
+stage potions "Elahni's potions"
+    travel  barout                      # out of the tavern (exit.def:24)
+    travel  healerin                    # Elahni's door
+    buy     "Lesser Healing" 1 from ELAHNI1
+    expect  have "Lesser Healing" >= 2
+    save    "first potions"

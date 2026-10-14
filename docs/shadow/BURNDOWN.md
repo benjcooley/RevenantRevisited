@@ -30,7 +30,7 @@ it has got.
 | Monster generators | `TMonsterGen` (§7) | P3 | agent porting |
 | Levelling up | real `AwardKillExp` | P2 | — |
 | New stat points | `Train`: the level-up markers (§8.3) | P4 | — |
-| Buying armour, weapons, potions | the shop's keys (§8.1) | P4 | — |
+| Buying armour, weapons, potions | the shop's keys (§8.1) | P4 | buying done (a potion at Elahni's); the shopping list to come |
 | Selling what is no longer useful | §8.1 | P4 | — |
 | Readying equipment: armour, the fight's weapon, belt, quick spells, a buff | `TPlayer::Equip` with the game's `CanEquip` (§8.10) | P4 | — |
 | Using potions and food | `Consume`, retail `TFood::Use` (§8.2) | P4 | agent porting `TFood::Use` |
@@ -107,7 +107,7 @@ it has got.
 | Status | Item | Last touched |
 |---|---|---|
 | [ ] | Retail `TFood::Use` (`0x0050e780`) | — |
-| [ ] | Public shop verbs (`Transact`, `Exit`); buy, sell | — |
+| [x] | `buy "<item>" [n] from <merchant>` / `sell ... to ...`: the merchant's real shop script and the drawer's own keys (pages, rows 1-3, A, E, then the menu's leave); the ledger allows exactly the purchase. Elahni sells Locke his second Lesser Healing for 250. Selling is written, not yet exercised | 2026-10-14 |
 | [ ] | Shopping list scored by the duel model; selling what is no longer useful (outgrown gear, spent keep-list items) | — |
 | [ ] | Level-up markers by style | — |
 | [ ] | Jong's lessons | — |

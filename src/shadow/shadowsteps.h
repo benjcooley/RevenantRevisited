@@ -88,3 +88,10 @@ class TShadowStepRunner
 // Nothing holds the game: control is Locke's, and no movie, fade, load,
 // menu or choice list is up.
 [[nodiscard]] bool ShadowGameIdle();
+
+// A key pressed and released, as a player's keyboard sends it: through the
+// input queue, which turbo drains before every tick.
+void ShadowPressKey(int32_t vk);
+
+// The shop steps (shadowshop.cpp).
+[[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeShopRunner(const SShadowStep& step);

@@ -37,12 +37,6 @@ constexpr int32_t kSettleTicks = 2 * kTicksPerSecond;
 // No scene in the game runs this long.
 constexpr int32_t kSceneLimitTicks = 30 * 60 * kTicksPerSecond;
 
-void PressKey(int32_t vk)
-{
-    InputQueue.PushKey(vk, true);
-    InputQueue.PushKey(vk, false);
-}
-
 // The choices of the menu up now, as the game shows them.
 std::vector<std::string> MenuTexts()
 {
@@ -81,7 +75,7 @@ class TSceneWatch
             if (!skipping)
             {
                 context.log.Event("movie", "skipped");
-                PressKey(VK_ESCAPE);
+                ShadowPressKey(VK_ESCAPE);
                 skipping = true;
             }
             return EShadowStatus::Running;
@@ -116,7 +110,7 @@ class TSceneWatch
                     out.String(ToUtf8(text.c_str()));
                 out.End(']');
             });
-            PressKey('0' + answer);
+            ShadowPressKey('0' + answer);
             answering = true;
             return EShadowStatus::Running;
         }
@@ -452,6 +446,12 @@ class TSaveRunner final : public TShadowStepRunner
 
 } // namespace
 
+void ShadowPressKey(int32_t vk)
+{
+    InputQueue.PushKey(vk, true);
+    InputQueue.PushKey(vk, false);
+}
+
 bool ShadowGameIdle()
 {
     TGameSession& session = GameFlow.Session();
@@ -470,6 +470,8 @@ std::unique_ptr<TShadowStepRunner> MakeStepRunner(const SShadowStep& step)
         case EShadowVerb::Talk:   return std::make_unique<TApproachRunner>(step);
         case EShadowVerb::Use:    return std::make_unique<TApproachRunner>(step);
         case EShadowVerb::Take:   return std::make_unique<TTakeRunner>(step);
+        case EShadowVerb::Buy:
+        case EShadowVerb::Sell:   return MakeShopRunner(step);
         case EShadowVerb::Expect: return std::make_unique<TExpectRunner>(step);
         case EShadowVerb::Save:   return std::make_unique<TSaveRunner>(step);
     }

@@ -35,6 +35,8 @@ enum class EShadowVerb : uint8_t
     Talk,       // talk <npc> [choose n ...]: Locke goes to the NPC and talks, then as scene
     Use,        // use <object> [with "<item>"]: Locke goes to it and uses it
     Take,       // take <container> [with "<key>"]: Locke goes to it and empties it
+    Buy,        // buy "<item>" [<n>] from <merchant>: through the merchant's shop
+    Sell,       // sell "<item>" [<n>] to <merchant>
     Expect,     // expect <state> <op> <n> | expect level|maplevel <op> <n> | expect have "<item>" [<op> <n>]
     Save,       // save "<name>": a waypoint save
 };
@@ -79,7 +81,8 @@ struct SShadowStep
     EShadowVerb          verb = EShadowVerb::Scene;
     int32_t              line = 0;      // in the plan file
     std::string          target;        // start: "newgame"; travel, talk, use: a place or an object
-    std::string          item;          // use: what to use on the target; take: the key
+    std::string          item;          // use: what to use on the target; take: the key; buy, sell: what
+    int32_t              count = 1;     // buy, sell: how many
     bool                 evade = false; // travel: run past the leg's monsters (§5.5)
     std::vector<int32_t> choices;       // scene, talk: the answer to each menu, in order
     SShadowCondition     condition;     // expect

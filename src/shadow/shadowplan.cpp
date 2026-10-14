@@ -289,6 +289,37 @@ bool ParseStep(const std::string& verb, TLineReader& in, SShadowStep& step, std:
         }
         return true;
     }
+    if (verb == "buy" || verb == "sell")
+    {
+        step.verb = verb == "buy" ? EShadowVerb::Buy : EShadowVerb::Sell;
+        const SToken* item = in.Take();
+        if (!item)
+        {
+            error = "'" + verb + "' needs an item";
+            return false;
+        }
+        step.item = item->text;
+        if (const SToken* n = in.Peek(); n && !n->quoted)
+            if (const std::optional<int32_t> count = ParseInt(n->text))
+            {
+                if (*count < 1)
+                {
+                    error = "'" + verb + "' needs a count of at least 1";
+                    return false;
+                }
+                step.count = *count;
+                in.Take();
+            }
+        const char* joiner = verb == "buy" ? "from" : "to";
+        const SToken* merchant = in.TakeKeyword(joiner) ? in.Take() : nullptr;
+        if (!merchant || !in.AtEnd())
+        {
+            error = "'" + verb + "' takes \"<item>\" [<count>] " + joiner + " <merchant>";
+            return false;
+        }
+        step.target = merchant->text;
+        return true;
+    }
     if (verb == "talk")
     {
         step.verb = EShadowVerb::Talk;
@@ -363,6 +394,8 @@ std::string SShadowStep::Describe() const
         case EShadowVerb::Talk:   out << "talk " << target; break;
         case EShadowVerb::Use:    out << "use " << target << (item.empty() ? "" : " with \"" + item + "\""); break;
         case EShadowVerb::Take:   out << "take " << target << (item.empty() ? "" : " with \"" + item + "\""); break;
+        case EShadowVerb::Buy:    out << "buy \"" << item << "\" " << count << " from " << target; break;
+        case EShadowVerb::Sell:   out << "sell \"" << item << "\" " << count << " to " << target; break;
         case EShadowVerb::Expect: out << "expect " << condition.Describe(); break;
         case EShadowVerb::Save:   out << "save \"" << name << '"'; break;
     }
