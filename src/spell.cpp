@@ -640,29 +640,32 @@ void TSpell::ObjectRemoved(int32_t notify, void* ptr)
 // the caster as attacker, and a player caster is offered the kill.
 void TSpell::Damage(TObjectInstance* ch)
 {
-    int32_t mindam = variant->mindamage;
-    int32_t maxdam = variant->maxdamage;
     if (!ch)
         return;
-    auto* target = static_cast<TCharacter*>(ch);
-    if (target->IsMagicResistant())
+    Damage(static_cast<TCharacter*>(invoker), *static_cast<TCharacter*>(ch), *spell, *variant);
+}
+
+void TSpell::Damage(TCharacter* caster, TCharacter& target, const SSpellData& spell, const SSpellVariant& variant)
+{
+    int32_t mindam = variant.mindamage;
+    int32_t maxdam = variant.maxdamage;
+    if (target.IsMagicResistant())
     {
         // x87 in retail: the float times the int, truncated. A double holds
         // the product exactly for any damage spell.def gives.
-        const double resist = target->GetMagicResistance();
+        const double resist = target.GetMagicResistance();
         mindam -= (int32_t)(resist * mindam);
         maxdam -= (int32_t)(resist * maxdam);
     }
     int32_t damage = random(mindam, maxdam);
-    auto* caster = static_cast<TCharacter*>(invoker);
     TPlayer* player = (caster && caster->ObjClass() == OBJCLASS_PLAYER) ? static_cast<TPlayer*>(caster) : nullptr;
     if (player)
         damage = (player->SpellDamageInc() + 100) * damage / 100;
-    if (target->ObjClass() == OBJCLASS_PLAYER)
-        damage = (100 - target->DamageModifier(DT_MAGICAL)) * damage / 100;
-    target->Damage(damage, spell->damagetype, 0, nullptr, caster);
+    if (target.ObjClass() == OBJCLASS_PLAYER)
+        damage = (100 - target.DamageModifier(DT_MAGICAL)) * damage / 100;
+    target.Damage(damage, spell.damagetype, 0, nullptr, caster);
     if (player)
-        player->AwardKillExp(target);
+        player->AwardKillExp(&target);
 }
 
 namespace
