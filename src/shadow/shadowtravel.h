@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "shadowencounters.h"
 #include "shadownav.h"
 #include "shadowsteps.h"
 #include "shadowzones.h"
@@ -113,6 +114,11 @@ class TShadowTravel
     // A standable cell of `exit`'s strip in Locke's region, nearest its
     // middle.
     bool OntoStrip(const TShadowWalkField& field, TExit& exit, S3DPoint& dest, std::string& failure) const;
+    // The monsters that would see Locke on `path`, the target left out.
+    [[nodiscard]] std::vector<SShadowEncounter> Encounters(const std::vector<S3DPoint>& path) const;
+    // Which of `met` he fights, sized up (§5.5); false, guarded, when he'd
+    // lose even running.
+    bool Meet(SShadowContext& context, const std::vector<SShadowEncounter>& met, std::string& failure);
 
     std::string      target;
     bool             evade  = false;
@@ -137,6 +143,7 @@ class TShadowTravel
     // Locke, and he fights it (and what else sees him there) before going
     // on. Evading, he fights a share of the leg's, once.
     std::vector<TSafeRef<TCharacter>>  meeting;
+    std::vector<S3DPoint>              walked;     // this leg's path, for what spawns beside it
     SShadowStep                        fightstep;
     std::unique_ptr<TShadowStepRunner> fight;
     bool                               evaded = false;

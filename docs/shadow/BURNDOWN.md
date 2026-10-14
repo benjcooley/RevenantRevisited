@@ -42,7 +42,7 @@ it has got.
 | Learning combos | Jong's lessons when due: AttackLevel, the lesson move landed (§8.5) | P4 | — |
 | Using combos in fights | chain attacks keyed inside their windows (§6.4) | P2 | — |
 | Grinding by level, back to town | §8.5 | P4 | — |
-| Story locations that change the town | the story-trigger map and gate (§9.4) | P5 | mapped (STORY_TRIGGERS.md); gate to build |
+| Story locations that change the town | the story-trigger map and gate (§9.4) | P5 | mapped (STORY_TRIGGERS.md); report and `--story-gate` built |
 
 ## P0 Spine
 
@@ -71,7 +71,7 @@ it has got.
 | [x] | Trigger zones (TShadowZones: every literal CUBE and player-named PROXIMITY of the level's area scripts and master.s, with an owner on the level); A* steers around them; a walk that can't stops in the zone, lets it fire, then goes on (tested on BAYNE1's tavern cube) | 2026-10-14 |
 | [~] | Encounters on the route: every aggressive enemy whose sight range and LineOfSight reach a point of the walk; the leg stops there for the fight, then goes on (written; first met on S2's way to the Druhg camp). Pricing routes by the duel model to do | 2026-10-14 |
 | [~] | Travel modes: `travel` fights what sees the walk; `evade` fights ⌈N·share⌉ (¼ slower, ½ as fast), at least one (written). The policy's choice to do | 2026-10-14 |
-| [ ] | Generator encounters on the route: exposure × slot frequency, real spawns through `TMonsterGen` (after P3) | — |
+| [~] | Generator encounters on the route: the walk's time runs the real `TMonsterGen`s, and once it has passed, what spawned in sight of the walked path meets Locke there (same fight rules: together, evading share, guarded). Written; not yet seen in a run (forest legs are short) | 2026-10-14 |
 | [x] | Travel time from Locke's real speeds (`walkf` 5.71, `runf` 8.93 units a tick); run/walk pacing by fatigue; the walk's ticks pass before he arrives | 2026-10-13 |
 | [x] | Proofs in the log (path sampled every 256 units); the ledger accepts a jump only where a proven travel said he'd land | 2026-10-13 |
 | [~] | Gate: the Keep chain's walks pass (Rand, Tendrick with every branch, the GowE scene, KeepExit, then S1: 13 min 53 s of game, 0 violations); tower door without key 42 to test | 2026-10-14 |
@@ -135,7 +135,7 @@ it has got.
 | [ ] | Readiness levels from the duel model | — |
 | [ ] | Stage-end checks: NPCs alive, keep list, control | — |
 | [x] | Story-trigger map: `tools/shadow/storymap.py`, STORY_TRIGGERS.md | 2026-10-13 |
-| [ ] | Story-trigger coverage gate: every required writer hit, town readers ran after | — |
+| [x] | Story coverage: every script line run is recorded by file, OBJECT block and line, with its last tick, and every story change (coverage.json). shadow.py reports each change with the writer that made it (`MISTSTATE 1 -> 2 by Gus1 (town.s:2474)`), and whether the town has seen it: an automatic reader (ALWAYS, CUBE, PROXIMITY) ran after it. `--story-gate` fails on one it hasn't (after the deal, Gus's house's GUS2DUMMY waits for Locke to come by) | 2026-10-14 |
 | [ ] | Script coverage report | — |
 | [ ] | Gate: new game to credits; every milestone saved and load-checked | — |
 

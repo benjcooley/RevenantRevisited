@@ -144,6 +144,60 @@ def verify_saves(args: argparse.Namespace, run_dir: Path) -> list[str]:
     return problems
 
 
+# Readers that run by themselves once Locke is in their area (a dialog
+# reader needs him to talk to its owner).
+AUTOMATIC_TRIGGERS = ('ALWAYS', 'CUBE', 'PROXIMITY')
+
+
+def story_report(run_dir: Path) -> list[str]:
+    """The story as the run moved it (ARCHITECTURE.md §9.4): each change of
+    a story variable with the writer that made it, and for a variable the
+    town reads, whether the town has seen the new value -- an automatic
+    reader there ran after the change. Returns the changes the town hasn't
+    seen."""
+    coverage_file = run_dir / 'out' / 'coverage.json'
+    if not coverage_file.exists():
+        return []
+    run = json.loads(coverage_file.read_text())
+    out = subprocess.run([sys.executable, str(REPO / 'tools' / 'shadow' / 'storymap.py'), '--format', 'json'],
+                         capture_output=True, text=True, check=True)
+    story = json.loads(out.stdout)
+    ran = {(b['file'].lower(), b['object'].lower()): {int(k): v for k, v in b['lines'].items()}
+           for b in run['blocks']}
+
+    def ticks(event: dict) -> dict:
+        return ran.get((event['file'].lower(), event['object'].lower()), {})
+
+    def last_run(event: dict) -> int | None:
+        return ticks(event).get(event['line'] - event['object_line'])
+
+    unseen = []
+    print('  story:')
+    for change in run['changes']:
+        var = story['variables'].get(change['var'], {})
+        by = [w for w in var.get('writers', []) if w['value'] == str(change['is'])
+              and last_run(w) is not None and last_run(w) <= change['tick']]
+        writer = ', '.join(f'{w["object"]} ({w["id"]})' for w in by) or 'a writer the map lacks'
+        print(f'    {change["tick"]:>7} {change["var"]} {change["was"]} -> {change["is"]} by {writer}')
+        town = story['coverage']['town_variables'].get(change['var'])
+        if not town:
+            continue
+        readers = {r['id'] for r in town['town_readers']}
+        events = [r for r in var.get('readers', []) if r['id'] in readers]
+        automatic = [r for r in events if r['trigger'] in AUTOMATIC_TRIGGERS]
+        seen = [r for r in events if (last_run(r) or -1) > change['tick']]
+        if automatic and not any(r in seen for r in automatic):
+            unseen.append(f'{change["var"]} = {change["is"]} (tick {change["tick"]}): no automatic town reader ran '
+                          f'after it ({", ".join(r["id"] for r in automatic)})')
+            print(f'            the town hasn\'t seen it: {", ".join(r["id"] for r in automatic)}')
+        elif seen:
+            print(f'            the town has seen it: {", ".join(r["object"] + " " + r["id"] for r in seen)}')
+        if not seen and not automatic:
+            print(f'            only dialogs read it in town; none talked to since '
+                  f'({", ".join(sorted({r["object"] for r in events}))})')
+    return unseen
+
+
 def file_waypoints(run_dir: Path, plan: Path, seed: int) -> None:
     """Adds the run's saves to the catalogue."""
     listing = run_dir / 'out' / 'waypoints.json'
@@ -171,6 +225,8 @@ def main() -> int:
     parser.add_argument('--stage', help='start at this stage, from the waypoint --start names')
     parser.add_argument('--start', help='the waypoint (catalogue name or directory) --stage starts from')
     parser.add_argument('--until', help='stop after this stage')
+    parser.add_argument('--story-gate', action='store_true',
+                        help="fail (4) when the town hasn't seen a story change by the end of the run")
     parser.add_argument('--style', choices=['melee', 'hands', 'bow', 'spells', 'mixed'],
                         help="play the plan in this style instead of its own (ARCHITECTURE.md §8.4)")
     parser.add_argument('--lenient', action='store_true', help='log ledger violations instead of stopping')
@@ -194,6 +250,10 @@ def main() -> int:
     print(summary.read_text() if summary.exists() else f'no summary; see {run_dir / "game.txt"}')
     if args.check and verify_saves(args, run_dir) and code == 0:
         code = 3
+    unseen = story_report(run_dir)
+    if args.story_gate and unseen and code == 0:
+        print('  story gate:\n' + '\n'.join(f'    {u}' for u in unseen))
+        code = 4
     if not args.no_file:
         file_waypoints(run_dir, args.plan.resolve(), args.seed)
     return code

@@ -345,6 +345,7 @@ void TShadowRun::Finish(int32_t code, const std::string& why)
         out.Field("violations", ledger.Violations());
     });
     ledger.Stop();
+    log.WriteFile("coverage.json", ledger.Coverage().Json() + "\n");
     WriteWaypoints();
     WriteSummary(why);
     log.Close();

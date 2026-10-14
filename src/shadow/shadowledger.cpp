@@ -152,10 +152,11 @@ void TShadowLedger::AllowVitals(std::string cause, int32_t health, int32_t mana,
     meals.push_back({std::move(cause), health, mana, until});
 }
 
-void TShadowLedger::BeforeLine(TScript& script, int32_t)
+void TShadowLedger::BeforeLine(TScript& script, int32_t offset)
 {
     const TScriptProto* proto = script.GetScriptProto();
     scripts.insert(proto && proto->name ? proto->name : "?");
+    coverage.Line(script, offset, audittick);
 }
 
 std::string TShadowLedger::ScriptCause() const
@@ -196,6 +197,7 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
         return 0;
 
     const int32_t before = violations;
+    audittick = tick;
     const SShadowSnapshot now = SShadowSnapshot::Take(player, tick);
     const bool scripted = !scripts.empty();
     const std::string scriptcause = scripted ? ScriptCause() : std::string();
@@ -344,6 +346,7 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
             continue;
         const std::string name = ToUtf8(states.StateName((int32_t)i));
         const std::string text = name + " " + std::to_string(was) + " -> " + std::to_string(is);
+        coverage.StateChanged(name, was, is, tick);
         if (!scripted)
         {
             Violation(log, "story", text + " with no script running");

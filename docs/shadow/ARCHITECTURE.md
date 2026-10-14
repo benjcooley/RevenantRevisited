@@ -1029,6 +1029,17 @@ So the plan has to go to those places and come back.
   have fired, and every town reader of a changed variable must have run
   after the change. A writer the run missed fails it, by name and place.
 
+As built (`shadowcoverage.cpp`; `shadow.py`, `--story-gate`): the ledger's
+step observer records each script line by its file, its OBJECT block and
+its line within the block. A prototype's text starts at the OBJECT line,
+so a line is the number of breaks before its offset. Each line keeps the
+last tick it ran. `storymap.py` gives every writer and reader its OBJECT
+line, so `file:line` ids join the two. At the end of a run, each story
+change is listed with the writer that made it. For a variable the town
+reads, the change counts as seen once an automatic town reader (ALWAYS,
+CUBE, PROXIMITY) has run after it. Dialog readers wait for Locke to talk,
+so they are only reported.
+
 ### 9.5 Coverage
 
 The script step observer counts every script line that runs. The report

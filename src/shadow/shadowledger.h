@@ -28,6 +28,8 @@
 
 #pragma once
 
+#include "shadowcoverage.h"
+
 #include "../charstats.h"
 #include "../script.h"
 
@@ -104,8 +106,11 @@ class TShadowLedger final : public TScript::IStepObserver
     // between slots or bags isn't one).
     [[nodiscard]] int32_t ItemsVersion() const { return itemsversion; }
     [[nodiscard]] const SShadowSnapshot& Last() const { return last; }
+    // Every script line run and story variable changed (§9.4, §9.5).
+    [[nodiscard]] const TShadowCoverage& Coverage() const { return coverage; }
 
-    // TScript::IStepObserver: which scripts ran lines since the last audit.
+    // TScript::IStepObserver: which scripts ran lines since the last audit,
+    // and each line for the coverage.
     void BeforeLine(TScript& script, int32_t offset) override;
     void AfterLine(TScript& script, int32_t bits) override {}
 
@@ -133,6 +138,8 @@ class TShadowLedger final : public TScript::IStepObserver
     };
 
     SShadowSnapshot               last;
+    TShadowCoverage               coverage;
+    int64_t                       audittick  = 0;    // the tick being run: the last audited
     bool                          started    = false;
     std::set<std::string>         scripts;          // run since the last audit
     std::vector<STravel>          travels;          // proven, not yet landed
