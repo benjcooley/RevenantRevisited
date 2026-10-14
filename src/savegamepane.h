@@ -42,8 +42,9 @@ class TSaveSlotPane : public TDefPane
     // Event 5000 on "gamelist": the slot's thumbnail, name, module and
     // character.
     void OnListSelect(const SDefWidget& list, int32_t row) override;
-    // REVSYNC: field getter @ 0x00539550 / 0x00539bc0 -- "picture" is the
-    // thumbnail.
+    // REVSYNC: field getters @ 0x00539550 / 0x00539bc0 -- "gamelist_name"
+    // is a slot's name, "picture" the thumbnail.
+    [[nodiscard]] std::string FieldText(const std::string& field, int32_t index, SDefColor& colour) override;
     void DrawField(const SDefWidget& widget) override;
     void Compose() override;
 

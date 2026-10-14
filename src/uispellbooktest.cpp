@@ -146,10 +146,6 @@ bool ApplyCase(const SCase& c)
     return true;
 }
 
-const char* AlignName(ETextAlign align)
-{
-    return align == ETextAlign::Center ? "center" : align == ETextAlign::Right ? "right" : "left";
-}
 
 // What the book shows and its text draws (pane-local), for the A/B.
 bool WriteShown(const std::string& path, const std::vector<STextDraw>& text)
@@ -166,23 +162,7 @@ bool WriteShown(const std::string& path, const std::vector<STextDraw>& text)
     json.Field("mana", Player->Mana());
     json.Field("scroll", SpellBook.ScrollPos());
     json.Field("pressed", SpellBook.PressedRow());
-    json.Key("text").Begin('[');
-    for (const STextDraw& draw : text)
-    {
-        json.Begin('{');
-        json.FieldString("text", ToUtf8(draw.text.c_str()));
-        json.FieldString("face", draw.face);
-        json.Field("x", draw.x).Field("y", draw.y).Field("w", draw.w).Field("h", draw.h);
-        json.FieldString("align", AlignName(draw.align));
-        json.Key("color").Begin('[').Value(draw.r).Value(draw.g).Value(draw.b).End(']');
-        json.FieldBool("shadowed", draw.shadowed).FieldBool("wrapped", draw.wrapped);
-        json.Key("lines").Begin('[');
-        for (const std::string& line : draw.lines)
-            json.String(ToUtf8(line.c_str()));
-        json.End(']');
-        json.End('}');
-    }
-    json.End(']');
+    WriteTextDraws(json, text);
     json.End('}');
     std::ofstream out(path, std::ios::binary);
     out << json.str() << '\n';

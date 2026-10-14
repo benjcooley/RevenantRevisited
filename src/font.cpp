@@ -14,6 +14,7 @@
 #include "renderer.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -485,13 +486,25 @@ std::vector<STextDraw>* g_textDrawRecorder = nullptr;
 // One public draw, as the A/B compares it with retail's text calls.
 void RecordTextDraw(const SFontAtlas* atlas, const char* text, int32_t x, int32_t y, int32_t w, int32_t h,
                     ETextAlign align, float r, float g, float b, bool shadowed, bool baseline, bool wrapped,
-                    std::vector<std::string> lines = {})
+                    std::vector<STextLine> lines)
 {
     if (!g_textDrawRecorder)
         return;
     const auto byte = [](float c) { return static_cast<uint8_t>(std::clamp(c, 0.0f, 1.0f) * 255.0f + 0.5f); };
     g_textDrawRecorder->push_back({ text, atlas->face, x, y, w, h, align, byte(r), byte(g), byte(b), shadowed,
                                     baseline, wrapped, std::move(lines) });
+}
+
+// The cell top of a line whose baseline is `baselineY`.
+int32_t CellTop(const SFontAtlas* atlas, float baselineY)
+{
+    return static_cast<int32_t>(std::lround(baselineY - TextCellBaseline(atlas)));
+}
+
+// Floor division, as GDI's vertical centring rounds (Python // in the A/B).
+int32_t FloorHalf(int32_t n)
+{
+    return n >= 0 ? n / 2 : -((-n + 1) / 2);
 }
 
 } // namespace
@@ -509,7 +522,7 @@ void DrawTextAtBaseline(const SFontAtlas* atlas, const char* text,
 {
     if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
     RecordTextDraw(atlas, text, int32_t(penX), int32_t(baselineY), 0, 0, ETextAlign::Left, r, g, b, false, true,
-                   false);
+                   false, { { text, int32_t(std::lround(penX)), CellTop(atlas, baselineY) } });
     DrawGlyphRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
 }
 
@@ -520,8 +533,9 @@ void DrawTextToTarget(const SFontAtlas* atlas, const char* text,
                       ETextEncoding encoding)
 {
     if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
-    RecordTextDraw(atlas, text, cellX, cellY, cellW, cellH, align, r, g, b, false, false, false);
     const float penX = AlignedPenX(atlas, text, encoding, cellX, cellW, align);
+    RecordTextDraw(atlas, text, cellX, cellY, cellW, cellH, align, r, g, b, false, false, false,
+                   { { text, int32_t(std::lround(penX)), cellY } });
     const float baselineY = cellY + TextCellBaseline(atlas);
     DrawColouredRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
 }
@@ -533,8 +547,9 @@ void DrawTextShadowedToTarget(const SFontAtlas* atlas, const char* text,
                               ETextEncoding encoding)
 {
     if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
-    RecordTextDraw(atlas, text, cellX, cellY, cellW, cellH, align, r, g, b, true, false, false);
     const float penX = AlignedPenX(atlas, text, encoding, cellX, cellW, align);
+    RecordTextDraw(atlas, text, cellX, cellY, cellW, cellH, align, r, g, b, true, false, false,
+                   { { text, int32_t(std::lround(penX)), cellY } });
     const float baselineY = cellY + TextCellBaseline(atlas);
     DrawShadowedRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
 }
@@ -547,37 +562,90 @@ void DrawTextShadowedAtBaseline(const SFontAtlas* atlas, const char* text,
 {
     if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return;
     RecordTextDraw(atlas, text, int32_t(penX), int32_t(baselineY), 0, 0, ETextAlign::Left, r, g, b, true, true,
-                   false);
+                   false, { { text, int32_t(std::lround(penX)), CellTop(atlas, baselineY) } });
     DrawShadowedRun(atlas, text, encoding, penX, baselineY, r, g, b, target_w, target_h);
 }
 
-// Retail's description box (DrawTextA, DT_WORDBREAK | DT_EDITCONTROL):
-// word-wrapped to `w`, a line every lineStep, whole lines only.
+// REVSYNC: 0x004be2b0 -- the flags to DrawTextA's layout (0x004be5c6):
+// left (DT 0x2810, word-wrapped), right (&4) or centred (&2); Top (&0x10)
+// a single line at the top, Bottom (&0x20) at the bottom, VCenter (&0x40)
+// centred; SingleLine (&0x80) alone, a single line whose baseline is y
+// (the rect moved up by the font's ascent, 0x004be643).
+int32_t DrawTextComposed(const SFontAtlas* atlas, const char* text, int32_t x, int32_t y, int32_t w, int32_t h,
+                         uint32_t flags, float r, float g, float b, int32_t target_w, int32_t target_h,
+                         ETextEncoding encoding)
+{
+    if (!atlas || atlas->texture == kInvalidTexture || !text || !*text)
+        return 1;
+    const ETextAlign align = (flags & TextFlag::Left) ? ETextAlign::Left
+                           : (flags & TextFlag::Right) ? ETextAlign::Right
+                           : (flags & TextFlag::Center) ? ETextAlign::Center : ETextAlign::Left;
+    const int32_t step = static_cast<int32_t>(atlas->lineStep > 0.0f ? atlas->lineStep : TextLineHeight(atlas));
+    const bool single = flags & (TextFlag::Top | TextFlag::Bottom | TextFlag::VCenter | TextFlag::SingleLine);
+
+    std::vector<std::string> lines;
+    int32_t top = y;
+    if (single)
+    {
+        std::string line = text;
+        line.erase(std::remove_if(line.begin(), line.end(), [](char c) { return c == '\r' || c == '\n'; }),
+                   line.end());
+        lines.push_back(std::move(line));
+        if (flags & TextFlag::Top)
+            top = y;
+        else if (flags & TextFlag::Bottom)
+            top = y + h - step;
+        else if (flags & TextFlag::VCenter)
+            top = y + FloorHalf(h - step);
+        else if (!(flags & (TextFlag::NoBaseline | TextFlag::Top | TextFlag::Bottom | TextFlag::VCenter)))
+            top = y - static_cast<int32_t>(atlas->ascent);
+    }
+    else
+    {
+        WrapTextLines(atlas, text, static_cast<float>(w), lines, encoding);
+        size_t shown = 1;                   // DT_EDITCONTROL: whole lines only, the first always
+        while (shown < lines.size() && static_cast<int32_t>(shown + 1) * step <= h)
+            ++shown;
+        lines.resize(shown);
+    }
+    const int32_t count = static_cast<int32_t>(lines.size());
+    if (flags & TextFlag::NoDraw)
+        return count;
+
+    std::vector<STextLine> placed;
+    placed.reserve(lines.size());
+    for (size_t i = 0; i < lines.size(); ++i)
+    {
+        const int32_t width = static_cast<int32_t>(TextWidth(atlas, lines[i].c_str(), encoding));
+        const int32_t lx = align == ETextAlign::Right ? x + w - width
+                         : align == ETextAlign::Center ? x + FloorHalf(w - width) : x;
+        placed.push_back({ lines[i], lx, top + static_cast<int32_t>(i) * step });
+    }
+    const bool shadowed = flags & TextFlag::Shadow;
+    RecordTextDraw(atlas, text, x, y, w, h, align, r, g, b, shadowed, false, !single, placed);
+    for (const STextLine& line : placed)
+    {
+        const float baselineY = line.y + TextCellBaseline(atlas);
+        if (shadowed)
+            DrawShadowedRun(atlas, line.text.c_str(), encoding, float(line.x), baselineY, r, g, b, target_w, target_h);
+        else
+            DrawColouredRun(atlas, line.text.c_str(), encoding, float(line.x), baselineY, r, g, b, target_w, target_h);
+    }
+    return count;
+}
+
 int32_t DrawTextWrappedToTarget(const SFontAtlas* atlas, const char* text,
                                 int32_t x, int32_t y, int32_t w, int32_t h,
                                 ETextAlign align, float r, float g, float b, bool shadowed,
                                 int32_t target_w, int32_t target_h, ETextEncoding encoding)
 {
-    if (!atlas || atlas->texture == kInvalidTexture || !text || !*text) return 0;
-    std::vector<std::string> lines;
-    WrapTextLines(atlas, text, float(w), lines, encoding);
-    // DT_EDITCONTROL: the first line always, then whole lines only.
-    const float step = atlas->lineStep > 0.0f ? atlas->lineStep : TextLineHeight(atlas);
-    size_t shown = 1;
-    while (shown < lines.size() && float(shown + 1) * step <= float(h))
-        ++shown;
-    lines.resize(shown);
-    RecordTextDraw(atlas, text, x, y, w, h, align, r, g, b, shadowed, false, true, lines);
-    for (size_t i = 0; i < lines.size(); ++i)
-    {
-        const float penX = AlignedPenX(atlas, lines[i].c_str(), encoding, x, w, align);
-        const float baselineY = y + float(i) * step + TextCellBaseline(atlas);
-        if (shadowed)
-            DrawShadowedRun(atlas, lines[i].c_str(), encoding, penX, baselineY, r, g, b, target_w, target_h);
-        else
-            DrawColouredRun(atlas, lines[i].c_str(), encoding, penX, baselineY, r, g, b, target_w, target_h);
-    }
-    return static_cast<int32_t>(static_cast<float>(lines.size()) * step);
+    if (!atlas || atlas->texture == kInvalidTexture || !text || !*text)
+        return 0;
+    const uint32_t flags = (align == ETextAlign::Right ? TextFlag::Right
+                            : align == ETextAlign::Center ? TextFlag::Center : TextFlag::Left)
+                         | (shadowed ? TextFlag::Shadow : 0u);
+    const int32_t lines = DrawTextComposed(atlas, text, x, y, w, h, flags, r, g, b, target_w, target_h, encoding);
+    return lines * static_cast<int32_t>(atlas->lineStep > 0.0f ? atlas->lineStep : TextLineHeight(atlas));
 }
 
 int32_t WrapTextLines(const SFontAtlas* atlas, const char* text, float wrapWidth,

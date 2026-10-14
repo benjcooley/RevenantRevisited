@@ -115,126 +115,90 @@ static bool IsOffMapPane(int32_t x, int32_t y)
     return x < px || y < py || x >= px + pw || y >= py + ph;
 }
 
-// Default game controls. Mirrors the retail table from
-// attic-final:attic/src/playscreen.cpp. Mode flags differ per binding: directional
-// keys are ALLMODES (work in walk / combat / bow / sneak), combat
-// strikes only fire in CTRL_COMBATMODE, etc. Mode bits live in the
-// ControlMap and gate which command a key generates -- the retail
-// values matter once the mode-switching is wired through ControlMap.
+// The control modes a binding works in (retail's mode bits).
 static constexpr uint32_t CTRL_NORMALMODE    = 1;
 static constexpr uint32_t CTRL_COMBATMODE    = 2;
 static constexpr uint32_t CTRL_BOWMODE       = 4;
 static constexpr uint32_t CTRL_SNEAKMODE     = 8;
-static constexpr uint32_t CTRL_INVENTORYMODE = 16;
 
+// REVSYNC: retail's control table 0x005d5500 (69 entries of 0x4c, count at
+// 0x005d697c): the order, names, INI ids ([Controls]), modes and default
+// keys as the release builds them -- what the Options pane lists and the
+// shipped Revenant.ini binds. Each control's command is the port's of the
+// same meaning (retail's numbers in GAMECOMMAND); the ones Command doesn't
+// handle yet do nothing. (The port's table used to be the 1998 build's:
+// another order, ids such as SidePanel, and controls retail dropped.)
 static SControlEntry g_defaultGameControls[] =
 {
-    // -- spell invocation slots --
     {"Invoke 1", "Invoke1", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F1}}, GAMECMD_INVOKE1, 0, 0, false},
     {"Invoke 2", "Invoke2", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F2}}, GAMECMD_INVOKE2, 0, 0, false},
     {"Invoke 3", "Invoke3", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F3}}, GAMECMD_INVOKE3, 0, 0, false},
     {"Invoke 4", "Invoke4", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F4}}, GAMECMD_INVOKE4, 0, 0, false},
-
-    // -- mode switches --
-    {"Combat Mode", "CombatMode", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_RETURN}}, GAMECMD_COMBAT,     0, 0, false},
-    {"Bow Mode",    "BowMode",    CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{'M'}},       GAMECMD_BOW,        0, 0, false},
-    {"Full Screen", "FullScreen", ALLMODES,                                          {{VK_SPACE}},  GAMECMD_FULLSCREEN, 0, 0, false},
-    {"Side Panel",  "SidePanel",  ALLMODES,                                          {{'V'}},       GAMECMD_SIDEPANEL, 0, 0, false},
-    {"Lower Panel", "LowerPanel", ALLMODES,                                          {{'B'}},       GAMECMD_BOTTOMPANEL, 0, 0, false},
-
-    // -- movement modifiers (state flags, repeat-down/up) --
-    {"Sneak", "Sneak", CTRL_NORMALMODE | CTRL_SNEAKMODE, {{'S'}}, GAMECMD_MOVEDOWN, GAMECMD_MOVEUP, CMDFLAG_SNEAK, false},
-    {"Run",   "Run",   CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{'R'}}, GAMECMD_MOVEDOWN, GAMECMD_MOVEUP, CMDFLAG_RUN, false},
-
-    // -- world interaction --
-    {"Use",  "Use",  CTRL_NORMALMODE, {{'U'}, {'T'}}, GAMECMD_USE,  0, 0, false},
-    {"Get",  "Get",  CTRL_NORMALMODE, {{'G'}},         GAMECMD_GET,  0, 0, false},
-    // Retail's entry 35 (0x005d5500): Get in combat and bow modes, so loot
-    // can be picked up straight after a fight.
+    {"Combat Combo 1", "CombatCombo1", CTRL_COMBATMODE, {{VK_CONTROL, 'A'}}, GAMECMD_COMBO1, 0, 0, false},
+    {"Combat Combo 2", "CombatCombo2", CTRL_COMBATMODE, {{VK_CONTROL, 'S'}}, GAMECMD_COMBO2, 0, 0, false},
+    {"Combat Combo 3", "CombatCombo3", CTRL_COMBATMODE, {{VK_CONTROL, 'D'}}, GAMECMD_COMBO3, 0, 0, false},
+    {"Combat Combo 4", "CombatCombo4", CTRL_COMBATMODE, {{VK_CONTROL, 'Q'}}, GAMECMD_COMBO4, 0, 0, false},
+    {"Combat Combo 5", "CombatCombo5", CTRL_COMBATMODE, {{VK_CONTROL, 'W'}}, GAMECMD_COMBO5, 0, 0, false},
+    {"Combat Combo 6", "CombatCombo6", CTRL_COMBATMODE, {{VK_CONTROL, 'E'}}, GAMECMD_COMBO6, 0, 0, false},
+    {"Combat Combo 7", "CombatCombo7", CTRL_COMBATMODE, {{'Q'}}, GAMECMD_COMBO7, 0, 0, false},
+    {"Combat Combo 8", "CombatCombo8", CTRL_COMBATMODE, {{'W'}}, GAMECMD_COMBO8, 0, 0, false},
+    {"Combat Combo 9", "CombatCombo9", CTRL_COMBATMODE, {{'E'}}, GAMECMD_COMBO9, 0, 0, false},
+    {"Combat Combo 10", "CombatCombo10", CTRL_COMBATMODE, {{VK_MENU, 'Q'}}, GAMECMD_COMBO10, 0, 0, false},
+    {"Combat Combo 11", "CombatCombo11", CTRL_COMBATMODE, {{VK_MENU, 'W'}}, GAMECMD_COMBO11, 0, 0, false},
+    {"Combat Combo 12", "CombatCombo12", CTRL_COMBATMODE, {{VK_MENU, 'E'}}, GAMECMD_COMBO12, 0, 0, false},
+    {"Belt Use 1", "BeltUse1", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F5}}, GAMECMD_BELTUSE1, 0, 0, false},
+    {"Belt Use 2", "BeltUse2", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F6}}, GAMECMD_BELTUSE2, 0, 0, false},
+    {"Belt Use 3", "BeltUse3", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F7}}, GAMECMD_BELTUSE3, 0, 0, false},
+    {"Belt Use 4", "BeltUse4", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F8}}, GAMECMD_BELTUSE4, 0, 0, false},
+    {"Belt Use 5", "BeltUse5", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F9}}, GAMECMD_BELTUSE5, 0, 0, false},
+    {"Combat Mode", "CombatMode", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{'C'}}, GAMECMD_COMBAT, 0, 0, false},
+    {"Bow Mode", "BowMode", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{'B'}}, GAMECMD_BOW, 0, 0, false},
+    {"Full Screen", "FullScreen", ALLMODES, {{VK_SPACE}}, GAMECMD_FULLSCREEN, 0, 0, false},
+    {"Bottom Pane", "BottomPane", ALLMODES, {{VK_TAB}}, GAMECMD_BOTTOMPANEL, 0, 0, false},
+    {"Side Pane", "SidePane", ALLMODES, {{VK_RWIN}}, GAMECMD_SIDEPANEL, 0, 0, false},
+    {"Show Spells", "Spells", ALLMODES, {{'1'}}, GAMECMD_SHOWSPELLS, 0, 0, false},
+    {"Show Stats", "Stats", ALLMODES, {{'2'}}, GAMECMD_SHOWSTATS, 0, 0, false},
+    {"Equip Character", "Equip", ALLMODES, {{'3'}}, GAMECMD_SHOWEQUIP, 0, 0, false},
+    {"Build Spells", "BuildSpell", ALLMODES, {{'4'}}, GAMECMD_BUILDSPELLS, 0, 0, false},
+    {"Show Inventory", "Invent", ALLMODES, {{'5'}}, GAMECMD_INVENTORY, 0, 0, false},
+    {"Show Map", "Map", ALLMODES, {{'6'}}, GAMECMD_SHOWMAP, 0, 0, false},
+    {"Run", "Run", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{'R'}}, GAMECMD_MOVEDOWN, GAMECMD_MOVEUP, CMDFLAG_RUN, false},
+    {"Use", "Use", CTRL_NORMALMODE, {{'U'}, {'T'}}, GAMECMD_USE, 0, 0, false},
+    {"Get", "Get", CTRL_NORMALMODE, {{'G'}}, GAMECMD_GET, 0, 0, false},
     {"Combat Get", "CombatGet", CTRL_COMBATMODE | CTRL_BOWMODE, {{'G'}}, GAMECMD_GET, 0, 0, false},
-    {"Jump", "Jump", CTRL_NORMALMODE, {{'J'}},         GAMECMD_JUMP, 0, 0, false},
-
-    // -- walk-mode action slots (unmapped by default; scripted hooks bind these) --
-    {"Walk Action 1", "WalkAction1", CTRL_NORMALMODE, {{0}}, GAMECMD_WALKACTION1, 0, 0, false},
-    {"Walk Action 2", "WalkAction2", CTRL_NORMALMODE, {{0}}, GAMECMD_WALKACTION2, 0, 0, false},
-    {"Walk Action 3", "WalkAction3", CTRL_NORMALMODE, {{0}}, GAMECMD_WALKACTION3, 0, 0, false},
-
-    // -- inventory --
-    {"Inventory",       "Inventory", CTRL_NORMALMODE,    {{'I'}},       GAMECMD_INVENTORY, 0, 0, false},
-    {"Inventory Use",   "InvUse",    CTRL_INVENTORYMODE, {{'U'}},       GAMECMD_INVUSE,    0, 0, false},
-    {"Inventory Move",  "InvMove",   CTRL_INVENTORYMODE, {{'M'}},       GAMECMD_INVMOVE,   0, 0, false},
-    {"Inventory Drop",  "InvDrop",   CTRL_INVENTORYMODE, {{'D'}},       GAMECMD_INVDROP,   0, 0, false},
-    {"Inventory Exit",  "InvExit",   CTRL_INVENTORYMODE, {{VK_ESCAPE}}, GAMECMD_INVEXIT,   0, 0, false},
-
-    // -- combat combos (Ctrl + key, Shift + key) --
-    {"Combat Combo 1",  "CombatCombo1",  CTRL_COMBATMODE, {{VK_CONTROL, 'A'}}, GAMECMD_COMBO1,  0, 0, false},
-    {"Combat Combo 2",  "CombatCombo2",  CTRL_COMBATMODE, {{VK_CONTROL, 'S'}}, GAMECMD_COMBO2,  0, 0, false},
-    {"Combat Combo 3",  "CombatCombo3",  CTRL_COMBATMODE, {{VK_CONTROL, 'D'}}, GAMECMD_COMBO3,  0, 0, false},
-    {"Combat Combo 4",  "CombatCombo4",  CTRL_COMBATMODE, {{VK_CONTROL, 'F'}}, GAMECMD_COMBO4,  0, 0, false},
-    {"Combat Combo 5",  "CombatCombo5",  CTRL_COMBATMODE, {{VK_CONTROL, 'G'}}, GAMECMD_COMBO5,  0, 0, false},
-    {"Combat Combo 6",  "CombatCombo6",  CTRL_COMBATMODE, {{VK_CONTROL, 'H'}}, GAMECMD_COMBO6,  0, 0, false},
-    {"Combat Combo 7",  "CombatCombo7",  CTRL_COMBATMODE, {{VK_SHIFT,   'A'}}, GAMECMD_COMBO7,  0, 0, false},
-    {"Combat Combo 8",  "CombatCombo8",  CTRL_COMBATMODE, {{VK_SHIFT,   'S'}}, GAMECMD_COMBO8,  0, 0, false},
-    {"Combat Combo 9",  "CombatCombo9",  CTRL_COMBATMODE, {{VK_SHIFT,   'D'}}, GAMECMD_COMBO9,  0, 0, false},
-    {"Combat Combo 10", "CombatCombo10", CTRL_COMBATMODE, {{VK_SHIFT,   'F'}}, GAMECMD_COMBO10, 0, 0, false},
-    {"Combat Combo 11", "CombatCombo11", CTRL_COMBATMODE, {{VK_SHIFT,   'G'}}, GAMECMD_COMBO11, 0, 0, false},
-    {"Combat Combo 12", "CombatCombo12", CTRL_COMBATMODE, {{VK_SHIFT,   'H'}}, GAMECMD_COMBO12, 0, 0, false},
-
-    // -- combat strikes / blocks / dodge / leap --
-    {"Combat Block",  "CombatBlock",  CTRL_COMBATMODE, {{'Q'}}, GAMECMD_BLOCKDOWN, GAMECMD_BLOCKUP, CMDFLAG_BLOCK, false},
-    // REVSYNC: retail's control table 0x005d5500, entries 37-44: Ctrl + a
-    // direction key, or a double tap of the joystick's (COMBAT_HIT.md §3.10).
-    // The 1998 build had one "Combat Dodge" on W instead.
-    {"Combat Dodge Left",      "DodgeLeft",      CTRL_COMBATMODE, {{VK_CONTROL, VK_LEFT},  {VK_JOYLEFT | VK_DBLTAP}},      GAMECMD_DODGELEFT,      0, 0, false},
-    {"Combat Dodge Right",     "DodgeRight",     CTRL_COMBATMODE, {{VK_CONTROL, VK_RIGHT}, {VK_JOYRIGHT | VK_DBLTAP}},     GAMECMD_DODGERIGHT,     0, 0, false},
-    {"Combat Dodge Up",        "DodgeUp",        CTRL_COMBATMODE, {{VK_CONTROL, VK_UP},    {VK_JOYUP | VK_DBLTAP}},        GAMECMD_DODGEUP,        0, 0, false},
-    {"Combat Dodge Down",      "DodgeDown",      CTRL_COMBATMODE, {{VK_CONTROL, VK_DOWN},  {VK_JOYDOWN | VK_DBLTAP}},      GAMECMD_DODGEDOWN,      0, 0, false},
-    {"Combat Dodge UpLeft",    "DodgeUpLeft",    CTRL_COMBATMODE, {{VK_CONTROL, VK_HOME},  {VK_JOYUPLEFT | VK_DBLTAP}},    GAMECMD_DODGEUPLEFT,    0, 0, false},
-    {"Combat Dodge UpRight",   "DodgeUpRight",   CTRL_COMBATMODE, {{VK_CONTROL, VK_PRIOR}, {VK_JOYUPRIGHT | VK_DBLTAP}},   GAMECMD_DODGEUPRIGHT,   0, 0, false},
-    {"Combat Dodge DownLeft",  "DodgeDownLeft",  CTRL_COMBATMODE, {{VK_CONTROL, VK_END},   {VK_JOYDOWNLEFT | VK_DBLTAP}},  GAMECMD_DODGEDOWNLEFT,  0, 0, false},
-    {"Combat Dodge DownRight", "DodgeDownRight", CTRL_COMBATMODE, {{VK_CONTROL, VK_NEXT},  {VK_JOYDOWNRIGHT | VK_DBLTAP}}, GAMECMD_DODGEDOWNRIGHT, 0, 0, false},
-    {"Combat Leap",   "CombatLeap",   CTRL_COMBATMODE, {{'F'}}, GAMECMD_LEAPDOWN,  GAMECMD_LEAPUP,   CMDFLAG_LEAP,  false},
-    {"Combat Swing",  "CombatSwing",  CTRL_COMBATMODE, {{'A'}}, GAMECMD_SWING,     0,                0,            false},
-    {"Combat Thrust", "CombatThrust", CTRL_COMBATMODE, {{'S'}}, GAMECMD_THRUST,    0,                0,            false},
-    {"Combat Chop",   "CombatChop",   CTRL_COMBATMODE, {{'D'}}, GAMECMD_CHOP,      0,                0,            false},
-
-    // -- combat action slots (scripted) --
-    {"Combat Action 1", "CombatAction1", CTRL_COMBATMODE, {{0}}, GAMECMD_COMBATACTION1, 0, 0, false},
-    {"Combat Action 2", "CombatAction2", CTRL_COMBATMODE, {{0}}, GAMECMD_COMBATACTION2, 0, 0, false},
-    {"Combat Action 3", "CombatAction3", CTRL_COMBATMODE, {{0}}, GAMECMD_COMBATACTION3, 0, 0, false},
-
-    // -- bow mode --
-    {"Bow Shoot",    "BowShoot",    CTRL_BOWMODE, {{'Z'}}, GAMECMD_BOWAIM,    GAMECMD_BOWSHOOT, 0, false},
-    {"Bow Action 1", "BowAction1",  CTRL_BOWMODE, {{0}},   GAMECMD_BOWACTION1, 0, 0, false},
-    {"Bow Action 2", "BowAction2",  CTRL_BOWMODE, {{0}},   GAMECMD_BOWACTION2, 0, 0, false},
-    {"Bow Action 3", "BowAction3",  CTRL_BOWMODE, {{0}},   GAMECMD_BOWACTION3, 0, 0, false},
-
-    // -- sneak attacks / actions (scripted) --
-    {"Sneak Attack 1", "SneakAttack1", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKATTACK1, 0, 0, false},
-    {"Sneak Attack 2", "SneakAttack2", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKATTACK2, 0, 0, false},
-    {"Sneak Attack 3", "SneakAttack3", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKATTACK3, 0, 0, false},
-    {"Sneak Action 1", "SneakAction1", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKACTION1, 0, 0, false},
-    {"Sneak Action 2", "SneakAction2", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKACTION2, 0, 0, false},
-    {"Sneak Action 3", "SneakAction3", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKACTION3, 0, 0, false},
-
-    // -- 8-way movement (cardinal + diagonals) --
-    {"Left",       "Left",      ALLMODES, {{VK_LEFT},  {VK_JOYLEFT}},      GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_LEFT,      false},
-    {"Right",      "Right",     ALLMODES, {{VK_RIGHT}, {VK_JOYRIGHT}},     GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_RIGHT,     false},
-    {"Up",         "Up",        ALLMODES, {{VK_UP},    {VK_JOYUP}},        GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UP,        false},
-    {"Down",       "Down",      ALLMODES, {{VK_DOWN},  {VK_JOYDOWN}},      GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWN,      false},
-    {"Up Left",    "UpLeft",    ALLMODES, {{VK_HOME},  {VK_JOYUPLEFT}},    GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UPLEFT,    false},
-    {"Up Right",   "UpRight",   ALLMODES, {{VK_PRIOR}, {VK_JOYUPRIGHT}},   GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UPRIGHT,   false},
-    {"Down Left",  "DownLeft",  ALLMODES, {{VK_END},   {VK_JOYDOWNLEFT}},  GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWNLEFT,  false},
-    {"Down Right", "DownRight", ALLMODES, {{VK_NEXT},  {VK_JOYDOWNRIGHT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWNRIGHT, false},
-
-    // -- in-game dialogs: retail's controls 65-68 (table 0x005d5500), keys
-    //    as retail's (VK_LWIN / VK_APPS are 0x5b / 0x5d, the codes the port's
-    //    input gives '[' and ']'; a retail INI writes them CTRL-LWIN /
-    //    CTRL-APPS) --
-    {"Game Options", "GameOpts",  ALLMODES, {{'O'}},                 GAMECMD_GAMEOPTIONS, 0, 0, false},
-    {"Load Game",    "LoadGame",  ALLMODES, {{VK_CONTROL, VK_LWIN}}, GAMECMD_LOADGAME,    0, 0, false},
-    {"Save Game",    "SaveGame",  ALLMODES, {{VK_CONTROL, VK_APPS}}, GAMECMD_SAVEGAME,    0, 0, false},
-    {"Quick Save",   "QuickSave", ALLMODES, {{VK_CONTROL, VK_BACK}}, GAMECMD_QUICKSAVE,   0, 0, false},
+    {"Combat Block", "CombatBlock", CTRL_COMBATMODE, {{'F'}}, GAMECMD_BLOCKDOWN, GAMECMD_BLOCKUP, CMDFLAG_BLOCK, false},
+    {"Combat Dodge Left", "DodgeLeft", CTRL_COMBATMODE, {{VK_CONTROL, VK_LEFT}, {VK_JOYLEFT | VK_DBLTAP}}, GAMECMD_DODGELEFT, 0, 0, false},
+    {"Combat Dodge Right", "DodgeRight", CTRL_COMBATMODE, {{VK_CONTROL, VK_RIGHT}, {VK_JOYRIGHT | VK_DBLTAP}}, GAMECMD_DODGERIGHT, 0, 0, false},
+    {"Combat Dodge Up", "DodgeUp", CTRL_COMBATMODE, {{VK_CONTROL, VK_UP}, {VK_JOYUP | VK_DBLTAP}}, GAMECMD_DODGEUP, 0, 0, false},
+    {"Combat Dodge Down", "DodgeDown", CTRL_COMBATMODE, {{VK_CONTROL, VK_DOWN}, {VK_JOYDOWN | VK_DBLTAP}}, GAMECMD_DODGEDOWN, 0, 0, false},
+    {"Combat Dodge UpLeft", "DodgeUpLeft", CTRL_COMBATMODE, {{VK_CONTROL, VK_HOME}, {VK_JOYUPLEFT | VK_DBLTAP}}, GAMECMD_DODGEUPLEFT, 0, 0, false},
+    {"Combat Dodge UpRight", "DodgeUpRight", CTRL_COMBATMODE, {{VK_CONTROL, VK_PRIOR}, {VK_JOYUPRIGHT | VK_DBLTAP}}, GAMECMD_DODGEUPRIGHT, 0, 0, false},
+    {"Combat Dodge DownLeft", "DodgeDownLeft", CTRL_COMBATMODE, {{VK_CONTROL, VK_END}, {VK_JOYDOWNLEFT | VK_DBLTAP}}, GAMECMD_DODGEDOWNLEFT, 0, 0, false},
+    {"Combat Dodge DownRight", "DodgeDownRight", CTRL_COMBATMODE, {{VK_CONTROL, VK_NEXT}, {VK_JOYDOWNRIGHT | VK_DBLTAP}}, GAMECMD_DODGEDOWNRIGHT, 0, 0, false},
+    {"Combat Swing", "CombatSwing", CTRL_COMBATMODE, {{'A'}}, GAMECMD_SWING, 0, 0, false},
+    {"Combat Thrust", "CombatThrust", CTRL_COMBATMODE, {{'S'}}, GAMECMD_THRUST, 0, 0, false},
+    {"Combat Chop", "CombatChop", CTRL_COMBATMODE, {{'D'}}, GAMECMD_CHOP, 0, 0, false},
+    {"Bow Shoot", "BowShoot", CTRL_BOWMODE, {{'Z'}}, GAMECMD_BOWAIM, GAMECMD_BOWSHOOT, 0, false},
+    {"Zoom In", "ZoomIn", ALLMODES, {{'I'}}, GAMECMD_CAMERADOWN, GAMECMD_CAMERAUP, CMDFLAG_ZOOMIN, false},
+    {"Zoom Out", "ZoomOut", ALLMODES, {{'K'}}, GAMECMD_CAMERADOWN, GAMECMD_CAMERAUP, CMDFLAG_ZOOMOUT, false},
+    {"Pan Left", "PanLeft", ALLMODES, {{'J'}}, GAMECMD_CAMERADOWN, GAMECMD_CAMERAUP, CMDFLAG_PANLEFT, false},
+    {"Pan Right", "PanRight", ALLMODES, {{'L'}}, GAMECMD_CAMERADOWN, GAMECMD_CAMERAUP, CMDFLAG_PANRIGHT, false},
+    {"Pan Up", "PanUp", ALLMODES, {{'Y'}}, GAMECMD_CAMERADOWN, GAMECMD_CAMERAUP, CMDFLAG_PANUP, false},
+    {"Pan Down", "PanDown", ALLMODES, {{'H'}}, GAMECMD_CAMERADOWN, GAMECMD_CAMERAUP, CMDFLAG_PANDOWN, false},
+    {"Left", "Left", ALLMODES, {{VK_LEFT}, {VK_JOYLEFT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_LEFT, false},
+    {"Right", "Right", ALLMODES, {{VK_RIGHT}, {VK_JOYRIGHT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_RIGHT, false},
+    {"Up", "Up", ALLMODES, {{VK_UP}, {VK_JOYUP}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UP, false},
+    {"Down", "Down", ALLMODES, {{VK_DOWN}, {VK_JOYDOWN}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWN, false},
+    {"Up Left", "UpLeft", ALLMODES, {{VK_HOME}, {VK_JOYUPLEFT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UPLEFT, false},
+    {"Up Right", "UpRight", ALLMODES, {{VK_PRIOR}, {VK_JOYUPRIGHT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UPRIGHT, false},
+    {"Down Left", "DownLeft", ALLMODES, {{VK_END}, {VK_JOYDOWNLEFT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWNLEFT, false},
+    {"Down Right", "DownRight", ALLMODES, {{VK_NEXT}, {VK_JOYDOWNRIGHT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWNRIGHT, false},
+    {"Multiplayer", "Multiplayer", ALLMODES, {{'M'}}, GAMECMD_MULTIPLAYER, 0, 0, false},
+    {"Edit Char", "EditChar", ALLMODES, {{'X'}}, GAMECMD_EDITCHAR, 0, 0, false},
+    {"Game Options", "GameOpts", ALLMODES, {{'O'}}, GAMECMD_GAMEOPTIONS, 0, 0, false},
+    {"Load Game", "LoadGame", ALLMODES, {{VK_CONTROL, VK_LWIN}}, GAMECMD_LOADGAME, 0, 0, false},
+    {"Save Game", "SaveGame", ALLMODES, {{VK_CONTROL, VK_APPS}}, GAMECMD_SAVEGAME, 0, 0, false},
+    {"Quick Save", "QuickSave", ALLMODES, {{VK_CONTROL, VK_BACK}}, GAMECMD_QUICKSAVE, 0, 0, false},
 };
 
 // REVSYNC: 0x00486177 / 0x00486186 -- retail initialized the control map
@@ -1832,6 +1796,12 @@ void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
         TScreen::MouseClick(button, x, y);
         break;
       case EClickRoute::Hud:
+        // An item held from the HUD let go over the map: the map pane, the
+        // first pane a release reaches (TPlayScreen::Initialize 0x0047ad65),
+        // uses it on what is under it or drops it there; then the item panes
+        // end the grab.
+        if (button == MB_LEFTUP && UIDragState::HeldItem() && !IsOffMapPane(x, y) && UISideTabButtonAt(x, y) < 0)
+            CurrentMode()->HandleMouseClick(button, x, y);
         if (!HandleMouseClickUISidebarModeConsumed(button, x, y))
         {
             const SHudState& s = GetHudState();
@@ -1979,6 +1949,11 @@ void TPlayScreen::Command(GAMECOMMAND command)
     case GAMECMD_DODGEDOWNLEFT: case GAMECMD_DODGEDOWNRIGHT:
         if (Player)         // 0x30-0x37 (0x0047d900): Dodge(0..7)
             Player->Dodge(command - GAMECMD_DODGELEFT);
+        break;
+    case GAMECMD_BELTUSE1: case GAMECMD_BELTUSE2: case GAMECMD_BELTUSE3:
+    case GAMECMD_BELTUSE4: case GAMECMD_BELTUSE5:
+        if (Player)         // 0x18-0x1c (0x0047d882): UseBelt(0..4) 0x0051e420
+            Player->UseBelt(command - GAMECMD_BELTUSE1);
         break;
     case GAMECMD_USE:               // 0xe: Use 0x004d01e0
         if (Player)
@@ -2159,6 +2134,14 @@ void TPlayScreen::HideLowerPanes()
 void TPlayScreen::ShowLowerPanes()
 {
     // TODO(port): symmetric reveal.
+}
+
+void TPlayScreen::ShowStatPane()
+{
+    SHudState& hud = GetHudState();
+    hud.topSlot = HUD_TOP_STATS;
+    hud.sidebarState = HUD_SIDEBAR_OPEN;
+    StatPane.SetDirty(true);
 }
 
 // *************************************************************************

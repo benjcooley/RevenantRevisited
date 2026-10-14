@@ -3003,6 +3003,9 @@ int32_t InputSimKeyCode(const std::string& tokIn)
     if (t == "end")                         return VK_END;
     if (t == "pgup" || t == "pageup")       return VK_PRIOR;
     if (t == "pgdn" || t == "pagedown")     return VK_NEXT;
+    if (t == "ctrl" || t == "control")      return VK_CONTROL;
+    if (t == "shift")                       return VK_SHIFT;
+    if (t == "alt")                         return VK_MENU;
     if (t.size() >= 2 && t[0] == 'f' && std::isdigit((unsigned char)t[1]))
     {
         const int32_t n = (int32_t)std::strtol(t.c_str() + 1, nullptr, 10);
@@ -3593,6 +3596,8 @@ bool Initialize(const char* mode)
         return InitializeABSpellBookMode();
     if (strcmp(mode, "ab-statpane") == 0)
         return InitializeABStatPaneMode();
+    if (strcmp(mode, "ab-options") == 0)
+        return InitializeABOptionsMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         SetUISidebarSyntheticStateEnabled(true);
@@ -3677,6 +3682,8 @@ void Close(const char* mode)
         CloseABSpellBookMode();
     if (strcmp(mode, "ab-statpane") == 0)
         CloseABStatPaneMode();
+    if (strcmp(mode, "ab-options") == 0)
+        CloseABOptionsMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         CloseUIStatsMode();
@@ -3780,6 +3787,8 @@ void Render(const char* mode)
         return RenderABSpellBookMode();
     if (strcmp(mode, "ab-statpane") == 0)
         return RenderABStatPaneMode();
+    if (strcmp(mode, "ab-options") == 0)
+        return RenderABOptionsMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         RenderUIHudMode();

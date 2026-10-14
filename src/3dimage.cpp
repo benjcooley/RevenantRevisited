@@ -1277,8 +1277,7 @@ static bool DecodeTextureFrameRGBA(const SSurfaceDesc* srcsd, const void* srcpix
     return false;
 }
 
-static uint64_t I3DTextureAssetKey(AssetUid asset_id, int32_t texture_index, int32_t frame_index,
-                                  bool repeat = false)
+static uint64_t I3DTextureAssetKey(AssetUid asset_id, int32_t texture_index, int32_t frame_index)
 {
     uint64_t hash = 1469598103934665603ull;
     auto mix = [&hash](uint64_t value) {
@@ -1288,7 +1287,6 @@ static uint64_t I3DTextureAssetKey(AssetUid asset_id, int32_t texture_index, int
     mix(asset_id);
     mix(uint64_t(uint32_t(texture_index)));
     mix(uint64_t(uint32_t(frame_index)));
-    if (repeat) mix(0x525054u); // distinct sampler identity; preserve existing clamp keys
     return hash ? hash : 1ull;
 }
 
@@ -3146,10 +3144,17 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
             dump_textures[texture_index][f] = rgba;
         }
 
+        // Texture coordinates wrap. Retail never sets a texture address mode
+        // (no D3DTSS_ADDRESS* or TEXTUREADDRESS state anywhere in the binary),
+        // so Direct3D samples with its default WRAP, and its software
+        // rasterizer wraps too. Authored UVs leave [0,1] on ordinary
+        // geometry, not only on scrolling textures: the left shin of Brown
+        // Leather Boots spans u = -0.37..-0.01, the waist of the Leg Plate
+        // u = 0.49..1.98. Clamped, such a part samples one edge column.
         TTextureHandle htexture = kInvalidTexture;
         if (Renderer)
         {
-            const uint64_t key = I3DTextureAssetKey(AssetId(), texture_index, f, HasScrollTex());
+            const uint64_t key = I3DTextureAssetKey(AssetId(), texture_index, f);
             htexture = Renderer->RegisterTextureAsset(key,
                                                        rgba.data(),
                                                        rgba.size(),
@@ -3158,7 +3163,7 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
                                                        ERendererTextureFormat::RGBA8,
                                                        uint64_t(rgba.size()),
                                                        ERendererTextureFilter::Linear,
-                                                       HasScrollTex());
+                                                       /*repeat*/ true);
             if (htexture != kInvalidTexture)
             {
                 Renderer->AddTextureAssetRef(htexture);

@@ -247,9 +247,10 @@ for the other panes); if the release is inside the pane,
 
 Inside the pane only (`0x0053823c..0x00538517`):
 
-- **Stats mode** (`0x0065c9e0`): the item under the pointer shows its
-  info (`0x0047eff0`, then `0x005496a0` on `0x0065b140`); on no item and
-  `0x0065d1b8 == 1`, the player's. [C]
+- **With Ctrl held** (`0x0065c9e0` is CtrlDown, §12): the item under the
+  pointer shows on the stats pane (`0x0047eff0` ShowStatPane, then
+  `0x005496a0` SetObject on `0x0065b140`); on no item and `0x0065d1b8 == 1`
+  (Stats up), the player's. [C]
 - Otherwise only with nothing held anywhere (this pane's grab, the doll's
   `0x0065b878`, the belt's `0x0065b090` all < 0). The item under the
   pointer:
@@ -364,11 +365,12 @@ Refuses (returns 0) when, in order:
 Otherwise 1. The messages print only for the main player. 1998 CanEquip
 (`player.cpp:197-225`) had checks 1-4a only. [C]
 
-Data: class.def gives the Short Sword and the Training Sword MinStrength
-16, chainmail 20 / 18, cloth 16 / 12, and the PLAYER class's Strn and
-Cons default to 14. A new game's Locke (the save after the opening) wears
-his starting boots, shirt and Short Sword under the retail checks in the
-port, so his Strn and Cons meet them. [C]
+Data: the class.def the game loads (the module's) gives Black Cloth Boots
+MinStrength 14 and MinConstitution 10 (and Value 10); the plain-text copy
+in `imagery.rvi` is an older one (16 / 12, Value 115), so read requirements
+from the loaded data, not that copy. A new game's Locke (the save after
+the opening) wears his starting boots, shirt and Short Sword under the
+retail checks in the port. [C]
 
 ### 5.3 Equip `0x005199b0` (TPlayer)
 
@@ -383,6 +385,27 @@ equipment array entry, the light-source walk root, the combat / bow root
 refresh for slots 4 and 7, then `0x0051c660`. Returns 1. [C]
 
 The port's `TPlayer::Equip` (`src/player.cpp:964`) follows this layout.
+
+### 5.4 The torch walk: SetWalkMode `0x004cf000`
+
+`TPlayer` vtable `+0x30c` (`0x0051b3f0`) is the walk root: "torch" with a
+LIGHTSOURCE in equipment slot 6, else "walk". `SetWalkMode` (any
+character): nothing while held in an interactive move (unless charflags
+`0x80000`) or dead; a root that is a walking one (`IsWalkMode`) **and**
+the walk root stays; any other is rebuilt as a copy of the old root under
+the mode's name (combat `+0x304`, bow `+0x308`, animate `+0x30c`), a step
+under way turned into its step, and started at once. So a combat or bow
+root is rebuilt on every call. [C]
+
+Callers on the item side: `Equip` after `equipment[slot] = item` when the
+root is a walking one and the item is a light source (`0x00519c24`); the
+panes' equip (`0x005384ed`, `0x0052d244`, `0x00536659`) for a light source
+once CanEquip passed; a worn light source dropped on a cell (`0x00538ae0`,
+`0x0052d5b5`). [C]
+
+Locke's imagery has no "torch", "torchf" or "torchr" state (checked in the
+port, 2026-10-14), so `HasActionAni("torch")` fails and the walk never
+changes in the shipped game; the calls are ported as they are. [C]
 
 ## 6. The hover cursor
 
@@ -558,6 +581,62 @@ bag again instead of closing it. [C]
 first tries a "Pouch" whose first item has the new item's class
 (INVENTORY.md §2 step 2). [C]
 
+### 8.3a Opening, traps and the ground half (`0x004dc218..0x004dd365`)
+
+Read 2026-10-14. The carried half above ends, as every successful exit of
+`Use` does, at `0x004dd33f`: `if (!GetAnimator()) SetCommandDone(true);
+return 1`. [C]
+
+**Opening** (Openable, state 0):
+
+- An item used on it shut: the player reads `FULLCONTCLOSED` (the shown
+  name) if the language has it, else `"%s %s %s"` of BASETHE, the shown
+  name and CONTISCLOSED ("The Chest is closed."); returns 0 for anyone. [C]
+- Else `SetState(1)`; the lid sound by the **type** name, only when it
+  holds "Chest": "Lab" `LabChestOpen`, "ForChest" `StoneOpen`, "Pot"
+  `ClayOpen` (no shipped type has "Chest" and "Pot"), else `TreasureOpen`,
+  played unplaced like "pouch"; the traps; the player reads
+  `FULLCONTOPEN` or `"%s %s"` of the shown name and CONTOPENED ("Chest
+  opened."). [C]
+- **Explosive**: an EFFECT "fireflash" at the container, z + 50, facing the
+  main player; the user's facing set from a sum of the container's and
+  his own coordinates (a retail slip); `KnockBack(&<unset local>, -1)`,
+  `Burn()`, `Damage(random(5, 15), DT_BURN)`. [C]
+- **Poisonous**: an EFFECT "poisoncloud" (class.def has none, the cloud is
+  "poison": nothing spawns); the same facing; `Flail()`,
+  `SetPoisoned(1)`, `Damage(random(5, 15), 20)` — 1998's DAMAGE_POISON,
+  which CalculateDamage treats as physical. [C]
+- Nothing disarms a trap: it fires on every opening. [C]
+
+**On the ground, used alone** (`0x004dcac0..0x004dd23a`): the first item
+(in inventory order) goes to the inventory **pane's shown container**
+through `AddToInventory(item, -1)`, room tested with
+`FindFreeInventorySlot() < 0xff` (else CONTFULL, "Can't carry any more.");
+the player reads `FULLCONTTAKEN` (item, container) / `FULLCONTTAKENREV`
+(container, item) / `"%s %s %s."` of the item, CONTTAKENFROM and the
+container ("Gold taken from Chest."); `TakenObject` = the item. Anyone but
+the player only goes to the network. No sound. [C]
+
+A container with the **Regen** object stat (`vtable 0x240`, "RGEN", 0..10000)
+is a dispenser: it hands out a copy of its next item (amount and object
+stats copied; cursor `+0xe0`), and after the last one rests until
+`Regen * 24` game frames have passed since (`+0xdc`). Which shipped map
+containers set it: UNCONFIRMED. [C]
+
+Empty (or resting): an openable container shuts (state 0, the lid's
+`...Close` sound, `FULLCONTCLOSED` or "Chest closed."); any other returns
+0. [C]
+
+**On the ground, used with an item** (`0x004dd23a`): nothing for an
+ingredient (CombineID); else `AddToInventory(inst, -1)` with no room
+test, `FULLCONTPUTIN` / `FULLCONTPUTINREV` / "Sword put in Chest.",
+`DroppedObject` = the item. [C]
+
+The FULL* tags are in no shipped `.def`: hooks for another word order. All
+names are shown names (`0x0046e7f0`). Stats registered at
+`0x004dbf4a..0x004dc16c`: Locked, KeyId, PickDifficulty, Explosive,
+Poisonous, CombineID, TargetID, Regen (object stats 0..7). [C]
+
 ### 8.4 Scrolls `0x00520eb0`
 
 With no `with` and the player as user: the scroll pane (`0x0066dcb0`),
@@ -570,9 +649,11 @@ or the book pane (`0x0066db18`) for a type name containing "Book" or
 
 ### 8.5 The rest
 
-- MONEY `0x00515e70`: a `with` of the same class and type is removed from
-  the map and deleted, and this pile takes both amounts; returns 1. No cap
-  (1998 `money.cpp:125` capped at MAXMONEYIMAGE). [C]
+- MONEY `0x00515e70`: the base Use first; a `with` of the same class and
+  type is removed from the map and deleted, and this pile takes both
+  amounts; returns 1. No cap (1998 `money.cpp:125` capped at
+  MAXMONEYIMAGE). CursorType `0x00515f10`: the hand for a `with` of the
+  same class and type, unless this pile is invisible. [C]
 - WEAPON `0x00528d80`: `with` named "Poison Vial" in state 0 on a Type 1
   weapon: the vial goes to state 1 (`+0x18`), "%s envenomed."; 1. [C]
 - TOOL `0x005240c0`: the base, as 0/1 (1998 `tool.cpp:20` returned FALSE
@@ -615,6 +696,12 @@ begins (`BeginCursorFrame`) rather than inside the cursor's draw: the port
 draws a frame's HUD again for captures (the mirror pass), which before
 showed no hover cursor at all.
 
+Since 2026-10-14 also: container opening (lid sounds, traps, lines), the
+half on the ground (take, Regen dispensers, shut, put in), money and tool
+Use (§8.3a, §8.5: `TContainer`, `TMoney`, `TTool`), and the torch walk
+(§5.4: `TCharacter::SetWalkMode`, `TPlayer::Equip`, `EquipInOwnSlot`,
+`ReleaseWorn`).
+
 Deviations:
 
 - Two ingredients that combine (§8.3) are deleted; retail took them out of
@@ -622,6 +709,13 @@ Deviations:
 - The belt's right up off its boxes does nothing; retail read equipment
   slot 10 there (`0x10a`), so it compacted the inventory, or re-equipped
   what is worn in that slot with its sound.
+- A trap's user is knocked back from the container and turned by
+  KnockBack; retail knocked him back from a point it never set and turned
+  him by a sum of coordinates (§8.3a). A non-character user springs no
+  trap (retail would have crashed).
+- A money pile isn't used on itself (retail deleted it).
+- A character's damage modifier reads 0 for a damage type past the table
+  (the poison trap's 20); retail read past it.
 - After removals, `CompactInventory`'s order can differ from retail's: the
   port's inventory array leaves holes that new items fill, retail's closed
   up on every removal.
@@ -630,13 +724,85 @@ Not ported yet:
 
 | Behaviour | Retail |
 |---|---|
-| Right up in stats mode: the item's information | `0x00538267..0x00538333`, `0x0052cff9..` |
-| The walk-root refresh after (un)equipping a light source | `0x004cf000` |
-| Container Use: opening (sounds by type, the Explosive and Poisonous traps, the dialog lines) and the half on the ground | `0x004dc22a..0x004dc87d`, `0x004dcac0..` |
 | Base Use combining (no shipped item has a nonzero "Combining") | `0x004706bc..0x004708dc` |
-| Money Use without the 1998 cap; Tool Use calling the base | `0x00515e70`, `0x005240c0` |
-| Dragging an item from the HUD onto the map or a world object (`TMapPane` still reads `TInventory::GetHeldSlot`, which is -1) | not covered here |
 | Multiplayer: the CanCombine gate, the network messages | `0x0066829c` |
+
+## 11. An item let go over the map
+
+Read 2026-10-14. `TMapPane::MouseClick` `0x0044f140`, left up, when the map
+had no press (`clicked` `+0x120` 0), `0x0044fff8..0x0045046f`. The map pane
+is the first pane `TPlayScreen::Initialize` adds (`0x0047ad65`), so it sees
+the release before the item panes. [C]
+
+- **The item** (`0x0044fce3`): the inventory pane's held item, else the
+  belt's, else the doll's equipment entry. The held slots outlive the grab
+  (each pane clears its own on its next repaint), and the doll's isn't
+  range-checked (with none held it reads `player+0x29c`). [C]
+- `on = OnObject(x, y, item)`: `with` only feeds `CursorType(with)` in the
+  2D walk (a floor item counts while DragObj is set only when it has a
+  cursor for the item); the 3D pick ignores it. [C]
+- **Use**: `on->Use(Player, item id)`; 1 → done (the inventory or belt
+  repainted). A character's Use runs GET / GIVE on the scripts and returns
+  1, so the item stays unless a script takes it; Locke's own returns 0. [C]
+- **Drop** (`0x004500ab..0x0045046a`), when Use returned 0 or nothing was
+  under the pointer:
+  - not an item that can't change hands (`CanTrade`, Value -1) nor AMMO:
+    silently kept; [C]
+  - a worn item comes off (`Equip(NULL, doll held slot)`); [C]
+  - the point: `FindClickPos` + (64, 64), but not for money (why:
+    UNCONFIRMED); farther than 96 from Locke, it lands on the line toward
+    it at Locke + 32k, k the walk checks passed at Locke + 0, 32, 64
+    (`GetWalkHeightRadius`, radius 32, a rise over 32 or a hole stops),
+    at Locke's z; no failure; [C]
+  - `RemoveFromInventory`, `SetPos(t, level)`, `AddToMap`; the line:
+    `FULLSINGDROP` / `"%s %s"` of the shown name and BASEDROPEPED ("Short
+    Sword dropped."), or for a pile `FULLMULTDROP` (n, name) /
+    `FULLMULTDROPREV` (name, n) / `"%d %s%s %s"` with PLURAL, which no
+    language ships ("3 Bread[PLURAL] dropped.", a shipped-text bug);
+    `DroppedObject`; [C]
+  - a still toss from 64 above (`Toss(from, t, -1, still)`) unless the
+    class is "Armor" or money; armour lies in the equip animator's resting
+    pose at once. No sound. [C]
+- Afterwards the map clears the drag bitmap and DragObj, not the held
+  slots. [C]
+
+Port: `TPlayScreen::MouseClick` hands a HUD item's release over the map to
+the map pane first (`TMapPane::PlayMouseRelease`, `DropHeldItem`), then the
+side panel ends the grab; the item comes from `UIDragState::HeldItem`.
+Deviations: the grab ends with the release, so no stale held slot acts
+later (retail's could, e.g. a combat swing's release); a pile's line uses
+"s" when PLURAL is missing.
+
+## 12. The item sheet (Ctrl + right click)
+
+Read 2026-10-14. There is no "stats mode": `0x0065c9e0` is `CtrlDown` (the
+WndProc's VK_CONTROL; AltDown `0x0065c9d8`, ShiftDown `0x0065b9fc`).
+`0x0065d1b8` is the upper side-panel mode (PlayScreen `+0x6c8`: 0 Equip,
+1 Stats, 2 Book). `0x0047eff0` is `TPlayScreen::ShowStatPane` (upper mode
+Stats, the panel opening if shut, the Stats tab pressed; it never rebinds
+the pane), `0x005496a0` `TStatPane::SetObject` (format "page1", dirty). [C]
+
+| Where | Trigger | Shows |
+|---|---|---|
+| Inventory `0x00538267` | right up **with Ctrl**, before anything else | the item: ShowStatPane + SetObject; none (or off the cells): the player when Stats is up, else nothing. Never an equip or compaction. |
+| Belt `0x0052cff9` | the same on a box; off the boxes nothing | the same |
+| Doll `0x005363f7` | right **press** on a worn item, Ctrl or not | ShowStatPane + SetObject |
+| Map `0x0044f87d` | right press **with Ctrl**, on anything but a tile, effect, exit, helper or shadow; no walk | ShowStatPane + SetObject |
+| Map `0x0044fb74` | left press on an inventory item | SetObject only (quietly) |
+| Stats pane `0x005493b0` | right press on it | the player again |
+| Destructors `0x0046e420`, `0x00518570` | the bound object goes | the player (port: TSafeRef, falling back to the player) |
+
+The pane draws `statpane.def`'s block for the object's class name
+(Character, Weapon, Armor, else Default). Side tabs
+(`TSideTabsPane::OnControl` `0x0053d790`, a tab turned on): Book and Spell
+show Book over Spell, Stats and Equip their pane over the inventory, Inv
+and Map only theirs. [C]
+
+Port: `TPlayScreen::ShowStatPane`, the side panel's right up / right down,
+`TMapPane::PlayMouseClick`; the stats pane's ICON draws the composed
+money / ammo icon (`InventoryIcon`). Not ported: the side-panel hotkeys
+('1'..'6' as retail's dispatcher cases 7..0xc read them; the port's keys
+differ for 4..6); an item-sheet A/B against retail.
 
 ## 10. Not settled
 

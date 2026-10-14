@@ -112,6 +112,17 @@ struct SSizing
 
 const SFontAtlas* Build(const char* path, const std::string& key, const SSizing& sizing, const char* face);
 
+// GDI's advance width of code point `cp` in the cell's table (0: none).
+int GdiWidth(const SGdiFontCell& cell, char32_t cp)
+{
+    if (!cell.widths)
+        return 0;
+    for (int byte = 0x20; byte <= 0xff; ++byte)
+        if (Cp1252ToUnicode(uint8_t(byte)) == cp)
+            return cell.widths[byte - 0x20];
+    return 0;
+}
+
 } // namespace
 
 std::string TTFFilePath(const char* file)
@@ -284,11 +295,14 @@ const SFontAtlas* Build(const char* path, const std::string& key, const SSizing&
         r.xadvance = roundf(pc.xadvance);
         if (cell)
         {
-            // The advance width at the em size, rounded half to even, from
-            // the face's own integer units (the division is exact).
+            // GDI's width at the em size where the table has one, else the
+            // face's advance width there, rounded half to even, from its
+            // own integer units (the division is exact).
             int advance = 0, bearing = 0;
             stbtt_GetCodepointHMetrics(&info, codepoints[i], &advance, &bearing);
             r.xadvance = float(std::nearbyint(double(advance) * double(scale)));
+            if (const int gdiwidth = GdiWidth(*cell, char32_t(codepoints[i])))
+                r.xadvance = float(gdiwidth);
         }
 
         const char32_t cp = char32_t(codepoints[i]);

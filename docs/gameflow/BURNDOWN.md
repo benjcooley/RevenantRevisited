@@ -127,7 +127,7 @@ reads.
 
 | [x] | Retail save format: header, game states, merchant table, player list; slots under `SaveGamePath/Single/<name>` with `CurMap/` (forensics/SAVE_GAME.md) | 2026-10-04 |
 | [x] | Retail `LoadGame` reset sequence (curmap, scripts, states, areas, players, control) | 2026-10-04 |
-| [x] | In-game requests: Quick Save (retail control, Ctrl+Backspace since 2026-10-05; was F5), F9 = dev reload of the last slot; `--savecycle-test` runs through them | 2026-10-04 |
+| [x] | In-game requests: Quick Save (retail control, Ctrl+Backspace since 2026-10-05; was F5), F9 = dev reload of the last slot (Shift+F9 since 2026-10-14: F9 is retail's Belt Use 5); `--savecycle-test` runs through them | 2026-10-04 |
 | [x] | Save interop: every class streams retail's layout (player objversion 15), sector hashes, `ss.bmp` thumbnail (ARCHITECTURE §3.5 2f); retail-side check in dosbox-x pending ([SAVE_INTEROP_TEST.md](SAVE_INTEROP_TEST.md)) | 2026-10-05 |
 | [x] | Player stats retail (maxima, RefreshStats, armor, level-up) — [../gameplay/forensics/PLAYER_STATS.md](../gameplay/forensics/PLAYER_STATS.md) | 2026-10-05 |
 | [x] | Automap persistence: retail keeps the explored masks in the player record (SAVE_GAME.md §11.5), streamed with the save interop work; the per-sector automap bitmaps are a render cache | 2026-10-05 |

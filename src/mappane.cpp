@@ -31,7 +31,9 @@
 #include "money.h"
 #include "exit.h"
 #include "textbar.h"
+#include "uidragstate.h"
 #include "spellpane.h"
+#include "statpane.h"
 #include "sound.h"
 #include "logging.h"
 #include "gameoptions.h"
@@ -1040,8 +1042,10 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
 // the side tabs' controls to them; the play screen's routing does that in
 // the port (TPlayScreen::ClickRoute). It hands the map every release, as
 // retail's screen did, wherever it lands: the right one ends the walk
-// anywhere, a left one off the view only forgets the press. Not ported: the stats pane's info (the right button in its info
-// mode, a left press on an item, 0x005496a0): the stats pane has no info mode.
+// anywhere, a left one off the view only forgets the press. A right press
+// with Ctrl held shows what is under the pointer on the stats pane instead of
+// walking (0x0044f87d..0x0044f8e3); a left press on an item binds the stats
+// pane to it, quietly (0x0044fb74).
 void TMapPane::PlayMouseClick(int32_t button, int32_t x, int32_t y)
 {
     if (playMouseClickSeam)
@@ -1059,8 +1063,24 @@ void TMapPane::PlayMouseClick(int32_t button, int32_t x, int32_t y)
     switch (button)
     {
       case MB_RIGHTDOWN:
-        if (Player)
-            UpdateMouseMovement(x, y);
+        if (!Player)
+            return;
+        if (CtrlDown)
+        {
+            TObjectInstance* const on = OnObject(x, y);
+            switch (on ? on->ObjClass() : OBJCLASS_TILE)
+            {
+              case OBJCLASS_TILE: case OBJCLASS_EFFECT: case OBJCLASS_EXIT:
+              case OBJCLASS_HELPER: case OBJCLASS_SHADOW:
+                break;
+              default:
+                PlayScreen.ShowStatPane();
+                StatPane.SetObject(on);
+                break;
+            }
+            return;
+        }
+        UpdateMouseMovement(x, y);
         return;
 
       case MB_RIGHTUP:
@@ -1103,10 +1123,13 @@ void TMapPane::PlayMouseClick(int32_t button, int32_t x, int32_t y)
             return;
         }
 
-        // The press only remembers what it was over; the release acts.
+        // The press only remembers what it was over (an item also goes to
+        // the stats pane); the release acts.
         TObjectInstance* on = OnObject(x, y);
         onobject = on ? on->GetMapIndex() : -1;
         clicked = true;
+        if (on && on->IsInventoryItem())
+            StatPane.SetObject(on);
         return;
       }
 
@@ -1121,8 +1144,8 @@ void TMapPane::PlayMouseClick(int32_t button, int32_t x, int32_t y)
 // The left button's release (MAP_INPUT.md §4.3): on the object pressed, Use
 // it, or pick it up if it is an item, when it is within 96 of Locke or is a
 // character; a farther one is walked to. A release that wasn't a press on the
-// map lets go of an item held from the inventory: used on the object under
-// it, else dropped there.
+// map lets go of an item held from the inventory, the belt or the equipment:
+// used on the object under it, else dropped there (INVENTORY_ACTIONS.md §11).
 void TMapPane::PlayMouseRelease(int32_t x, int32_t y, bool attackcursor)
 {
     if (Player->IsCombat() && attackcursor && clicked)
@@ -1133,9 +1156,9 @@ void TMapPane::PlayMouseRelease(int32_t x, int32_t y, bool attackcursor)
         return;
     }
 
-    TObjectInstance* inst = Inventory.GetContainer()->GetInventorySlot(Inventory.GetHeldSlot());
-    if (!inst)
-        inst = Player->GetInventorySlot(EquipPane.GetHeldSlot() + 256);
+    // REVSYNC: 0x0044fce3 -- the item the inventory, the belt or the doll
+    // holds (retail read their held slots; the port's grab).
+    TObjectInstance* inst = clicked ? nullptr : UIDragState::HeldItem();
 
     TObjectInstance* on = OnObject(x, y, inst);
     const int32_t objindex = on ? on->GetMapIndex() : -1;
@@ -1175,41 +1198,97 @@ void TMapPane::PlayMouseRelease(int32_t x, int32_t y, bool attackcursor)
         return;
     }
 
-    // Dragging from the inventory or equipment onto the map pane
+    // REVSYNC: 0x0044fff8..0x004500a6 -- a held item let go here: used on
+    // the object under it (a character's script gets it, a container takes
+    // it, ...), else dropped at the pointer.
     if (!inst)
         return;
+    if (on && on->Use(Player, inst->GetMapIndex()))
+        return;
+    DropHeldItem(inst, x, y);
+}
 
-    bool used = false;
-    if (on)
+// REVSYNC: 0x004500ab..0x0045046a -- a held item onto the floor: not one that
+// can't change hands (no Value) nor ammunition, silently; a worn one comes
+// off first. The floor under the pointer (FindClickPos), moved (64, 64) but
+// for money; farther than 96 from Locke it lands on the line toward it, as
+// far as walk checks from Locke at 0, 32 and 64 allow, at his height. Then
+// "<name> dropped.", DroppedObject, and a fall from 64 above (a still toss)
+// but for armor and money. No sound: the item's played when it was picked up.
+// Deviation: retail's pile line used a PLURAL line no language ships ("3
+// Bread[PLURAL] dropped."); the port uses "s" when it is missing.
+void TMapPane::DropHeldItem(TObjectInstance* item, int32_t x, int32_t y)
+{
+    if (!item->CanTrade() || item->ObjClass() == OBJCLASS_AMMO)
+        return;
+    const int32_t worn = item->InventNum() - kInvSlotEquipFirst;
+    if ((uint32_t)worn < NUM_EQ_SLOTS)
+        Player->Equip(nullptr, worn);
+
+    S3DPoint start, target;
+    Player->GetPos(start);
+    FindClickPos(x, y, start, target);
+    if (item->ObjClass() != OBJCLASS_MONEY)
     {
-        // use the dragged object with the object clicked on
-        used = on->Use(Player, inst->GetMapIndex());
-        if (used)
-            Inventory.Update();
+        target.x += 64;
+        target.y += 64;
+    }
+    constexpr int32_t kDropReach = 96;
+    const double dx = target.x - start.x, dy = target.y - start.y;
+    if (int32_t(sqrt(dx * dx + dy * dy)) > kDropReach)
+    {
+        const double angle = atan2(dy, dx);
+        const float stepx = float(cos(angle) * 32.0);
+        const float stepy = float(sin(angle) * 32.0);
+        float px = float(start.x), py = float(start.y);
+        for (int32_t step = 0; step < kDropReach / 32; ++step)
+        {
+            int32_t maxdelta = 0, height = 0;
+            bool hole = false;
+            GetWalkHeightRadius(S3DPoint(int32_t(px), int32_t(py), start.z), 32, maxdelta, height, hole);
+            if (abs(maxdelta) > 32 || hole)
+                break;
+            px += stepx;
+            py += stepy;
+        }
+        target = S3DPoint(int32_t(px), int32_t(py), start.z);
     }
 
-    if (!used)
+    item->RemoveFromInventory();
+    item->SetPos(target, Player->GetLevel());
+    item->AddToMap();
+
+    const std::string name = DialogList.DisplayName(item->GetName());
+    const int32_t amount = item->Amount();
+    char line[256];
+    if (amount > 1)
     {
-        // didn't click on anything special, so just drop it on the ground
-        if (inst->InventNum() >= 256)
-            ((TPlayer*)Player)->Equip(nullptr, EquipPane.GetHeldSlot());   // clear from eq list
-
-        S3DPoint curpos, target;
-        Player->GetPos(curpos);
-        int32_t mapx = 0, mapy = 0;
-        PaneToMapScreen(x, y, mapx, mapy);
-        ScreenToWorld(mapx, mapy, target, curpos.z + 30);
-
-        inst->RemoveFromInventory();
-        inst->SetPos(target, Player->GetLevel());
-        inst->AddToMap();
-
-        if (inst->Amount() > 1)
-            TextBar.Print("%d %ss dropped.", inst->Amount(), inst->GetName());
+        if (DialogList.FindLine("FULLMULTDROP") >= 0)
+            snprintf(line, sizeof(line), DialogList.GetLine("FULLMULTDROP"), amount, name.c_str());
+        else if (DialogList.FindLine("FULLMULTDROPREV") >= 0)
+            snprintf(line, sizeof(line), DialogList.GetLine("FULLMULTDROPREV"), name.c_str(), amount);
         else
-            TextBar.Print("%s dropped.", inst->GetName());
+            snprintf(line, sizeof(line), "%d %s%s %s", amount, name.c_str(),
+                     DialogList.FindLine("PLURAL") >= 0 ? DialogList.GetLine("PLURAL") : "s",
+                     DialogList.GetLine("BASEDROPEPED"));
+    }
+    else if (DialogList.FindLine("FULLSINGDROP") >= 0)
+        snprintf(line, sizeof(line), DialogList.GetLine("FULLSINGDROP"), name.c_str());
+    else
+        snprintf(line, sizeof(line), "%s %s", name.c_str(), DialogList.GetLine("BASEDROPEPED"));
+    TextBar.Print("%s", line);
+    log_info("[mapinput] dropped %s at (%d,%d,%d)", item->GetName(), target.x, target.y, target.z);
 
-        DroppedObject = inst;
+    DroppedObject = item;
+
+    if (item->NeedsAnimator())
+        item->CreateAnimator();
+    TObjectAnimator* const animator = item->GetAnimator();
+    if (animator && stricmp(item->GetClassName(), "Armor") != 0 && item->ObjClass() != OBJCLASS_MONEY)
+    {
+        S3DPoint from = target;
+        from.z += 64;
+        animator->Toss(from, target, -1, true);
     }
 }
 
@@ -1770,22 +1849,6 @@ namespace
 constexpr uint32_t Square32(int32_t v)
 {
     return static_cast<uint32_t>(v) * static_cast<uint32_t>(v);
-}
-
-// The objects FindObjectsInRange looks at: `level`'s loaded sectors that
-// meet the map rect, and their objects of `objset` in it, faces included,
-// no inventories (retail's iterator flags 0x6e0).
-template <class Visit>
-void ForObjectsIn(int32_t level, SRect rect, int32_t objset, Visit&& visit)
-{
-    if (TMapPane::mapObjectsSeam)
-    {
-        for (TObjectInstance* o : TMapPane::mapObjectsSeam(level, rect, objset))
-            visit(o);
-        return;
-    }
-    for (TMapIterator i(level, &rect, CHECK_NOINVENT, objset); i; i++)
-        visit(i.Item());
 }
 }  // namespace
 

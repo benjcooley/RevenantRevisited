@@ -72,15 +72,13 @@ void EndPoisonOn(TObjectInstance* who)
     const S3DPoint pos = who->Pos();
     SRect r{pos.x - kRange, pos.y - kRange, pos.x + kRange, pos.y + kRange};
     std::vector<TSafeRef<TObjectInstance>> ending;
-    for (TMapIterator i(who->GetLevel(), &r, CHECK_NOINVENT, OBJSET_PULSE); i; i++)
-    {
-        TObjectInstance* oi = i.Item();
+    TMapPane::ForObjectsIn(who->GetLevel(), r, OBJSET_PULSE, [&](TObjectInstance* oi) {
         if (oi->ObjClass() != OBJCLASS_EFFECT || ::Distance(pos, oi->Pos()) > kRange)
-            continue;
+            return;
         TSpell* spell = static_cast<TEffect*>(oi)->GetSpell();
         if (spell && spell->GetTarget(0) == who && spell->SpellData() && spell->SpellData()->damagetype == DT_POISON)
             ending.emplace_back(oi);
-    }
+    });
     // Ended after the walk: ending one changes the sets the walk reads.
     for (const TSafeRef<TObjectInstance>& effect : ending)
         if (TObjectInstance* oi = effect.Get())

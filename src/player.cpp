@@ -974,7 +974,9 @@ void TPlayer::OnInventoryRemove(TObjectInstance* item)
 // Equipping an item already at its equipment slot moves nothing, which
 // RefreshEquip relies on after a load. Ends with RefreshStats (0x0051c660):
 // the item's STATLINE. Not ported: the equip effect hookup (0x00519500) and
-// the body-part rebuild (0x00584e00).
+// the body-part rebuild (0x00584e00); a new combat or bow root without its
+// animation ends the fight there (EndFighting 0x004d3fd0), where the port
+// ends the combat or bow mode.
 bool TPlayer::Equip(TObjectInstance* oi, int32_t slot)
 {
     if (equipSeam)
@@ -1033,6 +1035,10 @@ bool TPlayer::Equip(TObjectInstance* oi, int32_t slot)
     if (this == Player)
         EquipPane.SetDirty(true);
 
+  // A light taken up while walking: the torch walk (0x00519c24..0x00519ca1)
+    if (oi && oi->ObjClass() == OBJCLASS_LIGHTSOURCE && IsWalkMode())
+        SetWalkMode();
+
   // Combat root changed
     if (IsCombat() && slot == EQ_PRIMEHAND && stricmp(old, GetCombatRoot()) != 0)
     {
@@ -1067,6 +1073,23 @@ bool TPlayer::Equip(TObjectInstance* oi, int32_t slot)
 
     RefreshStats();
     return true;
+}
+
+// REVSYNC: TPlayer::UseBelt = retail 0x0051e420. A weapon or armour goes to
+// its own equipment slot (EquipByName 0x00519ea0, the item it displaces
+// taking the belt box); anything else is used (vtable 0xbc, Use(this, -1)).
+// Retail's EquipByName equips the first item of the box item's name in the
+// inventory -- the same item unless two share the name; the port equips the
+// box's own.
+void TPlayer::UseBelt(int32_t box)
+{
+    TObjectInstance* item = GetInventorySlot(kInvSlotBeltFirst + box);
+    if (!item)
+        return;
+    if (item->ObjClass() == OBJCLASS_WEAPON || item->ObjClass() == OBJCLASS_ARMOR)
+        Equip(item, -1);
+    else
+        item->Use(this, -1);
 }
 
 // Returns the modifier value for the given player stat

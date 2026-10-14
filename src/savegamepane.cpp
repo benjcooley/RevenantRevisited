@@ -36,14 +36,19 @@ bool TSaveSlotPane::OpenSlots(const char* defName, uint32_t defFlags, int32_t x,
 
 void TSaveSlotPane::OnOpened()
 {
-    std::vector<std::vector<std::string>> rows;
-    for (const SSaveSlot& slot : ::SaveGame.Slots())
-        rows.push_back({ slot.name });
-    const int32_t count = static_cast<int32_t>(rows.size());
-    SetListRows("gamelist", std::move(rows));
+    const int32_t count = static_cast<int32_t>(::SaveGame.Slots().size());
+    SetListCount("gamelist", count);
     SetHotKey(ConfirmButton(), VK_RETURN);
     SetHotKey("exit", VK_ESCAPE);
-    SelectListRow("gamelist", count - 1);
+    SelectListItem("gamelist", count - 1);
+}
+
+std::string TSaveSlotPane::FieldText(const std::string& field, int32_t index, SDefColor& colour)
+{
+    const std::vector<SSaveSlot>& slots = ::SaveGame.Slots();
+    if (field == "gamelist_name" && index >= 0 && index < static_cast<int32_t>(slots.size()))
+        return slots[static_cast<size_t>(index)].name;
+    return TDefPane::FieldText(field, index, colour);
 }
 
 void TSaveSlotPane::OnListSelect(const SDefWidget& list, int32_t row)

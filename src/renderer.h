@@ -1157,6 +1157,11 @@ public:
     void DrawSolidRectToTarget(int32_t x, int32_t y, int32_t w, int32_t h,
                                int32_t target_w, int32_t target_h,
                                uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
+    // Sets a rect of the active TSurface pass back to transparent (replacing
+    // what was drawn there, alpha included). The DEF widget engine restores
+    // a widget's rect from the pane background with it.
+    void ClearRectToTarget(int32_t x, int32_t y, int32_t w, int32_t h,
+                           int32_t target_w, int32_t target_h);
 
     // Indexed triangles of coloured vertices, each vertex's colour (straight
     // alpha) interpolated across its triangles and blended over the active
@@ -1319,6 +1324,13 @@ private:
                    bool chroma_key = false,
                    const float* chroma_key_rgb = nullptr,
                    ECompositeAlpha alpha = ECompositeAlpha::Straight);
+    // Composite's quad through pipeline `pip`.
+    void CompositeWith(sg_pipeline pip, sg_image img,
+                       int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                       int32_t target_w, int32_t target_h,
+                       int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                       int32_t src_tex_w, int32_t src_tex_h,
+                       bool chroma_key, const float* chroma_key_rgb);
     // The reduce pipeline: (dst_w x dst_h) from the (2 dst_w x 2 dst_h) texels
     // at (src_x, src_y).
     void CompositeHalved(sg_image img,
@@ -1362,6 +1374,7 @@ private:
     sg_buffer   composite_vbuf     = {};
     sg_pipeline composite_pip_rt   = {};   // RGBA8 RT variant
     sg_pipeline composite_pip_add_rt = {}; // RGBA8 additive/lighten RT variant
+    sg_pipeline composite_pip_replace_rt = {};    // RGBA8 RT, no blending (ClearRectToTarget)
     sg_pipeline composite_pip_swap = {};   // Swapchain variant
     sg_pipeline composite_pip_premul_rt   = {};   // RGBA8 RT, premultiplied source
     sg_pipeline composite_pip_premul_swap = {};   // Swapchain, premultiplied source

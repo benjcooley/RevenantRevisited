@@ -1,5 +1,13 @@
 # LoadDef_options (TOptionsScreen) — Reconstruction SPEC
 
+> **Superseded in part (2026-10-13).** How each widget draws is
+> [DEF_ENGINE.md](DEF_ENGINE.md), and the controller list, `name0..name7`
+> and the key rebind are
+> [OPTIONS_CONTROLS.md](../../gameflow/forensics/OPTIONS_CONTROLS.md), both
+> from the emulator. Where this spec differs, they win. In particular
+> `name0..name7` aren't decorative: they are the list's name column (the
+> list's cells are only the keys, two a control), re-read on every scroll.
+
 **Class:** `cls_0x5b9744` (vtable @ `0x005b9744`, 46 slots, 184 B). This **IS a dedicated class** — the task brief listed it as TBD but the recon class table confirms a DEF-screen subclass with its own ctor, dtor, Initialize, Close, input override, and an "Apply settings" slot. Working candidate name: **TOptionsScreen** (no string anchor to confirm a `T*` identity in the binary; see §14 UNCONFIRMED-A).
 
 **Address fingerprints:**

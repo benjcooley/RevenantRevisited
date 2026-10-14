@@ -76,6 +76,14 @@ enum GAMECOMMAND : int32_t
     // Retail's last four controls (table 0x005d5500 #65-68, Command
     // 0x0047cf40 cases 0x52-0x55): the in-game dialogs without the menu.
     GAMECMD_GAMEOPTIONS, GAMECMD_LOADGAME, GAMECMD_SAVEGAME, GAMECMD_QUICKSAVE,
+    // Retail's commands the 1998 table didn't have (Command cases 7-12,
+    // 0x18-0x1c, 0x46 / 0x47, 0x50, 0x51): the side panel's tabs, the
+    // belt's slots, the camera's zoom and pan (held, CMDFLAG_ZOOMIN..),
+    // the multiplayer screen, the character editor.
+    GAMECMD_SHOWSPELLS, GAMECMD_SHOWSTATS, GAMECMD_SHOWEQUIP, GAMECMD_BUILDSPELLS, GAMECMD_SHOWMAP,
+    GAMECMD_BELTUSE1, GAMECMD_BELTUSE2, GAMECMD_BELTUSE3, GAMECMD_BELTUSE4, GAMECMD_BELTUSE5,
+    GAMECMD_CAMERADOWN, GAMECMD_CAMERAUP,
+    GAMECMD_MULTIPLAYER, GAMECMD_EDITCHAR,
 };
 
 // CMDFLAG_* bitmask values fed into TPlayer command-flag state.
@@ -91,6 +99,12 @@ enum GAMECOMMAND : int32_t
 #define CMDFLAG_SNEAK       (1<<9)
 #define CMDFLAG_LEAP        (1<<10)
 #define CMDFLAG_BLOCK       (1<<11)
+#define CMDFLAG_ZOOMIN      (1<<12)     // retail's camera keys (control table #49-54)
+#define CMDFLAG_ZOOMOUT     (1<<13)
+#define CMDFLAG_PANLEFT     (1<<14)
+#define CMDFLAG_PANRIGHT    (1<<15)
+#define CMDFLAG_PANUP       (1<<16)
+#define CMDFLAG_PANDOWN     (1<<17)
 
 #define CMDFLAG_DIRFLAGS    (0xFF)
 #define CMDFLAG_MOVEFLAGS   (0x300)
@@ -197,6 +211,11 @@ class TPlayScreen : public TScreen
 
     void HideLowerPanes();
     void ShowLowerPanes();
+
+    void ShowStatPane();
+      // REVSYNC: 0x0047eff0 -- the side panel's upper slot shows the stats
+      // pane, the panel opening if it is shut. What the pane shows (the
+      // player, or an item) stays: StatPane.SetObject picks it.
 
     // The map view on screen (retail MapPane's rect): what the world renders
     // into, inside the HUD's side and bottom panels.

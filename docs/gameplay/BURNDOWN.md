@@ -8,7 +8,7 @@ Live status. Update as work progresses. Goal: bring Demo 1 (Locke wakes up at Mi
 
 **Legend:** `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked · `[-]` cancelled / handed off
 
-Last updated: 2026-10-06 (the Keep's first fight: input dispatch, movement mode, HUD equip; [forensics/PLAYER_INPUT.md](forensics/PLAYER_INPUT.md))
+Last updated: 2026-10-14 (G.3 eating and drinking, the belt keys; [forensics/CONSUMABLES.md](forensics/CONSUMABLES.md))
 
 ---
 
@@ -80,7 +80,7 @@ UI side is in [../ui/BURNDOWN.md](../ui/BURNDOWN.md) B.6/B.7. Game-state side li
 
 - `[ ]` **G.1 Pick up item from world** — Locke walks over a dropped item, presses Use. Adds to inventory via `TObjectInstance::AddToInventory`.
 - `[ ]` **G.2 Drop item to world** — `GAMECMD_INVDROP` ([playscreen.cpp:104](../../src/playscreen.cpp#L104)). Spawns the object in the sector at Player's feet, removes from inventory.
-- `[ ]` **G.3 Use consumable** — `GAMECMD_INVUSE` ([playscreen.cpp:102](../../src/playscreen.cpp#L102)). Potion → restore HP, scroll → cast spell, etc. Per-object `Use()` virtual in [src/object.h](../../src/object.h).
+- `[x]` **G.3 Use consumable** — done 2026-10-14, [forensics/CONSUMABLES.md](forensics/CONSUMABLES.md). Retail's `TFood::Use` (`0x0050e780`, food and potions alike): health and mana up by the item's, held to the maxima (fatigue never), a Poison stat cures poison (and ends poison spells on the user within 128), the main player hears "food" or "potion" (by the item's inventory picture) and reads FOODGOOD1, one unit is used up. Triggers: a click on a pack or belt cell (`UIDragState::CompleteClick`; the drag now starts at retail's 2 px), the belt keys F5–F9 (`GAMECMD_BELTUSE1..5` → `TPlayer::UseBelt` `0x0051e420`; the dev reload moved to Shift+F9), scripts' `use`. A/B against retail: `retail_ab.py item-food-use`, 49/49. Retail had no `GAMECMD_INVUSE`-style key.
 - `[ ]` **G.4 Move equipped item between slots** — `GAMECMD_INVMOVE` ([playscreen.cpp:103](../../src/playscreen.cpp#L103)). Swap-on-conflict semantics from retail.
 - `[ ]` **G.5 Container interaction** — chest → contents listed in inventory pane. `TContainer` exists. Verify pickup loop.
 - `[x]` **G.6 Equipment drawn on the character** — done 2026-10-11. Equipped weapons and clothes ride the character's objects (TCharAnimator::ProcessEquipment `0x004d7f20`), the character's own sword/weapon is hidden, and object parents follow the animation state (T3DAnimator::Render `0x0040e8d0`). Checked against the shipped game in the DOSBox lab. [forensics/EQUIPMENT_RENDER.md](forensics/EQUIPMENT_RENDER.md); its §7 lists what's left (the hit flash pass, the paperdoll's own matcher).

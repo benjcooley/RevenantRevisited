@@ -139,38 +139,30 @@ void TMoney::SetAmount(int32_t amt)
     SetObjStat(se_Amount.id, amt);
 }
 
+// REVSYNC: TMoney::Use @ 0x00515e70 -- after the scripts (the base Use), a
+// pile of the same kind used on this one joins it: that pile is deleted and
+// this one takes both amounts, uncapped (SetAmount picks the pile's
+// picture). Deviation: a pile isn't used on itself (retail deleted it).
 bool TMoney::Use(TObjectInstance* user, int32_t with)
 {
-    TObjectInstance* inst = MapPane.GetInstance(with);
-    if (inst && inst->ObjClass() == ObjClass() && inst->ObjType() == ObjType() &&
-        inst->Amount() < MAXMONEYIMAGE && Amount() < MAXMONEYIMAGE)
-    {
-        int32_t amt = inst->Amount() + Amount();
-
-        if (amt > MAXMONEYIMAGE)
-        {
-            // keep both, just adjust their values
-            SetAmount(MAXMONEYIMAGE);
-            inst->SetAmount(amt - MAXMONEYIMAGE);
-        }
-        else
-        {
-            // nuke one, and combine values into the second
-            MapPane.DeleteObject(inst);
-
-            SetAmount(amt);
-        }
-
+    if (TObjectInstance::Use(user, with))
         return true;
-    }
 
-    return false;
+    TObjectInstance* inst = MapPane.GetInstance(with);
+    if (!inst || inst == this || inst->ObjClass() != ObjClass() || inst->ObjType() != ObjType())
+        return false;
+
+    const int32_t total = inst->Amount() + Amount();
+    MapPane.DeleteObject(inst);
+    SetAmount(total);
+    return true;
 }
 
+// REVSYNC: CursorType @ 0x00515f10 -- the hand when a pile of the same kind
+// is held over this one, unless this one is invisible.
 int32_t TMoney::CursorType(TObjectInstance* with)
 {
-    if (with && with->ObjClass() == ObjClass() && with->ObjType() == ObjType() &&
-        with->Amount() < MAXMONEYIMAGE && Amount() < MAXMONEYIMAGE)
+    if (with && with->ObjClass() == ObjClass() && with->ObjType() == ObjType() && !(GetFlags() & OF_INVISIBLE))
         return CURSOR_HAND;
 
     return CURSOR_NONE;

@@ -1814,6 +1814,13 @@ void TRenderer::InitCompositePipeline()
     pip.label = "renderer.composite.pipeline.rt.add";
     composite_pip_add_rt = sg_make_pipeline(&pip);
 
+    // The source replaces what the target holds, alpha included
+    // (ClearRectToTarget).
+    pip.colors[0].blend.enabled = false;
+    pip.label = "renderer.composite.pipeline.rt.replace";
+    composite_pip_replace_rt = sg_make_pipeline(&pip);
+    pip.colors[0].blend.enabled = true;
+
     // Variant 2: drawing into the swapchain (sokol default pass).
     pip.colors[0].blend.src_factor_rgb   = SG_BLENDFACTOR_SRC_ALPHA;
     pip.colors[0].blend.dst_factor_rgb   = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
@@ -1909,6 +1916,7 @@ void TRenderer::ShutdownCompositePipeline()
     if (composite_pip_premul_rt.id)   { sg_destroy_pipeline(composite_pip_premul_rt);   composite_pip_premul_rt   = {}; }
     if (composite_pip_premul_swap.id) { sg_destroy_pipeline(composite_pip_premul_swap); composite_pip_premul_swap = {}; }
     if (composite_pip_add_rt.id) { sg_destroy_pipeline(composite_pip_add_rt); composite_pip_add_rt = {}; }
+    if (composite_pip_replace_rt.id) { sg_destroy_pipeline(composite_pip_replace_rt); composite_pip_replace_rt = {}; }
     if (composite_pip_rt.id)   { sg_destroy_pipeline(composite_pip_rt);   composite_pip_rt   = {}; }
     if (composite_pip_swap.id) { sg_destroy_pipeline(composite_pip_swap); composite_pip_swap = {}; }
     if (composite_shader.id)   { sg_destroy_shader(composite_shader);     composite_shader   = {}; }
@@ -4725,6 +4733,17 @@ void TRenderer::Composite(sg_image img,
     const sg_pipeline pip = additive_blend ? composite_pip_add_rt
                           : alpha == ECompositeAlpha::Premultiplied ? composite_pip_premul_rt
                                                                     : composite_pip_rt;
+    CompositeWith(pip, img, dst_x, dst_y, dst_w, dst_h, target_w, target_h, src_x, src_y, src_w, src_h,
+                  src_tex_w, src_tex_h, chroma_key, chroma_key_rgb);
+}
+
+void TRenderer::CompositeWith(sg_pipeline pip, sg_image img,
+                              int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                              int32_t target_w, int32_t target_h,
+                              int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                              int32_t src_tex_w, int32_t src_tex_h,
+                              bool chroma_key, const float* chroma_key_rgb)
+{
     if (!img.id || !pip.id) return;
     if (target_w <= 0 || target_h <= 0) return;
     if (src_tex_w <= 0 || src_tex_h <= 0) return;
@@ -5459,6 +5478,14 @@ void TRenderer::DrawSolidRectToTarget(int32_t x, int32_t y, int32_t w, int32_t h
     const sg_image img = GetOrCreateSolidColorImage(key);
     if (!img.id) return;
     Composite(img, x, y, w, h, target_w, target_h, 0, 0, 1, 1, 1, 1);
+}
+
+void TRenderer::ClearRectToTarget(int32_t x, int32_t y, int32_t w, int32_t h,
+                                  int32_t target_w, int32_t target_h)
+{
+    if (w <= 0 || h <= 0) return;
+    const sg_image img = GetOrCreateSolidColorImage(0);
+    CompositeWith(composite_pip_replace_rt, img, x, y, w, h, target_w, target_h, 0, 0, 1, 1, 1, 1, false, nullptr);
 }
 
 void TRenderer::DrawNineSlice(PTBitmap bm,
