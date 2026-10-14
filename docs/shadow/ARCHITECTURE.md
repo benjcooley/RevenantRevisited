@@ -220,12 +220,22 @@ Regions connect through transitions. `TShadowNav` builds the graph of
    teleport stones (`master.s` ACTIVATE), the cave chain, the lever→gate
    jumps and the story scenes.
 3. **Script gates are tried, not predicted.** Script transitions carry
-   `IF` conditions on game state, and Shadow doesn't evaluate scripts
-   statically. A scripted edge is marked *conditional*. A route may use
-   one only when the plan names it, or as a last resort. Taking it means
-   performing its trigger and letting the real script decide. If Locke
-   doesn't arrive, the edge is marked shut for this world version, and
-   the planner replans.
+   `IF` conditions on game state, and Shadow doesn't run scripts
+   statically. A `pos` guarded only by simple comparisons of story
+   variables with numbers (`IF TOWNTELSTATE = 5`) is planned against the
+   current game state. Anything else is marked *conditional*: a route may
+   use it only when the plan names it, or as a last resort. Either way,
+   taking an edge means performing its trigger and letting the real
+   script decide. If Locke doesn't arrive where the plan expected, the
+   edge is marked shut for this world version, and the planner replans.
+
+**The town teleports.** The stones (`TOWNTEL1`–`14`, STORY.md §5) are
+ordinary edges of this graph. Each one sends Locke to the Keep and raises
+`TOWNTELSTATE` to its number. `TownTel0` in the Keep sends him back to the
+highest-numbered stone he has touched, which the planner reads from
+`TOWNTELSTATE`. Because they cost almost nothing to use, they carry every
+return to town from the cave levels on (§8.5). Stepping on a stone by
+accident is also a hazard: routes that only pass one keep off it (§5.4).
 
 Routes are Dijkstra over the graph. A leg inside a region costs its A*
 path length, plus the danger along the path (§5.5).
@@ -595,6 +605,19 @@ wait runs at turbo speed (§11).
 **Return to town** when the stock is spent, the pack is full, gold buys
 the next upgrade on the shopping list, or the target is met. Then shop,
 and go out again.
+
+The trip uses the town teleports wherever the route graph has them
+(§5.3):
+
+1. Travel to the nearest stone (a short leg, with its fights).
+2. The stone sends him to the Keep.
+3. Walk out of the Keep to Misthaven's shops, and shop.
+4. Walk back to `TownTel0`, which returns him to the highest stone he
+   has touched.
+5. Travel back to the grind site.
+
+Before the first stone (levels 0 to 4) the trip is a walk both ways, priced
+like any other (§5.5).
 
 **Training.** Jong's lessons fall due at levels 1, 3, 6, … 24 (GRIND.md
 §2.3). A lesson is a scene plus a fight on the dummy. The lesson's move
