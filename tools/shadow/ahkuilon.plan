@@ -83,18 +83,20 @@ stage potions "Elahni's potions"
     train                               # the next level-ups: the style's two
     save    "first potions"
 
-stage forest "The woods by the Keep, to level 4"
+stage forest "The woods by the Keep, to Hands 3 and level 4"
     # The Druhg camp wants level 4-5 (WALKTHROUGH.md §1.0). The woods east
     # and north of the gate hold Araknids, Under and Mongrel Druhg and Kantha
     # generators (GRIND.md §3.3).
     travel  healerout                   # out of Elahni's
     # Barehanded: Baez (S6) is a fistfight Locke can't win without Hands
     # (the author; WALKTHROUGH.md §5.2). Skill experience is the kill's, on
-    # the level table shifted one place (GRIND.md §1.5), so every kill here
-    # made with fists brings Hands 3 with level 4.
+    # the level table shifted one place (GRIND.md §1.5), and never more than
+    # the level's -- a levelling kill pays the skill at the new level, a
+    # sword kill on the way pays none -- so Hands 3 comes with level 4 or a
+    # little after it.
     unequip "Short Sword"
-    grind   until level 4 restock restock
-    expect  skill hands >= 3
+    grind   until skill hands 3 restock restock
+    expect  level >= 4
     equip   "Short Sword"
     save    "level 4"
 

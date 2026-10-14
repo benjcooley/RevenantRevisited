@@ -795,9 +795,11 @@ Jong's lessons hand over the Training Sword. GRIND.md §9.1 argues for
 keeping a share of kills barehanded in every style, so Hands is never
 untrained for the arena. The author confirms it: without Hands, Locke
 can't beat Baez. The plan fights the first forest grind with fists in
-every style. Skill experience is the kill's, on the level table shifted
-one place, so all-barehanded kills to level 4 bring Hands 3 exactly
-(`expect skill hands >= 3`).
+every style, `grind until skill hands 3`. Skill experience is the
+kill's, on the level table shifted one place, and never more than the
+level's: a levelling kill pays the skill at the new level, and a sword
+kill on the way pays it nothing. So Hands 3 comes with level 4 or a few
+kills after it, and the skill goal brings the level with it.
 
 Built so far: the `style` line and `--shadow-style` (shadow.py
 `--style`), and the level-up picks (`train` with no attributes takes the
