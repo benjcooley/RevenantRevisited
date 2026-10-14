@@ -72,6 +72,9 @@ class TShopRunner final : public TShadowStepRunner
         {
         case EStage::Go:
         {
+            // Holding enough already: nothing to buy.
+            if (step.upto && wanted() <= 0)
+                return EShadowStatus::Done;
             std::string why;
             const EShadowStatus status = travel.Pulse(context, why);
             if (status == EShadowStatus::Failed)
@@ -101,6 +104,7 @@ class TShopRunner final : public TShadowStepRunner
                 return EShadowStatus::Running;
             if (FindRow(step.item) < 0)
                 return Close(context, step.target + (buying ? " doesn't sell " : " won't buy ") + step.item);
+            target = step.upto ? std::max(0, wanted()) : step.count;
             Announce(context);
             stage = EStage::Trading;
             return EShadowStatus::Running;
@@ -109,8 +113,8 @@ class TShopRunner final : public TShadowStepRunner
         {
             // One a tick, each checked against the gold and the pack.
             const int32_t row = FindRow(step.item);
-            if (done >= step.count || row < 0)
-                return Close(context, done >= step.count ? "" : "none left to sell");
+            if (done >= target || row < 0)
+                return Close(context, done >= target ? "" : "none left to sell");
             const int32_t gold = Player->GetInventoryAmount("Gold");
             const int32_t held = Player->GetInventoryAmount(step.item.c_str());
             if (buying)
@@ -118,8 +122,13 @@ class TShopRunner final : public TShadowStepRunner
             else
                 BuySellPane.Sell(row);
             if (Player->GetInventoryAmount("Gold") == gold && Player->GetInventoryAmount(step.item.c_str()) == held)
+            {
+                // Buying up to a stock, what the gold allows is enough.
+                if (step.upto)
+                    return Close(context, "");
                 return Close(context, buying ? "the purchase didn't go through (gold? a free slot?)"
                                              : "the sale didn't go through");
+            }
             ++done;
             return EShadowStatus::Running;
         }
@@ -155,11 +164,11 @@ class TShopRunner final : public TShadowStepRunner
         const SBuySellItem& item = BuySellPane.Items()[size_t(FindRow(step.item))];
         if (buying)
             context.ledger.AllowItems("buy " + step.item,
-                                      {{Lower(item.type.empty() ? item.name : item.type), step.count}}, 0,
+                                      {{Lower(item.type.empty() ? item.name : item.type), target}}, 0,
                                       context.tick + kShopLimitTicks);
         else
-            context.ledger.AllowItems("sell " + step.item, {}, item.price * step.count, context.tick + kShopLimitTicks);
-        context.log.Event(buying ? "buy" : "sell", ToUtf8(item.name.c_str()) + " x" + std::to_string(step.count) +
+            context.ledger.AllowItems("sell " + step.item, {}, item.price * target, context.tick + kShopLimitTicks);
+        context.log.Event(buying ? "buy" : "sell", ToUtf8(item.name.c_str()) + " x" + std::to_string(target) +
                                                        " at " + std::to_string(item.price) + " gold each");
     }
 
@@ -173,8 +182,12 @@ class TShopRunner final : public TShadowStepRunner
         return EShadowStatus::Running;
     }
 
+    // Up to a stock: how many more he needs to hold `count`.
+    [[nodiscard]] int32_t wanted() const { return step.count - Player->GetInventoryAmount(step.item.c_str()); }
+
     TShadowTravel travel;
     bool          buying  = true;
+    int32_t       target  = 0;      // how many to trade
     EStage        stage   = EStage::Go;
     int32_t       age     = 0;
     int32_t       done    = 0;

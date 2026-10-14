@@ -5,6 +5,11 @@
 
 module Ahkuilon
 
+routine restock "Healing at Elahni's"
+    travel  healerin                    # her door from Misthaven (exit.def)
+    buy     "Lesser Healing" upto 4 from ELAHNI1
+    travel  healerout
+
 stage opening "Locke wakes in the Keep"
     start   newgame
     # SardokR's scene (keep.s:479-670). Both menus loop back on their first
@@ -76,3 +81,12 @@ stage potions "Elahni's potions"
     consume "Apple"
     train   strn agil                   # the next level-ups: Strength and Agility
     save    "first potions"
+
+stage forest "The woods by the Keep, to level 4"
+    # The Druhg camp wants level 4-5 (WALKTHROUGH.md §1.0). The woods east
+    # and north of the gate hold Araknids, Under and Mongrel Druhg and Kantha
+    # generators (GRIND.md §3.3).
+    travel  healerout                   # out of Elahni's
+    train   strn agil
+    grind   until level 4 restock restock
+    save    "level 4"

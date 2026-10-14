@@ -113,8 +113,11 @@ it has got.
 | [ ] | Level-up markers by style | — |
 | [ ] | Jong's lessons | — |
 | [ ] | Spell invention and quick-spell slots | — |
-| [ ] | The pack: talismans into the Spell Pouch, healing on the belt, pouches for consumables (§8.9) | — |
-| [ ] | Grind sites, linger rules, return to town | — |
+| [x] | The pack kept in order whenever its counts change (shadowpack.cpp, the game's AddToInventory): talismans into the Spell Pouch (the opening's three go in at once), potions onto belt boxes F5–F9 one kind a box (the Keep chest's Lesser Healing to box 1; bought ones merge onto it), scrolls and tradeable odd bits into Pouches of their own | 2026-10-14 |
+| [ ] | The duel drinks only from the belt (`ShadowBeltHealing`), once the calibrated duel lands | — |
+| [x] | `grind until level <n> \| skill <name> <n> [restock <routine>]`: sites scored by Value against his level, trial duels size each monster up, generators farmed from out of sight, food then potions below 60%, rest out of sight to 90% when nothing is left (never set off hurt), the restock routine when out of healing with the gold for it | 2026-10-14 |
+| [ ] | Gate: the forest grind to level 4 passes. Open: a level-1 Locke loses 15–25 health an Arakna fight for ~10 exp and ~30 gold, against 250-gold potions and 1 HP a minute, so he rests an hour every few fights. Waits on the duel calibration (is that what a player takes?) | — |
+| [ ] | Barehanded practice for Baez (S6): weapon off, `grind until skill hands 3` in the forest, `expect skill hands >= 3` before the arena (the author: without Hands Locke can't beat him) | — |
 | [x] | Chest survey: every container of a level with its lock, key and contents, logged as Locke first reaches the level | 2026-10-14 |
 | [x] | `take <chest> [with "<key>"]`: walk up, the real `TContainer::Use` a tick (open, one item each, close); the ledger allows exactly what the chest held. The Keep's three unlocked chests give their 500 gold, a Lesser Healing and an Apple | 2026-10-14 |
 | [ ] | Chest tours planned by value per minute of travel; lockpicks on locked chests; traps (§8.8) | — |

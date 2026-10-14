@@ -512,7 +512,9 @@ come from GRIND.md §9:
 - Keep fatigue above the next blow's cost. Back off to recover rather
   than throw the fatigued blow.
 - Drink a potion below the health floor: one more of the strongest
-  attacker's best hits.
+  attacker's best hits. Only what is on the belt (the action bar) is
+  drunk in a fight -- a player's potion is a key, not a trip into the
+  pack. The pack's potions go onto the belt between fights (§8.9).
 - Cast when a spell beats a blow on expected damage per second within
   the mana budget, and to grind Invoke just before a levelling kill.
 - Disengage if no potion is left and the next exchange is likely lost.
@@ -832,10 +834,19 @@ onto it. Shadow keeps the pack in order:
   Pouch's talismans (`TPlayer::HasTalismans`), not the pack. So every
   talisman Locke receives or picks up (Sky from Olihoot, Sun later, any
   from loot) is moved into the Spell Pouch at once, and `Invent` (§8.6)
-  looks there. The opening's Life, Moon and Soul start in it.
-- **Healing goes on the belt.** The belt boxes (F5–F9) hold the potions
-  he drinks in a fight (§6.4), each kind in its own box, so a fight's
-  potion is one key, as for a player.
+  looks there. The opening gives Life, Moon and Soul loose, beside the
+  pouch; they go in at once.
+- **Healing goes on the belt.** The belt boxes (the action bar, belt
+  slots `0x10b + n`) hold the potions he drinks in a fight (§6.4), each
+  kind in its own box, so a fight's potion is one key, as for a player.
+  The fight drinks only from the belt; after it, the pack's spares go up
+  to refill the boxes.
+- **Scrolls and the small things go into bags.** A player keeps the pack
+  in order with bags (the `INVCONTAINER` class): scrolls in one, the
+  gems, reagents and odd bits loot brings in another, so the pack's top
+  level holds what he reaches for. Locke does the same as he picks them
+  up, with whatever bags he has, and the shopping list buys a bag when
+  the top level crowds.
 - **Pouches hold the rest of the consumables.** A Pouch (Hruthford, 100
   gold) gathers spare potions and food; new ones of its kind then go
   into it by themselves. The shopping list buys one when consumables

@@ -17,6 +17,7 @@
 #include "../textencoding.h"
 
 #include <algorithm>
+#include <climits>
 #include <cmath>
 #include <optional>
 
@@ -84,6 +85,31 @@ double Recovery(TCharacter& who)
 }
 
 } // namespace
+
+int32_t TShadowDuel::Reach(TCharacter& foe)
+{
+    // A monster closes to its MAXATTACKRANGE (AIAttack) and strikes from
+    // where one of its attacks is valid: the farthest such distance inside
+    // that range.
+    const SCharData* data = foe.GetCharData();
+    const int32_t approach = std::max(kMinReach, data->maxattackrange);
+    int32_t best = -1;
+    int32_t nearest = INT32_MAX;
+    for (int32_t i = 0; i < data->attacks.NumItems(); ++i)
+    {
+        const SCharAttackData& a = data->attacks[i];
+        if ((a.flags & kUnmodelled) || a.responsename[0])
+            continue;
+        if (a.maxdist <= 0)
+            return approach;                // valid at any distance
+        nearest = std::min(nearest, a.mindist);
+        if (a.mindist <= approach)
+            best = std::max(best, std::min(approach, a.maxdist));
+    }
+    if (best >= 0)
+        return std::max(best, 0);
+    return nearest == INT32_MAX ? approach : nearest;
+}
 
 int32_t TShadowDuel::Draw(int32_t low, int32_t high)
 {
@@ -167,7 +193,8 @@ void TShadowDuel::Land(SFighter& f, int32_t now, SShadowFightReport& report, TSh
     f.swing = nullptr;
     f.impact = -1;
     f.fatigue = std::max(0.0, f.fatigue - attack.fatigue);       // paid at the impact
-    if (Health(f) <= 0 || Health(target) <= 0 || target.retreating)
+    // A blow at one that has run out of reach meets nothing.
+    if (Health(f) <= 0 || Health(target) <= 0 || target.fled || now < target.ready)
         return;
 
     const bool guarding = target.guard >= now;
@@ -209,16 +236,19 @@ void TShadowDuel::Land(SFighter& f, int32_t now, SShadowFightReport& report, TSh
 
     if (target.locke || Health(target) > 0)
     {
-        // A monster at its RETREATAT runs (TCharacter::Damage); it gets away
-        // when it outruns him.
+        // A monster at its RETREATAT runs (TCharacter::Damage) from every
+        // blow: it gets away when it outruns him, else he catches it.
         if (!target.locke && Health(target) <= target.who->GetCharData()->retreatat)
         {
             target.retreating = true;
             if (ShadowMoveSpeed(*target.who, {"runf", "combatf", "walkf"}) >=
                 ShadowMoveSpeed(*f.who, {"runf"}))
+            {
+                target.fled = true;
                 report.escaped = true;
+            }
             else
-                target.ready = now + kTicksPerSecond * 2;      // he catches it
+                target.ready = now + kTicksPerSecond * 2;
         }
         return;
     }
@@ -299,7 +329,7 @@ void TShadowDuel::LockeTurn(SFighter& me, std::vector<SFighter>& foes, int32_t n
     // the same as the last two (the same-button rule, GRIND.md §2.4).
     SFighter* target = nullptr;
     for (SFighter& f : foes)
-        if (Health(f) > 0 && !f.retreating && f.ready <= now && (!target || Health(f) < Health(*target)))
+        if (Health(f) > 0 && !f.fled && f.ready <= now && (!target || Health(f) < Health(*target)))
             target = &f;
     if (!target)
         return;
@@ -308,7 +338,11 @@ void TShadowDuel::LockeTurn(SFighter& me, std::vector<SFighter>& foes, int32_t n
     for (int32_t i = 0; i < data->attacks.NumItems(); ++i)
     {
         const SCharAttackData& a = data->attacks[i];
-        if (!Usable(me, a, target->reach, now))
+        // He fights from the monster's range or steps in to his attack's:
+        // any band that reaches no farther than it is open to him.
+        const int32_t dist = a.maxdist > 0 && a.mindist <= target->reach ? std::min(target->reach, a.maxdist)
+                                                                         : target->reach;
+        if (!Usable(me, a, dist, now))
             continue;
         // The fatigued blow does 80% less (GRIND.md §2.4): he steps back
         // and gets his breath instead, unless it finishes the foe.
@@ -353,7 +387,7 @@ SShadowFightReport TShadowDuel::Fight(TPlayer& locke, const std::vector<TCharact
         f.who = foe;
         f.health = foe->Health();
         f.fatigue = foe->Fatigue();
-        f.reach = std::max(kMinReach, foe->GetCharData()->maxattackrange);
+        f.reach = Reach(*foe);
         const double speed = ShadowMoveSpeed(*foe, {"runf", "combatf", "walkf"});
         const int32_t gap = std::max(0, Distance2D(foe->Pos(), locke.Pos()) - f.reach);
         f.ready = speed > 0 ? int32_t(gap / speed) : 0;
@@ -377,7 +411,7 @@ SShadowFightReport TShadowDuel::Fight(TPlayer& locke, const std::vector<TCharact
             break;
         }
         const bool anyleft = std::any_of(them.begin(), them.end(), [&](const SFighter& f) {
-            return Health(f) > 0 && !(f.retreating && report.escaped);
+            return Health(f) > 0 && !f.fled;
         });
         if (!anyleft)
         {

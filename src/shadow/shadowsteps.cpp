@@ -415,23 +415,9 @@ class TExpectRunner final : public TShadowStepRunner
     {
         const SShadowCondition& c = step.condition;
         int32_t actual = 0;
-        switch (c.subject)
-        {
-            case EShadowSubject::GameState:
-                actual = ScriptManager.GameState(c.name.c_str());
-                if (actual == STATE_INVALID)
-                    return Fail("no story variable " + c.name);
-                break;
-            case EShadowSubject::Level:
-                actual = Player->Level();
-                break;
-            case EShadowSubject::MapLevel:
-                actual = Player->GetLevel();
-                break;
-            case EShadowSubject::Have:
-                actual = Player->GetInventoryAmount(c.name.c_str());
-                break;
-        }
+        std::string why;
+        if (!ShadowRead(c, actual, why))
+            return Fail(why);
         const std::string text = c.Describe() + " (is " + std::to_string(actual) + ")";
         if (!c.Holds(actual))
             return Fail("expected " + text);
@@ -505,6 +491,40 @@ void ShadowPressKey(int32_t vk)
     InputQueue.PushKey(vk, false);
 }
 
+bool ShadowRead(const SShadowCondition& condition, int32_t& actual, std::string& why)
+{
+    switch (condition.subject)
+    {
+        case EShadowSubject::GameState:
+            actual = ScriptManager.GameState(condition.name.c_str());
+            if (actual == STATE_INVALID)
+            {
+                why = "no story variable " + condition.name;
+                return false;
+            }
+            return true;
+        case EShadowSubject::Level:
+            actual = Player->Level();
+            return true;
+        case EShadowSubject::MapLevel:
+            actual = Player->GetLevel();
+            return true;
+        case EShadowSubject::Have:
+            actual = Player->GetInventoryAmount(condition.name.c_str());
+            return true;
+        case EShadowSubject::Skill:
+            for (int32_t skill = 0; skill < NUM_SKILLS; ++skill)
+                if (condition.name == kSkillNames[skill])
+                {
+                    actual = Player->Skill(skill);
+                    return true;
+                }
+            why = "no skill " + condition.name;
+            return false;
+    }
+    return false;
+}
+
 bool ShadowGameIdle()
 {
     TGameSession& session = GameFlow.Session();
@@ -530,6 +550,7 @@ std::unique_ptr<TShadowStepRunner> MakeStepRunner(const SShadowStep& step)
         case EShadowVerb::Train:
         case EShadowVerb::Consume: return std::make_unique<TPackRunner>(step);
         case EShadowVerb::Fight:   return MakeFightRunner(step);
+        case EShadowVerb::Grind:   return MakeGrindRunner(step);
         case EShadowVerb::Expect: return std::make_unique<TExpectRunner>(step);
         case EShadowVerb::Save:   return std::make_unique<TSaveRunner>(step);
     }

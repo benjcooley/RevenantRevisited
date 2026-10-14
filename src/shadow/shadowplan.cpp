@@ -5,10 +5,13 @@
 
 #include "shadowplan.h"
 
+#include "../charstats.h"
+
 #include <algorithm>
 #include <cctype>
 #include <charconv>
 #include <fstream>
+#include <iterator>
 #include <optional>
 #include <sstream>
 
@@ -184,6 +187,23 @@ bool ParseComparison(TLineReader& in, SShadowCondition& condition, std::string& 
     return true;
 }
 
+// "<name>" of a skill, lowercased in `condition`; false with `error` set.
+bool ParseSkill(TLineReader& in, SShadowCondition& condition, std::string& error)
+{
+    const SToken* skill = in.Take();
+    std::string name = skill && !skill->quoted ? skill->text : "";
+    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+    if (std::find(std::begin(kSkillNames), std::end(kSkillNames), name) == std::end(kSkillNames))
+    {
+        error = "'skill' takes a skill (attack defense invoke hands knife sword bludgeon axes bows stealth "
+                "lockpick), not '" + (skill ? skill->text : std::string()) + "'";
+        return false;
+    }
+    condition.subject = EShadowSubject::Skill;
+    condition.name = name;
+    return true;
+}
+
 bool ParseExpect(TLineReader& in, SShadowCondition& condition, std::string& error)
 {
     if (in.TakeKeyword("level"))
@@ -196,6 +216,8 @@ bool ParseExpect(TLineReader& in, SShadowCondition& condition, std::string& erro
         condition.subject = EShadowSubject::MapLevel;
         return ParseComparison(in, condition, error);
     }
+    if (in.TakeKeyword("skill"))
+        return ParseSkill(in, condition, error) && ParseComparison(in, condition, error);
     if (in.TakeKeyword("have"))
     {
         const SToken* item = in.Take();
@@ -217,7 +239,7 @@ bool ParseExpect(TLineReader& in, SShadowCondition& condition, std::string& erro
     const SToken* state = in.Take();
     if (!state || state->quoted)
     {
-        error = "'expect' needs a story variable, 'level' or 'have'";
+        error = "'expect' needs a story variable, 'level', 'maplevel', 'skill' or 'have'";
         return false;
     }
     condition.subject = EShadowSubject::GameState;
@@ -299,6 +321,7 @@ bool ParseStep(const std::string& verb, TLineReader& in, SShadowStep& step, std:
             return false;
         }
         step.item = item->text;
+        step.upto = verb == "buy" && in.TakeKeyword("upto");
         if (const SToken* n = in.Peek(); n && !n->quoted)
             if (const std::optional<int32_t> count = ParseInt(n->text))
             {
@@ -314,7 +337,8 @@ bool ParseStep(const std::string& verb, TLineReader& in, SShadowStep& step, std:
         const SToken* merchant = in.TakeKeyword(joiner) ? in.Take() : nullptr;
         if (!merchant || !in.AtEnd())
         {
-            error = "'" + verb + "' takes \"<item>\" [<count>] " + joiner + " <merchant>";
+            error = "'" + verb + "' takes \"<item>\" [" + (verb == "buy" ? "[upto] " : "") + "<count>] " + joiner +
+                    " <merchant>";
             return false;
         }
         step.target = merchant->text;
@@ -334,6 +358,54 @@ bool ParseStep(const std::string& verb, TLineReader& in, SShadowStep& step, std:
         if (!in.AtEnd())
         {
             error = "'fight' takes a target, then 'win' or nothing";
+            return false;
+        }
+        return true;
+    }
+    if (verb == "grind")
+    {
+        step.verb = EShadowVerb::Grind;
+        constexpr const char* kUsage =
+            "'grind' takes 'until level <n>' or 'until skill <name> <n>', then 'restock <routine>' or nothing";
+        if (!in.TakeKeyword("until"))
+        {
+            error = kUsage;
+            return false;
+        }
+        if (in.TakeKeyword("level"))
+            step.goal.subject = EShadowSubject::Level;
+        else if (in.TakeKeyword("skill"))
+        {
+            if (!ParseSkill(in, step.goal, error))
+                return false;
+        }
+        else
+        {
+            error = kUsage;
+            return false;
+        }
+        const SToken* value = in.Take();
+        const std::optional<int32_t> n = value && !value->quoted ? ParseInt(value->text) : std::nullopt;
+        if (!n || *n < 1)
+        {
+            error = kUsage;
+            return false;
+        }
+        step.goal.compare = EShadowCompare::Ge;
+        step.goal.value = *n;
+        if (in.TakeKeyword("restock"))
+        {
+            const SToken* routine = in.Take();
+            if (!routine)
+            {
+                error = "'grind ... restock' needs a routine";
+                return false;
+            }
+            step.routine = routine->text;
+        }
+        if (!in.AtEnd())
+        {
+            error = kUsage;
             return false;
         }
         return true;
@@ -439,6 +511,7 @@ std::string SShadowCondition::Describe() const
         case EShadowSubject::Level:     out << "level"; break;
         case EShadowSubject::MapLevel:  out << "maplevel"; break;
         case EShadowSubject::Have:      out << "have \"" << name << '"'; break;
+        case EShadowSubject::Skill:     out << "skill " << name; break;
     }
     out << ' ' << CompareText(compare) << ' ' << value;
     return out.str();
@@ -455,13 +528,16 @@ std::string SShadowStep::Describe() const
         case EShadowVerb::Talk:   out << "talk " << target; break;
         case EShadowVerb::Use:    out << "use " << target << (item.empty() ? "" : " with \"" + item + "\""); break;
         case EShadowVerb::Take:   out << "take " << target << (item.empty() ? "" : " with \"" + item + "\""); break;
-        case EShadowVerb::Buy:    out << "buy \"" << item << "\" " << count << " from " << target; break;
+        case EShadowVerb::Buy:    out << "buy \"" << item << "\" " << (upto ? "upto " : "") << count << " from " << target; break;
         case EShadowVerb::Sell:   out << "sell \"" << item << "\" " << count << " to " << target; break;
         case EShadowVerb::Equip:   out << "equip \"" << item << "\""; break;
         case EShadowVerb::Unequip: out << "unequip \"" << item << "\""; break;
         case EShadowVerb::Consume: out << "consume \"" << item << "\""; break;
         case EShadowVerb::Fight:   out << "fight " << (target.empty() ? "(whoever attacks)" : target)
                                        << (mustwin ? " win" : ""); break;
+        case EShadowVerb::Grind:   out << "grind until "
+                                       << (goal.subject == EShadowSubject::Skill ? "skill " + goal.name : "level")
+                                       << ' ' << goal.value << (routine.empty() ? "" : " restock " + routine); break;
         case EShadowVerb::Train:
             out << "train";
             for (const int32_t a : attributes)
@@ -485,6 +561,10 @@ bool TShadowPlan::Load(const std::string& planpath, std::string& error)
     module.clear();
     places.clear();
     stages.clear();
+    routines.clear();
+    // The block the steps go into. Each vector grows only when a block of
+    // its kind starts, which repoints this, so it never dangles.
+    SShadowStage* current = nullptr;
 
     std::ifstream file(planpath);
     if (!file)
@@ -563,31 +643,32 @@ bool TShadowPlan::Load(const std::string& planpath, std::string& error)
                 return fail("'place <name>' takes 'level <level> <x> <y> [<z>]' or 'object <name>'");
             places.push_back(std::move(place));
         }
-        else if (word == "stage")
+        else if (word == "stage" || word == "routine")
         {
             const SToken* id = in.Take();
             if (!id || id->quoted)
-                return fail("'stage' needs an id");
-            if (FindStage(id->text) >= 0)
-                return fail("a second stage '" + id->text + "'");
-            SShadowStage stage;
-            stage.id = id->text;
-            stage.line = lineno;
+                return fail("'" + word + "' needs an id");
+            if (word == "stage" ? FindStage(id->text) >= 0 : FindRoutine(id->text) != nullptr)
+                return fail("a second " + word + " '" + id->text + "'");
+            SShadowStage block;
+            block.id = id->text;
+            block.line = lineno;
             if (const SToken* title = in.Take())
-                stage.title = title->text;
+                block.title = title->text;
             if (!in.AtEnd())
-                return fail("'stage' takes an id and a title");
-            stages.push_back(std::move(stage));
+                return fail("'" + word + "' takes an id and a title");
+            (word == "stage" ? stages : routines).push_back(std::move(block));
+            current = word == "stage" ? &stages.back() : &routines.back();
         }
         else
         {
-            if (stages.empty())
+            if (!current)
                 return fail("'" + first->text + "' outside a stage");
             SShadowStep step;
             step.line = lineno;
             if (!ParseStep(word, in, step, what))
                 return fail(what);
-            stages.back().steps.push_back(std::move(step));
+            current->steps.push_back(std::move(step));
         }
     }
 
@@ -595,6 +676,14 @@ bool TShadowPlan::Load(const std::string& planpath, std::string& error)
         return fail("no 'module' line");
     if (stages.empty())
         return fail("no stages");
+    // Every routine a grind names exists.
+    for (const SShadowStage& stage : stages)
+        for (const SShadowStep& step : stage.steps)
+            if (!step.routine.empty() && !FindRoutine(step.routine))
+            {
+                lineno = step.line;
+                return fail("no routine '" + step.routine + "'");
+            }
     return true;
 }
 
@@ -603,6 +692,14 @@ const SShadowPlace* TShadowPlan::FindPlace(const std::string& name) const
     for (const SShadowPlace& place : places)
         if (Lower(place.name) == Lower(name))
             return &place;
+    return nullptr;
+}
+
+const SShadowStage* TShadowPlan::FindRoutine(const std::string& name) const
+{
+    for (const SShadowStage& routine : routines)
+        if (Lower(routine.id) == Lower(name))
+            return &routine;
     return nullptr;
 }
 

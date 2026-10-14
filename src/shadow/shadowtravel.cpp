@@ -235,6 +235,20 @@ bool TShadowTravel::Destination(SShadowContext& context, S3DPoint& out, std::str
         return false;
     }
 
+    // A bare point on this level.
+    if (point)
+    {
+        const std::optional<S3DPoint> spot = field->NearestStandable(*point, kPlaceSlack, region);
+        if (!spot)
+        {
+            failure = "nowhere Locke can stand within " + std::to_string(kPlaceSlack) + " of " + target +
+                      " that he can walk to";
+            return false;
+        }
+        out = *spot;
+        return true;
+    }
+
     // A place: the point itself, or the object it names.
     std::string objectname = target;
     if (const SShadowPlace* place = context.plan.FindPlace(target))

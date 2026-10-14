@@ -100,6 +100,9 @@ class TShadowLedger final : public TScript::IStepObserver
     int32_t Audit(TPlayer& player, int64_t tick, TShadowLog& log);
 
     [[nodiscard]] int32_t Violations() const { return violations; }
+    // Clicked whenever the count of something he carries changes (a move
+    // between slots or bags isn't one).
+    [[nodiscard]] int32_t ItemsVersion() const { return itemsversion; }
     [[nodiscard]] const SShadowSnapshot& Last() const { return last; }
 
     // TScript::IStepObserver: which scripts ran lines since the last audit.
@@ -146,4 +149,5 @@ class TShadowLedger final : public TScript::IStepObserver
     };
     std::vector<SVitals>          meals;
     int32_t                       violations = 0;
+    int32_t                       itemsversion = 0;
 };

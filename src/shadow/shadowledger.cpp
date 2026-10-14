@@ -303,6 +303,7 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
         const int32_t is = is_it == now.items.end() ? 0 : is_it->second;
         if (was == is)
             continue;
+        ++itemsversion;
         const std::string utf8 = ToUtf8(name.c_str());
         const std::string text = utf8 + " " + std::to_string(was) + " -> " + std::to_string(is);
         std::string given;

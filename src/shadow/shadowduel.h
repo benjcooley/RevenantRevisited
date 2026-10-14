@@ -92,11 +92,12 @@ class TShadowDuel
         int32_t     health     = 0;     // the game's (live) or the copy (trial)
         double      fatigue    = 0.0;
         int32_t     reach      = 0;     // the range it fights from
-        int32_t     ready      = 0;     // tick it is in range
+        int32_t     ready      = 0;     // tick it is in range (again, for one caught running)
         int32_t     busy       = 0;     // tick it may start something new
         int32_t     guard      = -1;    // guarding until this tick
         int32_t     nextattack = 0;     // monster: tick its attack timer runs out
-        bool        retreating = false;
+        bool        retreating = false; // running from him: it strikes no more
+        bool        fled       = false; // and got away
         // The blow in the air.
         const SCharAttackData* swing = nullptr;
         SFighter*   at         = nullptr;
@@ -122,6 +123,8 @@ class TShadowDuel
                    SShadowFightReport& report, TShadowLedger* ledger, TShadowLog* log);
     [[nodiscard]] bool Usable(SFighter& f, const SCharAttackData& a, int32_t dist, int32_t now) const;
     [[nodiscard]] int32_t Health(const SFighter& f) const;
+    // The distance a monster fights from (see the definition).
+    [[nodiscard]] static int32_t Reach(TCharacter& foe);
     [[nodiscard]] int32_t Draw(int32_t low, int32_t high);   // Shadow's own stream, inclusive
 
     EMode          mode;

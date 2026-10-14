@@ -90,6 +90,10 @@ class TShadowStepRunner
 // menu or choice list is up.
 [[nodiscard]] bool ShadowGameIdle();
 
+// What `condition` reads, from the game, into `actual`; false with `why`
+// when there is nothing to read (a story variable state.def doesn't have).
+[[nodiscard]] bool ShadowRead(const SShadowCondition& condition, int32_t& actual, std::string& why);
+
 // A key pressed and released, as a player's keyboard sends it: through the
 // input queue, which turbo drains before every tick.
 void ShadowPressKey(int32_t vk);
@@ -101,5 +105,7 @@ void ShadowPressKey(int32_t vk);
 // fighting Locke.
 [[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeFightRunner(const SShadowStep& step,
                                                                  std::vector<TCharacter*> foes = {});
+// Grinding for a level (shadowgrind.cpp).
+[[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeGrindRunner(const SShadowStep& step);
 // Whether anything near Locke is fighting him (§6.5).
 [[nodiscard]] bool ShadowUnderAttack();

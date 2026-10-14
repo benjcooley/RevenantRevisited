@@ -103,6 +103,8 @@ TEST(ShadowPlan, ReadsPlacesAndLockesVerbs)
         "module Ahkuilon\n"
         "place KeepGate level 0 1842 24388 451\n"
         "place Tavern object Gus1\n"
+        "routine town \"Back for potions\"\n"
+        "    travel  Tavern\n"
         "stage s \"Everything Locke does\"\n"
         "    travel  KeepGate\n"
         "    travel  barin evade\n"
@@ -116,7 +118,10 @@ TEST(ShadowPlan, ReadsPlacesAndLockesVerbs)
         "    train   strength agil\n"
         "    train   cons\n"
         "    fight   Rahul win\n"
-        "    expect  maplevel = 0\n");
+        "    expect  maplevel = 0\n"
+        "    grind   until level 4 restock town\n"
+        "    grind   until skill Hands 3\n"
+        "    expect  skill hands >= 3\n");
     TShadowPlan plan;
     std::string error;
     ASSERT_TRUE(plan.Load(file.Path(), error)) << error;
@@ -130,7 +135,7 @@ TEST(ShadowPlan, ReadsPlacesAndLockesVerbs)
     EXPECT_EQ(plan.FindPlace("Tavern")->object, "Gus1");
 
     const std::vector<SShadowStep>& steps = plan.Stages()[0].steps;
-    ASSERT_EQ(steps.size(), 13u);
+    ASSERT_EQ(steps.size(), 16u);
     EXPECT_EQ(steps[0].verb, EShadowVerb::Travel);
     EXPECT_FALSE(steps[0].evade);
     EXPECT_TRUE(steps[1].evade);
@@ -151,6 +156,13 @@ TEST(ShadowPlan, ReadsPlacesAndLockesVerbs)
     EXPECT_EQ(steps[11].verb, EShadowVerb::Fight);
     EXPECT_TRUE(steps[11].mustwin);
     EXPECT_EQ(steps[12].condition.subject, EShadowSubject::MapLevel);
+    EXPECT_EQ(steps[13].Describe(), "grind until level 4 restock town");
+    EXPECT_EQ(steps[13].goal.subject, EShadowSubject::Level);
+    EXPECT_EQ(steps[13].routine, "town");
+    EXPECT_EQ(steps[14].Describe(), "grind until skill hands 3");
+    EXPECT_EQ(steps[14].goal.compare, EShadowCompare::Ge);
+    EXPECT_EQ(steps[15].condition.subject, EShadowSubject::Skill);
+    EXPECT_EQ(steps[15].Describe(), "expect skill hands >= 3");
 }
 
 TEST(ShadowPlan, ConditionsCompare)
@@ -183,8 +195,13 @@ TEST(ShadowPlan, RefusesMistakesByLine)
     EXPECT_EQ(LoadError("module A\nplace p here\n"),
               "2: 'place <name>' takes 'level <level> <x> <y> [<z>]' or 'object <name>'");
     EXPECT_EQ(LoadError("module A\nstage a\n  buy \"Apple\" from\n"),
-              "3: 'buy' takes \"<item>\" [<count>] from <merchant>");
+              "3: 'buy' takes \"<item>\" [[upto] <count>] from <merchant>");
     EXPECT_EQ(LoadError("module A\nstage a\n  train speed\n"),
               "3: 'train' takes attributes (strn cons agil rflx mind luck), not 'speed'");
     EXPECT_EQ(LoadError("module A\nstage a\n  fight Rahul now\n"), "3: 'fight' takes a target, then 'win' or nothing");
+    EXPECT_EQ(LoadError("module A\nstage a\n  grind until skill swimming 3\n"),
+              "3: 'skill' takes a skill (attack defense invoke hands knife sword bludgeon axes bows stealth "
+              "lockpick), not 'swimming'");
+    EXPECT_EQ(LoadError("module A\nstage a\n  grind until level\n"),
+              "3: 'grind' takes 'until level <n>' or 'until skill <name> <n>', then 'restock <routine>' or nothing");
 }

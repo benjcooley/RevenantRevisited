@@ -42,7 +42,9 @@ enum class EShadowVerb : uint8_t
     Train,      // train <attribute> [<attribute>]: the next level-up's two picks
     Consume,    // consume "<item>": eat or drink it
     Fight,      // fight <target> [win]: Locke goes to it and fights it, and whoever joins
-    Expect,     // expect <state> <op> <n> | expect level|maplevel <op> <n> | expect have "<item>" [<op> <n>]
+    Grind,      // grind until level <n> | skill <name> <n> [restock <routine>]: fight around here until then
+    Expect,     // expect <state> <op> <n> | expect level|maplevel <op> <n> | expect skill <name> <op> <n>
+                //   | expect have "<item>" [<op> <n>]
     Save,       // save "<name>": a waypoint save
 };
 
@@ -67,12 +69,13 @@ enum class EShadowSubject : uint8_t
     Level,      // Locke's level
     MapLevel,   // the map level he is on
     Have,       // how many of an item Locke carries, bags included
+    Skill,      // one of Locke's skills (kSkillNames: hands, sword, bows, ...)
 };
 
 struct SShadowCondition
 {
     EShadowSubject subject = EShadowSubject::GameState;
-    std::string    name;                            // the state, or the item
+    std::string    name;                            // the state, the item, or the skill
     EShadowCompare compare = EShadowCompare::Eq;
     int32_t        value   = 0;
 
@@ -88,6 +91,9 @@ struct SShadowStep
     std::string          target;        // start: "newgame"; travel, talk, use: a place or an object
     std::string          item;          // use: what to use on the target; take: the key; buy, sell: what
     int32_t              count = 1;     // buy, sell: how many
+    bool                 upto  = false; // buy: `count` is what he should end up holding
+    SShadowCondition     goal;          // grind: what it goes on until (a level or a skill, >=)
+    std::string          routine;       // grind: the routine that restocks him
     bool                 evade = false; // travel: run past the leg's monsters (§5.5)
     bool                 mustwin = false; // fight: the target must be dead after
     std::vector<int32_t> choices;       // scene, talk: the answer to each menu, in order
@@ -121,10 +127,14 @@ class TShadowPlan
     [[nodiscard]] int32_t FindStage(const std::string& id) const;
     // The place with this name, nullptr when there is none.
     [[nodiscard]] const SShadowPlace* FindPlace(const std::string& name) const;
+    // A routine: steps a stage's grind runs when it needs them (restocking),
+    // written like a stage; nullptr when there is none.
+    [[nodiscard]] const SShadowStage* FindRoutine(const std::string& name) const;
 
   private:
     std::string               path;
     std::string               module;
     std::vector<SShadowPlace> places;
     std::vector<SShadowStage> stages;
+    std::vector<SShadowStage> routines;
 };

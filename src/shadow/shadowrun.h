@@ -63,7 +63,10 @@ class TShadowRun
     void WriteSummary(const std::string& why) const;
     void WriteWaypoints() const;
 
-    static constexpr std::chrono::milliseconds kFrameBudget{12};
+    // The window is there to be watched, not played: a draw costs tens of
+    // milliseconds on a big level, so the simulation gets most of the frame
+    // and the run draws a handful of frames a second.
+    static constexpr std::chrono::milliseconds kFrameBudget{100};
     static constexpr int32_t kMaxStepsPerFrame = 4096;
 
     SShadowOptions options;
@@ -88,6 +91,7 @@ class TShadowRun
     std::vector<SShadowWaypoint>       waypoints;
     std::vector<std::string>           stagesdone;
     std::set<int32_t>                  surveyed;   // levels whose chests are logged
+    int32_t                            tidied = -1; // the ledger's items version the pack was put in order at
 
     // Turbo: the steps a frame runs, and when this frame's began.
     int32_t                               steps = 1;

@@ -90,6 +90,12 @@ class TShadowTravel
         : target(std::move(target)), evade(evade), arrive(arrive)
     {
     }
+    // To a point on Locke's level (a grind site, a farming spot), named
+    // `label` in the log.
+    TShadowTravel(const S3DPoint& point, std::string label, bool evade)
+        : target(std::move(label)), evade(evade), point(point)
+    {
+    }
 
     EShadowStatus Pulse(SShadowContext& context, std::string& failure);
     // The object travelled to (nullptr for a point, or once it is gone).
@@ -111,6 +117,7 @@ class TShadowTravel
     bool             viaexit = false;   // through an exit: it takes him on
     bool             viadoor = false;   // ... a scripted door, used once he is there
     int32_t          startlevel = -1;
+    std::optional<S3DPoint> point;      // a bare point to go to, not a place or object
     EStage           stage  = EStage::Plan;
     TSafeRef<TObjectInstance> object;
     int32_t          region = 0;        // Locke's, where the walk starts

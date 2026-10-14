@@ -8,7 +8,9 @@
 #include "buildinfo.h"
 
 #include "shadowloot.h"
+#include "shadowpack.h"
 
+#include "../buysell.h"
 #include "../gameflow.h"
 #include "../logging.h"
 #include "../module.h"
@@ -128,6 +130,14 @@ void TShadowRun::Pulse()
     {
         Finish(2, "the ledger found a change with no cause");
         return;
+    }
+
+    // Whatever came into or left the pack, it is put in order as a player
+    // keeps it -- not mid-trade, while the shop lists the pack (§8.9).
+    if (!finished && ledger.ItemsVersion() != tidied && ShadowGameIdle() && !BuySellPane.IsActive())
+    {
+        ShadowTidyPack(*Player, log);
+        tidied = ledger.ItemsVersion();
     }
 
     // The chests of each level Locke comes to, once: where the plan's chest
