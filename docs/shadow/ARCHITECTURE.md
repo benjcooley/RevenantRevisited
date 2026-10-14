@@ -57,7 +57,7 @@ A pass is then evidence that a real player could pass. A failure is
 either a port bug, a data bug or a plan bug, and the run log says which
 step failed.
 
-Combat is the exception. It is calibrated to match real fights (§6.6),
+Combat is the exception. It is calibrated to match real fights (§6.7),
 neither harder nor easier.
 
 ## 2. Shape
@@ -121,7 +121,7 @@ player's input does:
 | `Invent(talismans)` | the spell pane's invoke: `SpellBook.Reveal`, `TPlayer::LearnSpell` | `learn` |
 | `Fight(foes)` | `TShadowDuel` (§6) | `kill`, `hit`, `cast` |
 | `Save(name)` | `TGameSession::RequestSave`, gated (§10) | — |
-| `Load(name)` | `TGameSession::RequestLoad`, after a death (§6.5) | resets the ledger |
+| `Load(name)` | `TGameSession::RequestLoad`, after a death (§6.6) | resets the ledger |
 
 What a player does with a key, Shadow does with the same key: it pushes
 the key onto the input queue (`InputQueue.PushKey`), which turbo drains
@@ -455,6 +455,14 @@ does.
 come from GRIND.md §9:
 
 - Rotate buttons: never the same button three times in a row.
+- **Use the combos he knows.** A chain attack (`CA_CHAIN`) names the
+  attack it follows (`chainname`) and must come before that attack's
+  `chainexptime`. So the duel plays a combo as a player keys it: each
+  link pressed inside its window, valid only with the right weapon in
+  hand, enough AttackLevel and the fatigue for it. Tactics prefers a
+  combo whenever its damage per second and fatigue beat single blows
+  against this target. That makes the combos that Jong's lessons unlock
+  (§8.5) part of every fight that follows.
 - Strike into a monster's swing (+25), and block its wind-up when the
   reaction time allows it.
 - Keep fatigue above the next blow's cost. Back off to recover rather
@@ -474,14 +482,37 @@ expected health and potions spent. A player sizes up a fight the same
 way, so this is judgement, not cheating. The real fight is then thrown
 once, on the game's stream.
 
-### 6.5 Death
+### 6.5 Fights the plan didn't ask for
+
+The live world doesn't wait for the plan. A script turns a monster
+aggressive (Rahul, Mort and his gang, Baez), a monster Locke evaded
+follows him, or one wanders up while he waits out a leg's ticks. The
+game's AI then attacks, and Locke, who presses no keys, would take every
+blow unanswered.
+
+So every tick, before the plan's step, the run checks whether any living
+monster is fighting Locke: it has him as its target, or he took damage
+from it since the last tick. If one is, an interrupting `Fight` against
+everything engaged runs first, and the plan's step resumes after it. The
+interrupt is logged with what started it.
+
+**A fight takes no game time to resolve, then its duration passes.** The
+duel runs its whole timeline in one tick. Each event (a blow, a block, a
+cast, a potion) goes through the real game function in order, and the
+model reads the real state back between events, so a level-up mid-fight
+refills Locke exactly when the game says. Then the fight's duration in
+ticks runs with the world going, while Locke picks up the loot. The
+monsters' own AI never fights alongside the model: by the time ticks run
+again, they are dead or have been left behind.
+
+### 6.6 Death
 
 If Locke dies, Shadow does what a player does: it loads the newest save.
 The ledger resets to the save. The death and the reload are logged, and
 the stage's death count rises. Two deaths in one stage fail the run,
 because a balanced plan shouldn't lose a fight it chose to take twice.
 
-### 6.6 Calibration: is it realistic?
+### 6.7 Calibration: is it realistic?
 
 The duel model is right when it matches real fights. The combat arena
 (COMBAT_ARENA.md) already runs real ones, headless and deterministic,
@@ -503,7 +534,7 @@ The same switch makes the real fight available inside a run:
 game, at turbo speed. It is slower, but it is the referee for a stage
 that fails only in the duel model.
 
-### 6.7 Spells
+### 6.8 Spells
 
 `Cast(spell, target)` calls the real `CastByName`: cooldown, mana, the
 Invoke skill roll and Invoke experience, as in play. It then applies the
@@ -636,12 +667,20 @@ The trip uses the town teleports wherever the route graph has them
 Before the first stone (levels 0 to 4) the trip is a walk both ways, priced
 like any other (§5.5).
 
-**Training.** Jong's lessons fall due at levels 1, 3, 6, … 24 (GRIND.md
-§2.3). A lesson is a scene plus a fight on the dummy. The lesson's move
+**Training: learning combos.** Jong's lessons are where Locke learns his
+weapon moves and combos (Charging Thrust; Spinning Slash; Jumping Chop;
+then Combo A and the thrust, swing and chop chains; Combo B; Combo C).
+They fall due at levels 1, 3, 6, … 24 (GRIND.md §2.3). A lesson is a scene plus a fight on the dummy. The lesson's move
 must land, which the duel model does through `LastAttack`. The grind
 loop goes to Jong whenever a lesson is due and he is reachable.
 
 ### 8.6 Spells
+
+**Learning.** In Revenant a spell is learned by casting it: casting a
+talisman combination in the spell pane teaches it (`SpellBook.Reveal`,
+then `TPlayer::LearnSpell`). Whether a scroll item such as the opening's
+`mgcscrl1` also teaches one is unconfirmed; the P4 forensics will settle
+it.
 
 Talismans come from the story (Olihoot's Sky and Sun) and from loot.
 When Locke holds a combination that makes a spell he hasn't learned,
@@ -674,7 +713,7 @@ through the game's own state:
   resistances, in `CalculateDamage` and `TSpell::Damage`.
 - **Monster spells** (Acolytes' heal, tornado and bolt; Druids; the
   bosses) are cast through the real cast path at their `MAGICFREQ`, and
-  land as in §6.7.
+  land as in §6.8.
 
 Knockback and stagger are positional, and the duel has no positions
 (§6.3), so it leaves them out.
@@ -981,7 +1020,7 @@ Exit code 0 on a pass, 1 on a failure, 2 on a ledger violation.
   nothing costs a replan. The script scan logs every conditional edge it
   tried.
 - **Abstract distance.** Bands without positions can't model being
-  cornered, or monsters blocking each other. Calibration (§6.6) measures
+  cornered, or monsters blocking each other. Calibration (§6.7) measures
   how much that matters, and `--shadow-combat=real` is the referee.
 - **Duel versus boss AI.** Baez, the Solifuge, Jhaga and Yhagoro have
   special behaviour (`bossai.cpp`). The duel model takes their attack

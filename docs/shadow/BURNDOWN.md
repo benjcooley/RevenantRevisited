@@ -36,10 +36,11 @@ it has got.
 | Using potions and food | `Consume`, retail `TFood::Use` (§8.2) | P4 | agent porting `TFood::Use` |
 | Placing items, using bags | the real `AddToInventory`: belt for healing, pouches for consumables (§8.9) | P4 | — |
 | Talismans into the Spell Pouch | moved there on arrival; casting checks it (§8.9) | P4 | — |
-| Learning new spells | `Invent`: talisman combinations (§8.6) | P4 | — |
+| Learning new spells | `Invent`: casting a talisman combination teaches it; scrolls to check (§8.6) | P4 | — |
 | Readying spells | quick-spell slots (§8.6) | P4 | — |
 | Casting spells | `CastByName` in the duel (§6.7) | P2 | agent extracting the damage dice |
-| Jong's training | lessons when due (§8.5) | P4 | — |
+| Learning combos | Jong's lessons when due: AttackLevel, the lesson move landed (§8.5) | P4 | — |
+| Using combos in fights | chain attacks keyed inside their windows (§6.4) | P2 | — |
 | Grinding by level, back to town | §8.5 | P4 | — |
 | Story locations that change the town | the story-trigger map and gate (§9.4) | P5 | agent mapping |
 
@@ -82,6 +83,8 @@ it has got.
 | [ ] | Duel timeline: monster cadence, attack choice, blocks, retreat; Locke's blows, fatigue | — |
 | [ ] | Outcomes through `Damage`, the award functions, `DropLoot`, `LastAttack` | — |
 | [ ] | Tactics: rotation, counter timing, blocks, fatigue, potions, disengage; the 64-run size-up | — |
+| [ ] | Combos: chain attacks keyed inside `chainexptime` (§6.4) | — |
+| [ ] | Interrupts: a monster fighting Locke in the live world starts a fight first (§6.5) | — |
 | [ ] | Several monsters at once | — |
 | [ ] | Spells: `CastByName` and the pure part of `TSpell::Damage` | — |
 | [ ] | Effects: poison, paralysis, stat effects, damage types, monster spells (§8.7) | — |
