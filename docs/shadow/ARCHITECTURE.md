@@ -764,9 +764,10 @@ readies his equipment the way a player does:
   and armour limits (MinStrength, MinConstitution) are the game's own
   `CanEquip`, applied by the real `TPlayer::Equip`, so a piece he can't
   use stays in the pack.
-- **The weapon for this fight.** By the style rule (§8.4): fists against
-  a high `hand` resistance's opposite, the best weapon otherwise, and the
-  Training Sword when Jong hands it over. Switching is an unequip and an
+- **The weapon for this fight.** By the style rule (§8.4): fists, unless
+  the monster resists them (a high `hand` column) or a weapon far
+  outdamages them; then the best weapon. Jong's Training Sword when he
+  hands it over. Switching is an unequip and an
   equip, as on the equip pane.
 - **The belt and the quick spells** hold what this fight needs (§8.9,
   §8.6).
