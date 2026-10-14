@@ -34,6 +34,8 @@ it has got.
 | Selling what is no longer useful | §8.1 | P4 | — |
 | Equipping gear | `Equip` (§3) | P4 | — |
 | Using potions and food | `Consume`, retail `TFood::Use` (§8.2) | P4 | agent porting `TFood::Use` |
+| Placing items, using bags | the real `AddToInventory`: belt for healing, pouches for consumables (§8.9) | P4 | — |
+| Talismans into the Spell Pouch | moved there on arrival; casting checks it (§8.9) | P4 | — |
 | Learning new spells | `Invent`: talisman combinations (§8.6) | P4 | — |
 | Readying spells | quick-spell slots (§8.6) | P4 | — |
 | Casting spells | `CastByName` in the duel (§6.7) | P2 | agent extracting the damage dice |
@@ -105,6 +107,7 @@ it has got.
 | [ ] | Level-up markers by style | — |
 | [ ] | Jong's lessons | — |
 | [ ] | Spell invention and quick-spell slots | — |
+| [ ] | The pack: talismans into the Spell Pouch, healing on the belt, pouches for consumables (§8.9) | — |
 | [ ] | Grind sites, linger rules, return to town | — |
 | [ ] | Chest survey per level; chest tours by value per minute; locked chests by key or lockpicks; traps (§8.8) | — |
 | [ ] | Loot every kill: pick up the death drop; a full pack keeps the best per slot (§8.8) | — |

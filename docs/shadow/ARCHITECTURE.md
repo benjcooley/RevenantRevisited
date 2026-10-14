@@ -721,6 +721,38 @@ pack he keeps what sells for most per slot, and the grind heads for town
 Every take and pick-up goes in the ledger as a `take` or `pickup` cause,
 with the item and the amount. Loot can't appear any other way.
 
+### 8.9 The pack: placement and bags
+
+The pack works as it does for a player. Every move goes through the real
+`TObjectInstance::AddToInventory`, which takes the item out of where it
+was (unequipping it there), merges gold, food and potions into their
+piles, and routes a player's new item into a "Pouch" of its kind
+(INVENTORY.md §0). A move into a bag is the same call with the bag as
+the new owner: what the inventory pane does when a player drags an item
+onto it. Shadow keeps the pack in order:
+
+- **Talismans go into the Spell Pouch.** Casting checks the Spell
+  Pouch's talismans (`TPlayer::HasTalismans`), not the pack. So every
+  talisman Locke receives or picks up (Sky from Olihoot, Sun later, any
+  from loot) is moved into the Spell Pouch at once, and `Invent` (§8.6)
+  looks there. The opening's Life, Moon and Soul start in it.
+- **Healing goes on the belt.** The belt boxes (F5–F9) hold the potions
+  he drinks in a fight (§6.4), each kind in its own box, so a fight's
+  potion is one key, as for a player.
+- **Pouches hold the rest of the consumables.** A Pouch (Hruthford, 100
+  gold) gathers spare potions and food; new ones of its kind then go
+  into it by themselves. The shopping list buys one when consumables
+  start crowding the pack.
+- **Gear Locke wears is equipped,** not carried. Spares wait in the pack
+  for town (§8.1).
+- **Quest items stay loose in the pack,** where the scripts' counts
+  (`GETITEMAMOUNT`) see them. Counts walk bags too, but a quest item in
+  a bag gains nothing.
+
+The ledger counts items by name across the whole tree, bags included, so
+a move between slots or bags changes nothing it sees. It only checks that
+moves never create or destroy items.
+
 ## 9. The plan
 
 ### 9.1 The file
