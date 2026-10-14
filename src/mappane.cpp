@@ -4126,8 +4126,9 @@ void TMapPane::ClearWindow()
 // is the tail: the cursor for what is under the pointer. The type is worked
 // out on every 8th screen frame (retail's frame counter, one per drawn tick:
 // about three times a second) and kept (+0x12c); the cursor gets it every
-// drawn frame and clears it after drawing (TCursorHud::Draw, retail
-// 0x0043a480). Called by the game mode while the pointer is on the map.
+// drawn frame, which retail cleared after drawing (0x0043a480) and the port
+// clears as the next frame begins (BeginCursorFrame). Called by the game
+// mode while the pointer is on the map.
 // Not ported: the mark retail sets on a hovered item's animator (+0x35,
 // purpose unconfirmed).
 void TMapPane::Animate(bool draw)

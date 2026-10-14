@@ -20,3 +20,7 @@ DEFSTAT(Armor, Protection,      PROT, 2, 1, 1, 10)
 DEFSTAT(Armor, Combining,       COMB, 3, 0, 0, 16)
 DEFSTAT(Armor, ResistPoison,    RPSN, 4, 0, -100, 100)
 DEFSTAT(Armor, Stealth,         STLH, 5, 0, -100, 100)
+// REVSYNC: the strength and constitution armor asks of its wearer, the
+// seventh and eighth stats retail registers (0x004c0e30)
+DEFSTAT(Armor, MinStrength,     MSTR, 6, 0, 0, 100)
+DEFSTAT(Armor, MinConstitution, MCON, 7, 0, 0, 100)

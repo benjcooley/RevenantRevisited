@@ -58,6 +58,7 @@ class TWeapon : public TObjectInstance
     STATFUNC(Poison)
     STATFUNC(Value)
     STATFUNC(DamageType)
+    STATFUNC(MinStrength)
       // REVSYNC: slot 0x210, 0x00529060 -- the damage the weapon deals
       // whatever the attack (DT_XXX), -1 for the attack's own
 

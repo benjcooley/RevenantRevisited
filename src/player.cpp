@@ -907,30 +907,44 @@ void TPlayer::RefreshEquip()
         EquipPane.SetDirty(true);
 }
 
+// REVSYNC: TPlayer::CanEquip = retail 0x00519300. Refused: no item, an item
+// of a class with no EqSlot or of another slot; a weapon the player has no
+// action animation for, of a type his class may not use (char.def WEAPONS)
+// or asking more Strn than he has; armor asking more Strn or Cons than he
+// has. The main player reads the requirement that refused him.
 bool TPlayer::CanEquip(TObjectInstance* oi, int32_t slot)
 {
-    if (!oi)
-        return false;
-
-    if (oi->FindStat("EqSlot") < 0)
-        return false;
-
-    int32_t objslot = oi->GetStat("EqSlot");
-    if (objslot != slot)
+    if (!oi || oi->FindStat("EqSlot") < 0 || oi->GetStat("EqSlot") != slot)
         return false;
 
     if (oi->ObjClass() == OBJCLASS_WEAPON)
     {
-        int32_t weapontype = ((PTWeapon)oi)->Type();
-        if (weapontype == WT_BOW || weapontype == WT_CROSSBOW)
+        auto* const weapon = static_cast<TWeapon*>(oi);
+        const int32_t type = weapon->Type();
+        const bool bow = type == WT_BOW || type == WT_CROSSBOW;
+        if (!HasActionAni(bow ? GetBowRoot(oi) : GetCombatRoot(oi)))
+            return false;
+        const SClassData* const cd = chardata ? chardata->classdata : nullptr;
+        if (cd && !(cd->weapons & (1 << type)))
+            return false;
+        if (Strn() < weapon->MinStrength())
         {
-            if (!HasActionAni(GetBowRoot(oi)))
-                return false;
+            if (this == Player)
+                TextBar.Print("%s. ( %s: %d )", DialogList.GetLine("EQUIPUNABLE"), DialogList.GetLine("BSARM4"),
+                              weapon->MinStrength());
+            return false;
         }
-        else
+    }
+    else if (oi->ObjClass() == OBJCLASS_ARMOR)
+    {
+        auto* const armor = static_cast<TArmor*>(oi);
+        if (Strn() < armor->MinStrength() || Cons() < armor->MinConstitution())
         {
-            if (!HasActionAni(GetCombatRoot(oi)))
-                return false;
+            if (this == Player)
+                TextBar.Print("%s. ( %s: %d )  ( %s: %d )", DialogList.GetLine("EQUIPUNABLE"),
+                              DialogList.GetLine("BSARM4"), armor->MinStrength(), DialogList.GetLine("BSARM5"),
+                              armor->MinConstitution());
+            return false;
         }
     }
 

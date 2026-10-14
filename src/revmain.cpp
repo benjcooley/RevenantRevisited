@@ -2976,6 +2976,9 @@ static void AppFrame()
         return;
     }
 
+    // The cursor's corner picture starts over each frame (cursor.h).
+    BeginCursorFrame();
+
     // The frame's input, in order, before the tick (inputqueue.h): what the
     // hardware sent since the last frame, then scripted input (--input-script),
     // then a playtest session's (its step's events, or its recording's).

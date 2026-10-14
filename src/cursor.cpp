@@ -48,7 +48,7 @@ int32_t grabx, graby;
 SDragBitmapLayer DragLayers[kMaxDragBitmapLayers] = {};
 int32_t DragLayerCount = 0;
 
-TObjectInstance* DragObj = nullptr;
+TSafeRef<TObjectInstance> DragObj;     // what an item pane holds (retail 0x006563cc)
 
 bool cleardragbitmap = false;
 
@@ -190,14 +190,18 @@ void ClearDragBitmap()
     cleardragbitmap = true;
 }
 
+// REVSYNC: 0x0043a140 -- an item picked up makes its sound (PlayItemSound,
+// 0x00473a10); what is held decides the cursor over the map and the panes.
 void SetDragObj(TObjectInstance* inst)
 {
     DragObj = inst;
+    if (inst)
+        inst->PlayItemSound();
 }
 
 TObjectInstance* GetDragObj()
 {
-    return DragObj;
+    return DragObj.Get();
 }
 
 void DrawMouseShadow(int32_t x, int32_t y, int32_t width, int32_t height)
@@ -270,7 +274,14 @@ void TCursorHud::Draw()
     }
     if (shown && !g_os_cursor_owns_pixels)
         Renderer->DrawBitmap(shown, cursorx, cursory);
+}
 
+// REVSYNC: the tail of retail's cursor draw (0x0043a480): a released drag
+// bitmap goes, and the corner picture and its priority last a frame. The
+// port can draw a frame's HUD more than once (the window, then a capture),
+// so they end as the next frame begins, before its input.
+void BeginCursorFrame()
+{
     if (cleardragbitmap)
     {
         SetDragBitmap(nullptr);
@@ -318,7 +329,7 @@ void CursorOverObject(TObjectInstance* inst, bool toppriority)
         int32_t type = CURSOR_NONE;
 
         if (inst)
-            type = inst->CursorType(DragObj);
+            type = inst->CursorType(DragObj.Get());
 
         SetMouseCornerBitmap(type, toppriority);
     }

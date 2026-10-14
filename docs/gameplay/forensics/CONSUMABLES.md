@@ -3,9 +3,9 @@
 **Topic:** what the shipped game does when the player eats food or drinks a
 potion: how it is triggered, what it changes, what it plays and prints, and
 how the item is used up. Burndown row G.3.
-**Status:** 2026-10-13. Forensics complete; port in `src/food.cpp`,
-`src/player.cpp`, `src/playscreen.cpp`, `src/uidragstate.cpp`; checked in the
-retail emulator (§10).
+**Status:** 2026-10-14. Forensics complete; the port (`src/food.cpp`, the
+inventory actions of INVENTORY_ACTIONS.md, `TPlayer::UseBelt`) checked in
+the retail emulator (§10).
 **Evidence:** the unchanged retail image (`28bec273…`), read in the baseline
 listing (`recon/retail_asm/baseline`) and Ghidra decompiles; the shipped
 `class.def` (imagery.rvi), `english.def` (resources.rvr) and `quickload.dat`
@@ -299,29 +299,21 @@ rest of §2.
 
 ## 9. The port
 
-- `TFood::Use` is §2 in order, through the virtual stat accessors every
-  object has (`TObjectInstance` `Health`, `SetHealth`, `MaxHealth`, …),
-  as retail calls them; the cure scan walks `TMapPane::ForObjectsIn`
-  (the retail iterator's port, now shared with FindObjectsInRange, which
-  honours the A/B seam).
-- The FOOD stat ids are retail's (Fill 6, Value's minimum −1).
-- Clicks: a press and release on one pack or belt cell with no drag is
-  `UIDragState::CompleteClick`, which uses the item (`Use(Player, -1)`) or
-  asks for "pop"; the drag starts at 2 pixels, as in retail's panes (it was
-  4).
-- `GAMECMD_BELTUSE1..5` ("Belt Use 1".."5", `BeltUse1`..`5`) on F5–F9 call
-  `TPlayer::UseBelt`. The port's developer reload of the last save, which
-  had taken F9, is on Shift+F9.
-- **Divergences** (each marked `REVSYNC-DIVERGENCE` in the code):
-  - The sound follows retail's rule over the port's imagery, which keeps
-    no icon copy: potions always "potion" (retail: usually, §5).
-  - A null user is refused (retail would fault).
-  - No network guard (single player).
-  - A press and release on different cells without a drag (possible only
-    across a cell edge within 2 pixels) does nothing; retail moves the item
-    into the release cell with a "pop".
-  - Retail's pack and belt moves ask for "pop" too (silent); the port's
-    drop keeps its `open.wav` stand-in (`uidragstate.cpp`, the UI track's).
+The inventory actions came to main independently (gameflow,
+[INVENTORY_ACTIONS.md](../../gameflow/forensics/INVENTORY_ACTIONS.md)):
+`TFood::Use`, the pack and belt clicks and drops, right clicks, the 2 px
+drag threshold. This doc and its A/B verify that code; what they added:
+
+- `TFood::Use` (`src/food.cpp`) is §2 in order. Its cure scan walks
+  `TMapPane::ForObjectsIn` (the retail iterator's port, now shared with
+  FindObjectsInRange, which honours the A/B seam), so the A/B checks the
+  scan too.
+- `GAMECMD_BELTUSE1..5` ("Belt Use 1".."5", `BeltUse1`..`5`, retail's
+  control table) on F5-F9 call `TPlayer::UseBelt` (0x0051e420). The port's
+  developer reload of the last save, which had taken F9, is on Shift+F9.
+- **Divergences:** the sound follows retail's rule over the port's imagery,
+  which keeps no icon copy: potions always "potion" (retail: usually, §5).
+  The click and drop divergences are INVENTORY_ACTIONS.md's.
 
 ## 10. Verification
 

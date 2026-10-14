@@ -15,16 +15,15 @@
 // Lifecycle:
 //   1. Mouse-down on a slot or playfield item -> BeginDrag(source, index, item)
 //      records a pending click/grab, but does not yet remove the item from its
-//      slot or show a drag ghost.
+//      slot or show a drag ghost (the doll's grab is a drag at once).
 //   2. Mouse motion past the wiggle threshold -> UpdateDrag(...) promotes the
-//      pending grab to a real drag and attaches the icon at the original
-//      click offset.
-//   3. Mouse-up before promotion -> CompleteClick(cell under the release)
-//      clears the pending grab; on the pressed pack or belt cell the main
-//      player uses the item.
-//   4. Mouse-up after promotion -> CompleteDrag(dest, dest_slot) moves the
-//      item in the main player's inventory, if the destination takes it.
-//   5. Either way, state returns to idle.
+//      pending grab to a real drag, attaches the icon at the original click
+//      offset and holds the item (SetDragObj).
+//   3. Mouse-up -> Release(dest, dest_slot) does what retail's item panes do
+//      with it: a click uses the item, a drag uses the item it lands on with
+//      it, moves it, equips it or takes it off. A spell is dropped through
+//      CompleteDrag.
+//   4. Either way, state returns to idle.
 //
 // Retail-cited fields (per the pane specs):
 //   DAT_0065b878 ↔ source_slot      currently-dragged EQ-slot index
@@ -36,19 +35,21 @@
 //                                  — we hold the cross-pane subset here, the
 //                                  per-pane local state stays on the pane.
 //
-// The items are the main player's (`Player`): one inventory holds the
-// carried items, the equipment and the belt, told apart by slot number
-// (revdefs.h kInvSlot*). A slot index below means:
-//   Inventory  carried slot number (page + column*3 + row)
+// The belt's and the doll's items are the main player's (`Player`): one
+// inventory holds his carried items, his equipment and his belt, told apart
+// by slot number (revdefs.h kInvSlot*). The inventory pane's are those of
+// the container it shows: his, or a bag he opened. A slot index below means:
+//   Inventory  slot number in the shown container (page + column*3 + row)
 //   BarInv     belt position n (slot 0x10b + n)
 //   Equip      EQ_* index (slot 0x100 + index)
 //   SpellPane  spell-book row (the spell itself is `spell`: retail's drag
 //              payload 0x00656398, the talisman code)
 //   QuickSpell quick-spell ring 1..4 (a destination only: spells drop there)
 //
-// The manager is the one place a drop or a click mutates the inventory and
-// plays the action sound; slots only start drags and name destinations. A
-// spell drop moves nothing: the ring it lands on copies the spell, silently.
+// The manager is the one place a click, a drop or a right click acts on an
+// item (docs/gameflow/forensics/INVENTORY_ACTIONS.md); the panes only start
+// grabs and name where the button came up. A spell drop moves nothing: the
+// ring it lands on copies the spell, silently.
 //
 // *************************************************************************
 
@@ -79,6 +80,7 @@ struct SUIDragState
     EDragSource      source     = EDragSource::None;
     int32_t          source_idx = -1;   // slot index, see the banner
     TSafeRef<TObjectInstance> item;     // the in-flight item
+    TSafeRef<TObjectInstance> container; // the inventory the source pane showed
     int32_t          start_x    = 0;    // cursor at mouse-down (for revert)
     int32_t          start_y    = 0;
     int32_t          grab_x     = 0;    // cursor offset within source slot/icon
@@ -120,24 +122,32 @@ bool BeginSpellDrag(int32_t row, const char* talismans, PTBitmap icon,
 // Returns true when the manager is tracking this pointer sequence.
 bool UpdateDrag(int32_t mouse_x, int32_t mouse_y);
 
-// Finish a pending click without converting it into a drag/drop. `dest` and
-// `dest_slot` name the cell under the release (EDragSource::None: none). A
-// press and release on one pack or belt cell uses its item: the main player
-// eats a food, drinks a potion, opens a pouch (docs/gameplay/forensics/
-// CONSUMABLES.md §7.1, §7.2).
-bool CompleteClick(EDragSource dest = EDragSource::None, int32_t dest_slot = -1);
+// The left button came up over cell `dest_slot` of item pane `dest`
+// (Inventory, BarInv; anywhere on the Equip pane, whose slot is ignored), or
+// over none of them (EDragSource::None), with an item grabbed in one of
+// them: a click (no drag) uses the item, a drag onto another item uses that
+// one with it, and what isn't used moves, comes off or is equipped. The grab
+// ends either way.
+void Release(EDragSource dest, int32_t dest_slot);
 
-// Drop on (dest, dest_slot). With `commit`, an item drag moves the item in
-// the main player's inventory when the destination takes it. Either way
-// the drag state returns to idle. Returns true if the drop was committed.
-// The equip pane takes a drop anywhere on it: the item goes to its own
-// slot, so `dest_slot` is ignored for EDragSource::Equip.
+// The left button came up on the inventory pane's container icon: up to the
+// inventory the shown bag is in, or the item grabbed in the inventory up
+// into it. Ends a grab of an item pane.
+void ReleaseOnContainerIcon();
+
+// The right button came up over an item pane's cell with nothing grabbed:
+// `item` (null for an empty cell) of `container`. A talisman goes into the
+// Spell Pouch, an item is equipped, an empty cell closes up the container.
+void RightClick(TObjectInstance* container, TObjectInstance* item);
+
+// A spell-book drag let go on (dest, dest_slot); `commit` when the
+// destination took the spell. The drag state returns to idle. Returns true
+// if the drop was committed.
 bool CompleteDrag(EDragSource dest, int32_t dest_slot, bool commit);
 
-// Equip an item of the main player's pack or belt in its own equipment
-// slot (its EqSlot stat), as a drop on the equip pane or a right click on
-// the item does. An item with no slot puts EQUIPUNABLE on the text bar.
-// Returns true if the item was equipped.
+// Equip a carried item in its own equipment slot (its EqSlot stat), as a
+// drop on the equip pane or a right click on the item does. A slot of -1
+// puts EQUIPUNABLE on the text bar. Returns true if the item was equipped.
 bool EquipInOwnSlot(TObjectInstance* item);
 
 // Force-cancel the active drag (e.g. ESC pressed, mouse-up over empty
@@ -145,15 +155,12 @@ bool EquipInOwnSlot(TObjectInstance* item);
 void Cancel();
 
 // Ends what is still tracked when the button comes up and no pane took the
-// drop: a click that never became a drag completes as a click, a drag is
-// cancelled (its item stays where it was). The screen that owns the drag
-// calls it after routing the button-up.
+// drop: its item stays where it was. The screen that owns the drag calls it
+// after routing the button-up.
 void ReleaseUnclaimed();
 
-// Quick predicates. IsActive() and IsTracking() include pending clicks;
+// Quick predicates. IsActive() includes a grab not yet dragged;
 // IsDragging() is true only after promotion past the wiggle threshold.
-bool IsTracking();
-bool IsPending();
 bool IsActive();
 bool IsDragging();
 

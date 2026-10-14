@@ -24,10 +24,9 @@ class TObjectInstance;
 // main player's inventory, set as the player becomes main, or a bag the
 // player opened.
 //
-// Not yet ported (P4, interactions): retail's own clicks and drags
-// (MouseClick 0x00538210) -- opening a bag, climbing back out through the
-// container icon, using and swapping items. The side panel harness still
-// hit-tests the cells for drags (UIDragState), through FirstSlot.
+// Its clicks, drags and hover cursor (MouseClick 0x00538210, Animate
+// 0x00537f90) are the side panel's (uisidebartest.cpp), which hit-tests the
+// cells (FirstSlot) and the container icon; UIDragState acts on the items.
 class TInventory final : public TButtonPane
 {
   public:
