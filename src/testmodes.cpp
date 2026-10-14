@@ -3003,6 +3003,9 @@ int32_t InputSimKeyCode(const std::string& tokIn)
     if (t == "end")                         return VK_END;
     if (t == "pgup" || t == "pageup")       return VK_PRIOR;
     if (t == "pgdn" || t == "pagedown")     return VK_NEXT;
+    if (t == "ctrl" || t == "control")      return VK_CONTROL;
+    if (t == "shift")                       return VK_SHIFT;
+    if (t == "alt")                         return VK_MENU;
     if (t.size() >= 2 && t[0] == 'f' && std::isdigit((unsigned char)t[1]))
     {
         const int32_t n = (int32_t)std::strtol(t.c_str() + 1, nullptr, 10);

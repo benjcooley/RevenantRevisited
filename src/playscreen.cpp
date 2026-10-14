@@ -1796,6 +1796,12 @@ void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
         TScreen::MouseClick(button, x, y);
         break;
       case EClickRoute::Hud:
+        // An item held from the HUD let go over the map: the map pane, the
+        // first pane a release reaches (TPlayScreen::Initialize 0x0047ad65),
+        // uses it on what is under it or drops it there; then the item panes
+        // end the grab.
+        if (button == MB_LEFTUP && UIDragState::HeldItem() && !IsOffMapPane(x, y) && UISideTabButtonAt(x, y) < 0)
+            CurrentMode()->HandleMouseClick(button, x, y);
         if (!HandleMouseClickUISidebarModeConsumed(button, x, y))
         {
             const SHudState& s = GetHudState();
@@ -2128,6 +2134,14 @@ void TPlayScreen::HideLowerPanes()
 void TPlayScreen::ShowLowerPanes()
 {
     // TODO(port): symmetric reveal.
+}
+
+void TPlayScreen::ShowStatPane()
+{
+    SHudState& hud = GetHudState();
+    hud.topSlot = HUD_TOP_STATS;
+    hud.sidebarState = HUD_SIDEBAR_OPEN;
+    StatPane.SetDirty(true);
 }
 
 // *************************************************************************

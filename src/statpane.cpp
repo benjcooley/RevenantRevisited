@@ -627,20 +627,30 @@ void TStatPane::DrawRun(const SRun &run, TObjectInstance &shown, int32_t target_
 }
 
 // The ICON statement (0x00547aeb): the object's inventory image (vtable
-// +0x130), keyed on magenta when it has no key of its own (but money); a
-// character's in the ring RingT, anything else over its black shadow 3 px
-// down and right (0x004bda20: fully faded to black).
+// +0x130: a money pile or an ammo bundle composed of copies, which the port
+// keeps as the icon's parts), keyed on magenta when it has no key of its own
+// (but money); a character's in the ring RingT, anything else over its black
+// shadow 3 px down and right (0x004bda20: fully faded to black).
 void TStatPane::DrawIcon(TObjectInstance &shown, int32_t x, int32_t y, int32_t target_w, int32_t target_h) const
 {
-    TBitmap *image = shown.InventoryImage();
-    if (!image || !Renderer)
+    const SInvIcon icon = shown.InventoryIcon();
+    if (!icon.count || !Renderer)
         return;
-    const EBitmapDecode decode = image->keycolor == 0 && shown.ObjClass() != OBJCLASS_MONEY
-                               ? EBitmapDecode::MagentaKeyed : EBitmapDecode::Pixels;
     const bool character = shown.ObjClass() == OBJCLASS_CHARACTER;
     if (!character)
-        Renderer->DrawBitmapTintedToTarget(image, x + 3, y + 3, target_w, target_h, 0.0f, 0.0f, 0.0f, 1.0f);
-    Renderer->DrawBitmapToTarget(image, x, y, target_w, target_h, decode);
+        for (int32_t i = 0; i < icon.count; ++i)
+            if (TBitmap *image = icon.parts[i].image)
+                Renderer->DrawBitmapTintedToTarget(image, x + icon.parts[i].x + 3, y + icon.parts[i].y + 3, target_w,
+                                                   target_h, 0.0f, 0.0f, 0.0f, 1.0f);
+    for (int32_t i = 0; i < icon.count; ++i)
+    {
+        TBitmap *image = icon.parts[i].image;
+        if (!image)
+            continue;
+        const EBitmapDecode decode = image->keycolor == 0 && shown.ObjClass() != OBJCLASS_MONEY
+                                   ? EBitmapDecode::MagentaKeyed : EBitmapDecode::Pixels;
+        Renderer->DrawBitmapToTarget(image, x + icon.parts[i].x, y + icon.parts[i].y, target_w, target_h, decode);
+    }
     if (character && ringt)
         Renderer->DrawBitmapToTarget(ringt, x, y, target_w, target_h, EBitmapDecode::Pixels);
 }

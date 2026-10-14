@@ -689,6 +689,8 @@ class TMapPane : public TPane
         // The left button's release: use, pick up, walk to, or let go of a held item
     void WalkToward(int32_t x, int32_t y, TObjectInstance* on);
         // An object out of reach: walk toward it, or "too far"
+    void DropHeldItem(TObjectInstance* item, int32_t x, int32_t y);
+        // An item held from the HUD onto the floor under (x, y)
     void ClickWalkTo(int32_t x, int32_t y);
         // Click to walk: Locke to the point under (x, y)
     void HoldMoveKey(int32_t key);
