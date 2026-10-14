@@ -247,9 +247,10 @@ for the other panes); if the release is inside the pane,
 
 Inside the pane only (`0x0053823c..0x00538517`):
 
-- **Stats mode** (`0x0065c9e0`): the item under the pointer shows its
-  info (`0x0047eff0`, then `0x005496a0` on `0x0065b140`); on no item and
-  `0x0065d1b8 == 1`, the player's. [C]
+- **With Ctrl held** (`0x0065c9e0` is CtrlDown, §12): the item under the
+  pointer shows on the stats pane (`0x0047eff0` ShowStatPane, then
+  `0x005496a0` SetObject on `0x0065b140`); on no item and `0x0065d1b8 == 1`
+  (Stats up), the player's. [C]
 - Otherwise only with nothing held anywhere (this pane's grab, the doll's
   `0x0065b878`, the belt's `0x0065b090` all < 0). The item under the
   pointer:
@@ -364,11 +365,12 @@ Refuses (returns 0) when, in order:
 Otherwise 1. The messages print only for the main player. 1998 CanEquip
 (`player.cpp:197-225`) had checks 1-4a only. [C]
 
-Data: class.def gives the Short Sword and the Training Sword MinStrength
-16, chainmail 20 / 18, cloth 16 / 12, and the PLAYER class's Strn and
-Cons default to 14. A new game's Locke (the save after the opening) wears
-his starting boots, shirt and Short Sword under the retail checks in the
-port, so his Strn and Cons meet them. [C]
+Data: the class.def the game loads (the module's) gives Black Cloth Boots
+MinStrength 14 and MinConstitution 10 (and Value 10); the plain-text copy
+in `imagery.rvi` is an older one (16 / 12, Value 115), so read requirements
+from the loaded data, not that copy. A new game's Locke (the save after
+the opening) wears his starting boots, shirt and Short Sword under the
+retail checks in the port. [C]
 
 ### 5.3 Equip `0x005199b0` (TPlayer)
 
@@ -722,10 +724,85 @@ Not ported yet:
 
 | Behaviour | Retail |
 |---|---|
-| Right up in stats mode: the item's information | `0x00538267..0x00538333`, `0x0052cff9..` |
 | Base Use combining (no shipped item has a nonzero "Combining") | `0x004706bc..0x004708dc` |
-| Dragging an item from the HUD onto the map or a world object (`TMapPane` still reads `TInventory::GetHeldSlot`, which is -1) | not covered here |
 | Multiplayer: the CanCombine gate, the network messages | `0x0066829c` |
+
+## 11. An item let go over the map
+
+Read 2026-10-14. `TMapPane::MouseClick` `0x0044f140`, left up, when the map
+had no press (`clicked` `+0x120` 0), `0x0044fff8..0x0045046f`. The map pane
+is the first pane `TPlayScreen::Initialize` adds (`0x0047ad65`), so it sees
+the release before the item panes. [C]
+
+- **The item** (`0x0044fce3`): the inventory pane's held item, else the
+  belt's, else the doll's equipment entry. The held slots outlive the grab
+  (each pane clears its own on its next repaint), and the doll's isn't
+  range-checked (with none held it reads `player+0x29c`). [C]
+- `on = OnObject(x, y, item)`: `with` only feeds `CursorType(with)` in the
+  2D walk (a floor item counts while DragObj is set only when it has a
+  cursor for the item); the 3D pick ignores it. [C]
+- **Use**: `on->Use(Player, item id)`; 1 → done (the inventory or belt
+  repainted). A character's Use runs GET / GIVE on the scripts and returns
+  1, so the item stays unless a script takes it; Locke's own returns 0. [C]
+- **Drop** (`0x004500ab..0x0045046a`), when Use returned 0 or nothing was
+  under the pointer:
+  - not an item that can't change hands (`CanTrade`, Value -1) nor AMMO:
+    silently kept; [C]
+  - a worn item comes off (`Equip(NULL, doll held slot)`); [C]
+  - the point: `FindClickPos` + (64, 64), but not for money (why:
+    UNCONFIRMED); farther than 96 from Locke, it lands on the line toward
+    it at Locke + 32k, k the walk checks passed at Locke + 0, 32, 64
+    (`GetWalkHeightRadius`, radius 32, a rise over 32 or a hole stops),
+    at Locke's z; no failure; [C]
+  - `RemoveFromInventory`, `SetPos(t, level)`, `AddToMap`; the line:
+    `FULLSINGDROP` / `"%s %s"` of the shown name and BASEDROPEPED ("Short
+    Sword dropped."), or for a pile `FULLMULTDROP` (n, name) /
+    `FULLMULTDROPREV` (name, n) / `"%d %s%s %s"` with PLURAL, which no
+    language ships ("3 Bread[PLURAL] dropped.", a shipped-text bug);
+    `DroppedObject`; [C]
+  - a still toss from 64 above (`Toss(from, t, -1, still)`) unless the
+    class is "Armor" or money; armour lies in the equip animator's resting
+    pose at once. No sound. [C]
+- Afterwards the map clears the drag bitmap and DragObj, not the held
+  slots. [C]
+
+Port: `TPlayScreen::MouseClick` hands a HUD item's release over the map to
+the map pane first (`TMapPane::PlayMouseRelease`, `DropHeldItem`), then the
+side panel ends the grab; the item comes from `UIDragState::HeldItem`.
+Deviations: the grab ends with the release, so no stale held slot acts
+later (retail's could, e.g. a combat swing's release); a pile's line uses
+"s" when PLURAL is missing.
+
+## 12. The item sheet (Ctrl + right click)
+
+Read 2026-10-14. There is no "stats mode": `0x0065c9e0` is `CtrlDown` (the
+WndProc's VK_CONTROL; AltDown `0x0065c9d8`, ShiftDown `0x0065b9fc`).
+`0x0065d1b8` is the upper side-panel mode (PlayScreen `+0x6c8`: 0 Equip,
+1 Stats, 2 Book). `0x0047eff0` is `TPlayScreen::ShowStatPane` (upper mode
+Stats, the panel opening if shut, the Stats tab pressed; it never rebinds
+the pane), `0x005496a0` `TStatPane::SetObject` (format "page1", dirty). [C]
+
+| Where | Trigger | Shows |
+|---|---|---|
+| Inventory `0x00538267` | right up **with Ctrl**, before anything else | the item: ShowStatPane + SetObject; none (or off the cells): the player when Stats is up, else nothing. Never an equip or compaction. |
+| Belt `0x0052cff9` | the same on a box; off the boxes nothing | the same |
+| Doll `0x005363f7` | right **press** on a worn item, Ctrl or not | ShowStatPane + SetObject |
+| Map `0x0044f87d` | right press **with Ctrl**, on anything but a tile, effect, exit, helper or shadow; no walk | ShowStatPane + SetObject |
+| Map `0x0044fb74` | left press on an inventory item | SetObject only (quietly) |
+| Stats pane `0x005493b0` | right press on it | the player again |
+| Destructors `0x0046e420`, `0x00518570` | the bound object goes | the player (port: TSafeRef, falling back to the player) |
+
+The pane draws `statpane.def`'s block for the object's class name
+(Character, Weapon, Armor, else Default). Side tabs
+(`TSideTabsPane::OnControl` `0x0053d790`, a tab turned on): Book and Spell
+show Book over Spell, Stats and Equip their pane over the inventory, Inv
+and Map only theirs. [C]
+
+Port: `TPlayScreen::ShowStatPane`, the side panel's right up / right down,
+`TMapPane::PlayMouseClick`; the stats pane's ICON draws the composed
+money / ammo icon (`InventoryIcon`). Not ported: the side-panel hotkeys
+('1'..'6' as retail's dispatcher cases 7..0xc read them; the port's keys
+differ for 4..6); an item-sheet A/B against retail.
 
 ## 10. Not settled
 
