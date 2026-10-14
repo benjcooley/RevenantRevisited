@@ -265,6 +265,12 @@ class TSpell
     void SetByTalismans(char* talismans);
 
     void Damage(TObjectInstance* ch);
+      // REVSYNC: 0x0053f560 -- the spell's damage on `ch` (none on null), its
+      // invoker the caster
+    static void Damage(TCharacter* caster, TCharacter& target, const SSpellData& spell,
+                       const SSpellVariant& variant);
+      // The same with no spell object: `variant`'s damage of `spell`'s type
+      // dealt to `target` by `caster` (null: nobody)
 
     virtual void Pulse();
       // REVSYNC: TSpell::Pulse @ 0x0053f800 -- its effects that are in no

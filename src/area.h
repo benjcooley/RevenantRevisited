@@ -92,6 +92,8 @@ class TArea
       // Returns area flags
 
     const char *GetName() const { return name; }
+    [[nodiscard]] int32_t Level() const { return level; }
+    [[nodiscard]] const char *ScriptFile() const { return scriptfile; }
       // Returns area name (for "Bake Defaults to Source" + display)
 
     bool In(S3DPoint &pos, int32_t lev);

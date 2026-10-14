@@ -1,0 +1,92 @@
+# Shadow Smoke: the Ahkuilon main quest, new game to credits.
+# The stages follow docs/playtest/STORY.md; the format is
+# docs/shadow/ARCHITECTURE.md §9.1. Citations are lines of the module's
+# scripts (keep.s:479 is line 479 of keep.s).
+
+module Ahkuilon
+
+routine restock "Healing at Elahni's"
+    travel  healerin                    # her door from Misthaven (exit.def)
+    buy     "Lesser Healing" upto 4 from ELAHNI1
+    travel  healerout
+
+stage opening "Locke wakes in the Keep"
+    start   newgame
+    # SardokR's scene (keep.s:479-670). Both menus loop back on their first
+    # two answers, so every line of the scene plays before the third.
+    scene   choose 1 2 3 1 2 3
+    # The scene ends with RAHULSTATE 1 (keep.s:660), and Rahul attacks at
+    # once: Locke fights him then and there, before anything else.
+
+stage rahul "Rahul attacks"
+    # Rahul comes for Locke as the opening ends; the fight starts before
+    # Locke can dress, so he fights with his fists (the fight the plan
+    # didn't ask for, ARCHITECTURE.md §6.5). If he is somehow still up:
+    fight   Rahul win
+    # TendrickR waits for Rahul's health to be 0 (keep.s:673-720): his scene,
+    # RAHULSTATE 0, and the chamber door unlocked.
+    expect  RAHULSTATE = 0
+    # Tendrick's gifts: the clothes and the sword (keep.s:640-650).
+    equip   "Short Sword"
+    equip   "Red Cloth Shirt"
+    equip   "Brown Cloth Pants"
+    equip   "Black Cloth Boots"
+    save    "rahul defeated"
+
+stage rand "Rand, in the Keep's jail"
+    travel  ressexit                    # out of the resurrection chamber
+    travel  jailenter
+    # RandK (keep.s:278-350): the first menu loops on its first two
+    # answers; any answer to the second finishes.
+    talk    RandK  choose 1 2 3 1
+    expect  RANDSTATE = 1               # keep.s:341
+    expect  TENDRICKSTATE = 1           # keep.s:342
+    save    "rand questioned"
+
+stage tendrick "Tendrick in the throne room"
+    travel  jailexit                    # back out of the jail (exit.def:111)
+    # The Keep's unlocked chests: 500 gold, a Lesser Healing and an Apple
+    # (the run's chest survey; GRIND.md §4.4). The Gothic Leg Plate and the
+    # Wyrmm's Tooth Sword (key 33) stay locked for now.
+    take    Chest@10532,11000           # 250 gold
+    take    Chest@10864,10720           # 100 gold, a Lesser Healing
+    take    ChestE@13042,10898          # 150 gold, an Apple
+    # TendrickT (keep.s:1016-1140): eastern and yhagoro loop; innocent and
+    # executed go on to a last menu, whose first answer loops back to the
+    # first menu and whose second finishes. Every branch, then on: the
+    # finish moves Locke to level 6 for the GowE scene, then back.
+    talk    TendrickT  choose 1 2 3 1 4 2
+    expect  TENDRICKSTATE = 2
+    save    "tendrick told"
+
+stage keepexit "Out of the Keep"
+    use     KeepExit                    # keep.s:1257-1290, open at TENDRICKSTATE > 1
+    expect  maplevel = 0
+    save    "left the keep"
+
+stage s1 "Gus's deal: passage to Arakna for the ring"
+    # The tavern door (exit.def:20); master.s's door block takes Locke in.
+    use     barin
+    # Gus1 (town.s:2348-2497): any first answer; Cav; Deal.
+    talk    Gus1  choose 1 1 1
+    expect  MISTSTATE = 2               # town.s:2474
+    save    "gus deal"
+
+stage potions "Elahni's potions"
+    travel  barout                      # out of the tavern (exit.def:24)
+    travel  healerin                    # Elahni's door
+    buy     "Lesser Healing" 1 from ELAHNI1
+    expect  have "Lesser Healing" >= 2
+    equip   "Short Sword"
+    consume "Apple"
+    train   strn agil                   # the next level-ups: Strength and Agility
+    save    "first potions"
+
+stage forest "The woods by the Keep, to level 4"
+    # The Druhg camp wants level 4-5 (WALKTHROUGH.md §1.0). The woods east
+    # and north of the gate hold Araknids, Under and Mongrel Druhg and Kantha
+    # generators (GRIND.md §3.3).
+    travel  healerout                   # out of Elahni's
+    train   strn agil
+    grind   until level 4 restock restock
+    save    "level 4"

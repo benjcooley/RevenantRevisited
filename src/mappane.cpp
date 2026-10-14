@@ -2252,13 +2252,14 @@ int32_t TMapPane::GetWalkHeightArea(S3DPoint& pos, int32_t width, int32_t height
 // nearest point is within the radius (the distance table, or the squares
 // past it): maxdelta is the largest height step to the cell west or north of
 // it (when that one is in range too), hole is set by a cell of height 0 (no
-// walkmap). A radius whose cells would reach 0x80 is cut to 0x6f.
-void TMapPane::GetWalkHeightRadius(const S3DPoint& pos, int32_t radius, int32_t& maxdelta, int32_t& height,
-    bool& hole)
+// walkmap). A radius whose cells would reach 0x80 is cut to 0x6f. The cells
+// are read from the loaded sectors of level lvl (FindSector 0x00499e10).
+void TMapPane::GetWalkHeightRadius(const S3DPoint& pos, int32_t lvl, int32_t radius, int32_t& maxdelta,
+    int32_t& height, bool& hole)
 {
     maxdelta = 0;
     hole = false;
-    height = GetWalkHeight(pos);
+    height = GetWalkHeight(pos, lvl);
     if (radius <= 0 || radius >= 0xf0)
         return;
     if (((radius + GRIDSIZE - 1) & GRIDMASK) >= 0x80)
@@ -2290,7 +2291,7 @@ void TMapPane::GetWalkHeightRadius(const S3DPoint& pos, int32_t radius, int32_t&
                 cells[row][col] = -1;
                 continue;
             }
-            const int32_t h = GetWalkHeight(S3DPoint(x, y, 0));
+            const int32_t h = GetWalkHeight(S3DPoint(x, y, 0), lvl);
             cells[row][col] = h;
             if (h == 0)
                 hole = true;
@@ -3962,16 +3963,74 @@ void TMapPane::MoveObjects()
     ForEachTickObject(OBJSET_MOVING, [](TObjectInstance* inst, TMapIterator*) { inst->SetObjectMotion(); });
 }
 
+namespace {
+
+// The animate pass's test (0x00458750): the object's screen rect or its
+// animation rect meets r.
+bool MeetsAnimateRect(TObjectInstance* oi, const SRect& r)
+{
+    SRect ir, ar;
+    oi->GetScreenRect(ir);
+    oi->GetAnimRect(ar);
+    return r.Intersects(ir) || r.Intersects(ar);
+}
+
+} // namespace
+
+// REVSYNC: TMapPane::AnimateObjects @ 0x00458750, its usual branch (+0x918
+// clear). Retail anchored the rect at +0x88/+0x8c, the scroll origin the
+// background update publishes (UpdateEdges: the scroll rounded down to the
+// 64-pixel update grid), and grew the pane by 0xc0 on every side. The scroll
+// is SetMapPos's: the view centre's screen point less half the pane, and the
+// pane is the 640x480 screen (docs/LIGHTING_FIDELITY.md F14). The port's map
+// pane has no size of its own (TMapRenderer draws the view), so the rect is
+// built from the centre the last tick set, which is the view the next draw
+// shows, and retail's pane size.
+SRect TMapPane::AnimateRect() const
+{
+    constexpr int32_t kMargin = 0xc0;
+    int32_t centrex = 0, centrey = 0;
+    WorldToScreen(center, centrex, centrey);
+    const int32_t originx = int32_t(uint32_t(centrex - WIDTH / 2) & UPDATEMASKX);
+    const int32_t originy = int32_t(uint32_t(centrey - HEIGHT / 2) & UPDATEMASKY);
+    return SRect(originx - kMargin, originy - kMargin,
+                 originx + WIDTH + kMargin - 1, originy + HEIGHT + kMargin - 1);
+}
+
+// The pass reaches what its iterator hands out (flags 0x29, CHECK_SECTRECT |
+// CHECK_INVIS | CHECK_NOINVENT, over the animate set): the visible animated
+// objects of the window's sectors whose screen rect meets AnimateRect(). It
+// is skipped while NoAnimateObjs (0x006680d8) is set.
+std::optional<bool> TMapPane::AnimatePassOnScreen(TObjectInstance* oi)
+{
+    if (NoAnimateObjs || !oi->IsAnimated() || (oi->GetFlags() & OF_INVISIBLE))
+        return std::nullopt;
+
+    TSector* const sector = oi->GetSector();
+    if (!sector)
+        return std::nullopt;
+
+    const SRect r = AnimateRect();
+    for (const auto& column : sectors)
+        for (TSector* windowsector : column)
+        {
+            if (windowsector != sector)
+                continue;
+            SRect sr;
+            sector->GetMaxScreenRect(sr);
+            if (!r.Intersects(sr))
+                return std::nullopt;
+            return MeetsAnimateRect(oi, r);
+        }
+    return std::nullopt;
+}
+
 void TMapPane::AnimateObjects(bool draw)
 {
     if (NoAnimateObjs)
         return;
 
-    SRect r; // Get area of screen where we should turn on animators
-    r.top    = scrolly - 128;
-    r.left   = scrollx - 64;
-    r.bottom = scrolly + GetHeight() + 128 - 1;
-    r.right  = scrollx + GetWidth() + 64 - 1;
+    SRect r = AnimateRect();     // Get area of screen where we should turn on animators
 
     Display.SetClipRect(MAPPANEX, MAPPANEY, GetWidth(), GetHeight());
 
@@ -3979,11 +4038,7 @@ void TMapPane::AnimateObjects(bool draw)
     {
         TObjectInstance* inst = i.Item();
 
-        SRect ir, ar;
-        inst->GetScreenRect(ir);
-        inst->GetAnimRect(ar);
-
-        bool intersects = r.Intersects(ir) || r.Intersects(ar);
+        const bool intersects = MeetsAnimateRect(inst, r);
 
         if (intersects && !inst->HasAnimator())
             inst->OnScreen();

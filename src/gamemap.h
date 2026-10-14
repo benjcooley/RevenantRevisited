@@ -100,8 +100,8 @@ class TGameMap : public TSafeObjectBase<TGameMap>
     // sector-coord scan.
     [[nodiscard]] const std::vector<TSector*>& Sectors() const { return sectors; }
 
-    // Find a sector by (sx, sy). O(N) linear scan; small loaded counts
-    // make this fine for now. Returns nullptr if not loaded.
+    // Find a sector by (sx, sy), through the grid index. Returns nullptr
+    // if not loaded.
     [[nodiscard]] TSector* FindSector(int32_t sx, int32_t sy) const;
 
     // The sector containing world position `pos`, or nullptr.
@@ -143,9 +143,18 @@ class TGameMap : public TSafeObjectBase<TGameMap>
     void Release(ESectorRelease how);
 
     void FinishLoad();
+    void AddSector(TSector* sec);
+
+    // Sector coordinates run 0..255 on each axis.
+    static constexpr int32_t kGridSide = 256;
 
     int32_t               level = -1;
     std::vector<TSector*> sectors;
+    // (sx, sy) -> its sector, kGridSide x kGridSide, sized with the first
+    // sector. Walk queries resolve every cell outside the pane's window
+    // through FindSector (retail searched a list, 0x00499e10), and a
+    // whole-level walk analysis makes millions of them.
+    std::vector<TSector*> grid;
     Listeners             listeners;
 
     std::vector<SSectorCoord> pending;      // the level's sector files, in load order
