@@ -4062,35 +4062,40 @@ bool TCharacter::Jump()
     return false;
 }
 
-// Sets walk mode
+// REVSYNC: TCharacter::SetWalkMode @ 0x004cf000 -- the walking root of the
+// mode the character is in: the combat or bow root, or the walk root
+// (GetWalkRoot: "torch" for a player holding a light). Not while held in an
+// interactive move, or dead. A root that is a walking one and the walk root
+// stays; any other (a run, a sneak, "walk" with a torch now held or "torch"
+// without, and the combat and bow roots every time) is rebuilt as a copy of
+// the old root under the new name, a step in progress turned into its step,
+// and started at once. Not ported (multiplayer): the network message.
 bool TCharacter::SetWalkMode()
 {
     if (setWalkModeSeam)
         return setWalkModeSeam(this);
-    if (IsWalkMode())
+    if (InteractiveLocked() || Health() <= 0)
+        return false;
+    if (IsWalkMode() && root->Is(GetWalkRoot()))
         return true;
 
     char aniname[RESNAMELEN];
-    if (root->Is(ACTION_ANIMATE))
-        strcpy(aniname, "walk");
-    else if (root->Is(ACTION_COMBAT))
-        strcpy(aniname, GetCombatRoot());
-    else if (root->Is(ACTION_BOW))
-        strcpy(aniname, GetBowRoot());
-
+    switch (root->action)
+    {
+      case ACTION_COMBAT:  strcpy(aniname, GetCombatRoot()); break;
+      case ACTION_BOW:     strcpy(aniname, GetBowRoot());    break;
+      case ACTION_ANIMATE: strcpy(aniname, GetWalkRoot());   break;
+      default:             return false;    // retail read a name never set here
+    }
     if (!HasActionAni(aniname))
         return false;
 
-    TActionBlock* ab = new TActionBlock(aniname, root->action);
+    TActionBlock* ab = new TActionBlock(*root, aniname, root->action);
     SetRoot(ab);
 
-    if (IsMoving())         // If moving, change next step to new root
+    if (IsMoveAction(doing))    // a step under way becomes the new root's
     {
-        char *name;
-        if (HasActionAni(StName(aniname, "r")))
-            name = StName(aniname, "r");
-        else
-            name = StName(aniname, "f");
+        const char* name = HasActionAni(StName(aniname, "r")) ? StName(aniname, "r") : StName(aniname, "f");
         ab = new TActionBlock(*doing, name, doing->action);
     }
 
