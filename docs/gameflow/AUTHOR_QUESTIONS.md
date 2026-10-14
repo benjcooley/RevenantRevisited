@@ -94,7 +94,8 @@ Answer inline (or in chat) and the owning doc gets updated.
 
 ## HUD ([../ui/HUD_LIVE_BINDING.md](../ui/HUD_LIVE_BINDING.md) §7)
 
-22. Does the retail paperdoll animate or hold one pose? Which animation?
+22. *(Answered by the decompile: it loops random `walk` idle variants,
+    `FindState("walk", -1)` in the pane's Animate `0x005368c0`.)*
 23. With no portrait icon, does retail show an empty frame?
 24. Does a new game start with 0 of 105 mana? (`newgame.sav` stores 0;
     retail's `New Game1` has 7 of 105.)

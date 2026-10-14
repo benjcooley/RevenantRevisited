@@ -115,11 +115,15 @@ Also in the commit messages.
   (retail `0x0040ce60`), characters have it, and the `LockeFace` fallback is
   gone.
 - **Paperdoll pose.** Retail animates the paperdoll through its own
-  counters (`mbr_0xbc/0xc4`) with an animation chosen through vtable
-  `+0x131`, which is not identified. The pane holds frame 0 of the
-  recovered `"walk"` state (`DAT_005e4060`), the pose the harness showed;
-  stepping the walk cycle turns the model, so it is not the idle retail
-  plays.
+  counters: state `+0xbc`, frame `+0xc4`, previous state and frame
+  `+0xc0/+0xc8`. Its Animate (`0x005368c0`) steps the frame each tick, and
+  when the frame reaches the state's length (imagery vtable `+0x90`) it
+  picks the next state with `Player->FindState("walk", -1)` (vtable
+  `+0x138`, `0x00477c10`; the string at `0x005e4058`). That is a random
+  pick among the character's `NN:walk` idle variants (Locke: `2:walk` to
+  `14:walk` and `100:walk`). The draw (`0x00536bc0`) poses the player's
+  animator with these counters and restores it afterwards. The pane holds
+  frame 0 of the first match (`100:walk`) and doesn't play the idles yet.
 - **Armor.** `armor` is `ArmorValue()` (the player's: ACBonus plus the
   Protection of the armor worn, `0x00519850`), plus the main player's
   DmgResMisc (vtable `+0x260`) and his spells' defense (the SpellManager
@@ -180,8 +184,8 @@ the panes changed:
 
 Current behaviour is kept until these are answered.
 
-1. Paperdoll: does retail's paperdoll animate (an idle loop), or hold one
-   pose? Which animation?
+1. Answered by the decompile (2026-10-13): retail's paperdoll animates.
+   It loops random `walk` idle variants (§5, "Paperdoll pose").
 2. Answered by the emulator (2026-10-09): retail draws whatever the
    character's +0x130 image is, which is its state-0 icon. With none, the
    ring is empty. The port now does the same.
