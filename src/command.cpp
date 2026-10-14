@@ -59,6 +59,7 @@ static inline char *strlwr(char *s)
 #include "effect.h"
 #include "logging.h"
 #include "module.h"
+#include "monstergen.h"
 
 /* externs */
 extern TObjectClass TileClass;
@@ -4445,11 +4446,92 @@ COMMAND(CmdSaveGame)
 
 // ----- owner: world + character (movement, combat, inventory, objects) -----
 
-COMMAND(CmdAddMonsterType) { return CmdNotPorted("addmonstertype", 0x00427ac0, t); }
+// ----- monster generators (TMonsterGen, docs/playtest/GRIND.md §3.1) -----
+
+// The generator a monster generator command addresses. Retail's handlers took
+// any HELPER for one (and wrote past the end of the others); the port answers
+// for another helper as for a command it doesn't know.
+static TMonsterGen* GeneratorContext(TObjectInstance* context, TToken &t)
+{
+    auto* const gen = dynamic_cast<TMonsterGen*>(context);
+    if (!gen)
+        while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+            t.Get();
+    return gen;
+}
+
+// REVSYNC: addmonstertype @ 0x00427ac0 -- <type> <frequency> <treasure tier>
+// (TMonsterGen::AddType). The message gives the frequency in seconds the way
+// the editor's usage line reads it, as frames (frequency / 24); the generator
+// counts it in hundredths of a second.
+COMMAND(CmdAddMonsterType)
+{
+    TMonsterGen* const gen = GeneratorContext(context, t);
+    if (!gen)
+        return CMD_BADCOMMAND;
+
+    char type[60];
+    int32_t frequency = 0, treasure = 0;
+    if (!Parse(t, "%60s %d %d", type, &frequency, &treasure))
+        return CMD_BADPARAMS;
+    if (gen->AddType(type, frequency, treasure))
+        Output("%s [freq: %ds] [tt: %d]: added successfully\n", type, frequency / 24, treasure);
+    else
+        Output("Could not add '%s' to the monster list\n", type);
+    return 0;
+}
+
+// REVSYNC: delmonstertype @ 0x00427b60 -- <type> (TMonsterGen::DelType).
+COMMAND(CmdDelMonsterType)
+{
+    TMonsterGen* const gen = GeneratorContext(context, t);
+    if (!gen)
+        return CMD_BADCOMMAND;
+
+    char type[60];
+    if (!Parse(t, "%60s", type))
+        return CMD_BADPARAMS;
+    if (gen->DelType(type))
+        Output("Removed '%s' from the monster list\n", type);
+    else
+        Output("'%s' not found in monster list\n", type);
+    return 0;
+}
+
+// REVSYNC: monstertypes @ 0x00427bd0 -- the count and each used slot's type.
+COMMAND(CmdMonsterTypes)
+{
+    TMonsterGen* const gen = GeneratorContext(context, t);
+    if (!gen)
+        return CMD_BADCOMMAND;
+
+    Output("%d Monster types for %s:\n", gen->NumTypes(), gen->GetName());
+    for (int32_t i = 0; i < TMonsterGen::kMaxTypes; i++)
+        if (const char* type = gen->TypeName(i); *type)
+            Output("%s\n", type);
+    return 0;
+}
+
+// REVSYNC: maxmonsters @ 0x00427c30 -- [<count>]: sets the cap, or shows it.
+COMMAND(CmdMaxMonsters)
+{
+    TMonsterGen* const gen = GeneratorContext(context, t);
+    if (!gen)
+        return CMD_BADCOMMAND;
+
+    int32_t count = 0;
+    if (!Parse(t, "%d", &count))
+    {
+        Output("%d\n", gen->MaxMonsters());
+        return 0;
+    }
+    gen->SetMaxMonsters(count);
+    return 0;
+}
+
 COMMAND(CmdAddNear) { return CmdNotPorted("addnear", 0x00421bc0, t); }
 COMMAND(CmdAmbSoundGet) { return CmdNotPorted("ambsoundget", 0x00420fe0, t); }
 COMMAND(CmdAmbSoundSet) { return CmdNotPorted("ambsoundset", 0x00420dc0, t); }
-COMMAND(CmdDelMonsterType) { return CmdNotPorted("delmonstertype", 0x00427b60, t); }
 COMMAND(CmdDispInv) { return CmdNotPorted("dispinv", 0x00422070, t); }
 COMMAND(CmdDrop) { return CmdNotPorted("drop", 0x004281c0, t); }
 COMMAND(CmdGetItemAmount) { return CmdNotPorted("getitemamount", 0x00426be0, t); }
@@ -4458,8 +4540,6 @@ COMMAND(CmdGetItemValue) { return CmdNotPorted("getitemvalue", 0x00426e20, t); }
 COMMAND(CmdHasFreeSlot) { return CmdNotPorted("hasfreeslot", 0x00426c60, t); }
 COMMAND(CmdHideObjects) { return CmdNotPorted("hideobjects", 0x00427010, t); }
 COMMAND(CmdMapIndex) { return CmdNotPorted("mapindex", 0x00426ed0, t); }
-COMMAND(CmdMaxMonsters) { return CmdNotPorted("maxmonsters", 0x00427c30, t); }
-COMMAND(CmdMonsterTypes) { return CmdNotPorted("monstertypes", 0x00427bd0, t); }
 COMMAND(CmdShowObjects) { return CmdNotPorted("showobjects", 0x00426fc0, t); }
 COMMAND(CmdSize) { return CmdNotPorted("size", 0x00426f30, t); }
 
