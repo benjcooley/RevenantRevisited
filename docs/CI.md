@@ -1,26 +1,41 @@
 # Continuous integration
 
-Every commit pushed to GitHub, on any branch, gets a version and is built
+C++ changes pushed to GitHub, on any branch, get a version and are built
 and tested on macOS, Windows and Linux. Packages that pass are published to
-`https://downloads.revenantrevisited.com`, and `main` only takes pull
-requests that pass on all three.
+`https://downloads.revenantrevisited.com`. When C++ is unchanged, the three
+required build checks report **skipped** without starting platform runners;
+no version is claimed and no package is published.
 
 - Workflow: [.github/workflows/ci.yml](../.github/workflows/ci.yml)
 - Driver: [tools/ci/ci.py](../tools/ci/ci.py), one subcommand per workflow step
 - Package README: [tools/ci/PACKAGE_README.md](../tools/ci/PACKAGE_README.md)
+- Change selection: [tools/ci/changes.py](../tools/ci/changes.py)
+
+The C++ inputs are `src/`, `thirdparty/`, `assets/`, `cmake/`, `tools/`,
+`CMakeLists.txt`, `editor.def`, `.gitattributes`, `.gitmodules`, and the C++
+workflow itself. Rust-only and documentation-only changes skip the C++ jobs.
+On feature branches, selection compares the entire branch against its merge
+base with `main`: a later Rust-only push cannot hide an earlier C++ failure.
+On `main`, it compares the commits before and after the push. Missing comparison
+history runs the build conservatively; a manual dispatch always runs it.
+
+The separate [Rust workflow](../.github/workflows/rust.yml) runs for `rust/`
+changes, its own workflow changes, and `src/mappane.cpp`, which its terrain
+comparison test compiles. It runs once per PR update and on pushes to `main`,
+with a manual dispatch available. Other C++ changes do not start Rust CI.
 
 ## 1. Jobs
 
 | Job | Runs on | Does |
 |---|---|---|
-| `Version` | `ubuntu-24.04` | claims the commit's version tag (§6) |
+| `Version` | `ubuntu-24.04` | selects C++ changes, then claims a version if needed (§6) |
 | `Build & test (osx)` | `macos-latest` (Apple silicon) | configure, build, test, package |
 | `Build & test (windows)` | `windows-latest` | the same |
 | `Build & test (linux)` | `ubuntu-24.04` (x86-64) | the same |
 | `Publish & report` | `ubuntu-24.04` | uploads passing packages to R2, writes the run summary |
 
 A push to a branch other than `main` cancels that branch's run in flight;
-runs on `main` are never cancelled, so each commit there gets its archive.
+runs on `main` are never cancelled, so each C++ change there gets its archive.
 `workflow_dispatch` reruns any branch from the Actions tab.
 
 ### Toolchains
@@ -149,7 +164,7 @@ local build without CI shows the tag on its commit, else the newest tag it
 descends from plus `-dev`.
 
 If the `Version` job fails, the builds still run with that local fallback:
-a skipped build would count as a passed check.
+a failed change detector must not turn into passed/skipped build checks.
 
 ## 7. The run summary
 
@@ -173,7 +188,8 @@ A repository ruleset on `main`:
 - changes arrive through pull requests, from everyone, administrators
   included; approvals are not required;
 - `Build & test (osx)`, `Build & test (windows)` and `Build & test (linux)`
-  must pass on the pull request's head commit;
+  must pass on the pull request's head commit, or report skipped when the
+  branch has no C++ changes;
 - the branch must be up to date with `main` (merge `main` in, push, let CI
   pass);
 - no force pushes, and `main` cannot be deleted.
@@ -182,6 +198,12 @@ The checks come from the push of the branch, so a pull request is ready to
 merge once its branch's latest push has passed. Pull requests from forks
 don't trigger the workflow; a maintainer pushes the fork's branch to this
 repository to run it.
+
+The C++ workflow starts on every branch push so required checks can report a
+result. It conditionally skips each named job when C++ inputs are unchanged;
+filtering out the entire workflow would leave required checks pending. The
+three jobs have static names and share their build steps through a YAML anchor,
+so skipping them preserves all three required check names.
 
 ## 9. Secrets
 
@@ -205,5 +227,5 @@ the bucket or its domains, which is done in the Cloudflare dashboard.
   `--snap`, `--filmstrip` and editor picking do nothing there.
 - The editor's window resize is macOS-only; elsewhere the window keeps its
   size (`src/platform/editorplatform_stub.cpp`).
-- Windows and Linux builds are compiled and unit-tested on every commit,
+- Windows and Linux builds are compiled and unit-tested on every C++ change,
   but the game is played on macOS.
