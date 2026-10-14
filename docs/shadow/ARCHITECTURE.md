@@ -679,6 +679,48 @@ through the game's own state:
 Knockback and stagger are positional, and the duel has no positions
 (§6.3), so it leaves them out.
 
+### 8.8 Chests and loot
+
+Loot is most of Locke's income. Level 0's chests alone hold about 16,600
+gold, against 4,400 on its monsters (GRIND.md §4.4). Looting them early
+buys armour that a monster grind would take hours to pay for.
+
+**Chests.** Each level's containers are surveyed from the loaded map:
+
+- where they stand;
+- whether they open (Openable), and whether they are locked (`LOCK`,
+  `KEY`, `PICK`);
+- their traps (Explosive, Poisonous);
+- what they hold.
+
+Looting one is a travel to it (with its proof), then `Take`: the real
+`TContainer::Use`, one use at a time, as a player clicks (GRIND.md §4.2).
+The first use opens it, each one after takes one item, and the last one
+closes it. A trap fires for real; its poison is §8.7's.
+
+- **Locked, with its key:** `UseOn(chest, key)` first.
+- **Locked, with lockpicks:** the real `CheckKeyUse` roll. Success
+  teaches LockPick (50 experience). On failure Locke tries again a set
+  number of times, then moves on.
+- **Locked, with neither:** remembered, and revisited once the key or
+  lockpicks are in the pack.
+
+The grind plans chest tours by value per minute of travel. Unlocked gold
+chests come first, and every chest within a short detour of a route gets
+opened on the way. Story chests (the Diamond Ring, the vials, the
+crystals) are plan steps. The summary counts the chests opened per level
+and lists the ones left shut, with why.
+
+**Monsters.** A kill runs the real death drop: everything tradeable
+leaves the corpse for the floor, gold at (+30, +30) and the rest within
+about 48 units (GRIND.md §4.1). Locke then picks up all of it with the
+real `Pickup`, one item at a time, before he travels on. With a full
+pack he keeps what sells for most per slot, and the grind heads for town
+(§8.1).
+
+Every take and pick-up goes in the ledger as a `take` or `pickup` cause,
+with the item and the amount. Loot can't appear any other way.
+
 ## 9. The plan
 
 ### 9.1 The file

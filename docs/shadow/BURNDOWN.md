@@ -25,7 +25,8 @@ it has got.
 | Fights on the way | travel and evade (§5.5) | P1–P3 | — |
 | Fights | the duel model (§6) | P2 | — |
 | Getting poisoned, paralysed, buffed | real state through the duel (§8.7) | P2 | — |
-| Loot | real death drop, pick-up (§6.1) | P2 | — |
+| Looting monsters | real death drop, `Pickup` of every item (§8.8) | P2 | — |
+| Opening chests, picking locks | `Take` / `UseOn` through `TContainer::Use`, `CheckKeyUse` (§8.8) | P4 | — |
 | Monster generators | `TMonsterGen` (§7) | P3 | agent porting |
 | Levelling up | real `AwardKillExp` | P2 | — |
 | New stat points | `Train`: the level-up markers (§8.3) | P4 | — |
@@ -105,6 +106,8 @@ it has got.
 | [ ] | Jong's lessons | — |
 | [ ] | Spell invention and quick-spell slots | — |
 | [ ] | Grind sites, linger rules, return to town | — |
+| [ ] | Chest survey per level; chest tours by value per minute; locked chests by key or lockpicks; traps (§8.8) | — |
+| [ ] | Loot every kill: pick up the death drop; a full pack keeps the best per slot (§8.8) | — |
 | [ ] | Gate: level 1 to 6 with shopping trips | — |
 
 ## P5 Story
