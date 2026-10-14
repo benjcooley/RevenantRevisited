@@ -1,0 +1,14 @@
+# Shadow Smoke: the Ahkuilon main quest, new game to credits.
+# The stages follow docs/playtest/STORY.md; the format is
+# docs/shadow/ARCHITECTURE.md §9.1. Citations are lines of the module's
+# scripts (keep.s:479 is line 479 of keep.s).
+
+module Ahkuilon
+
+stage opening "Locke wakes in the Keep"
+    start   newgame
+    # SardokR's scene (keep.s:479-670). Both menus loop back on their first
+    # two answers, so every line of the scene plays before the third.
+    scene   choose 1 2 3 1 2 3
+    expect  RAHULSTATE = 1              # keep.s:660
+    save    "opening"

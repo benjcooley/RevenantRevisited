@@ -13,15 +13,15 @@ inline) · `[-]` cancelled. Dates are ISO.
 | Status | Item | Last touched |
 |---|---|---|
 | [x] | Design: ARCHITECTURE.md, README.md, this page | 2026-10-13 |
-| [ ] | Turbo time: `TTime::BeginFixedFrames(n)`, a per-frame tick budget under `--shadow` | — |
-| [ ] | `--shadow` flags; `TShadowRun` hosted in `TPlayScreen::Update`; deterministic level loads | — |
-| [ ] | Plan parser: stages, steps, places, keep list; errors with file:line | — |
-| [ ] | Event log (`shadow.jsonl`) and `summary.txt`; exit codes | — |
+| [x] | Turbo: several simulation steps per drawn frame, each with its own input drain; the step count adapts to a 12 ms simulation budget. The opening: 6 min 23 s of game time in about 1 s | 2026-10-13 |
+| [x] | `--shadow`, `--shadow-out`, `--shadow-until`, `--shadow-lenient`; `TShadowRun` pulsed first in `TPlayScreen::Update`; `DeterministicRun`; seed 1 by default | 2026-10-13 |
+| [x] | Plan parser: module, stages, `start`, `scene`, `talk`, `expect`, `save`; errors with file:line; `test_shadowplan` (CI). Places and the keep list come with P1 | 2026-10-13 |
+| [x] | Event log (`shadow.jsonl`, `[smoke]` lines in revenant.log), `summary.txt`, `waypoints.json`; exit codes 0/1/2 | 2026-10-13 |
 | [~] | Ledger: per-tick snapshot and diff; script, clock and exit causes; story variables; cheat flags (verb and kill causes come with P1/P2) | 2026-10-13 |
-| [ ] | Verbs: `talk`, `choose` (public `TDialogPane::Choose`), `scene`, `expect`, `save` (gated) | — |
-| [ ] | Movies skipped through the player's path | — |
-| [ ] | Waypoint export in the playtest catalogue's format; load check | — |
-| [ ] | Gate: the opening to "control on" headless; waypoint `shadow-opening` loads | — |
+| [x] | Verbs: `talk`, `choose` (digit keys through the input queue), `scene`, `expect`, `save` (waits for idle control) | 2026-10-13 |
+| [~] | Movies skipped with Escape through the input queue (written; first exercised by S8's FMV) | 2026-10-13 |
+| [x] | `tools/shadow/shadow.py`: runs the plan, files each save in the waypoint catalogue as `shadow <name>`, `--check` load-checks it | 2026-10-13 |
+| [x] | Gate: the opening (every line of both menus) passes in ~10 s; two seed-1 runs give identical logs; `shadow opening` filed and load-checked | 2026-10-13 |
 
 ## P1 Nav
 

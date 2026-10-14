@@ -57,6 +57,18 @@ class TExit : public TContainer
     // REVSYNC: WriteExitList @ 0x0050cca0 -- only when changed.
     static bool WriteExitList();
 
+    // An exit.def entry: going through the exit `name` puts you at `target`
+    // on `level`.
+    struct STarget
+    {
+        std::string name;
+        S3DPoint    target{};
+        int32_t     level = 0;
+    };
+    // Every entry, in file order. For checks that a move went through an
+    // exit, and for route planning (Shadow Smoke, docs/shadow/ARCHITECTURE.md).
+    [[nodiscard]] static std::vector<STarget> Targets();
+
     void Load(RTInputStream is, int32_t version, int32_t objversion) override;
     void Save(RTOutputStream os) override;
 

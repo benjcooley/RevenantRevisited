@@ -193,6 +193,15 @@ void TExit::Close()
     exitlistdirty = false;
 }
 
+std::vector<TExit::STarget> TExit::Targets()
+{
+    std::vector<STarget> targets;
+    targets.reserve(exitlist.size());
+    for (const SExitRef& ref : exitlist)
+        targets.push_back({ref.name, ref.target, ref.level});
+    return targets;
+}
+
 // REVSYNC: WriteExitList @ 0x0050cca0. Retail wrote the module's exit.def
 // when that file existed on disk, else the shared one; DataFilePath picks
 // the same, and the file layer puts writes under the save path. Entries go
