@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "shadowencounters.h"
 #include "shadownav.h"
 #include "shadowsteps.h"
 #include "shadowzones.h"
@@ -64,6 +65,12 @@ class TShadowNav
     const SShadowGait& Gait(TShadowLog& log);
     // The trigger zones of Locke's level, read when he comes to it.
     const TShadowZones& Zones(TShadowLog& log);
+    // A load replaced the world: the field and the zones are built again.
+    void Forget()
+    {
+        field = TShadowWalkField{};
+        zones = TShadowZones{};
+    }
 
   private:
     TShadowWalkField           field;
@@ -72,8 +79,11 @@ class TShadowNav
 };
 
 // The object `name` names on `level` nearest `near`: an instance name, else
-// a type name, compared without case. nullptr when there is none.
-[[nodiscard]] TObjectInstance* ShadowFindObject(const std::string& name, int32_t level, const S3DPoint& near);
+// a type name, compared without case. `living`: a character only while it
+// lives (a fight's target, not the body of the last one). nullptr when
+// there is none.
+[[nodiscard]] TObjectInstance* ShadowFindObject(const std::string& name, int32_t level, const S3DPoint& near,
+                                                bool living = false);
 
 class TShadowTravel
 {
@@ -100,6 +110,11 @@ class TShadowTravel
     EShadowStatus Pulse(SShadowContext& context, std::string& failure);
     // The object travelled to (nullptr for a point, or once it is gone).
     [[nodiscard]] TObjectInstance* Object() const { return object.Get(); }
+    // To a living character: the travel's target is never a body.
+    void OnlyLiving() { living = true; }
+    // Failed because the way is held by monsters Locke wouldn't beat, even
+    // running past them: a player turns back there (§5.5).
+    [[nodiscard]] bool Guarded() const { return guarded; }
 
   private:
     enum class EStage : uint8_t { Plan, Walk, Arrive, Through, Crossing, Fighting, Done };
@@ -110,9 +125,17 @@ class TShadowTravel
     // A standable cell of `exit`'s strip in Locke's region, nearest its
     // middle.
     bool OntoStrip(const TShadowWalkField& field, TExit& exit, S3DPoint& dest, std::string& failure) const;
+    // The monsters that would see Locke on `path`, the target left out.
+    [[nodiscard]] std::vector<SShadowEncounter> Encounters(const std::vector<S3DPoint>& path) const;
+    // Which of `met` (on `path`) he fights, sized up where they meet him
+    // (§5.5); false, guarded, when he'd lose even running.
+    bool Meet(SShadowContext& context, const std::vector<SShadowEncounter>& met, const std::vector<S3DPoint>& path,
+              std::string& failure);
 
     std::string      target;
     bool             evade  = false;
+    bool             guarded = false;
+    bool             living  = false;   // the target must be a living character
     EArrive          arrive = EArrive::Beside;
     bool             viaexit = false;   // through an exit: it takes him on
     bool             viadoor = false;   // ... a scripted door, used once he is there
@@ -133,6 +156,7 @@ class TShadowTravel
     // Locke, and he fights it (and what else sees him there) before going
     // on. Evading, he fights a share of the leg's, once.
     std::vector<TSafeRef<TCharacter>>  meeting;
+    std::vector<S3DPoint>              walked;     // this leg's path, for what spawns beside it
     SShadowStep                        fightstep;
     std::unique_ptr<TShadowStepRunner> fight;
     bool                               evaded = false;

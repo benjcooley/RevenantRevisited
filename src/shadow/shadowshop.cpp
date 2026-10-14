@@ -11,12 +11,14 @@
 // the shop's own Buy and Sell, called per item rather than through the
 // drawer's keys -- the stock, the prices, the gold and free-slot checks and
 // the sold-unique bookkeeping are all theirs. Then Exit, and the menu's
-// third answer ends the conversation.
+// third answer ends the conversation. `sell junk` sells whatever of
+// Locke's the purse has no use for (shadowpurse.h) that this shop takes.
 
 #include "shadowsteps.h"
 
 #include "shadowledger.h"
 #include "shadowlog.h"
+#include "shadowpurse.h"
 #include "shadowtravel.h"
 
 #include "../buysell.h"
@@ -28,6 +30,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <map>
 
 namespace {
 
@@ -72,13 +75,13 @@ class TShopRunner final : public TShadowStepRunner
         {
         case EStage::Go:
         {
-            // Holding enough already: nothing to buy.
-            if (step.upto && wanted() <= 0)
+            // Holding enough already, or nothing to spare: no trip.
+            if ((step.upto && wanted() <= 0) || (step.junk && ShadowJunk(*Player).empty()))
                 return EShadowStatus::Done;
             std::string why;
             const EShadowStatus status = travel.Pulse(context, why);
             if (status == EShadowStatus::Failed)
-                return Fail(why);
+                return Fail(why, travel.Guarded());
             if (status == EShadowStatus::Running)
                 return status;
             TObjectInstance* merchant = travel.Object();
@@ -102,8 +105,16 @@ class TShopRunner final : public TShadowStepRunner
             // its rows; they are all in once `buysellscreen` puts them up.
             if (!BuySellPane.IsActive() || PlayScreen.Drawer() != TPlayScreen::EDrawer::BuySell)
                 return EShadowStatus::Running;
+            if (step.junk)
+                return OpenJunk(context);
             if (FindRow(step.item) < 0)
-                return Close(context, step.target + (buying ? " doesn't sell " : " won't buy ") + step.item);
+            {
+                std::string rows;
+                for (const SBuySellItem& item : BuySellPane.Items())
+                    rows += (rows.empty() ? "" : ", ") + ToUtf8(item.name.c_str());
+                return Close(context, step.target + (buying ? " doesn't sell " : " won't buy ") + step.item + " (" +
+                                          (rows.empty() ? "nothing" : rows) + ")");
+            }
             target = step.upto ? std::max(0, wanted()) : step.count;
             Announce(context);
             stage = EStage::Trading;
@@ -112,11 +123,12 @@ class TShopRunner final : public TShadowStepRunner
         case EStage::Trading:
         {
             // One a tick, each checked against the gold and the pack.
-            const int32_t row = FindRow(step.item);
+            const int32_t row = step.junk ? JunkRow() : FindRow(step.item);
             if (done >= target || row < 0)
                 return Close(context, done >= target ? "" : "none left to sell");
             const int32_t gold = Player->GetInventoryAmount("Gold");
             const int32_t held = Player->GetInventoryAmount(step.item.c_str());
+            lastsold = BuySellPane.Items()[size_t(row)].type;
             if (buying)
                 BuySellPane.Buy(BuySellPane.Items()[size_t(row)]);
             else
@@ -130,6 +142,8 @@ class TShopRunner final : public TShadowStepRunner
                                              : "the sale didn't go through");
             }
             ++done;
+            if (step.junk)
+                --selling[Lower(lastsold)];
             return EShadowStatus::Running;
         }
 
@@ -158,6 +172,43 @@ class TShopRunner final : public TShadowStepRunner
   private:
     enum class EStage : uint8_t { Go, Greeting, Opening, Trading, Leaving, Settling };
 
+    // Junk: of what the purse would sell, the rows this shop takes.
+    EShadowStatus OpenJunk(SShadowContext& context)
+    {
+        selling.clear();
+        target = 0;
+        int32_t gold = 0;
+        std::map<std::string, int32_t> junk;
+        for (const auto& [name, count] : ShadowJunk(*Player))
+            junk[Lower(name)] += count;
+        for (const SBuySellItem& item : BuySellPane.Items())
+        {
+            int32_t& left = junk[Lower(item.type)];
+            if (left <= 0)
+                continue;
+            --left;
+            ++selling[Lower(item.type)];
+            ++target;
+            gold += item.price;
+            context.log.Event("sell", ToUtf8(item.name.c_str()) + " at " + std::to_string(item.price) + " gold");
+        }
+        if (target == 0)
+            return Close(context, "");
+        context.ledger.AllowItems("sell junk", {}, gold, context.tick + kShopLimitTicks);
+        stage = EStage::Trading;
+        return EShadowStatus::Running;
+    }
+
+    // A row of junk still to sell, -1 for none.
+    [[nodiscard]] int32_t JunkRow() const
+    {
+        const std::vector<SBuySellItem>& items = BuySellPane.Items();
+        for (size_t i = 0; i < items.size(); ++i)
+            if (const auto it = selling.find(Lower(items[i].type)); it != selling.end() && it->second > 0)
+                return int32_t(i);
+        return -1;
+    }
+
     // The ledger is told the whole trade before the first of it.
     void Announce(SShadowContext& context)
     {
@@ -175,8 +226,8 @@ class TShopRunner final : public TShadowStepRunner
     EShadowStatus Close(SShadowContext& context, const std::string& why)
     {
         failure = why;
-        context.log.Event(buying ? "bought" : "sold",
-                          step.item + " x" + std::to_string(done) + (why.empty() ? "" : ": " + why));
+        context.log.Event(buying ? "bought" : "sold", (step.junk ? std::string("junk") : step.item) + " x" +
+                                                          std::to_string(done) + (why.empty() ? "" : ": " + why));
         BuySellPane.Exit();
         stage = EStage::Leaving;
         return EShadowStatus::Running;
@@ -193,6 +244,8 @@ class TShopRunner final : public TShadowStepRunner
     int32_t       done    = 0;
     int32_t       settled = 0;
     std::string   failure;
+    std::map<std::string, int32_t> selling;     // junk: by type, how many still to sell
+    std::string   lastsold;                     // the type of the row last traded
 };
 
 } // namespace

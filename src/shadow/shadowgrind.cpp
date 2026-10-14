@@ -30,7 +30,6 @@
 
 #include "shadowsteps.h"
 
-#include "shadowduel.h"
 #include "shadowencounters.h"
 #include "shadowledger.h"
 #include "shadowlog.h"
@@ -57,24 +56,28 @@ constexpr int32_t kTicksPerSecond = 24;
 // Monsters and generators this close together are one site (grind.py's
 // SITE_RADIUS).
 constexpr int32_t kSiteRadius = 600;
-// A site cleared is left alone this long, so its generators can refill.
+// A site cleared is left alone this long, so its generators can refill; one
+// he couldn't get to (guarded, or nowhere to farm it from), this long; and
+// with nowhere to go and nothing to rest off, he waits this long.
 constexpr int32_t kRevisitTicks = 2 * 60 * kTicksPerSecond;
+constexpr int32_t kRefuseTicks = 5 * 60 * kTicksPerSecond;
+constexpr int32_t kIdleTicks = 60 * kTicksPerSecond;
 // Farming: where to wait from the generators -- out of sight (the animate
 // pass reaches about 450-500 units, GRIND.md §3.1) but in the sector window
 // that keeps them pulsing -- and the longest wait (the slowest slot is 91 s).
 constexpr int32_t kFarmNear = 650;
 constexpr int32_t kFarmFar = 800;
 constexpr int32_t kFarmTicks = 100 * kTicksPerSecond;
-// Sizing a fight up: this many trial duels, and what makes it one to take.
-constexpr int32_t kTrials = 24;
-constexpr int32_t kWinsNeeded = 22;             // of kTrials
-constexpr int32_t kWorstLossPct = 70;           // of his health, on average
-// He tops up below this share of his health, food first out of a fight;
-// with nothing to, he rests to this share. Health comes back about a point
-// a minute (GRIND.md §6.1): a rest is long, and has stuck when this long
-// passes without a point.
+// He tops up below this share of his health, food first out of a fight.
+// With nothing to, he fights on -- the trial duels turn down a fight he'd
+// lose as he is (forest fights cost a level-1 Locke a few points,
+// CALIBRATION.md) -- until he is below the rest share, or nothing is left
+// that he would take on; then he rests to the rested share. Health comes
+// back about a point a minute (GRIND.md §6.1): a rest is long, and has
+// stuck when this long passes without a point.
 constexpr int32_t kTopUpPct = 60;
-constexpr int32_t kRestedPct = 90;
+constexpr int32_t kRestPct = 35;
+constexpr int32_t kRestedPct = 75;
 constexpr int32_t kRestStuckTicks = 5 * 60 * kTicksPerSecond;
 // No grind goes on longer than this much game time.
 constexpr int32_t kGrindLimit = 6 * 60 * 60 * kTicksPerSecond;
@@ -145,12 +148,13 @@ class TGrindRunner final : public TShadowStepRunner
             case EStage::Fight:    return Fight(context);
             case EStage::Linger:   return Linger(context);
             case EStage::Rest:     return Rest(context);
+            case EStage::Idle:     return Idle();
         }
         return EShadowStatus::Running;
     }
 
   private:
-    enum class EStage : uint8_t { Assess, Restock, Go, Clear, Fight, Linger, Rest };
+    enum class EStage : uint8_t { Assess, Restock, Go, Clear, Fight, Linger, Rest, Idle };
 
     // The goal reached? A goal the game can't read fails the step.
     [[nodiscard]] bool Reached(std::string& why) const
@@ -188,8 +192,10 @@ class TGrindRunner final : public TShadowStepRunner
             hard.clear();
             sizedat = Player->Level();
         }
-        if (Hurt())
-            return TopUp(context) ? EShadowStatus::Running : StartRest(context);
+        if (Hurt() && TopUp(context))
+            return EShadowStatus::Running;
+        if (Player->Health() * 100 < Player->MaxHealth() * kRestPct)
+            return StartRest(context);
         if (!step.routine.empty() && !restocked && !CarriesHealing() &&
             Player->GetInventoryAmount("Gold") >= kPotionPrice)
         {
@@ -200,7 +206,8 @@ class TGrindRunner final : public TShadowStepRunner
         std::vector<SSite> sites = Survey();
         SSite* best = nullptr;
         for (SSite& site : sites)
-            if (!Recent(site, context) && !site.monsters.empty() && (!best || site.score > best->score))
+            if (!Recent(site, context) && !Refused(site, context) && !site.monsters.empty() &&
+                (!best || site.score > best->score))
                 best = &site;
         if (best)
         {
@@ -214,10 +221,20 @@ class TGrindRunner final : public TShadowStepRunner
         }
         // Farming is going back to a site cleared, so recent ones count.
         for (SSite& candidate : sites)
-            if (!candidate.generators.empty() && (!best || candidate.score > best->score))
+            if (!candidate.generators.empty() && !Refused(candidate, context) &&
+                (!best || candidate.score > best->score))
                 best = &candidate;
         if (!best)
-            return Fail("nothing left to fight that Locke would beat, at level " + std::to_string(Player->Level()));
+        {
+            // Turned down everywhere: hurt, he rests; else he waits for the
+            // generators and the ways to change.
+            if (Player->Health() * 100 < Player->MaxHealth() * kRestedPct)
+                return StartRest(context);
+            context.log.Event("grind", "nothing in reach he'd take on; waiting");
+            waited = 0;
+            stage = EStage::Idle;
+            return EShadowStatus::Running;
+        }
         site = *best;
         return Farm(context);
     }
@@ -276,7 +293,18 @@ class TGrindRunner final : public TShadowStepRunner
             if (status == EShadowStatus::Running)
                 return status;
             if (status == EShadowStatus::Failed)
+            {
+                // Turned back on the way: no trip this time. He rests and
+                // grinds on, and tries again after a fight that goes well.
+                if (routinerunner->Guarded() && Player->Health() > 0)
+                {
+                    context.log.Event("grind", "the restock trip turned back: " + routinerunner->Failure());
+                    routinerunner.reset();
+                    stage = EStage::Assess;
+                    return EShadowStatus::Running;
+                }
                 return Fail("restocking: " + routinerunner->Failure());
+            }
             routinerunner.reset();
             ++routinestep;
         }
@@ -331,6 +359,21 @@ class TGrindRunner final : public TShadowStepRunner
         return false;
     }
 
+    [[nodiscard]] bool Refused(const SSite& candidate, const SShadowContext& context) const
+    {
+        for (const auto& [centre, when] : refused)
+            if (Distance2D(centre, candidate.centre) <= kSiteRadius / 2 && context.tick - when < kRefuseTicks)
+                return true;
+        return false;
+    }
+
+    EShadowStatus Idle()
+    {
+        if (++waited >= kIdleTicks)
+            stage = EStage::Assess;
+        return EShadowStatus::Running;
+    }
+
     // ---- going, clearing, fighting ----
     EShadowStatus Go(SShadowContext& context)
     {
@@ -338,9 +381,12 @@ class TGrindRunner final : public TShadowStepRunner
         const EShadowStatus status = travel->Pulse(context, why);
         if (status == EShadowStatus::Failed)
         {
-            // Somewhere he can't walk to: leave the site be for a while.
+            if (Player->Health() <= 0)
+                return Fail(why);
+            // Somewhere he can't walk to, or not past what guards the way:
+            // leave the site be for a while.
             context.log.Event("grind", "can't reach the site: " + why);
-            visited.push_back({site.centre, context.tick});
+            refused.push_back({site.centre, context.tick});
             stage = EStage::Assess;
             return EShadowStatus::Running;
         }
@@ -386,22 +432,13 @@ class TGrindRunner final : public TShadowStepRunner
     // Would he beat it as he is? Trial duels on copies (§6.4).
     bool SizeUp(TCharacter& monster, SShadowContext& context)
     {
-        int32_t wins = 0, lost = 0;
-        for (int32_t k = 0; k < kTrials; ++k)
-        {
-            TShadowDuel trial(TShadowDuel::EMode::Trial, SShadowTactics{}, uint32_t(context.tick * 31 + k));
-            const SShadowFightReport report = trial.Fight(*Player, {&monster}, context.tick, nullptr, nullptr);
-            wins += report.won;
-            lost += report.suffered;
-        }
-        const int32_t meanloss = lost / kTrials;
-        const bool take = wins >= kWinsNeeded && meanloss * 100 <= Player->Health() * kWorstLossPct;
+        const SShadowOdds odds = ShadowSizeUp({&monster}, context.tick);
         const std::string name = ToUtf8(monster.GetName() && monster.GetName()[0] ? monster.GetName()
                                                                                     : monster.GetTypeName());
-        context.log.Event("sizeup", name + ": won " + std::to_string(wins) + "/" + std::to_string(kTrials) +
-                                        ", losing " + std::to_string(meanloss) + " health on average: " +
-                                        (take ? "fight" : "leave it"));
-        return take;
+        context.log.Event("sizeup", name + ": won " + std::to_string(odds.wins) + "/" + std::to_string(odds.trials) +
+                                        ", losing " + std::to_string(odds.meanloss) + " health on average: " +
+                                        (odds.take ? "fight" : "leave it"));
+        return odds.take;
     }
 
     EShadowStatus Fight(SShadowContext& context)
@@ -447,7 +484,7 @@ class TGrindRunner final : public TShadowStepRunner
                 }
             }
         }
-        visited.push_back({site.centre, context.tick});
+        refused.push_back({site.centre, context.tick});     // nowhere to wait for it from
         stage = EStage::Assess;
         return EShadowStatus::Running;
     }
@@ -463,7 +500,8 @@ class TGrindRunner final : public TShadowStepRunner
             travel.reset();
             if (status == EShadowStatus::Failed)
             {
-                visited.push_back({site.centre, context.tick});
+                context.log.Event("grind", "can't reach the farming spot: " + why);
+                refused.push_back({site.centre, context.tick});
                 stage = EStage::Assess;
                 return EShadowStatus::Running;
             }
@@ -521,6 +559,8 @@ class TGrindRunner final : public TShadowStepRunner
             if (status == EShadowStatus::Running)
                 return status;
             travel.reset();         // got there, or rests where he stands
+            restgain = context.tick;
+            resthealth = Player->Health();
         }
         if (Player->Health() * 100 >= Player->MaxHealth() * kRestedPct)
         {
@@ -530,12 +570,12 @@ class TGrindRunner final : public TShadowStepRunner
             stage = EStage::Assess;
             return EShadowStatus::Running;
         }
+        // A fight on the way to a quiet spot can set him back; only a rise
+        // counts as the rest working.
         if (Player->Health() > resthealth)
-        {
-            resthealth = Player->Health();
             restgain = context.tick;
-        }
-        else if (context.tick - restgain > kRestStuckTicks)
+        resthealth = Player->Health();
+        if (context.tick - restgain > kRestStuckTicks)
             return Fail("his health stopped coming back resting (" + std::to_string(Player->Health()) + "/" +
                         std::to_string(Player->MaxHealth()) + ")");
         return EShadowStatus::Running;
@@ -551,6 +591,7 @@ class TGrindRunner final : public TShadowStepRunner
     int32_t sizedat = 0;                        // the level `hard` was sized at
     SSite   site;
     std::vector<std::pair<S3DPoint, int64_t>> visited;     // sites cleared, and when
+    std::vector<std::pair<S3DPoint, int64_t>> refused;     // sites he couldn't get to, and when
     std::set<int32_t>                         hard;        // monsters he wouldn't beat
     std::unique_ptr<TShadowTravel>            travel;
     SShadowStep                               fightstep;

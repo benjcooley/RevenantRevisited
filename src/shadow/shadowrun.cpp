@@ -9,12 +9,14 @@
 
 #include "shadowloot.h"
 #include "shadowpack.h"
+#include "shadowpurse.h"
+#include "shadowstate.h"
 
-#include "../buysell.h"
 #include "../gameflow.h"
 #include "../logging.h"
 #include "../module.h"
 #include "../player.h"
+#include "../playscreen.h"
 #include "../revenant.h"
 #include "../revutils.h"
 
@@ -24,6 +26,7 @@
 #include <cctype>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <sstream>
 
 TShadowRun Shadow;
@@ -50,11 +53,47 @@ std::string Timestamp()
 bool TShadowRun::Configure(const SShadowOptions& given)
 {
     options = given;
+    if (!options.verify.empty())
+    {
+        SetDeterministicRun(true);
+        active = true;
+        log_info("[smoke] verifying the save: Locke's state to %s", options.verify.c_str());
+        return true;
+    }
+    if (!options.duel.empty())
+    {
+        // The duel harness: no plan, no ledger (the scenario's console lines
+        // set Locke up, which no verb explains), the same turbo.
+        if (options.duelruns < 1)
+        {
+            log_error("[smoke] --shadow-duel-runs must be at least 1");
+            return false;
+        }
+        bench = std::make_unique<TShadowDuelBench>(options.duel, options.duelruns, options.dueltrace);
+        if (options.out.empty())
+            options.out = (std::filesystem::path(SavePath) / "shadow" / ("duel-s" + std::to_string(options.seed) + "-" +
+                                                                         Timestamp())).string();
+        SetDeterministicRun(true);
+        active = true;
+        log_info("[smoke] duel harness: %d trials against %d foe(s), out %s", options.duelruns,
+                 (int32_t)options.duel.size(), options.out.c_str());
+        return true;
+    }
     std::string error;
     if (!plan.Load(options.plan, error))
     {
         log_error("[smoke] %s", error.c_str());
         return false;
+    }
+    if (!options.style.empty())
+    {
+        const std::optional<EShadowStyle> style = ShadowParseStyle(options.style);
+        if (!style)
+        {
+            log_error("[smoke] --shadow-style: '%s' isn't melee, hands, bow, spells or mixed", options.style.c_str());
+            return false;
+        }
+        plan.SetStyle(*style);
     }
     if (!options.until.empty() && plan.FindStage(options.until) < 0)
     {
@@ -69,6 +108,8 @@ bool TShadowRun::Configure(const SShadowOptions& given)
             log_error("[smoke] --shadow-stage: the plan has no stage '%s'", options.from.c_str());
             return false;
         }
+        if (!options.startslot.empty())
+            lastsave = {options.startslot, stage, 0};
     }
     if (options.out.empty())
     {
@@ -117,26 +158,55 @@ void TShadowRun::Pulse()
     }
 
     ++tick;
+    if (!options.verify.empty())
+    {
+        Verify();
+        return;
+    }
     log.SetTick(tick);
     if (!begun)
         Begin();
+    if (bench)
+    {
+        RunBench();
+        return;
+    }
 
     if (Player != player)
     {
         ledger.Start(*Player, tick);
         player = Player;
+        if (reloading)
+        {
+            nav.Forget();       // the old world's
+            settling = true;
+        }
+        reloading = false;
     }
+    else if (reloading)
+        return;             // the load hasn't begun yet: the dead Locke is still the player
     else if (ledger.Audit(*Player, tick, log) > 0 && !options.lenient)
     {
         Finish(2, "the ledger found a change with no cause");
         return;
     }
 
+    // A death: back to the newest save, as a player (§6.6).
+    if (Player->Health() <= 0)
+    {
+        Died("Locke died");
+        return;
+    }
+
     // Whatever came into or left the pack, it is put in order as a player
-    // keeps it -- not mid-trade, while the shop lists the pack (§8.9).
-    if (!finished && ledger.ItemsVersion() != tidied && ShadowGameIdle() && !BuySellPane.IsActive())
+    // keeps it, and the best armour is put on -- not mid-trade, while the
+    // shop's drawer lists the pack (§8.9, §8.10). (The shop pane stays
+    // armed after a visit: its script sets it up again with each menu.)
+    if (!finished && ledger.ItemsVersion() != tidied && ShadowGameIdle() &&
+        PlayScreen.Drawer() != TPlayScreen::EDrawer::BuySell)
     {
         ShadowTidyPack(*Player, log);
+        ShadowReadyArmour(*Player, log);
         tidied = ledger.ItemsVersion();
     }
 
@@ -148,6 +218,13 @@ void TShadowRun::Pulse()
         ShadowLogChests(Player->GetLevel(), log);
     }
 
+    // After a death's reload, the plan goes on once the game is Locke's again.
+    if (settling)
+    {
+        if (!ShadowGameIdle())
+            return;
+        settling = false;
+    }
     RunSteps();
 }
 
@@ -162,16 +239,39 @@ void TShadowRun::Begin()
     }
     const TModule* module = ModuleManager.Active();
     const std::string modulename = module ? module->dirname : "";
-    log.Event("run", plan.Path() + ", seed " + std::to_string(options.seed) + ", build " + kBuildName,
+    if (bench)
+    {
+        log.Event("run", "duel harness, seed " + std::to_string(options.seed) + ", build " + kBuildName,
+                  [&](JsonOut& out) {
+                      out.Field("seed", options.seed);
+                      out.FieldString("module", modulename);
+                      out.FieldString("build", kBuildName);
+                      out.FieldString("sha", kBuildSha);
+                  });
+        return;
+    }
+    const std::string style = kShadowStyleNames[size_t(plan.Style())];
+    log.Event("run", plan.Path() + ", seed " + std::to_string(options.seed) + ", style " + style + ", build " +
+                         kBuildName,
               [&](JsonOut& out) {
                   out.FieldString("plan", plan.Path());
                   out.Field("seed", options.seed);
+                  out.FieldString("style", style);
                   out.FieldString("module", modulename);
                   out.FieldString("build", kBuildName);
                   out.FieldString("sha", kBuildSha);
               });
     if (!SameId(modulename, plan.Module()))
         Finish(1, "the plan is for module " + plan.Module() + ", the game runs " + modulename);
+}
+
+void TShadowRun::RunBench()
+{
+    const EShadowStatus status = bench->Pulse(log);
+    if (status == EShadowStatus::Done)
+        Finish(0, "the trial duels are done");
+    else if (status == EShadowStatus::Failed)
+        Finish(1, "duel harness: " + bench->Failure());
 }
 
 void TShadowRun::RunSteps()
@@ -197,7 +297,12 @@ void TShadowRun::RunSteps()
             return;
         if (status == EShadowStatus::Failed)
         {
-            Finish(1, "a fight the plan didn't ask for: " + interrupt->Failure());
+            const std::string why = "a step the plan didn't ask for (" + interruptstep.Describe() + "): " +
+                                    interrupt->Failure();
+            if (Player->Health() <= 0)
+                Died(why);
+            else
+                Finish(1, why);
             return;
         }
         interrupt.reset();
@@ -234,6 +339,20 @@ void TShadowRun::RunSteps()
                 step = -1;
                 continue;
             }
+            // Between steps, with something new in the pack: a combination
+            // of his talismans that makes a spell he doesn't know is tried,
+            // as a player experiments in the spell pane (§8.6).
+            if (ledger.ItemsVersion() != inventedat && ShadowGameIdle())
+            {
+                inventedat = ledger.ItemsVersion();
+                if (ShadowSpellToInvent({}, nullptr))
+                {
+                    interruptstep = SShadowStep{};
+                    interruptstep.verb = EShadowVerb::Invent;
+                    interrupt = MakeInventRunner(interruptstep);
+                    return;
+                }
+            }
             const SShadowStep& next = current.steps[step];
             log.Event("step", next.Describe(), [&](JsonOut& out) {
                 out.Field("line", next.line);
@@ -249,13 +368,69 @@ void TShadowRun::RunSteps()
         if (status == EShadowStatus::Failed)
         {
             const SShadowStep& failed = stages[stage].steps[step];
-            Finish(1, plan.Path() + ":" + std::to_string(failed.line) + ": " + failed.Describe() + ": " +
-                          runner->Failure());
+            const std::string why = plan.Path() + ":" + std::to_string(failed.line) + ": " + failed.Describe() +
+                                    ": " + runner->Failure();
+            if (Player->Health() <= 0)
+                Died(why);
+            else
+                Finish(1, why);
             return;
         }
+        // The newest save is where a death goes back to: the step after it.
+        if (stages[stage].steps[step].verb == EShadowVerb::Save)
+            lastsave = {"Shadow " + stages[stage].steps[step].name, stage, step + 1};
         runner.reset();
         ++step;
     }
+}
+
+void TShadowRun::Verify()
+{
+    // The game's own settling first: the load done, control Locke's, and a
+    // second more for whatever the level's scripts do on arrival.
+    constexpr int32_t kSettleTicks = 24;
+    if (!ShadowGameIdle())
+    {
+        settled = 0;
+        return;
+    }
+    if (++settled < kSettleTicks)
+        return;
+    std::ofstream file(options.verify, std::ios::binary);
+    file << ShadowStateJson(*Player) << "\n";
+    finished = true;
+    exitcode = file ? 0 : 1;
+    if (!file)
+        log_error("[smoke] can't write %s", options.verify.c_str());
+    sapp_request_quit();
+}
+
+void TShadowRun::Died(const std::string& how)
+{
+    const std::string where = stage < (int32_t)plan.Stages().size() ? plan.Stages()[stage].id : "the end";
+    const int32_t times = ++deaths[where];
+    log.Event("death", how, [&](JsonOut& out) {
+        out.FieldString("stage", where);
+        out.Field("times", times);
+    });
+    // A balanced plan doesn't lose a fight it chose twice (§6.6).
+    if (lastsave.slot.empty())
+    {
+        Finish(1, how + " (no save to go back to)");
+        return;
+    }
+    if (times > kDeathsAllowed)
+    {
+        Finish(1, how + " (the second death in stage " + where + ")");
+        return;
+    }
+    log.Event("reload", "\"" + lastsave.slot + "\", back to stage " + plan.Stages()[lastsave.stage].id);
+    GameFlow.Session().RequestLoad(lastsave.slot, false);
+    reloading = true;
+    runner.reset();
+    interrupt.reset();
+    stage = lastsave.stage;
+    step = lastsave.step;
 }
 
 void TShadowRun::Finish(int32_t code, const std::string& why)
@@ -271,8 +446,12 @@ void TShadowRun::Finish(int32_t code, const std::string& why)
         out.Field("violations", ledger.Violations());
     });
     ledger.Stop();
-    WriteWaypoints();
-    WriteSummary(why);
+    if (!bench)
+    {
+        log.WriteFile("coverage.json", ledger.Coverage().Json() + "\n");
+        WriteWaypoints();
+        WriteSummary(why);
+    }
     log.Close();
     sapp_request_quit();
 }
@@ -285,6 +464,7 @@ void TShadowRun::WriteSummary(const std::string& why) const
         << "  " << why << "\n\n"
         << "plan      " << plan.Path() << "\n"
         << "seed      " << options.seed << "\n"
+        << "style     " << kShadowStyleNames[size_t(plan.Style())] << "\n"
         << "build     " << kBuildName << "\n"
         << "game time " << tick / 24 / 60 << " min " << tick / 24 % 60 << " s (" << tick << " ticks)\n"
         << "wall time " << (int64_t)wall << " s\n";
@@ -330,6 +510,7 @@ void TShadowRun::WriteWaypoints() const
         out.Key("xp").Begin('[').Value(w.xp[0]).Value(w.xp[1]).Value(w.xp[2]).End(']');
         out.Field("gold", w.gold);
         out.End('}');
+        out.Key("state").Raw(w.state);
         out.End('}');
     }
     out.End(']');

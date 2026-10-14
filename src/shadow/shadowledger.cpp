@@ -72,12 +72,14 @@ SShadowSnapshot SShadowSnapshot::Take(TPlayer& player, int64_t tick)
     s.level = player.Level();
     s.exp = player.Exp();
     s.attacklevel = player.AttackLevel();
+    // The stats as kept: what equipment and stat effects add on top come
+    // and go with them, and are no one's to explain.
     for (int32_t i = 0; i < NUM_PLRSTATS; ++i)
-        s.stats[i] = player.PlyrStat(i);
+        s.stats[i] = player.BaseObjStat(PLRSTAT_FIRST + i);
     for (int32_t i = 0; i < NUM_SKILLS; ++i)
     {
-        s.skills[i] = player.Skill(i);
-        s.skillexp[i] = player.SkillExp(i);
+        s.skills[i] = player.BaseObjStat(SK_FIRST + i);
+        s.skillexp[i] = player.BaseObjStat(SKE_FIRST + i);
     }
     s.levelup = player.LevelUpStats();
     const TGameState& states = ScriptManager.GameStates();
@@ -150,10 +152,11 @@ void TShadowLedger::AllowVitals(std::string cause, int32_t health, int32_t mana,
     meals.push_back({std::move(cause), health, mana, until});
 }
 
-void TShadowLedger::BeforeLine(TScript& script, int32_t)
+void TShadowLedger::BeforeLine(TScript& script, int32_t offset)
 {
     const TScriptProto* proto = script.GetScriptProto();
     scripts.insert(proto && proto->name ? proto->name : "?");
+    coverage.Line(script, offset, audittick);
 }
 
 std::string TShadowLedger::ScriptCause() const
@@ -194,6 +197,7 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
         return 0;
 
     const int32_t before = violations;
+    audittick = tick;
     const SShadowSnapshot now = SShadowSnapshot::Take(player, tick);
     const bool scripted = !scripts.empty();
     const std::string scriptcause = scripted ? ScriptCause() : std::string();
@@ -248,7 +252,9 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
             });
             return;
         }
-        if (is > was && !scripted && tick <= progressuntil && strcmp(field, "gold") != 0)
+        // A registered cause first: an area's ALWAYS script may be running
+        // lines in the same tick without touching him.
+        if (is > was && tick <= progressuntil && strcmp(field, "gold") != 0)
         {
             log.Event("gain", text + " by " + progresscause, [&](JsonOut& out) {
                 out.FieldString("field", field);
@@ -342,6 +348,7 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
             continue;
         const std::string name = ToUtf8(states.StateName((int32_t)i));
         const std::string text = name + " " + std::to_string(was) + " -> " + std::to_string(is);
+        coverage.StateChanged(name, was, is, tick);
         if (!scripted)
         {
             Violation(log, "story", text + " with no script running");

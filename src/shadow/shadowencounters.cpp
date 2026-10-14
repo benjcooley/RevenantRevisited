@@ -18,9 +18,19 @@
 
 namespace {
 
-// The walk is looked at every this many units: a monster's sight is
-// hundreds, so nothing it would see slips between two looks.
+// The walk is looked at every this many units: a monster's reach is
+// hundreds (COMBATRANGEMAX, 192 by default), so none slips between looks.
 constexpr int32_t kLookSpacing = 64;
+
+// Whether `monster`'s look would find Locke standing at `at` (see the header).
+bool WouldFind(TCharacter& monster, const S3DPoint& at)
+{
+    const SCharData* data = monster.GetCharData();
+    const S3DPoint from = monster.Pos();
+    const int32_t centre = (int32_t)std::lround(std::hypot(double(at.x - from.x), double(at.y - from.y)));
+    const int32_t edge = std::max(0, centre - monster.Radius() - Player->Radius());
+    return edge <= data->combatrangemax && edge - monster.Radius() - 32 <= data->hearingrange;
+}
 
 // What evading still leaves to fight (§5.5): a quarter of them against
 // monsters slower than his run, half against the as fast or faster.
@@ -55,10 +65,11 @@ std::vector<SShadowEncounter> ShadowLegEncounters(const std::vector<S3DPoint>& p
         box.bottom = std::max(box.bottom, path[i].y);
     }
 
-    // The monsters near enough to see some of it.
-    constexpr int32_t kWidestSight = 1024;
-    SRect around{box.left - kWidestSight, box.top - kWidestSight, box.right + kWidestSight,
-                 box.bottom + kWidestSight};
+    // The monsters near enough to find him on some of it: no char.def gives
+    // a combat range near this.
+    constexpr int32_t kWidestReach = 1024;
+    SRect around{box.left - kWidestReach, box.top - kWidestReach, box.right + kWidestReach,
+                 box.bottom + kWidestReach};
     for (TMapIterator i(level, &around, CHECK_NOINVENT); i; i++)
     {
         if (i->ObjClass() != OBJCLASS_CHARACTER)
@@ -66,19 +77,12 @@ std::vector<SShadowEncounter> ShadowLegEncounters(const std::vector<S3DPoint>& p
         auto* monster = static_cast<TCharacter*>(i.Item());
         if (monster->Health() <= 0 || !monster->Aggressive() || !monster->IsEnemy(Player))
             continue;
-        const int32_t sight = monster->GetCharData()->sightrange;
-        S3DPoint eye = monster->Pos();
-        eye.z += LIGHTINGCHARHEIGHT;
         for (const size_t at : looks)
-        {
-            S3DPoint there = path[at];
-            there.z += LIGHTINGCHARHEIGHT;
-            if (::Distance(eye, there) <= sight && MapPane.LineOfSight(eye, there, level))
+            if (WouldFind(*monster, path[at]))
             {
                 met.push_back({monster, at});
                 break;
             }
-        }
     }
     std::sort(met.begin(), met.end(), [](const SShadowEncounter& a, const SShadowEncounter& b) {
         return a.index < b.index;

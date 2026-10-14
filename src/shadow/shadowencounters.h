@@ -4,16 +4,19 @@
 // *************************************************************************
 //
 // Travel between two points is not free (docs/shadow/ARCHITECTURE.md §5.5).
-// When Locke walks, the monsters along his way see him and come for him;
+// When Locke walks, the monsters along his way find him and come for him;
 // a teleport would slip past them. So a leg's walk is checked for every
-// monster that would see some point of it -- alive, aggressive, his enemy,
-// within its sight range with a clear line of sight (the game's
-// LineOfSight, at character height) -- and the leg stops where the first
-// one would, for a fight.
+// monster whose look would find him at some point of it -- alive,
+// aggressive, his enemy -- and the leg stops where the first one would, for
+// a fight.
 //
-// Facing and light, which also decide whether a monster notices him
-// (TCharacter::CanSeeCharacter), are left out: monsters turn and wander,
-// and Shadow is never easier than walking.
+// The look is the AI's own (TCharacter::FindCharacters with ENEMY, HEAR and
+// SEE): a valid target is within the monster's COMBATRANGEMAX, edge to edge
+// (IsValidTarget), and it hears him -- any noise carries within its
+// HEARINGRANGE of its edge plus 32, with or without a line of sight
+// (Hearing, CanHearCharacter). Sight adds nothing on a walk: Sight wants a
+// glimpse of 99, and only an attacking Locke gives one off
+// (ResetStealthValues).
 
 #pragma once
 

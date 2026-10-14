@@ -320,7 +320,8 @@ bool ParseStep(const std::string& verb, TLineReader& in, SShadowStep& step, std:
             error = "'" + verb + "' needs an item";
             return false;
         }
-        step.item = item->text;
+        step.junk = verb == "sell" && !item->quoted && Lower(item->text) == "junk";
+        step.item = step.junk ? "" : item->text;
         step.upto = verb == "buy" && in.TakeKeyword("upto");
         if (const SToken* n = in.Peek(); n && !n->quoted)
             if (const std::optional<int32_t> count = ParseInt(n->text))
@@ -358,6 +359,16 @@ bool ParseStep(const std::string& verb, TLineReader& in, SShadowStep& step, std:
         if (!in.AtEnd())
         {
             error = "'fight' takes a target, then 'win' or nothing";
+            return false;
+        }
+        return true;
+    }
+    if (verb == "invent")
+    {
+        step.verb = EShadowVerb::Invent;
+        if (!in.AtEnd())
+        {
+            error = "'invent' takes nothing";
             return false;
         }
         return true;
@@ -444,9 +455,9 @@ bool ParseStep(const std::string& verb, TLineReader& in, SShadowStep& step, std:
             }
             step.attributes.push_back(found);
         }
-        if (step.attributes.empty() || step.attributes.size() > 2)
+        if (step.attributes.size() > 2)
         {
-            error = "'train' takes one or two attributes";
+            error = "'train' takes up to two attributes";
             return false;
         }
         if (step.attributes.size() == 1)
@@ -502,6 +513,29 @@ bool SShadowCondition::Holds(int32_t actual) const
     return false;
 }
 
+std::optional<EShadowStyle> ShadowParseStyle(const std::string& name)
+{
+    const std::string word = Lower(name);
+    for (size_t i = 0; i < kShadowStyleNames.size(); ++i)
+        if (word == kShadowStyleNames[i])
+            return EShadowStyle(i);
+    return std::nullopt;
+}
+
+std::array<int32_t, 2> ShadowStylePicks(EShadowStyle style)
+{
+    constexpr int32_t kStrn = 0, kCons = 1, kAgil = 2, kRflx = 3, kMind = 4;
+    switch (style)
+    {
+        case EShadowStyle::Melee:
+        case EShadowStyle::Hands:  return {kStrn, kAgil};
+        case EShadowStyle::Bow:    return {kAgil, kRflx};
+        case EShadowStyle::Spells: return {kMind, kCons};
+        case EShadowStyle::Mixed:  return {kStrn, kMind};
+    }
+    return {kStrn, kAgil};
+}
+
 std::string SShadowCondition::Describe() const
 {
     std::ostringstream out;
@@ -529,12 +563,18 @@ std::string SShadowStep::Describe() const
         case EShadowVerb::Use:    out << "use " << target << (item.empty() ? "" : " with \"" + item + "\""); break;
         case EShadowVerb::Take:   out << "take " << target << (item.empty() ? "" : " with \"" + item + "\""); break;
         case EShadowVerb::Buy:    out << "buy \"" << item << "\" " << (upto ? "upto " : "") << count << " from " << target; break;
-        case EShadowVerb::Sell:   out << "sell \"" << item << "\" " << count << " to " << target; break;
+        case EShadowVerb::Sell:
+            if (junk)
+                out << "sell junk to " << target;
+            else
+                out << "sell \"" << item << "\" " << count << " to " << target;
+            break;
         case EShadowVerb::Equip:   out << "equip \"" << item << "\""; break;
         case EShadowVerb::Unequip: out << "unequip \"" << item << "\""; break;
         case EShadowVerb::Consume: out << "consume \"" << item << "\""; break;
         case EShadowVerb::Fight:   out << "fight " << (target.empty() ? "(whoever attacks)" : target)
                                        << (mustwin ? " win" : ""); break;
+        case EShadowVerb::Invent:  out << "invent"; break;
         case EShadowVerb::Grind:   out << "grind until "
                                        << (goal.subject == EShadowSubject::Skill ? "skill " + goal.name : "level")
                                        << ' ' << goal.value << (routine.empty() ? "" : " restock " + routine); break;
@@ -542,6 +582,8 @@ std::string SShadowStep::Describe() const
             out << "train";
             for (const int32_t a : attributes)
                 out << ' ' << a;
+            if (attributes.empty())
+                out << " (the style's)";
             break;
         case EShadowVerb::Expect: out << "expect " << condition.Describe(); break;
         case EShadowVerb::Save:   out << "save \"" << name << '"'; break;
@@ -605,6 +647,14 @@ bool TShadowPlan::Load(const std::string& planpath, std::string& error)
             if (!name || !in.AtEnd())
                 return fail("'module' takes one name");
             module = name->text;
+        }
+        else if (word == "style")
+        {
+            const SToken* name = in.Take();
+            const std::optional<EShadowStyle> found = name ? ShadowParseStyle(name->text) : std::nullopt;
+            if (!found || !in.AtEnd())
+                return fail("'style' takes one of melee, hands, bow, spells, mixed");
+            style = *found;
         }
         else if (word == "place")
         {

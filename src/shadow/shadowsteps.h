@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -26,6 +27,7 @@ class TShadowLedger;
 class TShadowLog;
 class TShadowNav;
 class TShadowPlan;
+struct SSpellData;
 
 enum class EShadowStatus : uint8_t { Running, Done, Failed };
 
@@ -44,6 +46,7 @@ struct SShadowWaypoint
     std::array<int32_t, 2> health{}, mana{}, fatigue{};   // value, maximum
     std::array<int32_t, 3> xp{};                          // level, experience, next level's
     int32_t               gold = 0;
+    std::string           state;    // all of him, as JSON (shadowstate.h)
 };
 
 // What a step works with while it runs.
@@ -70,11 +73,15 @@ class TShadowStepRunner
     virtual EShadowStatus Pulse(SShadowContext& context) = 0;
     // Why it failed.
     [[nodiscard]] const std::string& Failure() const { return failure; }
+    // It failed because the way was guarded: the travel turned back from
+    // monsters Locke wouldn't beat (§5.5). Stronger, later, it may not.
+    [[nodiscard]] bool Guarded() const { return guarded; }
 
   protected:
-    EShadowStatus Fail(std::string why)
+    EShadowStatus Fail(std::string why, bool guardedway = false)
     {
         failure = std::move(why);
+        guarded = guardedway;
         return EShadowStatus::Failed;
     }
 
@@ -82,6 +89,7 @@ class TShadowStepRunner
 
   private:
     std::string failure;
+    bool        guarded = false;
 };
 
 [[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeStepRunner(const SShadowStep& step);
@@ -105,6 +113,26 @@ void ShadowPressKey(int32_t vk);
 // fighting Locke.
 [[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeFightRunner(const SShadowStep& step,
                                                                  std::vector<TCharacter*> foes = {});
+// Locke's odds against `foes` together, as he is now (shadowfight.cpp):
+// trial duels on copies (§6.4), the game untouched. Worth taking when he
+// wins nearly every one without losing most of the health he has.
+struct SShadowOdds
+{
+    int32_t wins     = 0;
+    int32_t trials   = 0;
+    int32_t meanloss = 0;       // health, on average
+    bool    take     = false;
+};
+// `at`: where he will stand when it comes to the fight (a walk's meeting
+// point); by default where he is.
+[[nodiscard]] SShadowOdds ShadowSizeUp(const std::vector<TCharacter*>& foes, int64_t tick,
+                                       const S3DPoint* at = nullptr);
+// Trying the spells he can make (shadowspells.cpp, §8.6).
+[[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeInventRunner(const SShadowStep& step);
+// The first combination of spell.def's that Locke holds the talismans for,
+// would learn by casting, doesn't know and hasn't `tried`; null for none.
+// `spell`, when given, gets its spell.
+[[nodiscard]] const char* ShadowSpellToInvent(const std::set<std::string>& tried, const SSpellData** spell);
 // Grinding for a level (shadowgrind.cpp).
 [[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeGrindRunner(const SShadowStep& step);
 // Whether anything near Locke is fighting him (§6.5).

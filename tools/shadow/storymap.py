@@ -180,6 +180,7 @@ class Event:
     poll: int | None = None  # ALWAYS: its WAIT before the first IF, in ticks
     end: int = 0             # read: the last line the IF guards
     wrapper: bool = False    # read: its block holds only another IF on the same variable (a range's first half)
+    object_line: int = 0     # the OBJECT line of its block: the engine's script text starts there (§9.4 coverage)
 
 
 def code_of(raw: str) -> str:
@@ -340,7 +341,7 @@ def walk_block(file: str, proto: storytest.Proto, block: storytest.Block, header
                 frames[-1]['first_if'] = m.group(1).upper()
             if m and is_story(m.group(1)):
                 ev = Event('read', m.group(1).upper(), file, line, proto.name, block.trigger, header_line,
-                           header, outer, label, m.group(3), m.group(2), cond)
+                           header, outer, label, m.group(3), m.group(2), cond, object_line=proto.line)
                 events.append(ev)
                 pending_readers = [ev]
             continue
@@ -351,7 +352,7 @@ def walk_block(file: str, proto: storytest.Proto, block: storytest.Block, header
         m = SET_LINE.match(code)
         if m and is_story(m.group(1)):
             events.append(Event('write', m.group(1).upper(), file, line, proto.name, block.trigger,
-                                header_line, header, outer, label, m.group(2)))
+                                header_line, header, outer, label, m.group(2), object_line=proto.line))
         effect = effect_of(code)
         credit(effect)
         if line_guard:               # a single guarded line: the IF closes here

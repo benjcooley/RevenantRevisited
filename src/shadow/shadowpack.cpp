@@ -203,7 +203,8 @@ void ShadowTidyPack(TPlayer& locke, TShadowLog& log)
     }
 }
 
-TObjectInstance* ShadowBeltHealing(TPlayer& locke, int32_t missing)
+TObjectInstance* ShadowBeltHealing(TPlayer& locke, int32_t missing,
+                                   const std::map<const TObjectInstance*, int32_t>& drunk)
 {
     TObjectInstance* enough = nullptr;
     TObjectInstance* biggest = nullptr;
@@ -212,6 +213,8 @@ TObjectInstance* ShadowBeltHealing(TPlayer& locke, int32_t missing)
         TObjectInstance* held = locke.GetInventorySlot(kInvSlotBeltFirst + box);
         const int32_t health = held && held->ObjClass() == OBJCLASS_POTION ? Stat(*held, "Health") : 0;
         if (health <= 0)
+            continue;
+        if (const auto gone = drunk.find(held); gone != drunk.end() && gone->second >= std::max(held->Amount(), 1))
             continue;
         if (health >= missing && (!enough || health < Stat(*enough, "Health")))
             enough = held;

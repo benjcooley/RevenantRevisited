@@ -38,6 +38,10 @@ constexpr int32_t kDropTicks = 2 * kTicksPerSecond;
 // Drops land within about twice a body's radius, gold 30 off (DropLoot).
 constexpr int32_t kLootRange = 128;
 constexpr int32_t kMaxFoes = 32;
+// Sizing a fight up: this many trial duels, and what makes it one to take.
+constexpr int32_t kTrials = 24;
+constexpr int32_t kWinsNeeded = 22;             // of kTrials
+constexpr int32_t kWorstLossPct = 70;           // of his health, on average
 
 std::string Lower(const char* s)
 {
@@ -66,6 +70,7 @@ class TFightRunner final : public TShadowStepRunner
     TFightRunner(const SShadowStep& step, const std::vector<TCharacter*>& met)
         : TShadowStepRunner(step), travel(step.target, false, TShadowTravel::EArrive::Beside)
     {
+        travel.OnlyLiving();
         for (TCharacter* foe : met)
             given.push_back(foe);
     }
@@ -77,11 +82,12 @@ class TFightRunner final : public TShadowStepRunner
         case EStage::Go:
             if (!step.target.empty())
             {
-                // Someone already beaten -- dead, or his body gone -- is a
-                // fight already won; the plan's checks after it say so.
-                TCharacter* foe =
-                    dynamic_cast<TCharacter*>(ShadowFindObject(step.target, Player->GetLevel(), Player->Pos()));
-                if (!foe || foe->Health() <= 0)
+                // No one of that name alive -- beaten, or his body gone --
+                // is a fight already won; the plan's checks after it say so.
+                // By a type name, the nearest one still standing.
+                TCharacter* foe = dynamic_cast<TCharacter*>(
+                    ShadowFindObject(step.target, Player->GetLevel(), Player->Pos(), true));
+                if (!foe)
                 {
                     context.log.Event("fight", step.target + " is already down");
                     return EShadowStatus::Done;
@@ -89,7 +95,7 @@ class TFightRunner final : public TShadowStepRunner
                 std::string why;
                 const EShadowStatus status = travel.Pulse(context, why);
                 if (status == EShadowStatus::Failed)
-                    return Fail(why);
+                    return Fail(why, travel.Guarded());
                 if (status == EShadowStatus::Running)
                     return status;
             }
@@ -212,6 +218,25 @@ class TFightRunner final : public TShadowStepRunner
 std::unique_ptr<TShadowStepRunner> MakeFightRunner(const SShadowStep& step, std::vector<TCharacter*> foes)
 {
     return std::make_unique<TFightRunner>(step, foes);
+}
+
+SShadowOdds ShadowSizeUp(const std::vector<TCharacter*>& foes, int64_t tick, const S3DPoint* at)
+{
+    SShadowOdds odds;
+    int32_t lost = 0;
+    for (int32_t k = 0; k < kTrials; ++k)
+    {
+        TShadowDuel trial(TShadowDuel::EMode::Trial, SShadowTactics{}, uint32_t(tick * 31 + k));
+        if (at)
+            trial.StandAt(*at);
+        const SShadowFightReport report = trial.Fight(*Player, foes, tick, nullptr, nullptr);
+        odds.wins += report.won;
+        lost += report.suffered;
+    }
+    odds.trials = kTrials;
+    odds.meanloss = lost / kTrials;
+    odds.take = odds.wins >= kWinsNeeded && odds.meanloss * 100 <= Player->Health() * kWorstLossPct;
+    return odds;
 }
 
 bool ShadowUnderAttack()

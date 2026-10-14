@@ -1,0 +1,16 @@
+{
+  "name": "calib_l1_sword_arakna",
+  "about": "Calibration (tools/shadow/calibrate.py): Locke level 1, with the Short Sword, no potion, played by the player bot, against an Arakna 150 east on the flat arena; until one of them dies.",
+  "slotdir": "build/arena_slots/ArenaLocke",
+  "seed": 1,
+  "ticks": 5760,
+  "until_deaths": 1,
+  "exec": [
+    "sleep 12",
+    "playerlevel 1",
+    "delinv \"Lesser Healing\"",
+    "sleep 12",
+    "addat 25525 3072 \"Arakna\""
+  ],
+  "playerbot": true
+}
