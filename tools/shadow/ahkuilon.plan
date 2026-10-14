@@ -97,3 +97,19 @@ stage forest "The woods by the Keep, to level 4"
     expect  skill hands >= 3
     equip   "Short Sword"
     save    "level 4"
+
+stage druhgcamp "Free Jason: the Golden Sun Key"
+    # The Druhg camp on level 0, no exits from town (STORY.md S2;
+    # WALKTHROUGH.md §1.4). JASON1 shows once MISTSTATE > 1
+    # (forest.s:1998-2018); around him a Mongrel Druhg, three Thrush Druhg
+    # and an Under Druhg, whom the walk meets. Talk to the named one: an
+    # unnamed Jason twin beside him has no script.
+    talk    JASON1
+    expect  have "Golden Sun Key" >= 1  # forest.s:1976
+    expect  JASONSTATE = 3              # forest.s:1985
+    # The camp's two chests (GRIND.md §5.6): the Animal Fur set (Con 14)
+    # and the Ball Racker; the Earth talisman, 1500 gold, the Bone Sickle
+    # and magic scroll 2. Earth teaches Regeneration and Stone Skin.
+    take    ChestS@3218,15576
+    take    ChestE@2768,15760
+    save    "jason freed"
