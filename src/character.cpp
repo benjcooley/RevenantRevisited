@@ -2124,24 +2124,16 @@ bool TCharacter::ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAtta
     ConvertToVector(GetFace(), 4 * ROLLOVER, push);
     targ->vel += push;
 
-    bool hit = tohit >= roll;
-    int32_t dmg = damage;
-    bool blocked = false;
+  // A guard counts against a blow the target faces, unless it is a death
+  // blow (WeighBlow does the arithmetic).
     const int32_t facing = targ->FaceAngleTo(this);
-    if (!(impact && (impact->flags & CAI_DEATH)) && abs(facing) < 0x30 && targ->doing &&
-        (targ->doing->action == ACTION_BLOCK || targ->doing->action == ACTION_DODGE))
-    {
-      // Undo the tier the damage carries, take the guard's 50 off the
-      // to-hit, and tier it again.
-        int32_t factor;
-        if (damage > 0 && ToHitDamageFactor(tohit - roll, factor))
-            dmg = damage * 100 / factor;
-        tohit = std::clamp(tohit - 50, 10, 100);
-        if (ToHitDamageFactor(tohit - roll, factor))
-            dmg = (std::max)(1, factor * dmg / 100);
-        hit = tohit >= roll;
-        blocked = !hit;
-    }
+    const bool guarding = !(impact && (impact->flags & CAI_DEATH)) && abs(facing) < 0x30 && targ->doing &&
+                          (targ->doing->action == ACTION_BLOCK || targ->doing->action == ACTION_DODGE);
+    const SBlowOutcome weighed = WeighBlow(damage, tohit, roll, guarding);
+    bool hit = weighed.hit;
+    const int32_t dmg = weighed.damage;
+    const bool blocked = weighed.blocked;
+    tohit = weighed.tohit;
   // An interactive move lands on a target that is moving and not blocking.
     if ((attack->flags & CA_INTERACTIVE) && (targ->accum.x || targ->accum.y) &&
         !(targ->doing && targ->doing->action == ACTION_BLOCK))
@@ -2151,8 +2143,6 @@ bool TCharacter::ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAtta
     def += targ->Defense();
     int32_t off = LuckMod();
     off += Offense();
-    if (dmg < 1)
-        dmg = 1;
 
   // An interactive move can't kill without a death impact.
     if (hit && (attack->flags & CA_INTERACTIVE) && targ->Health() - dmg < 1 &&
@@ -2245,24 +2235,55 @@ bool TCharacter::ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAtta
             CombatTrace::Event(this, "result", "text=%s", line);
     }
 
-  // The damage: a blocking player takes none from a glance. Damage keeps
-  // or frees the block it is given (retail frees it here when Damage
-  // didn't install it, after a Damage that may have freed it already).
-    if (hit || !(targ->ObjClass() == OBJCLASS_PLAYER && targ->doing && targ->doing->action == ACTION_BLOCK))
-        targ->Damage(dmg, DT_NONE, 0, hitab, this);
-    else
-        delete hitab;   // REVSYNC-DIVERGENCE: ownership passes to Damage (no double free; see TCharacter::Damage)
+  // A blocking player takes nothing from a glance.
+    const bool lands =
+        hit || !(targ->ObjClass() == OBJCLASS_PLAYER && targ->doing && targ->doing->action == ACTION_BLOCK);
+    LandBlow(*targ, dmg, lands, hitab);
+    return hit;
+}
 
-    if (targ->ObjClass() == OBJCLASS_PLAYER && targ->root && targ->root->action == ACTION_BOW)
-        targ->BeginFighting(nullptr, ACTION_COMBAT);
+SBlowOutcome TCharacter::WeighBlow(int32_t damage, int32_t tohit, int32_t roll, bool guarding)
+{
+    SBlowOutcome blow;
+    blow.damage = damage;
+    blow.tohit = tohit;
+    blow.hit = tohit >= roll;
+    if (guarding)
+    {
+      // Undo the tier the damage carries, take the guard's 50 off the
+      // to-hit, and tier it again.
+        int32_t factor;
+        if (damage > 0 && ToHitDamageFactor(tohit - roll, factor))
+            blow.damage = damage * 100 / factor;
+        blow.tohit = std::clamp(tohit - 50, 10, 100);
+        if (ToHitDamageFactor(blow.tohit - roll, factor))
+            blow.damage = (std::max)(1, factor * blow.damage / 100);
+        blow.hit = blow.tohit >= roll;
+        blow.blocked = !blow.hit;
+    }
+    blow.damage = (std::max)(blow.damage, 1);
+    return blow;
+}
+
+void TCharacter::LandBlow(TCharacter& target, int32_t damage, bool lands, TActionBlock* action)
+{
+  // Damage keeps or frees the block it is given (retail frees it in
+  // ResolveHit when Damage didn't install it, after a Damage that may have
+  // freed it already).
+    if (lands)
+        target.Damage(damage, DT_NONE, 0, action, this);
+    else
+        delete action;  // REVSYNC-DIVERGENCE: ownership passes to Damage (no double free; see TCharacter::Damage)
+
+    if (target.ObjClass() == OBJCLASS_PLAYER && target.root && target.root->action == ACTION_BOW)
+        target.BeginFighting(nullptr, ACTION_COMBAT);
     if (ObjClass() == OBJCLASS_PLAYER)
     {
         TPlayer* player = static_cast<TPlayer*>(this);
-        player->AwardKillExp(targ);
-        player->AwardSkillExp(SK_WEAPONSKILLS + WeaponType(), targ);
-        player->AwardStealthExp(targ);
+        player->AwardKillExp(&target);
+        player->AwardSkillExp(SK_WEAPONSKILLS + WeaponType(), &target);
+        player->AwardStealthExp(&target);
     }
-    return hit;
 }
 
 // Maximum number of characters an attack strikes at once (retail's 0x20).
@@ -4773,15 +4794,84 @@ void TCharacter::CombatAnimName(char *buf, const char *name)
     }
 }
 
+// IsValidAttack's tier (0x004d18d2), ToHitDamageFactor's row.
+int32_t SAttackRoll::Tiered() const
+{
+    int32_t factor;
+    if (ToHitDamageFactor(tohit - roll, factor))
+        return (std::max)(1, factor * damage / 100);
+    return damage;
+}
+
+// The dice of one blow (COMBAT_HIT.md §3.1), IsValidAttack's (0x004d16ea..
+// 0x004d18c9) with the target's stance handed in. The damage: the target's
+// CalculateDamage of this character's weapon, scaled by DamageMod plus
+// `dmgpcnt` and by a player's EdgeBonus for an edged weapon. The to-hit:
+// tohitcenter less the target's luck and defence plus this character's,
+// tohitface more against an open target (100 more for the player under the
+// cheat), held to 10..100, then 5 more one time in ten. The roll:
+// random(1, 50) + random(0, 50). Only the dice still -1 in `thrown` are
+// thrown, in that order; both sides' luck and defence are read whatever is
+// left to throw, as retail reads them.
+SAttackRoll TCharacter::RollAttack(TCharacter& target, const SCharAttackData& attack, int32_t dmgpcnt,
+    bool targetopen, SAttackRoll thrown)
+{
+    SAttackRoll dice = thrown;
+    if (dice.damage == -1)
+    {
+        const int32_t type = GetDamageType(WeaponType(), attack.flags);
+        const int32_t weapon = WeaponDamage();
+        const int32_t d = target.CalculateDamage(weapon, type, attack.damagemod);
+        dice.damage = d * (DamageMod() + dmgpcnt + 100) / 100;
+        if (CombatTrace::Enabled())
+            CombatTrace::Event(this, "damage-roll", "attack=%s\ttarget=%s\tweapon=%d\ttype=%d\tmod=%d\t"
+                               "armor=%d\tresist=%d\ttaken=%d\tdmgmod=%d\tdmgpcnt=%d\tdamage=%d",
+                               attack.attackname, target.GetName() ? target.GetName() : "-", weapon, type,
+                               attack.damagemod, target.ArmorValue(),
+                               type >= 0 && type < NUMDAMAGETYPES ? target.DamageModifier(type) : 0,
+                               d, DamageMod(), dmgpcnt, dice.damage);
+        if (objclass == OBJCLASS_PLAYER)
+        {
+            const int32_t wt = WeaponType();
+            if (wt == WT_KNIFE || wt == WT_SWORD || wt == WT_AXE)
+                dice.damage = dice.damage * (static_cast<TPlayer*>(this)->EdgeBonus() + 100) / 100;
+        }
+    }
+    int32_t def = target.LuckMod();
+    def += target.Defense();
+    int32_t off = LuckMod();
+    off += Offense();
+    if (dice.tohit == -1)
+    {
+        int32_t t = Rules.tohitcenter - def + off;
+        if (targetopen)
+            t += Rules.tohitface;
+        if (objclass == OBJCLASS_PLAYER && CheatNahkranoth)
+            t += 100;
+        t = std::clamp(t, 10, 100);
+        dice.tohit = t + (random(0, 9) == 0 ? 5 : 0);
+    }
+    if (dice.roll == -1)
+    {
+        const int32_t high = random(1, 50);
+        dice.roll = high + random(0, 50);
+    }
+    return dice;
+}
+
+int32_t TCharacter::RollDamagePercent()
+{
+    const int32_t first = random(1, 50);
+    return first + random(1, 50);
+}
+
 // REVSYNC: TCharacter::IsValidAttack @ 0x004d1120. The shape gates
-// (COMBAT_ATTACK_CHOICE.md §3.1), then with a target the numbers the attack
-// will carry (COMBAT_HIT.md §3.1): the damage once per search -- the
-// target's CalculateDamage of this character's weapon, scaled by DamageMod
-// plus `dmgpcnt` (a player's StrengthMod takes its place) and by a player's
-// EdgeBonus for an edged weapon -- the to-hit and the roll once each, and
-// the TOHITDAMAGE tier every time a candidate gets that far, so a search
-// that goes on past a later refusal compounds it. Then the impact the
-// target will play, and the glancing-blow guard.
+// (COMBAT_ATTACK_CHOICE.md §3.1), then with a target the dice the attack
+// will carry (RollAttack; a player's StrengthMod takes `dmgpcnt`'s place):
+// the damage, the to-hit and the roll once per search, and the TOHITDAMAGE
+// tier every time a candidate gets that far, so a search that goes on past
+// a later refusal compounds it. Then the impact the target will play, and
+// the glancing-blow guard.
 bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &damage, int32_t &tohit,
     int32_t &roll, int32_t tdist, int32_t button, int32_t pcnt, int32_t dmgpcnt, int32_t flagmask,
     int32_t flags, TCharacter* targ)
@@ -4937,49 +5027,13 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
 
     if (targ)
     {
-        if (damage == -1)
-        {
-            const int32_t type = GetDamageType(WeaponType(), ad->flags);
-            const int32_t weapon = WeaponDamage();
-            const int32_t d = targ->CalculateDamage(weapon, type, ad->damagemod);
-            damage = d * (DamageMod() + dmgpcnt + 100) / 100;
-            if (CombatTrace::Enabled())
-                CombatTrace::Event(this, "damage-roll", "attack=%s\ttarget=%s\tweapon=%d\ttype=%d\tmod=%d\t"
-                                   "armor=%d\tresist=%d\ttaken=%d\tdmgmod=%d\tdmgpcnt=%d\tdamage=%d",
-                                   ad->attackname, targ->GetName() ? targ->GetName() : "-", weapon, type,
-                                   ad->damagemod, targ->ArmorValue(), type >= 0 && type < NUMDAMAGETYPES ? targ->DamageModifier(type) : 0,
-                                   d, DamageMod(),
-                                   dmgpcnt, damage);
-            if (objclass == OBJCLASS_PLAYER)
-            {
-                const int32_t wt = WeaponType();
-                if (wt == WT_KNIFE || wt == WT_SWORD || wt == WT_AXE)
-                    damage = damage * (static_cast<TPlayer*>(this)->EdgeBonus() + 100) / 100;
-            }
-        }
-        int32_t def = targ->LuckMod();
-        def += targ->Defense();
-        int32_t off = LuckMod();
-        off += Offense();
-        if (tohit == -1)
-        {
-          // Easier against a target facing away, or one swinging itself.
-            int32_t t = Rules.tohitcenter - def + off;
-            if (abs(targ->FaceAngleTo(this)) >= 0x30 || (targ->doing && targ->doing->action == ACTION_ATTACK))
-                t += Rules.tohitface;
-            if (objclass == OBJCLASS_PLAYER && CheatNahkranoth)
-                t += 100;
-            t = std::clamp(t, 10, 100);
-            tohit = t + (random(0, 9) == 0 ? 5 : 0);
-        }
-        if (roll == -1)
-        {
-            const int32_t high = random(1, 50);
-            roll = high + random(0, 50);
-        }
-        int32_t factor;
-        if (ToHitDamageFactor(tohit - roll, factor))
-            damage = (std::max)(1, factor * damage / 100);
+      // Easier against a target facing away, or one swinging itself.
+        const bool open = abs(targ->FaceAngleTo(this)) >= 0x30 ||
+                          (targ->doing && targ->doing->action == ACTION_ATTACK);
+        const SAttackRoll dice = RollAttack(*targ, *ad, dmgpcnt, open, {damage, tohit, roll});
+        damage = dice.Tiered();
+        tohit = dice.tohit;
+        roll = dice.roll;
     }
 
     if ((ad->flags & CA_DEATH) && (!targ || damage < targ->Health()))
@@ -5270,8 +5324,7 @@ bool TCharacter::ButtonAttack(int32_t button)
         }
     }
 
-    const int32_t first = random(1, 50);
-    const int32_t dmgpcnt = first + random(1, 50);
+    const int32_t dmgpcnt = RollDamagePercent();
     int32_t a = -1, imp = -1, dmg = -1, th = -1, rl = repeat ? 100 : -1;
     if (FindButtonAttack(button, dmgpcnt, a, imp, dmg, th, rl, false, targ))
         return DoAttack(a, imp, dmg, th, rl, targ);
@@ -5286,8 +5339,7 @@ bool TCharacter::ButtonAction(int32_t button)
         return false;
     TCharacter* found = nullptr;
     TCharacter* targ = FindCharacters(&found, 1, 0x200, GetFace(), 0x20, 0) > 0 ? found : nullptr;
-    const int32_t first = random(1, 50);
-    const int32_t dmgpcnt = first + random(1, 50);
+    const int32_t dmgpcnt = RollDamagePercent();
     int32_t a = -1, imp = -1, dmg = -1, th = -1, rl = -1;
     if (FindButtonAttack(button, dmgpcnt, a, imp, dmg, th, rl, true, targ))
         return DoAttack(a, imp, dmg, th, rl, targ);
@@ -5300,8 +5352,7 @@ bool TCharacter::RandomAttack(int32_t pcnt)
 {
     if (Health() <= 0 || InteractiveLocked())
         return false;
-    const int32_t first = random(1, 50);
-    const int32_t dmgpcnt = first + random(1, 50);
+    const int32_t dmgpcnt = RollDamagePercent();
     int32_t a = -1, imp = -1, dmg = -1, th = -1, rl = -1;
     bool found = false;
     if (lastbutton >= 0 && (requestbits & kRequestInteractive))
@@ -5328,8 +5379,7 @@ bool TCharacter::SpecificAttack(int32_t attacknum)
             targ = found;
     }
     const int32_t tdist = targ ? Distance(targ) : 10000;
-    const int32_t first = random(1, 50);
-    const int32_t dmgpcnt = first + random(1, 50);
+    const int32_t dmgpcnt = RollDamagePercent();
     int32_t imp = -1, dmg = -1, th = -1, rl = -1;
     nextattack = 0;
     if (!IsValidAttack(attacknum, imp, dmg, th, rl, tdist, -1, -1, dmgpcnt, 0, 0, targ))

@@ -41,15 +41,6 @@ int64_t g_messagesSeen = 0;     // text-bar lines the last observation reported
 
 constexpr int32_t kBeltObserved = 5;   // the belt slots F5-F9 use
 
-// The skills in stat order (charstats.h SK_*: stats 40-50, their experience
-// 51-61, the experience for their next level 62-72).
-constexpr const char* kSkillNames[NUM_SKILLS] = {
-    "attack", "defense", "invoke", "hands", "knife", "sword", "bludgeon", "axes", "bows", "stealth", "lockpick",
-};
-
-// The attributes in stat order (charstats.h PLRSTAT_*: stats 34-39).
-constexpr const char* kAttributeNames[NUM_PLRSTATS] = { "strn", "cons", "agil", "rflx", "mind", "luck" };
-
 std::string Lower(const char* s)
 {
     std::string out = s ? s : "";

@@ -27,6 +27,7 @@
 #include "combattrace.h"
 #include "testconfig.h"
 #include "playscreen.h"
+#include "shadow/shadowrun.h"
 #include "playerbot.h"
 
 #include "audio_backend.h"
@@ -856,6 +857,11 @@ static void PulseSaveCycleTest()
 
 void TPlayScreen::Update()
 {
+    // Shadow Smoke (--shadow): its audit of the last tick and its next step,
+    // before anything else of this one -- a movie or a load included, which
+    // it waits out or skips as a player would.
+    Shadow.Pulse();
+
     // Apply any deferred pane add scheduled by SetNextPane().
     if (nextpane)
     {

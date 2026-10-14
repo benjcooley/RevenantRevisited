@@ -57,11 +57,30 @@ class TExit : public TContainer
     // REVSYNC: WriteExitList @ 0x0050cca0 -- only when changed.
     static bool WriteExitList();
 
+    // An exit.def entry: going through the exit `name` puts you at `target`
+    // on `level`.
+    struct STarget
+    {
+        std::string name;
+        S3DPoint    target{};
+        int32_t     level = 0;
+    };
+    // Every entry, in file order. For checks that a move went through an
+    // exit, and for route planning (Shadow Smoke, docs/shadow/ARCHITECTURE.md).
+    [[nodiscard]] static std::vector<STarget> Targets();
+
     void Load(RTInputStream is, int32_t version, int32_t objversion) override;
     void Save(RTOutputStream os) override;
 
     // REVSYNC: 0x0050d640 -- state auto-step, then every player on the strip.
     void Pulse() override;
+    // A scripted door (Door1, Door2, PortEW, PortNS): walking onto it does
+    // nothing; its master.s USE block takes the player through.
+    [[nodiscard]] bool IsScriptedDoor() const;
+    // The strip a walker sets this exit off from, in world units (right and
+    // bottom exclusive), and whether `at` stands on it (Pulse's test).
+    [[nodiscard]] SRect StripRect();
+    [[nodiscard]] bool IsOnStrip(const S3DPoint& at);
     // REVSYNC: 0x0050d1a0 -- lock check, then the USE trigger. Never opens.
     bool Use(TObjectInstance* user, int32_t with = -1) override;
     // REVSYNC: 0x0050d370

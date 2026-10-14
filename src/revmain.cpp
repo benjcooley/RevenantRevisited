@@ -42,6 +42,7 @@
 #include "playscreen.h"
 #include "playerbot.h"
 #include "playtest.h"
+#include "shadow/shadowrun.h"
 #include "revisited_defaults.h"
 #include "revisited_settings.h"
 #include "testscreen.h"
@@ -1558,7 +1559,7 @@ void GetParameters(int argc, char **argv)
         "chunkcachesize", "driver", "device", "videocap", "fastlock",
         "loadmap", "lang", "test", "level", "resolution", "res",
         "cinematic", "menu", "exec", "vfx-lighting-mode", "partsys-quality", "partsys-incoming-blend",
-        "seed", "combattrace", "combattrace-rng",
+        "seed", "combattrace", "combattrace-rng", "shadow", "shadow-out", "shadow-stage", "shadow-until",
         "vfx-review-speed", "vfx-review-watcher-rate", "vfx-review-ratio", "vfx-review-spacing",
         "vfx-review-gap", "vfx-review-offset", "vfx-review-effects",
         "vfx-review-spacing-overrides",
@@ -1594,6 +1595,32 @@ void GetParameters(int argc, char **argv)
             const size_t colon = p.find(':');
             CombatTrace::TraceRandom(std::stoll(p.substr(0, colon)),
                                      colon == std::string::npos ? std::stoll(p) : std::stoll(p.substr(colon + 1)));
+        }
+    }
+
+  // --shadow=<plan>: Shadow Smoke plays the plan from a new game, or from
+  // --shadow-stage=<id> on the save --quickstart=<slot> names, headless and
+  // deterministic (docs/shadow/README.md). Without --seed it plays seed 1.
+    {
+        SShadowOptions shadow;
+        if (arg_param(cmd, "shadow", shadow.plan))
+        {
+            arg_param(cmd, "shadow-out", shadow.out);
+            arg_param(cmd, "shadow-stage", shadow.from);
+            arg_param(cmd, "shadow-until", shadow.until);
+            shadow.lenient = arg_flag(cmd, "shadow-lenient");
+            std::string seed;
+            if (arg_param(cmd, "seed", seed))
+                shadow.seed = (uint32_t)std::stoul(seed);
+            else
+            {
+                SeedRandom(shadow.seed);
+                PlayerBot.Seed(shadow.seed);
+            }
+            if (Shadow.Configure(shadow))
+                StartupQuickstart = true;
+            else
+                sapp_request_quit();
         }
     }
 
@@ -2878,6 +2905,20 @@ static void PresentIdleFrame()
         log_error("[playtest] presenting the last frame again drew game random numbers");
 }
 
+// One step of game time: --fixedstep, a lockstep playtest session and
+// Shadow Smoke advance exactly one game tick on an integer count; otherwise
+// a frame capture's --snapstep, otherwise the live clock (a replay's
+// recorded frame times).
+static void BeginTimeStep()
+{
+    const auto& snap_config = FrameSnap::GetConfig();
+    if (FixedStep || Shadow.Active() || (Playtest.Active() && Playtest.Lockstep()))
+        TTime::BeginFixedFrame();
+    else
+        TTime::BeginFrame(Playtest.FrameTime(FrameSnap::Active() && snap_config.fixed_step_sec > 0.0
+                                             ? snap_config.fixed_step_sec : sapp_frame_duration()));
+}
+
 static void AppFrame()
 {
     // Drive the legacy screen dispatch. The pre-port top-level loop was:
@@ -2928,15 +2969,10 @@ static void AppFrame()
     if (!SystemInitialized || Closing)
         return;
 
-    // --fixedstep (and a lockstep playtest session): one game tick per frame
-    // on an integer count; otherwise a frame capture's --snapstep, otherwise
-    // the live clock (a replay's recorded frame times).
-    const auto& snap_config = FrameSnap::GetConfig();
-    if (FixedStep || (Playtest.Active() && Playtest.Lockstep()))
-        TTime::BeginFixedFrame();
-    else
-        TTime::BeginFrame(Playtest.FrameTime(FrameSnap::Active() && snap_config.fixed_step_sec > 0.0
-                                             ? snap_config.fixed_step_sec : sapp_frame_duration()));
+    // The frame's first time step (turbo's further ones begin in the
+    // simulation loop below).
+    const int32_t steps = Shadow.Active() ? Shadow.StepsThisFrame() : 1;
+    BeginTimeStep();
 
     // Start the ImGui frame before Animate/draw so screens can build debug
     // panels from their normal per-frame code. simgui_render() is called
@@ -2979,20 +3015,38 @@ static void AppFrame()
     // The cursor's corner picture starts over each frame (cursor.h).
     BeginCursorFrame();
 
-    // The frame's input, in order, before the tick (inputqueue.h): what the
-    // hardware sent since the last frame, then scripted input (--input-script),
-    // then a playtest session's (its step's events, or its recording's).
-    TestModes::InputSimTick(CurrentScreen);
-    Playtest.BeforeDrain();
-    InputQueue.Drain(CurrentScreen);
+    // The frame's simulation: one step, or under Shadow Smoke's turbo as
+    // many as fit its budget, each a whole frame's worth -- the time step,
+    // the input, the tick, the update list -- so input given during a step
+    // acts on the next tick (docs/shadow/ARCHITECTURE.md §11). Only the
+    // last step draws. A screen that is ending stops the steps.
+    for (int32_t step = 0; step < steps; ++step)
+    {
+        if (step > 0)
+        {
+            if (CurrentScreen->ReadyToEnd() || Closing)
+                break;
+            BeginTimeStep();
+        }
 
-    // Tick / Draw split (see docs/FRAME_PIPELINE.md). Tick catches up
-    // missed legacy 24Hz pulses (pure sim, no draw calls); DrawFrame
-    // opens the Overlay2D pass on the backbuffer and runs the screen's
-    // 2D draw work. Anything in the active screen's Pulse goes through
-    // Tick; anything in its Animate goes through DrawFrame.
-    CurrentScreen->Tick();
-    TObjectComponent::RunUpdateList();
+        // The frame's input, in order, before the tick (inputqueue.h): what
+        // the hardware sent since the last frame, then scripted input
+        // (--input-script), then a playtest session's (its step's events, or
+        // its recording's).
+        TestModes::InputSimTick(CurrentScreen);
+        Playtest.BeforeDrain();
+        InputQueue.Drain(CurrentScreen);
+
+        // Tick / Draw split (see docs/FRAME_PIPELINE.md). Tick catches up
+        // missed legacy 24Hz pulses (pure sim, no draw calls); DrawFrame
+        // opens the Overlay2D pass on the backbuffer and runs the screen's
+        // 2D draw work. Anything in the active screen's Pulse goes through
+        // Tick; anything in its Animate goes through DrawFrame.
+        CurrentScreen->Tick();
+        TObjectComponent::RunUpdateList();
+    }
+    if (Shadow.Active())
+        Shadow.StepsDone();
     CurrentScreen->DrawFrame();
     DebugUI::DrawFrame();
     Playtest.DrawOverlay();     // over the window only: frame captures leave it out
@@ -3047,6 +3101,9 @@ static void AppCleanup()
     // A verified replay that diverged exits 1, a session that couldn't
     // start 2 (playtest.h).
     if (const int code = Playtest.ExitCode())
+        std::exit(code);
+    // A Shadow Smoke run: 1 a step failed, 2 a ledger violation (shadowrun.h).
+    if (const int code = Shadow.ExitCode())
         std::exit(code);
 }
 

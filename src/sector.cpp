@@ -607,6 +607,8 @@ void TSector::WalkmapHandler(int32_t mode, uint8_t *walk, int32_t zpos, int32_t 
     // cliped out completely?
     if (!w && !l)
         return;
+    if (mode != WALK_CAPTURE)
+        ++walkmapversion;
 
     // Just Do It(tm)
     uint16_t *start = walkmap + (y * (SECTORWIDTH >> WALKMAPSHIFT)) + x;
@@ -655,6 +657,7 @@ void TSector::WalkmapHandler(int32_t mode, uint8_t *walk, int32_t zpos, int32_t 
 void TSector::ClearWalkmap()
 {
     memset(walkmap, 0, WALKMAPSIZE * 2);
+    ++walkmapversion;
 }
 
 // ----------------------- Preload Sector System -------------------

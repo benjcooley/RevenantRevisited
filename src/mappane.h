@@ -14,6 +14,7 @@
 #include "screen.h"
 #include "sector.h"
 
+#include <optional>
 #include <vector>
 
 class TMapRenderer;
@@ -328,6 +329,16 @@ class TMapPane : public TPane
       // drawing is TMapRenderer's)
     void AnimateObjects(bool draw);
       // Does foreground/2D animations (calls Animate() function for objects on screen)
+    [[nodiscard]] SRect AnimateRect() const;
+      // The map-screen rect retail's animate pass (0x00458750) works over:
+      // its 640x480 pane around the view centre, at the scroll origin the
+      // background update publishes, grown by 192 pixels on every side
+    [[nodiscard]] std::optional<bool> AnimatePassOnScreen(TObjectInstance* oi);
+      // What the animate pass tells oi on a drawn frame: true (OnScreen) when
+      // its screen or animation rect meets AnimateRect(), false (OffScreen)
+      // when the pass reaches it but it doesn't; empty when the pass doesn't
+      // reach it (not animated, invisible, carried, or its sector outside
+      // the window or the rect), so it keeps what it was last told
     void NextFrameObjects();
       // Advances all animated objects (regardless of whether they are on screen)
       // to the next frame of thier animation.  This allows offscreen objects to move,
@@ -548,12 +559,16 @@ class TMapPane : public TPane
         // Gets walk height for a given walk map CENTERED on pos with given with and height
         // If width == 0, pos is treated as a point
         // Otherwise pos, width, and height define the box of walk area CENTERED on pos
+    void GetWalkHeightRadius(const S3DPoint& pos, int32_t lvl, int32_t radius, int32_t& maxdelta,
+        int32_t& height, bool& hole);
     void GetWalkHeightRadius(const S3DPoint& pos, int32_t radius, int32_t& maxdelta, int32_t& height,
-        bool& hole);
-        // The walk height under pos, and over the walk cells whose nearest
-        // point lies within radius of pos: the largest height step between
-        // two such cells side by side (maxdelta: walls, ledges) and whether
-        // any of them has no walkmap (hole)
+        bool& hole)
+        { GetWalkHeightRadius(pos, level, radius, maxdelta, height, hole); }
+        // The walk height under pos on level lvl (the second: the pane's),
+        // and over the walk cells whose nearest point lies within radius of
+        // pos: the largest height step between two such cells side by side
+        // (maxdelta: walls, ledges) and whether any of them has no walkmap
+        // (hole)
     bool LineOfSight(const S3DPoint& from, const S3DPoint& to, int32_t lvl, S3DPoint* blockedat = nullptr,
         S3DPoint* laststep = nullptr);
         // REVSYNC: TMapPane::LineOfSight @ 0x004533d0 -- is the straight
