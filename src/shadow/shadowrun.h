@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "shadowbench.h"
 #include "shadowledger.h"
 #include "shadowlog.h"
 #include "shadowplan.h"
@@ -40,6 +41,11 @@ struct SShadowOptions
     // the game quits -- the reload half of the save round trip (§10).
     std::string verify;
     std::string style;              // --shadow-style=<melee|hands|bow|spells|mixed>: over the plan's
+    // --shadow-duel=<foe type>[,...]: the calibration's duel harness in place
+    // of a plan (shadowbench.h), --shadow-duel-runs=N trial fights.
+    std::vector<std::string> duel;
+    int32_t     duelruns = 200;
+    int32_t     dueltrace = 0;      // --shadow-duel-trace=N: the first N fights' timelines
 };
 
 class TShadowRun
@@ -66,6 +72,7 @@ class TShadowRun
   private:
     void Begin();
     void RunSteps();
+    void RunBench();
     void Finish(int32_t code, const std::string& why);
     void WriteSummary(const std::string& why) const;
     void WriteWaypoints() const;
@@ -99,6 +106,8 @@ class TShadowRun
     // (§8.6): it runs first, then the plan's step goes on.
     SShadowStep                        interruptstep;
     std::unique_ptr<TShadowStepRunner> interrupt;
+    // --shadow-duel: the duel harness runs instead of the plan.
+    std::unique_ptr<TShadowDuelBench>  bench;
     std::vector<SShadowWaypoint>       waypoints;
     std::vector<std::string>           stagesdone;
     std::set<int32_t>                  surveyed;   // levels whose chests are logged

@@ -60,6 +60,25 @@ bool TShadowRun::Configure(const SShadowOptions& given)
         log_info("[smoke] verifying the save: Locke's state to %s", options.verify.c_str());
         return true;
     }
+    if (!options.duel.empty())
+    {
+        // The duel harness: no plan, no ledger (the scenario's console lines
+        // set Locke up, which no verb explains), the same turbo.
+        if (options.duelruns < 1)
+        {
+            log_error("[smoke] --shadow-duel-runs must be at least 1");
+            return false;
+        }
+        bench = std::make_unique<TShadowDuelBench>(options.duel, options.duelruns, options.dueltrace);
+        if (options.out.empty())
+            options.out = (std::filesystem::path(SavePath) / "shadow" / ("duel-s" + std::to_string(options.seed) + "-" +
+                                                                         Timestamp())).string();
+        SetDeterministicRun(true);
+        active = true;
+        log_info("[smoke] duel harness: %d trials against %d foe(s), out %s", options.duelruns,
+                 (int32_t)options.duel.size(), options.out.c_str());
+        return true;
+    }
     std::string error;
     if (!plan.Load(options.plan, error))
     {
@@ -147,6 +166,11 @@ void TShadowRun::Pulse()
     log.SetTick(tick);
     if (!begun)
         Begin();
+    if (bench)
+    {
+        RunBench();
+        return;
+    }
 
     if (Player != player)
     {
@@ -203,6 +227,17 @@ void TShadowRun::Begin()
     }
     const TModule* module = ModuleManager.Active();
     const std::string modulename = module ? module->dirname : "";
+    if (bench)
+    {
+        log.Event("run", "duel harness, seed " + std::to_string(options.seed) + ", build " + kBuildName,
+                  [&](JsonOut& out) {
+                      out.Field("seed", options.seed);
+                      out.FieldString("module", modulename);
+                      out.FieldString("build", kBuildName);
+                      out.FieldString("sha", kBuildSha);
+                  });
+        return;
+    }
     const std::string style = kShadowStyleNames[size_t(plan.Style())];
     log.Event("run", plan.Path() + ", seed " + std::to_string(options.seed) + ", style " + style + ", build " +
                          kBuildName,
@@ -216,6 +251,15 @@ void TShadowRun::Begin()
               });
     if (!SameId(modulename, plan.Module()))
         Finish(1, "the plan is for module " + plan.Module() + ", the game runs " + modulename);
+}
+
+void TShadowRun::RunBench()
+{
+    const EShadowStatus status = bench->Pulse(log);
+    if (status == EShadowStatus::Done)
+        Finish(0, "the trial duels are done");
+    else if (status == EShadowStatus::Failed)
+        Finish(1, "duel harness: " + bench->Failure());
 }
 
 void TShadowRun::RunSteps()
@@ -390,9 +434,12 @@ void TShadowRun::Finish(int32_t code, const std::string& why)
         out.Field("violations", ledger.Violations());
     });
     ledger.Stop();
-    log.WriteFile("coverage.json", ledger.Coverage().Json() + "\n");
-    WriteWaypoints();
-    WriteSummary(why);
+    if (!bench)
+    {
+        log.WriteFile("coverage.json", ledger.Coverage().Json() + "\n");
+        WriteWaypoints();
+        WriteSummary(why);
+    }
     log.Close();
     sapp_request_quit();
 }

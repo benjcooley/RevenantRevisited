@@ -33,6 +33,9 @@ Scenario keys:
             (--playerai; retail's charflags 0x100000)
   playerbot true: Locke is played by the player bot, through the player's
             keys (--playerbot; docs/gameplay/PLAYER_BOT.md)
+  until_deaths  n: the fight is over, and the run ends a second later, once
+            Locke has died or n others have (a sweep of fights then costs
+            the fights, not the scenario's ticks)
 
 Environment: REVENANT_DATA_PATH (the install; default the retail lab's).
 """
@@ -111,6 +114,35 @@ def last_tick(trace: Path) -> int:
     return -1
 
 
+class DeathWatch:
+    """Reads a growing trace for deaths: the tick the fight ended, once Locke
+    has died or `others` other characters have."""
+
+    def __init__(self, trace: Path, others: int):
+        self.trace, self.others = trace, others
+        self.offset, self.partial, self.dead = 0, b'', 0
+        self.ended = -1
+
+    def poll(self) -> int:
+        if self.ended >= 0 or not self.trace.exists():
+            return self.ended
+        with open(self.trace, 'rb') as f:
+            f.seek(self.offset)
+            chunk = f.read()
+        self.offset += len(chunk)
+        lines = (self.partial + chunk).split(b'\n')
+        self.partial = lines.pop()
+        for line in lines:
+            if b'\twhat=death\t' not in line:
+                continue
+            locke = b'\tname=Locke\t' in line
+            self.dead += not locke
+            if locke or self.dead >= self.others:
+                self.ended = int(line.split(b'\t', 1)[0])
+                break
+        return self.ended
+
+
 def run_once(scn: dict, port: Path, out: Path, watch: bool = False, extra: list[str] = ()) -> dict:
     if out.exists():
         shutil.rmtree(out)
@@ -131,6 +163,7 @@ def run_once(scn: dict, port: Path, out: Path, watch: bool = False, extra: list[
     shutil.copy2(port, exe)
     trace = out / 'trace.tsv'
     ticks = int(scn['ticks'])
+    deaths = DeathWatch(trace, int(scn['until_deaths'])) if scn.get('until_deaths') else None
     args = [str(exe), f'--quickstart={scn["slot"]}', f'--seed={scn["seed"]}', '--fixedstep',
             f'--combattrace={trace}', f'--exec={exec_line(scn["exec"])}',
             f'--max-runtime={scn.get("max_runtime", 600)}']
@@ -157,10 +190,14 @@ def run_once(scn: dict, port: Path, out: Path, watch: bool = False, extra: list[
             now = last_tick(trace)
             if now != seen:
                 seen, seen_at = now, time.time()
+            if deaths and deaths.poll() >= 0:
+                ticks = min(ticks, deaths.ended + 24)
             done = now >= ticks
             stalled = now >= 0 and time.time() - seen_at > stall_limit
             if done or stalled or time.time() - begin > wall_limit:
-                stop = ('ticks reached' if done else f'play stopped at tick {now} (death screen?)' if stalled
+                ended = deaths.ended if deaths else -1
+                stop = (f'fight over at tick {ended}' if done and ended >= 0 else 'ticks reached' if done
+                        else f'play stopped at tick {now} (death screen?)' if stalled
                         else f'wall limit {wall_limit} s')
                 proc.send_signal(signal.SIGTERM)
                 try:
