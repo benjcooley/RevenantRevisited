@@ -109,18 +109,26 @@ player's input does:
 |---|---|---|
 | `Travel(dest)` | `TObjectInstance::Teleport`, with a `TShadowNav` proof | `travel` (position, level) |
 | `Talk(npc)` | `npc->Use(Player, -1)`: fires the DIALOG trigger | none of its own; the script's changes are `script` |
-| `Choose(n)` | the dialog pane's choice commit (`TDialogPane::Choose`, made public) | — |
+| `Choose(n)` | the digit key, through the input queue | — |
 | `UseOn(target, item)` | `target->Use(Player, item)`: keys on doors and chests, USE triggers | `use` |
 | `Take(container, item)` | `TContainer::Use`, then the take | `take` (item, gold) |
 | `PickUp(item)` | `TCharacter::Pickup` | `pickup` (item, gold) |
 | `Equip(item)` / `Unequip(item)` | `TPlayer::Equip` / the unequip path | `equip` |
 | `Consume(item)` | `item->Use(Player, -1)`, i.e. `TFood::Use` | `consume` (health, mana, item) |
-| `Buy(row)` / `Sell(row)` | the shop pane's transaction (`TBuySellPane::Transact`, made public) | `shop` (item, gold) |
+| `Buy(row)` / `Sell(row)` | the shop's keys (row 1–3, A, arrows, E), through the input queue | `shop` (item, gold) |
+| `SkipMovie()` | Escape, through the input queue | — |
 | `Train(attr)` | `TPlayer::TrainStat` | `train` (level-up markers) |
 | `Invent(talismans)` | the spell pane's invoke: `SpellBook.Reveal`, `TPlayer::LearnSpell` | `learn` |
 | `Fight(foes)` | `TShadowDuel` (§6) | `kill`, `hit`, `cast` |
 | `Save(name)` | `TGameSession::RequestSave`, gated (§10) | — |
 | `Load(name)` | `TGameSession::RequestLoad`, after a death (§6.5) | resets the ledger |
+
+What a player does with a key, Shadow does with the same key: it pushes
+the key onto the input queue (`InputQueue.PushKey`), which turbo drains
+before every tick (§11). What a player does with a click on the world
+(talk, use, take, pick up), Shadow does by calling the function the click
+reaches, because turning a world point into a screen click buys nothing
+headless.
 
 Talking, using and taking also need Locke to be in reach. `Travel` puts
 him there first: next to the NPC, in front of the door, at the chest.
@@ -712,7 +720,35 @@ level 5, 800 HP; Baez level 8, 650 HP, with fists), with a margin.
   - the keep list is still in the pack;
   - control is on.
 
-### 9.4 Coverage
+### 9.4 Story triggers
+
+Going to certain places changes the town. A CUBE, a USE or a
+conversation writes a story variable, and the town's scripts read it: Gus
+moves to his house, a shop's stock grows, the townsfolk get new lines. Two
+things make this easy to miss:
+
+- A writer fires only where Locke actually is (a CUBE tests his position,
+  §5.4).
+- A reader runs only while its area's script is loaded, which follows the
+  camera (`TAreaManager`). A town `ALWAYS` block that reacts to a new
+  state runs only once Locke is back in town.
+
+So the plan has to go to those places and come back.
+
+- **[STORY_TRIGGERS.md](STORY_TRIGGERS.md)** maps every story variable,
+  generated from the module's scripts by `tools/shadow/storymap.py`:
+  - who writes it (trigger, object, place, gate);
+  - who reads it, and in which area that reader runs;
+  - what it enables.
+- **The ledger logs every change of a story variable** with the script
+  that made it and where Locke stood. That is the run's record of how the
+  story advanced.
+- **The coverage gate.** The map's JSON lists the writers a full
+  playthrough must hit. At the end of the run, every required writer must
+  have fired, and every town reader of a changed variable must have run
+  after the change. A writer the run missed fails it, by name and place.
+
+### 9.5 Coverage
 
 The script step observer counts every script line that runs. The report
 gives the coverage per script file and per trigger block, so a run shows
@@ -748,14 +784,13 @@ The port runs one tick per frame under `--fixedstep`, and a headless
 frame comes at the display's rate, so a run would take hours. Shadow
 needs the clock to run fast:
 
-- **Turbo.** `TTime::BeginFixedFrames(n)` advances n ticks in one frame.
-  `TScreen::Tick` already catches up any number of pulses. Under
-  `--shadow`, revmain runs as many ticks per frame as fit in a 12 ms
-  budget, so headless runs as fast as the simulation allows. The world is
-  drawn once a frame, so the cost is the simulation alone.
-- **Per-frame work** (`TObjectComponent::RunUpdateList`) runs once per
-  frame. A tick that depends on it waits for the next frame. Shadow keeps
-  its own waits in ticks, so this costs nothing.
+- **Turbo.** Under `--shadow`, each drawn frame runs several simulation
+  steps. Each step is a whole frame's worth of simulation: a fixed time
+  step, the input queue's drain, one tick and the per-frame update list.
+  Only the last one draws. revmain runs as many steps as fit in a 12 ms
+  budget, so headless runs as fast as the simulation allows. Because every
+  step drains input, a key Shadow presses acts on the next tick, not after
+  the rest of a large batch.
 - **Movies** are skipped the way a player skips them (`TMoviePane::Finish`,
   the ESC path).
 - **Level loads** are whole and synchronous, as in a deterministic
@@ -773,7 +808,6 @@ first. Each is fixed in the game, retail first:
 | `RequestSave` doesn't refuse while control is off; only the menu does | the gate moves into the session, as retail's `0x0047e850` path has it |
 | `Teleport` doesn't set OF_ONEXIT: landing on a strip activates it | as retail: verify in the emulator, then match |
 | NOWALK extract leaves holes outside the sector window | re-stamp neighbours on any loaded level |
-| `TDialogPane::Choose`, `TBuySellPane::Transact` / `Exit` are private (reached only through key presses) | public verbs for UI and Shadow alike |
 | Hit dice inside `IsValidAttack` | `RollAttack` (§6.2) |
 
 ## 13. Outputs
@@ -786,7 +820,7 @@ A run writes `shadow/<plan>-<seed>-<time>/`:
 - `summary.txt`: per stage, the game time, wall time, Locke's level, gold,
   kills, deaths, potions used and waypoints written. Then pass or fail
   with the failing step.
-- `coverage.txt`: script coverage (§9.4).
+- `coverage.txt`: script coverage (§9.5) and the story-trigger gate (§9.4).
 - `revenant.log`: the game's own log.
 
 Exit code 0 on a pass, 1 on a failure, 2 on a ledger violation.

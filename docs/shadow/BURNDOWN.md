@@ -17,7 +17,7 @@ inline) · `[-]` cancelled. Dates are ISO.
 | [ ] | `--shadow` flags; `TShadowRun` hosted in `TPlayScreen::Update`; deterministic level loads | — |
 | [ ] | Plan parser: stages, steps, places, keep list; errors with file:line | — |
 | [ ] | Event log (`shadow.jsonl`) and `summary.txt`; exit codes | — |
-| [ ] | Ledger: per-tick snapshot and diff; verb, script, kill, clock and exit causes; cheat flags | — |
+| [~] | Ledger: per-tick snapshot and diff; script, clock and exit causes; story variables; cheat flags (verb and kill causes come with P1/P2) | 2026-10-13 |
 | [ ] | Verbs: `talk`, `choose` (public `TDialogPane::Choose`), `scene`, `expect`, `save` (gated) | — |
 | [ ] | Movies skipped through the player's path | — |
 | [ ] | Waypoint export in the playtest catalogue's format; load check | — |
@@ -81,6 +81,8 @@ inline) · `[-]` cancelled. Dates are ISO.
 | [ ] | `tools/shadow/ahkuilon.plan`, S0–S15 | — |
 | [ ] | Readiness levels from the duel model | — |
 | [ ] | Stage-end checks: NPCs alive, keep list, control | — |
+| [~] | Story-trigger map: `tools/shadow/storymap.py`, STORY_TRIGGERS.md (forensics agent running) | 2026-10-13 |
+| [ ] | Story-trigger coverage gate: every required writer hit, town readers ran after | — |
 | [ ] | Script coverage report | — |
 | [ ] | Gate: new game to credits; every milestone saved and load-checked | — |
 
