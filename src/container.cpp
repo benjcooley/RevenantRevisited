@@ -35,18 +35,25 @@ extern TObjectInstance* DroppedObject;
 #define CLOSED      0
 #define OPEN        1
 
+// REVSYNC: TContainer::Use @ 0x004dc180 (INVCONTAINER's too): the scripts
+// (the base Use), a key or pick on it shut, CONTISLOCKED, then opening it,
+// then UseCarried when the user carries it. Not yet retail's: opening (its
+// sounds by type, the Explosive and Poisonous traps and the dialog lines,
+// 0x004dc22a..0x004dc87d) and the half on the ground (0x004dcac0..).
 bool TContainer::Use(TObjectInstance* user, int32_t with)
 {
-    TObjectInstance::Use(user, with);
-
     TObjectInstance* inst = MapPane.GetInstance(with);
+
+    if (TObjectInstance::Use(user, with))
+        return true;
 
     if (state == CLOSED && CheckKeyUse(user, inst))
         return true;
 
     if (Locked())
     {
-        TextBar.Print("It seems to be locked.");
+        if (user == Player)
+            TextBar.Print("%s", DialogList.GetLine("CONTISLOCKED"));
         return false;
     }
 
@@ -68,77 +75,117 @@ bool TContainer::Use(TObjectInstance* user, int32_t with)
         return true;
     }
 
-    if (GetTopOwner() == Inventory.GetTopContainer())
+    if (user && GetTopOwner() == user)
+        return UseCarried(user, inst);
+
+    // On the ground
+    if (!inst)
     {
-        // it's in inventory
-        if (!inst)
-            Inventory.SetContainer(this);
-        else if (NumObjects() < (MAXINVITEMS - 1))
+        // get from
+        TInventoryIterator i(this);
+        TObjectInstance* oi = i.Item();
+
+        if (oi)
         {
-            if ((uint32_t)FindFreeInventorySlot() < MAXINVITEMS)
+            if (Inventory.GetContainer() && (uint32_t)Inventory.GetContainer()->FindFreeInventorySlot() < MAXINVITEMS)
             {
-                inst->RemoveFromInventory();
-                AddToInventory(inst);
+                // Gold or food may merge into a pile and be deleted
+                snprintf(buf, sizeof(buf), "%s taken from %s.", oi->GetName(), GetName());
+                const TSafeRef<TObjectInstance> taken(oi);
+                oi->RemoveFromInventory();
+                Inventory.GetContainer()->AddToInventory(oi);
+
+                TextBar.Print("%s", buf);
+
+                TakenObject = taken.Get();
             }
+            else
+                TextBar.Print("Can't carry any more.");
+        }
+        else
+        {
+            if (!Openable())
+                return false;
+
+            SetState(CLOSED);
+            sprintf(buf, "%s closed.", GetName());
+            TextBar.Print("%s", buf);
         }
     }
     else
     {
-        // it's on the ground
-        if (!inst)
-        {
-            // get from
-            TInventoryIterator i(this);
-            TObjectInstance* oi = i.Item();
+        // add to (gold or food may merge into a pile and be deleted)
+        snprintf(buf, sizeof(buf), "%s put in %s.", inst->GetName(), GetName());
+        const TSafeRef<TObjectInstance> dropped(inst);
+        inst->RemoveFromInventory();
+        AddToInventory(inst);
 
-            if (oi)
-            {
-                if (Inventory.GetContainer() && (uint32_t)Inventory.GetContainer()->FindFreeInventorySlot() < MAXINVITEMS)
-                {
-                    // Gold or food may merge into a pile and be deleted
-                    snprintf(buf, sizeof(buf), "%s taken from %s.", oi->GetName(), GetName());
-                    const TSafeRef<TObjectInstance> taken(oi);
-                    oi->RemoveFromInventory();
-                    Inventory.GetContainer()->AddToInventory(oi);
+        TextBar.Print("%s", buf);
 
-                    TextBar.Print("%s", buf);
-
-                    TakenObject = taken.Get();
-                }
-                else
-                    TextBar.Print("Can't carry any more.");
-            }
-            else
-            {
-                if (!Openable())
-                    return false;
-
-                SetState(CLOSED);
-                sprintf(buf, "%s closed.", GetName());
-                TextBar.Print("%s", buf);
-            }
-        }
-        else
-        {
-            // add to (gold or food may merge into a pile and be deleted)
-            snprintf(buf, sizeof(buf), "%s put in %s.", inst->GetName(), GetName());
-            const TSafeRef<TObjectInstance> dropped(inst);
-            inst->RemoveFromInventory();
-            AddToInventory(inst);
-
-            TextBar.Print("%s", buf);
-
-            DroppedObject = dropped.Get();
-        }
-
+        DroppedObject = dropped.Get();
     }
 
     return true;
 }
 
+// REVSYNC: 0x004dc880..0x004dcabb. Alone, a bag shows in the main player's
+// inventory pane, or, shown already, the inventory at its top does (retail
+// skips a bag in slots 0xff..0x10b, the equipment and the first belt box, as
+// read; an ingredient, with a CombineID, never opens). With an item it makes
+// what their TargetID names (CanCombine), or takes the item when it has room
+// and isn't an ingredient ("pouch"). True even when nothing happened, so the
+// panes never swap an item with a bag.
+bool TContainer::UseCarried(TObjectInstance* user, TObjectInstance* inst)
+{
+    const int32_t slot = InventNum();
+    if (!inst && (slot < 0xff || slot > kInvSlotBeltFirst) && !GetStat("CombineID"))
+    {
+        if (user == Player)
+        {
+            TObjectInstance* const top = GetTopOwner();
+            Inventory.SetContainer(Inventory.GetContainer() == this && top ? top : this);
+        }
+        return true;
+    }
+
+    if (CanCombine(inst))
+    {
+        // The made item goes to the owner of the one whose TargetID names it.
+        // Deviation: retail only took the two out of their inventories, so
+        // they were left nowhere; the port deletes them.
+        TObjectInstance* const maker = GetOwner() && GetStat("TargetID") ? this : inst;
+        TObjectInstance* const owner = maker->GetOwner();
+        const uint32_t target = static_cast<uint32_t>(maker->GetStat("TargetID"));
+        if (owner && target && owner->AddToInventoryByUniqueId(target, 1, -1))
+        {
+            inst->RemoveFromInventory();
+            delete inst;
+            RemoveFromInventory();
+            delete this;    // as a food's use-up deletes the food Use runs on
+        }
+        return true;
+    }
+
+    const int32_t target = GetStat("TargetID");
+    if (inst && RealNumInventoryItems() < 0xfe && (target == -1 || target == 0 || target == 1) &&
+        !GetStat("CombineID") && FindFreeInventorySlot() < 0xff)
+    {
+        AddToInventory(inst, -1);
+        if (user == Player)
+        {
+            const int32_t id = SoundPlayer.FindSound("pouch");
+            if (id >= 0 && SoundPlayer.Mount(id))
+                SoundPlayer.Play(id);
+        }
+    }
+    return true;
+}
+
+// REVSYNC: CursorType @ 0x004dd370 -- the hand for a container that opens or
+// holds something, unless it's invisible; what's held over it doesn't matter.
 int32_t TContainer::CursorType(TObjectInstance* inst)
 {
-    if (Openable() || NumObjects() > 0)
+    if ((Openable() || NumObjects() > 0) && !(GetFlags() & OF_INVISIBLE))
         return CURSOR_HAND;
 
     return CURSOR_NONE;

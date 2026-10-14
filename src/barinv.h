@@ -26,10 +26,10 @@ class TSurface;
 // ones each frame (Animate 0x0052cd80); here both go into one composed layer,
 // recomposed when what a box shows changes.
 //
-// Not yet ported (P4, with the other item panes' drag and drop): starting a
-// drag off the shelf (0x0052d6e0) and taking a drop, which the side panel's
-// harness still does by hit-testing the boxes, and the hovered item's name
-// (Animate's first half, 0x0043a820).
+// Its clicks, drags and hover cursor (MouseClick 0x0052cfb0, MouseMove
+// 0x0052d6e0, Animate's first half 0x0052ce0f) are the side panel's
+// (uisidebartest.cpp), which hit-tests the boxes; UIDragState acts on the
+// items.
 class TBarInvPane final : public TPane
 {
   public:
