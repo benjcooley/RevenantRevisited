@@ -81,6 +81,10 @@ class TShadowRun
     int32_t        stage = 0;
     int32_t        step  = -1;
     std::unique_ptr<TShadowStepRunner> runner;
+    // A fight the plan didn't ask for (§6.5): it runs first, then the plan's
+    // step goes on.
+    SShadowStep                        interruptstep;
+    std::unique_ptr<TShadowStepRunner> interrupt;
     std::vector<SShadowWaypoint>       waypoints;
     std::vector<std::string>           stagesdone;
     std::set<int32_t>                  surveyed;   // levels whose chests are logged

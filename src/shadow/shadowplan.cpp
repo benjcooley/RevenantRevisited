@@ -320,6 +320,24 @@ bool ParseStep(const std::string& verb, TLineReader& in, SShadowStep& step, std:
         step.target = merchant->text;
         return true;
     }
+    if (verb == "fight")
+    {
+        step.verb = EShadowVerb::Fight;
+        const SToken* target = in.Take();
+        if (!target)
+        {
+            error = "'fight' needs someone to fight";
+            return false;
+        }
+        step.target = target->text;
+        step.mustwin = in.TakeKeyword("win");
+        if (!in.AtEnd())
+        {
+            error = "'fight' takes a target, then 'win' or nothing";
+            return false;
+        }
+        return true;
+    }
     if (verb == "equip" || verb == "unequip" || verb == "consume")
     {
         step.verb = verb == "equip" ? EShadowVerb::Equip : verb == "unequip" ? EShadowVerb::Unequip
@@ -442,6 +460,8 @@ std::string SShadowStep::Describe() const
         case EShadowVerb::Equip:   out << "equip \"" << item << "\""; break;
         case EShadowVerb::Unequip: out << "unequip \"" << item << "\""; break;
         case EShadowVerb::Consume: out << "consume \"" << item << "\""; break;
+        case EShadowVerb::Fight:   out << "fight " << (target.empty() ? "(whoever attacks)" : target)
+                                       << (mustwin ? " win" : ""); break;
         case EShadowVerb::Train:
             out << "train";
             for (const int32_t a : attributes)

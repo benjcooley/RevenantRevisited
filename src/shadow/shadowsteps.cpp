@@ -529,6 +529,7 @@ std::unique_ptr<TShadowStepRunner> MakeStepRunner(const SShadowStep& step)
         case EShadowVerb::Unequip:
         case EShadowVerb::Train:
         case EShadowVerb::Consume: return std::make_unique<TPackRunner>(step);
+        case EShadowVerb::Fight:   return MakeFightRunner(step);
         case EShadowVerb::Expect: return std::make_unique<TExpectRunner>(step);
         case EShadowVerb::Save:   return std::make_unique<TSaveRunner>(step);
     }

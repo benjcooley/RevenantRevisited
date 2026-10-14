@@ -18,9 +18,12 @@
 #include "../object.h"
 #include "../saferef.h"
 
+#include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
+class TCharacter;
 class TExit;
 
 // Locke's pace, from his own animations and char.def, per game tick.
@@ -43,6 +46,11 @@ struct SShadowPace
 };
 
 [[nodiscard]] SShadowPace PaceLeg(int32_t length, int32_t fatigue, int32_t maxfatigue, const SShadowGait& gait);
+
+// A character's speed in units a tick moving forward: the root motion of
+// the first of `states` it has ("runf", "combatf", "walkf"; one frame a
+// tick), 0 when it has none.
+[[nodiscard]] double ShadowMoveSpeed(TObjectInstance& who, std::initializer_list<const char*> states);
 
 // What travel keeps across steps: the walk field of Locke's level and his
 // gait, both built when first needed.
@@ -88,7 +96,7 @@ class TShadowTravel
     [[nodiscard]] TObjectInstance* Object() const { return object.Get(); }
 
   private:
-    enum class EStage : uint8_t { Plan, Walk, Arrive, Through, Crossing, Done };
+    enum class EStage : uint8_t { Plan, Walk, Arrive, Through, Crossing, Fighting, Done };
 
     // Where Locke should end up for the target as it stands now: next to an
     // object, on an exit's strip, or on the place. False with `failure` set.
@@ -114,4 +122,11 @@ class TShadowTravel
     // a walker would, and travel goes on from there.
     std::string      crossing;
     int32_t          crossings = 0;
+    // Monsters the walk meets (§5.5): the leg stops where the first sees
+    // Locke, and he fights it (and what else sees him there) before going
+    // on. Evading, he fights a share of the leg's, once.
+    std::vector<TSafeRef<TCharacter>>  meeting;
+    SShadowStep                        fightstep;
+    std::unique_ptr<TShadowStepRunner> fight;
+    bool                               evaded = false;
 };

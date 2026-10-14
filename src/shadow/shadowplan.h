@@ -41,6 +41,7 @@ enum class EShadowVerb : uint8_t
     Unequip,    // unequip "<item>": back into the pack
     Train,      // train <attribute> [<attribute>]: the next level-up's two picks
     Consume,    // consume "<item>": eat or drink it
+    Fight,      // fight <target> [win]: Locke goes to it and fights it, and whoever joins
     Expect,     // expect <state> <op> <n> | expect level|maplevel <op> <n> | expect have "<item>" [<op> <n>]
     Save,       // save "<name>": a waypoint save
 };
@@ -88,6 +89,7 @@ struct SShadowStep
     std::string          item;          // use: what to use on the target; take: the key; buy, sell: what
     int32_t              count = 1;     // buy, sell: how many
     bool                 evade = false; // travel: run past the leg's monsters (§5.5)
+    bool                 mustwin = false; // fight: the target must be dead after
     std::vector<int32_t> choices;       // scene, talk: the answer to each menu, in order
     SShadowCondition     condition;     // expect
     std::string          name;          // save: the waypoint's name

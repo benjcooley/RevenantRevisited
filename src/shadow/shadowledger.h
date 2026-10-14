@@ -84,6 +84,13 @@ class TShadowLedger final : public TScript::IStepObserver
     void AllowItems(std::string cause, std::map<std::string, int32_t> items, int32_t gold, int64_t until);
     // Training is setting the level-up picks: they may change until `until`.
     void AllowTraining(int64_t until) { traininguntil = until; }
+    // A fight's kills earn experience, skill experience and level-ups (and
+    // a level-up's attributes and refill) until `until`.
+    void AllowProgress(std::string cause, int64_t until)
+    {
+        progresscause = std::move(cause);
+        progressuntil = until;
+    }
     // Food or a potion is about to give health and mana: up to these, above
     // regeneration, until `until`.
     void AllowVitals(std::string cause, int32_t health, int32_t mana, int64_t until);
@@ -128,6 +135,8 @@ class TShadowLedger final : public TScript::IStepObserver
     std::vector<STravel>          travels;          // proven, not yet landed
     std::vector<SItems>           gifts;            // registered, not yet arrived
     int64_t                       traininguntil = -1;
+    int64_t                       progressuntil = -1;
+    std::string                   progresscause;
     struct SVitals
     {
         std::string cause;

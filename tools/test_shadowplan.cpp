@@ -97,6 +97,62 @@ TEST(ShadowPlan, ReadsStagesAndSteps)
     EXPECT_EQ(s1.steps[3].Describe(), "expect have \"Diamond Ring\" = 0");
 }
 
+TEST(ShadowPlan, ReadsPlacesAndLockesVerbs)
+{
+    const PlanFile file(
+        "module Ahkuilon\n"
+        "place KeepGate level 0 1842 24388 451\n"
+        "place Tavern object Gus1\n"
+        "stage s \"Everything Locke does\"\n"
+        "    travel  KeepGate\n"
+        "    travel  barin evade\n"
+        "    use     TOWERIN with \"Golden Sun Key\"\n"
+        "    take    Chest@10532,11000\n"
+        "    buy     \"Lesser Healing\" 2 from ELAHNI1\n"
+        "    sell    \"Bone Sickle\" to GINA1\n"
+        "    equip   \"Short Sword\"\n"
+        "    unequip \"Short Sword\"\n"
+        "    consume \"Apple\"\n"
+        "    train   strength agil\n"
+        "    train   cons\n"
+        "    fight   Rahul win\n"
+        "    expect  maplevel = 0\n");
+    TShadowPlan plan;
+    std::string error;
+    ASSERT_TRUE(plan.Load(file.Path(), error)) << error;
+
+    const SShadowPlace* gate = plan.FindPlace("keepgate");
+    ASSERT_NE(gate, nullptr);
+    EXPECT_EQ(gate->level, 0);
+    EXPECT_EQ(gate->x, 1842);
+    EXPECT_EQ(gate->z, 451);
+    ASSERT_NE(plan.FindPlace("Tavern"), nullptr);
+    EXPECT_EQ(plan.FindPlace("Tavern")->object, "Gus1");
+
+    const std::vector<SShadowStep>& steps = plan.Stages()[0].steps;
+    ASSERT_EQ(steps.size(), 13u);
+    EXPECT_EQ(steps[0].verb, EShadowVerb::Travel);
+    EXPECT_FALSE(steps[0].evade);
+    EXPECT_TRUE(steps[1].evade);
+    EXPECT_EQ(steps[2].verb, EShadowVerb::Use);
+    EXPECT_EQ(steps[2].item, "Golden Sun Key");
+    EXPECT_EQ(steps[3].verb, EShadowVerb::Take);
+    EXPECT_EQ(steps[3].target, "Chest@10532,11000");
+    EXPECT_EQ(steps[4].verb, EShadowVerb::Buy);
+    EXPECT_EQ(steps[4].count, 2);
+    EXPECT_EQ(steps[4].target, "ELAHNI1");
+    EXPECT_EQ(steps[5].verb, EShadowVerb::Sell);
+    EXPECT_EQ(steps[5].count, 1);
+    EXPECT_EQ(steps[6].verb, EShadowVerb::Equip);
+    EXPECT_EQ(steps[7].verb, EShadowVerb::Unequip);
+    EXPECT_EQ(steps[8].verb, EShadowVerb::Consume);
+    EXPECT_EQ(steps[9].attributes, (std::vector<int32_t>{0, 2}));
+    EXPECT_EQ(steps[10].attributes, (std::vector<int32_t>{1, 1}));
+    EXPECT_EQ(steps[11].verb, EShadowVerb::Fight);
+    EXPECT_TRUE(steps[11].mustwin);
+    EXPECT_EQ(steps[12].condition.subject, EShadowSubject::MapLevel);
+}
+
 TEST(ShadowPlan, ConditionsCompare)
 {
     SShadowCondition c;
@@ -123,4 +179,12 @@ TEST(ShadowPlan, RefusesMistakesByLine)
     EXPECT_EQ(LoadError("module A\nstage a\n  start loadgame\n"), "3: 'start' takes 'newgame'");
     EXPECT_EQ(LoadError("stage a\n  scene\n"), "2: no 'module' line");
     EXPECT_EQ(LoadError("module A\n"), "1: no stages");
+    EXPECT_EQ(LoadError("module A\nplace p level 0 1\n"), "2: 'place <name> level' takes <level> <x> <y> [<z>]");
+    EXPECT_EQ(LoadError("module A\nplace p here\n"),
+              "2: 'place <name>' takes 'level <level> <x> <y> [<z>]' or 'object <name>'");
+    EXPECT_EQ(LoadError("module A\nstage a\n  buy \"Apple\" from\n"),
+              "3: 'buy' takes \"<item>\" [<count>] from <merchant>");
+    EXPECT_EQ(LoadError("module A\nstage a\n  train speed\n"),
+              "3: 'train' takes attributes (strn cons agil rflx mind luck), not 'speed'");
+    EXPECT_EQ(LoadError("module A\nstage a\n  fight Rahul now\n"), "3: 'fight' takes a target, then 'win' or nothing");
 }

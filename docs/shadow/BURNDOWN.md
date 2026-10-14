@@ -22,18 +22,18 @@ it has got.
 | Travel between places | proven walks, real travel time (§5) | P1 | same level done; through doors by their scripts (S1 passes) |
 | Doors, keys, levers | `use … with …`, transitions (§5.3) | P1 | — |
 | Town teleports | stones in the route graph (§5.3) | P1 | — |
-| Fights on the way | travel and evade (§5.5) | P1–P3 | — |
-| Fights | the duel model (§6) | P2 | — |
+| Fights on the way | travel and evade (§5.5) | P1–P3 | written; first exercised on the way to the Druhg camp |
+| Fights | the duel model (§6) | P2 | working (Rahul) |
 | Getting poisoned, paralysed, buffed | real state through the duel (§8.7) | P2 | — |
-| Looting monsters | real death drop, `Pickup` of every item (§8.8) | P2 | — |
+| Looting monsters | real death drop, `Pickup` of every item (§8.8) | P2 | done |
 | Opening chests, picking locks | `take` through `TContainer::Use`; keys by `with`; lockpicks to come (§8.8) | P4 | chests done (the Keep's 500 gold); lockpicks open |
-| Monster generators | `TMonsterGen` (§7) | P3 | agent porting |
-| Levelling up | real `AwardKillExp` | P2 | — |
+| Monster generators | `TMonsterGen` (§7) | P3 | ported and merged |
+| Levelling up | real `AwardKillExp` | P2 | experience from kills works; a level-up yet to be seen in a run |
 | New stat points | `Train`: the level-up markers (§8.3) | P4 | — |
 | Buying armour, weapons, potions | the shop's keys (§8.1) | P4 | buying done (a potion at Elahni's); the shopping list to come |
 | Selling what is no longer useful | §8.1 | P4 | — |
 | Readying equipment: armour, the fight's weapon, belt, quick spells, a buff | `TPlayer::Equip` with the game's `CanEquip` (§8.10) | P4 | — |
-| Using potions and food | `Consume`, retail `TFood::Use` (§8.2) | P4 | agent porting `TFood::Use` |
+| Using potions and food | `Consume`, retail `TFood::Use` (§8.2) | P4 | done (retail TFood::Use merged); in fights below 35% health |
 | Placing items, using bags | the real `AddToInventory`: belt for healing, pouches for consumables (§8.9) | P4 | — |
 | Talismans into the Spell Pouch | moved there on arrival; casting checks it (§8.9) | P4 | — |
 | Learning new spells | `Invent`: casting a talisman combination teaches it; scrolls to check (§8.6) | P4 | — |
@@ -69,8 +69,8 @@ it has got.
 | [ ] | Automatic routing across levels (exit graph); today the plan names each exit, which doubles as the walkthrough | — |
 | [ ] | Script scan for routing: `pos` on the player in CUBE, USE, ACTIVATE and DIALOG blocks; conditional edges tried live (until then the plan names each scripted transition) | — |
 | [x] | Trigger zones (TShadowZones: every literal CUBE and player-named PROXIMITY of the level's area scripts and master.s, with an owner on the level); A* steers around them; a walk that can't stops in the zone, lets it fire, then goes on (tested on BAYNE1's tavern cube) | 2026-10-14 |
-| [ ] | Encounters on the route: monsters already there (sight, LineOfSight), priced by the duel model | — |
-| [ ] | Travel modes: `travel` fights every monster on the leg; `evade` runs and fights ⌈N·share⌉, at least one; the policy's choice | — |
+| [~] | Encounters on the route: every aggressive enemy whose sight range and LineOfSight reach a point of the walk; the leg stops there for the fight, then goes on (written; first met on S2's way to the Druhg camp). Pricing routes by the duel model to do | 2026-10-14 |
+| [~] | Travel modes: `travel` fights what sees the walk; `evade` fights ⌈N·share⌉ (¼ slower, ½ as fast), at least one (written). The policy's choice to do | 2026-10-14 |
 | [ ] | Generator encounters on the route: exposure × slot frequency, real spawns through `TMonsterGen` (after P3) | — |
 | [x] | Travel time from Locke's real speeds (`walkf` 5.71, `runf` 8.93 units a tick); run/walk pacing by fatigue; the walk's ticks pass before he arrives | 2026-10-13 |
 | [x] | Proofs in the log (path sampled every 256 units); the ledger accepts a jump only where a proven travel said he'd land | 2026-10-13 |
@@ -82,24 +82,24 @@ it has got.
 | Status | Item | Last touched |
 |---|---|---|
 | [x] | `TCharacter::RollAttack` extracted from `IsValidAttack` (and `RollDamagePercent` from the four attack choices): C3 port output byte-identical before and after (5206/5206 against retail); arena fights identical draw for draw | 2026-10-13 |
-| [ ] | Duel timeline: monster cadence, attack choice, blocks, retreat; Locke's blows, fatigue | — |
-| [ ] | Outcomes through `Damage`, the award functions, `DropLoot`, `LastAttack` | — |
-| [ ] | Tactics: rotation, counter timing, blocks, fatigue, potions, disengage; the 64-run size-up | — |
+| [x] | Duel timeline (TShadowDuel): monster cadence (ATTACKFREQ), RandomAttack's pick, OnAttacked's guard, RETREATAT; Locke's blows by IsValidAttack's animation-free tests, fatigue; one fight in one tick | 2026-10-14 |
+| [x] | Outcomes through the game: `WeighBlow`/`LandBlow` extracted from ResolveHit (Damage, the kill, skill and stealth awards); the bodies drop their loot and Locke picks it up; the ledger's progress cause. `LastAttack` for Jong still to do | 2026-10-14 |
+| [~] | Tactics: rotation, chains first, guard a seen blow (35%), never the fatigued blow, a potion under 35% health. Disengage and the 64-run size-up (trial mode is built) to do | 2026-10-14 |
 | [ ] | Combos: chain attacks keyed inside `chainexptime` (§6.4) | — |
-| [ ] | Interrupts: a monster fighting Locke in the live world starts a fight first (§6.5) | — |
-| [ ] | Several monsters at once | — |
+| [x] | Interrupts: anything fighting Locke in the live world is fought first (Rahul, as the opening ends) | 2026-10-14 |
+| [x] | Several monsters at once: each its own timer, at most three in reach | 2026-10-14 |
 | [~] | Spells: `CastByName` and the pure part of `TSpell::Damage` (static `TSpell::Damage(caster, target, spelldata, variant)`, done; the duel side waits) | 2026-10-13 |
 | [ ] | Effects: poison, paralysis, stat effects, damage types, monster spells (§8.7) | — |
 | [ ] | Calibration suite against the arena and player bot; tolerances | — |
 | [ ] | `--shadow-combat=real` | — |
-| [ ] | Gate: Rahul; the Keep chain complete | — |
+| [x] | Gate: from a new game through Rahul (won barehanded, 214 ticks), Rand, Tendrick, the Keep's exit, Gus's deal and the first potions: 23 min 24 s of game in 30 s, six waypoints, no violations | 2026-10-14 |
 
 ## P3 Generators
 
 | Status | Item | Last touched |
 |---|---|---|
-| [ ] | `TMonsterGen` retail first: slots, Pulse, spawn, treasure, Load/Save | — |
-| [ ] | `addmonstertype`, `delmonstertype`, `maxmonsters`, `monstertypes` | — |
+| [x] | `TMonsterGen` retail first: slots, Pulse (off screen by the animate pass's verdict), spawn, treasure kit, Load/Save in retail's layout (agent, shadow/gen) | 2026-10-14 |
+| [x] | `addmonstertype`, `delmonstertype`, `maxmonsters`, `monstertypes` | 2026-10-14 |
 | [ ] | Gate: respawn cadence against the emulator | — |
 
 ## P4 Purse

@@ -2124,24 +2124,16 @@ bool TCharacter::ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAtta
     ConvertToVector(GetFace(), 4 * ROLLOVER, push);
     targ->vel += push;
 
-    bool hit = tohit >= roll;
-    int32_t dmg = damage;
-    bool blocked = false;
+  // A guard counts against a blow the target faces, unless it is a death
+  // blow (WeighBlow does the arithmetic).
     const int32_t facing = targ->FaceAngleTo(this);
-    if (!(impact && (impact->flags & CAI_DEATH)) && abs(facing) < 0x30 && targ->doing &&
-        (targ->doing->action == ACTION_BLOCK || targ->doing->action == ACTION_DODGE))
-    {
-      // Undo the tier the damage carries, take the guard's 50 off the
-      // to-hit, and tier it again.
-        int32_t factor;
-        if (damage > 0 && ToHitDamageFactor(tohit - roll, factor))
-            dmg = damage * 100 / factor;
-        tohit = std::clamp(tohit - 50, 10, 100);
-        if (ToHitDamageFactor(tohit - roll, factor))
-            dmg = (std::max)(1, factor * dmg / 100);
-        hit = tohit >= roll;
-        blocked = !hit;
-    }
+    const bool guarding = !(impact && (impact->flags & CAI_DEATH)) && abs(facing) < 0x30 && targ->doing &&
+                          (targ->doing->action == ACTION_BLOCK || targ->doing->action == ACTION_DODGE);
+    const SBlowOutcome weighed = WeighBlow(damage, tohit, roll, guarding);
+    bool hit = weighed.hit;
+    const int32_t dmg = weighed.damage;
+    const bool blocked = weighed.blocked;
+    tohit = weighed.tohit;
   // An interactive move lands on a target that is moving and not blocking.
     if ((attack->flags & CA_INTERACTIVE) && (targ->accum.x || targ->accum.y) &&
         !(targ->doing && targ->doing->action == ACTION_BLOCK))
@@ -2151,8 +2143,6 @@ bool TCharacter::ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAtta
     def += targ->Defense();
     int32_t off = LuckMod();
     off += Offense();
-    if (dmg < 1)
-        dmg = 1;
 
   // An interactive move can't kill without a death impact.
     if (hit && (attack->flags & CA_INTERACTIVE) && targ->Health() - dmg < 1 &&
@@ -2245,24 +2235,55 @@ bool TCharacter::ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAtta
             CombatTrace::Event(this, "result", "text=%s", line);
     }
 
-  // The damage: a blocking player takes none from a glance. Damage keeps
-  // or frees the block it is given (retail frees it here when Damage
-  // didn't install it, after a Damage that may have freed it already).
-    if (hit || !(targ->ObjClass() == OBJCLASS_PLAYER && targ->doing && targ->doing->action == ACTION_BLOCK))
-        targ->Damage(dmg, DT_NONE, 0, hitab, this);
-    else
-        delete hitab;   // REVSYNC-DIVERGENCE: ownership passes to Damage (no double free; see TCharacter::Damage)
+  // A blocking player takes nothing from a glance.
+    const bool lands =
+        hit || !(targ->ObjClass() == OBJCLASS_PLAYER && targ->doing && targ->doing->action == ACTION_BLOCK);
+    LandBlow(*targ, dmg, lands, hitab);
+    return hit;
+}
 
-    if (targ->ObjClass() == OBJCLASS_PLAYER && targ->root && targ->root->action == ACTION_BOW)
-        targ->BeginFighting(nullptr, ACTION_COMBAT);
+SBlowOutcome TCharacter::WeighBlow(int32_t damage, int32_t tohit, int32_t roll, bool guarding)
+{
+    SBlowOutcome blow;
+    blow.damage = damage;
+    blow.tohit = tohit;
+    blow.hit = tohit >= roll;
+    if (guarding)
+    {
+      // Undo the tier the damage carries, take the guard's 50 off the
+      // to-hit, and tier it again.
+        int32_t factor;
+        if (damage > 0 && ToHitDamageFactor(tohit - roll, factor))
+            blow.damage = damage * 100 / factor;
+        blow.tohit = std::clamp(tohit - 50, 10, 100);
+        if (ToHitDamageFactor(blow.tohit - roll, factor))
+            blow.damage = (std::max)(1, factor * blow.damage / 100);
+        blow.hit = blow.tohit >= roll;
+        blow.blocked = !blow.hit;
+    }
+    blow.damage = (std::max)(blow.damage, 1);
+    return blow;
+}
+
+void TCharacter::LandBlow(TCharacter& target, int32_t damage, bool lands, TActionBlock* action)
+{
+  // Damage keeps or frees the block it is given (retail frees it in
+  // ResolveHit when Damage didn't install it, after a Damage that may have
+  // freed it already).
+    if (lands)
+        target.Damage(damage, DT_NONE, 0, action, this);
+    else
+        delete action;  // REVSYNC-DIVERGENCE: ownership passes to Damage (no double free; see TCharacter::Damage)
+
+    if (target.ObjClass() == OBJCLASS_PLAYER && target.root && target.root->action == ACTION_BOW)
+        target.BeginFighting(nullptr, ACTION_COMBAT);
     if (ObjClass() == OBJCLASS_PLAYER)
     {
         TPlayer* player = static_cast<TPlayer*>(this);
-        player->AwardKillExp(targ);
-        player->AwardSkillExp(SK_WEAPONSKILLS + WeaponType(), targ);
-        player->AwardStealthExp(targ);
+        player->AwardKillExp(&target);
+        player->AwardSkillExp(SK_WEAPONSKILLS + WeaponType(), &target);
+        player->AwardStealthExp(&target);
     }
-    return hit;
 }
 
 // Maximum number of characters an attack strikes at once (retail's 0x20).

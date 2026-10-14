@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+class TCharacter;
 class TShadowLedger;
 class TShadowLog;
 class TShadowNav;
@@ -95,3 +96,10 @@ void ShadowPressKey(int32_t vk);
 
 // The shop steps (shadowshop.cpp).
 [[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeShopRunner(const SShadowStep& step);
+// A fight, planned or not (shadowfight.cpp): the step's target (none: no
+// one in particular), `foes` (the monsters a walk met), and whoever is
+// fighting Locke.
+[[nodiscard]] std::unique_ptr<TShadowStepRunner> MakeFightRunner(const SShadowStep& step,
+                                                                 std::vector<TCharacter*> foes = {});
+// Whether anything near Locke is fighting him (§6.5).
+[[nodiscard]] bool ShadowUnderAttack();

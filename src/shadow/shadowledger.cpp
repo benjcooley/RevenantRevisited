@@ -248,6 +248,16 @@ int32_t TShadowLedger::Audit(TPlayer& player, int64_t tick, TShadowLog& log)
             });
             return;
         }
+        if (is > was && !scripted && tick <= progressuntil && strcmp(field, "gold") != 0)
+        {
+            log.Event("gain", text + " by " + progresscause, [&](JsonOut& out) {
+                out.FieldString("field", field);
+                out.Field("was", was);
+                out.Field("is", is);
+                out.FieldString("cause", progresscause);
+            });
+            return;
+        }
         if (is < was || scripted)
             log.Event(is < was ? "loss" : "gain", text + (scripted ? " by " + scriptcause : ""), [&](JsonOut& out) {
                 out.FieldString("field", field);

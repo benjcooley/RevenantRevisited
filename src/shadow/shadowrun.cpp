@@ -167,6 +167,32 @@ void TShadowRun::Begin()
 void TShadowRun::RunSteps()
 {
     const std::vector<SShadowStage>& stages = plan.Stages();
+
+    // Something fighting Locke comes first, whatever the step: he answers it.
+    if (!interrupt && ShadowGameIdle() && ShadowUnderAttack() &&
+        !(runner && step >= 0 && stage < (int32_t)stages.size() &&
+          stages[stage].steps[step].verb == EShadowVerb::Fight))
+    {
+        interruptstep = SShadowStep{};
+        interruptstep.verb = EShadowVerb::Fight;
+        log.Event("interrupt", "something is fighting Locke");
+        interrupt = MakeFightRunner(interruptstep);
+    }
+    if (interrupt)
+    {
+        SShadowContext context{log, ledger, nav, plan, tick,
+                               stages[std::min<int32_t>(stage, (int32_t)stages.size() - 1)], waypoints};
+        const EShadowStatus status = interrupt->Pulse(context);
+        if (status == EShadowStatus::Running)
+            return;
+        if (status == EShadowStatus::Failed)
+        {
+            Finish(1, "a fight the plan didn't ask for: " + interrupt->Failure());
+            return;
+        }
+        interrupt.reset();
+    }
+
     while (!finished)
     {
         if (!runner)

@@ -7,6 +7,7 @@
 
 #include "shadowledger.h"
 #include "shadowlog.h"
+#include "shadowencounters.h"
 #include "shadowplan.h"
 
 #include "../3dimage.h"
@@ -132,18 +133,18 @@ const TShadowWalkField* TShadowNav::Field(TShadowLog& log)
     return &field;
 }
 
-const SShadowGait& TShadowNav::Gait(TShadowLog& log)
+double ShadowMoveSpeed(TObjectInstance& who, std::initializer_list<const char*> states)
 {
-    if (gait)
-        return *gait;
-    SShadowGait g;
     // The root motion of a state's frames, one frame a tick, in world units.
     // FindState is given its percent so it draws nothing from the game's
     // random stream.
-    auto* imagery = dynamic_cast<T3DImagery*>(Player->GetImagery());
-    auto speed = [&](const char* name) -> double {
-        if (!imagery || !imagery->HasState(name))
-            return 0.0;
+    auto* imagery = dynamic_cast<T3DImagery*>(who.GetImagery());
+    if (!imagery)
+        return 0.0;
+    for (const char* name : states)
+    {
+        if (!imagery->HasState(name))
+            continue;
         const int32_t state = imagery->FindState(name, 100);
         const int32_t frames = imagery->GetAniLength(state);
         int64_t sum = 0;
@@ -154,11 +155,19 @@ const SShadowGait& TShadowNav::Gait(TShadowLog& log)
                 sum += dist;
         }
         return frames > 0 ? double(sum) / frames / ROLLOVER : 0.0;
-    };
+    }
+    return 0.0;
+}
+
+const SShadowGait& TShadowNav::Gait(TShadowLog& log)
+{
+    if (gait)
+        return *gait;
+    SShadowGait g;
     // "walk" and "run" are the stances a mode stands in; walking and running
     // forward are "walkf" and "runf".
-    g.walk = speed("walkf");
-    g.run = speed("runf");
+    g.walk = ShadowMoveSpeed(*Player, {"walkf"});
+    g.run = ShadowMoveSpeed(*Player, {"runf"});
     // Points every `rate` hundredths of a second (TCharacter::PulseRecovery),
     // a tick being 100/24 hundredths.
     if (const SCharData* data = Player->GetCharData())
@@ -381,9 +390,12 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
                       std::to_string(field->RegionAt(dest)) + ")";
             return EShadowStatus::Failed;
         }
-        // A zone it can't keep out of: walk as far as its edge, and stop
-        // there to let it fire.
+        // Where the walk has to stop on the way: a zone it can't keep out
+        // of (stop at its edge, let it fire), or the first monster that would
+        // see Locke (stop there and fight) -- whichever comes first.
         crossing.clear();
+        meeting.clear();
+        size_t stop = path->points.size();
         for (size_t i = 0; i < path->points.size(); ++i)
             if (const int32_t z = inzone(path->points[i]); z >= 0)
             {
@@ -393,16 +405,42 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
                     return EShadowStatus::Failed;
                 }
                 crossing = zones.Zones()[z].Describe();
-                path->points.resize(i + 1);
-                double length = 0.0;
-                for (size_t k = 1; k < path->points.size(); ++k)
-                    length += std::hypot(double(path->points[k].x - path->points[k - 1].x),
-                                         double(path->points[k].y - path->points[k - 1].y));
-                path->length = (int32_t)std::lround(length);
-                dest = path->points.back();
-                viaexit = viadoor = false;
+                stop = i;
                 break;
             }
+        if (!evaded)
+        {
+            std::vector<SShadowEncounter> met = ShadowLegEncounters(path->points, Player->GetLevel());
+            met.erase(std::remove_if(met.begin(), met.end(),
+                                     [&](const SShadowEncounter& e) { return e.monster.Get() == object.Get(); }),
+                      met.end());
+            if (!met.empty() && met.front().index < stop)
+            {
+                const size_t fights = evade ? ShadowEvadeShare(met, context.nav.Gait(context.log).run)
+                                            : size_t(std::count_if(met.begin(), met.end(), [&](const SShadowEncounter& e) {
+                                                  return e.index == met.front().index;
+                                              }));
+                for (size_t k = 0; k < fights && k < met.size(); ++k)
+                    meeting.push_back(met[k].monster);
+                evaded = evade;
+                crossing.clear();
+                stop = met.front().index;
+                context.log.Event("encounter", std::to_string(met.size()) + " monsters on the way to " + target +
+                                                   "; Locke fights " + std::to_string(meeting.size()) +
+                                                   (evade ? " (evading)" : ""));
+            }
+        }
+        if (stop < path->points.size())
+        {
+            path->points.resize(stop + 1);
+            double length = 0.0;
+            for (size_t k = 1; k < path->points.size(); ++k)
+                length += std::hypot(double(path->points[k].x - path->points[k - 1].x),
+                                     double(path->points[k].y - path->points[k - 1].y));
+            path->length = (int32_t)std::lround(length);
+            dest = path->points.back();
+            viaexit = viadoor = false;
+        }
         const SShadowGait& gait = context.nav.Gait(context.log);
         pace = PaceLeg(path->length, Player->Fatigue(), Player->MaxFatigue(), gait);
 
@@ -441,7 +479,7 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
                 }
                 out.End(']');
             });
-        if (path->length < kThere && crossing.empty())
+        if (path->length < kThere && crossing.empty() && meeting.empty())
         {
             stage = EStage::Done;
             return EShadowStatus::Done;
@@ -464,7 +502,7 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
             return EShadowStatus::Running;
         // An NPC may have walked on meanwhile: stand by it where it is now,
         // by a walk that still holds.
-        if (object && crossing.empty())
+        if (object && crossing.empty() && meeting.empty())
         {
             S3DPoint now;
             if (!Destination(context, now, failure))
@@ -484,6 +522,19 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
         // back what walking would have.
         if (pace.fatigue < Player->Fatigue())
             Player->SetFatigue(pace.fatigue);
+        if (!meeting.empty())
+        {
+            std::vector<TCharacter*> foes;
+            for (const TSafeRef<TCharacter>& ref : meeting)
+                if (TCharacter* foe = ref.Get())
+                    foes.push_back(foe);
+            fightstep = SShadowStep{};
+            fightstep.verb = EShadowVerb::Fight;
+            fight = MakeFightRunner(fightstep, std::move(foes));
+            meeting.clear();
+            stage = EStage::Fighting;
+            return EShadowStatus::Running;
+        }
         if (!crossing.empty())
         {
             context.log.Event("crossing", crossing + ": Locke stops in it on the way to " + target);
@@ -527,6 +578,22 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
         context.log.Event("through", target + ": level " + std::to_string(Player->GetLevel()));
         stage = EStage::Done;
         return EShadowStatus::Done;
+
+    case EStage::Fighting:
+    {
+        const EShadowStatus status = fight->Pulse(context);
+        if (status == EShadowStatus::Running)
+            return status;
+        if (status == EShadowStatus::Failed)
+        {
+            failure = "on the way to " + target + ": " + fight->Failure();
+            return EShadowStatus::Failed;
+        }
+        fight.reset();
+        waited = 0;
+        stage = EStage::Plan;
+        return EShadowStatus::Running;
+    }
 
     case EStage::Crossing:
         // The zone fires (or its script has nothing to do now); once the
