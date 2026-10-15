@@ -258,6 +258,9 @@ add_executable(test_savefile
   src/savefile.cpp)
 target_include_directories(test_savefile PRIVATE ${XXHASH_DIR})
 
+add_executable(test_defwidget tools/test_defwidget.cpp)
+target_include_directories(test_defwidget PRIVATE ${HANDMADE_MATH_DIR} ${LOG_DIR} ${SOKOL_DIR})
+
 add_executable(test_sectorstore
   tools/test_sectorstore.cpp
   src/sectorstore.cpp
@@ -275,6 +278,7 @@ FetchContent_MakeAvailable(googletest)
 target_link_libraries(test_particlefx PRIVATE GTest::gtest_main)
 target_link_libraries(test_savefile PRIVATE GTest::gtest_main)
 target_link_libraries(test_sectorstore PRIVATE GTest::gtest_main)
+target_link_libraries(test_defwidget PRIVATE GTest::gtest_main)
 
 add_executable(test_vfs_path_index tools/test_vfs_path_index.cpp)
 add_executable(test_retail_mesh_lighting tools/test_retail_mesh_lighting.cpp)
@@ -440,6 +444,7 @@ endforeach()
 foreach(test IN ITEMS
     test_audio_decode
     test_classiclighting
+    test_defwidget
     test_particlefx
     test_playerstats
     test_savefile

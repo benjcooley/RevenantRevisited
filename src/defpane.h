@@ -180,6 +180,22 @@ struct SDefWidget
     {
         return px >= x && py >= y && px < x + w && py < y + h;
     }
+
+    // REVSYNC: each widget class's hit test (vtable +0x54), which the click
+    // asks of the widgets in DEF order (0x00436530). A hidden or disabled
+    // widget is passed over (0x004365f3..0x00436603). TEXT, BITMAP and FRAME
+    // never take a click (0x00438a40, 0x00438910, 0x00438920): they are
+    // decoration, so a FRAME drawn behind a list leaves the list its clicks.
+    // The others take one in their rect (0x0042a7a0; BUTTON 0x0042d0d0,
+    // whose BTNFLAG_NOTSQUARE key-colour test no shipped screen uses).
+    [[nodiscard]] bool TakesClick(int32_t px, int32_t py) const
+    {
+        if (hidden || disabled)
+            return false;
+        if (type == EDefWidget::Text || type == EDefWidget::Bitmap || type == EDefWidget::Frame)
+            return false;
+        return Contains(px, py);
+    }
 };
 
 // A DEF widget pane: parsed (or code-built) widget set + style table + assets,

@@ -150,6 +150,19 @@ Per-type Draw entries are in vtable slot 16 (+0x40):
   - List/scrollbar/edit backgrounds: `bm->drawmode & ~0x20000` (0x43121f, 0x42ebe9).
   - Scrollbar/spin parts: the per-part default is `(upBm->drawmode & ~0x20000) | 0x20`
     (EDIT parser decomp line 201; the parts show mode 0x2020 live, `+0xec/+0x108/+0x124 = 0x2020`).
+- **Hit test.** The pane's click (`0x00436530`) first offers it to the topmost widget
+  (+0xa8) and the widget holding the mouse (+0xac), then asks the widgets in DEF order
+  (0x004365de..0x0043661f), passing over HIDDEN (2) and DISABLED (4) ones, and gives it to
+  the first whose own hit test (vtable +0x54) takes the point:
+  - TEXT `0x00438a40`, BITMAP `0x00438910`, FRAME `0x00438920`: `xor eax, eax` -- never.
+    Decoration doesn't take clicks, so the backdrop FRAME a screen lists first doesn't
+    hide the list in front of it (the Load and Save dialogs).
+  - SCROLLBAR, LISTBOX, EDIT, DROPLIST `0x0042a7a0`: the rect (+0x60..+0x6c).
+  - BUTTON `0x0042d0d0`: the rect, then with BTNFLAG_NOTSQUARE (0x20000) the up bitmap's
+    key colour; no shipped screen sets that flag.
+
+  On a left press it then moves the focus (`0x004369f0`) and calls the widget's click
+  (vtable +0x38).
 
 ### 1.4 The frame tiler, `0x00429ac0`
 Signature: `__thiscall(frame, surface, bitmap, x, y, w, h, drawmode)`, `ret 0x1c`.
@@ -612,7 +625,9 @@ The blit-mode split in practice:
   pane's getter (`FieldText`), the selection Box on the item's cell, the EDIT's
   caret blink (48 pulses, on for 24), hidden widgets skipped, DRAWTOBG first and
   the edited EDIT last, and the background restores (section 1.3);
-- the input: the click goes to the first widget under the pointer; toggles
+- the input: the click goes to the first widget that takes it
+  (`SDefWidget::TakesClick`, section 1.3: never decoration, hidden or disabled
+  widgets); toggles
   change on the press; the list's scrollbar takes its clicks first, its track
   pages by the visible items, and a release on an item raises event 5002
   (OPTIONS_CONTROLS.md section 4).
