@@ -153,6 +153,9 @@ it has got.
 | [x] | Encounters are the AI's own look (FindCharacters ENEMY HEAR SEE): within COMBATRANGEMAX edge to edge and HEARINGRANGE (+ radius + 32), no line of sight needed; sight adds nothing to a walking Locke (Sight wants a glimpse of 99). The sight-range model had a Hopper "guard" every way from where Locke stood, though it never came for him | 2026-10-14 |
 | [x] | Trials of a walk's fight are fought where the walk meets the monsters (`TShadowDuel::StandAt`), not where Locke starts the leg | 2026-10-14 |
 | [x] | A step that fails on a guarded way says so (`Guarded()`); the grind's restock turns back instead of failing, and evading is tried only when fewer would catch him than meet him | 2026-10-14 |
+| [x] | Save point repository (SAVEPOINTS.md, `tools/shadow/savepoints.py`): every filed save carries a sidecar (plan, plan hash, stage, seed, style, round trip); a story point's save point is its newest good save; `list` and `export` to a game's Save folder | 2026-10-15 |
+| [x] | Segments: `shadow.py --segment <stage>` plays from the newest save point before it, `--segments --jobs N` every segment at once; each files its saves, refreshing the repository | 2026-10-15 |
+| [ ] | Save points load in retail (the DOSBox lab or the retail emulator), checked and recorded in the sidecar | — |
 | [x] | Plan through S2: Jason freed for the Golden Sun Key, the camp's chests (the Earth talisman teaches Regeneration and Stone Skin); new game to "jason freed" in 261 s of wall time, eight waypoints, every round trip unchanged, no violations | 2026-10-14 |
 | [~] | Play styles (§8.4): `style` / `--shadow-style` = melee, hands, bow, spells, mixed. Done: the setting, the level-up picks (`train` alone takes the style's), the first forest grind barehanded for Baez in every style. To do: readying, duel tactics, shopping, spells | 2026-10-14 |
 | [ ] | Bows in the duel: bow-mode shots while a monster closes (needed for the Solifuge anyway) | — |
