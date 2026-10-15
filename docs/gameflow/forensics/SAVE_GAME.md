@@ -46,6 +46,11 @@ A sector is read from `curmap` if present, otherwise from the module map;
 sectors are written to `curmap` when they unload. `curmap` therefore
 *is* the modified world, and new game = empty `curmap`.
 
+The port keeps no `curmap` folder: the working set is held in memory
+(`SectorStore`), saves default to one `.rvsave` file per slot, and a
+retail slot folder still loads and can still be written (`--oldsaves`).
+See [../SAVE_FORMAT.md](../SAVE_FORMAT.md).
+
 ## 3. `game.sav` / `newgame.sav` format
 
 Little-endian. Writer `SaveGame` `0x0048d720` (`LAB_0048dbde`), reader

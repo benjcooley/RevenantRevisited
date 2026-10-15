@@ -41,7 +41,6 @@ extern char ResourcePath[MAXPATHLEN]; // Where to read / write the resources
 extern char ImageryPath[MAXPATHLEN];  // Imagery tree / imagery.rvi; class.def and the rules rosters (INI [Paths] ImageryPath)
 extern char ModulesPath[MAXPATHLEN];  // Root of the game modules (INI [Paths] ModulesPath)
 extern char BaseMapPath[MAXPATHLEN];  // Where the untouched version of the game map is stored
-extern char CurMapPath[MAXPATHLEN];   // Where the current map is stored
 extern char MoviePath[MAXPATHLEN];    // Where the .smk movies live (INI [Paths] MoviePath)
 extern char SaveGamePath[MAXPATHLEN]; // Root of the save slots (INI [Paths] SaveGamePath)
 
@@ -114,6 +113,7 @@ extern bool Editor;             // This is true if we are in edit mode
 extern bool StartInEditor;      // Whether to start the program in editor mode
 extern bool RevisitedEnabled;   // --revisited: mount the Revisited overlay (.rvr / dev folder); FATAL if requested but missing
 extern bool NoQuickLoad;        // Prevent the program from attempting to load the IMAGERY.DAT file
+extern bool OldSaves;           // Save retail slot folders, not save files (--oldsaves, [Revisited] OldSaves)
 extern char StartupSavePath[];  // --loadmap=<slot>; empty if no startup auto-load
 extern bool StartupSaveCycle;   // --savecycle-test: WriteGame/ReadGame round-trip + diff log on first PlayScreen pulse
 extern int32_t StartupSaveCycleSettle;  // --savecycle-test=<frames>: frames before the save (0 = before the first tick)

@@ -64,7 +64,7 @@ void TSaveSlotPane::OnListSelect(const SDefWidget& list, int32_t row)
     // REVSYNC-DIVERGENCE: retail loaded <slot>\ss.bmp over the previous
     // picture only when it read, so a slot without one kept the last slot's
     // picture; the port shows black (INGAME_MENU.md §10).
-    hasPicture   = TSaveGame::ReadThumbnail(slot.dir, picture);
+    hasPicture   = TSaveGame::ReadThumbnail(slot, picture);
     pictureDirty = hasPicture;
 
     SetText("gamename", slot.name);

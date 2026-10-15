@@ -34,6 +34,7 @@
 #pragma once
 
 #include "listenerlist.h"
+#include "savefile.h"
 
 #include <cstdint>
 #include <filesystem>
@@ -148,11 +149,22 @@ class TMapManager
     // the working set from `dir` (a save slot's CurMap).
     void LoadCurMap(const std::filesystem::path& dir);
 
-    // REVSYNC: TMapPane::SaveCurMap @ 0x0044e250 — flush, then copy the
-    // working set into `dir`. Retail first copied the previously loaded
-    // slot's CurMap into `dir`; LoadCurMap already imported that into the
-    // working set, so the copy is a no-op and isn't repeated here.
+    // REVSYNC: TMapPane::SaveCurMap @ 0x0044e250 — flush, then write the
+    // working set's sectors into `dir` whole (a retail slot's CurMap).
+    // Retail first copied the previously loaded slot's CurMap into `dir`;
+    // LoadCurMap already took that into the working set, so the copy is a
+    // no-op and isn't repeated here.
     void SaveCurMap(const std::filesystem::path& dir) const;
+
+    // Editor: flush, then publish the working set into the base map
+    // (SectorStore::Publish). The loaded sectors stay; they now match it.
+    void PublishCurMap() const;
+
+    // A save file's sectors (docs/gameflow/SAVE_FORMAT.md): flush, then the
+    // working set as diffs against the base map; and ClearCurMap, then the
+    // working set rebuilt from them.
+    [[nodiscard]] std::vector<SaveFile::SSectorDelta> DiffCurMap() const;
+    void LoadCurMap(const std::vector<SaveFile::SSectorDelta>& sectors);
 
     // ---- Reloading from the sector files (editor commands) ------------
     // REVSYNC: TMapPane::FreeAllSectors @ 0x00458ff0 and the reload that

@@ -123,6 +123,7 @@ set(IMPLOT_DIR   "${THIRDPARTY_DIR}/implot")
 set(IMGUIFD_DIR  "${THIRDPARTY_DIR}/imguifiledialog")
 set(IMGUITGL_DIR "${THIRDPARTY_DIR}/imgui_toggle")
 set(FONTS_DIR    "${THIRDPARTY_DIR}/fonts")
+set(XXHASH_DIR   "${THIRDPARTY_DIR}/xxhash")
 
 # Dear ImGui core + first-party extensions (ImGuizmo, ImPlot, ImGuiFileDialog).
 # No backends here -- sokol_imgui.h provides the backend.
@@ -205,6 +206,7 @@ target_compile_definitions(Revenant PRIVATE REV_VFX_TEST_BG_DIR="${CMAKE_SOURCE_
 # Include directories for third-party dependencies
 target_include_directories(Revenant PRIVATE
   ${SOKOL_DIR}
+  ${XXHASH_DIR}
   ${HANDMADE_MATH_DIR}
   ${SIMPLEINI_DIR}
   ${MINIZ_DIR}
@@ -251,6 +253,18 @@ target_include_directories(test_particlefx PRIVATE
   ${HANDMADE_MATH_DIR})
 target_compile_definitions(test_particlefx PRIVATE REV_ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")
 
+add_executable(test_savefile
+  tools/test_savefile.cpp
+  src/savefile.cpp)
+target_include_directories(test_savefile PRIVATE ${XXHASH_DIR})
+
+add_executable(test_sectorstore
+  tools/test_sectorstore.cpp
+  src/sectorstore.cpp
+  src/savefile.cpp
+  ${LOG_DIR}/log.c)
+target_include_directories(test_sectorstore PRIVATE ${XXHASH_DIR} ${HANDMADE_MATH_DIR} ${LOG_DIR})
+
 FetchContent_Declare(
   googletest
   URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
@@ -259,6 +273,8 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 target_link_libraries(test_particlefx PRIVATE GTest::gtest_main)
+target_link_libraries(test_savefile PRIVATE GTest::gtest_main)
+target_link_libraries(test_sectorstore PRIVATE GTest::gtest_main)
 
 add_executable(test_vfs_path_index tools/test_vfs_path_index.cpp)
 add_executable(test_retail_mesh_lighting tools/test_retail_mesh_lighting.cpp)
@@ -426,6 +442,8 @@ foreach(test IN ITEMS
     test_classiclighting
     test_particlefx
     test_playerstats
+    test_savefile
+    test_sectorstore
     test_shadowplan)
   gtest_discover_tests(${test} TEST_PREFIX "${test}." DISCOVERY_MODE PRE_TEST)
 endforeach()

@@ -65,11 +65,6 @@
 
 namespace {
 
-struct SSectorCoord {
-    int32_t sx = 0;
-    int32_t sy = 0;
-};
-
 struct SSectorSurfaceProbe {
     bool  hit = false;
     FVec3 world = { 0.0f, 0.0f, 0.0f };
@@ -671,110 +666,6 @@ static void TransposeSourceToRenderer(const hmm_mat4& src, float out[16])
     for (int32_t r = 0; r < 4; ++r)
         for (int32_t c = 0; c < 4; ++c)
             out[r * 4 + c] = src.Elements[c][r];
-}
-
-static std::filesystem::path ResolveSectorDataRoot()
-{
-    namespace fs = std::filesystem;
-    if (const char* env = std::getenv("REVENANT_DATA_PATH"))
-    {
-        std::error_code ec;
-        fs::path p(env);
-        if (fs::exists(p, ec))
-            return p;
-    }
-    std::error_code ec;
-    const fs::path cwd = fs::current_path(ec);
-    for (const fs::path& cand : { cwd, cwd / "data", cwd / ".." / "data" })
-    {
-        if (cand.empty()) continue;
-        if (fs::exists(cand / "imagery.rvi", ec) ||
-            fs::exists(cand / "Modules", ec) ||
-            fs::is_directory(cand / "Curmap", ec) ||
-            fs::is_directory(cand / "curmap", ec))
-            return fs::canonical(cand, ec);
-    }
-    return {};
-}
-
-static void GatherLevelSectorCoordsFromDir(const std::filesystem::path& dir,
-                                           int32_t level,
-                                           std::vector<SSectorCoord>& out)
-{
-    namespace fs = std::filesystem;
-    std::error_code ec;
-    if (!fs::is_directory(dir, ec)) return;
-    for (const fs::directory_entry& entry :
-         fs::directory_iterator(dir, fs::directory_options::skip_permission_denied, ec))
-    {
-        if (ec) break;
-        if (!entry.is_regular_file(ec)) continue;
-        const std::string name = entry.path().filename().string();
-        std::string tail = name;
-        const size_t sep = tail.find_last_of("\\/");
-        if (sep != std::string::npos && sep + 1 < tail.size()) tail = tail.substr(sep + 1);
-        int32_t file_lvl = 0, sx = 0, sy = 0;
-        char ext[16] = {};
-        if (std::sscanf(tail.c_str(), "%d_%d_%d.%15s", &file_lvl, &sx, &sy, ext) != 4)
-            continue;
-        if (file_lvl != level || stricmp(ext, "DAT") != 0)
-            continue;
-        out.push_back({ sx, sy });
-    }
-}
-
-static std::vector<SSectorCoord> FindLevelSectorCoords(int32_t level)
-{
-    namespace fs = std::filesystem;
-    std::vector<SSectorCoord> coords;
-    std::vector<fs::path> scan_dirs;
-    scan_dirs.push_back(NormalizeFsPath(CurMapPath) / CURMAPDIR);
-    scan_dirs.push_back(NormalizeFsPath(BaseMapPath) / BASEMAPDIR);
-    const fs::path data_root = ResolveSectorDataRoot();
-    if (!data_root.empty())
-    {
-        scan_dirs.push_back(data_root / "Curmap");
-        scan_dirs.push_back(data_root / "curmap");
-        scan_dirs.push_back(data_root / "Map");
-        scan_dirs.push_back(data_root / "map");
-    }
-    std::sort(scan_dirs.begin(), scan_dirs.end(),
-        [](const fs::path& a, const fs::path& b) { return a.generic_string() < b.generic_string(); });
-    scan_dirs.erase(std::unique(scan_dirs.begin(), scan_dirs.end(),
-        [](const fs::path& a, const fs::path& b) { return a.generic_string() == b.generic_string(); }),
-        scan_dirs.end());
-    for (const fs::path& dir : scan_dirs)
-        GatherLevelSectorCoordsFromDir(dir, level, coords);
-    {
-        char relpath[MAXPATHLEN] = {};
-        for (int32_t sy = 0; sy < 64; ++sy)
-        for (int32_t sx = 0; sx < 64; ++sx)
-        {
-            std::snprintf(relpath, sizeof(relpath), CURMAPDIR "\\%d_%d_%d.DAT", level, sx, sy);
-            FILE* fp = rev_fopen(relpath, "rb");
-            if (!fp)
-            {
-                std::snprintf(relpath, sizeof(relpath), BASEMAPDIR "\\%d_%d_%d.DAT", level, sx, sy);
-                fp = rev_fopen(relpath, "rb");
-            }
-            if (fp)
-            {
-                fclose(fp);
-                coords.push_back({ sx, sy });
-            }
-        }
-    }
-    std::sort(coords.begin(), coords.end(),
-        [](const SSectorCoord& a, const SSectorCoord& b) {
-            if (a.sy != b.sy) return a.sy < b.sy;
-            return a.sx < b.sx;
-        });
-    coords.erase(std::unique(coords.begin(), coords.end(),
-        [](const SSectorCoord& a, const SSectorCoord& b) {
-            return a.sx == b.sx && a.sy == b.sy;
-        }),
-        coords.end());
-    return coords;
 }
 
 static void ComputeAuthoredLocalDepthRange(int32_t wwidth, int32_t wlength, int32_t wheight,

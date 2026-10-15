@@ -10,6 +10,7 @@
 #include "logging.h"
 #include "parse.h"
 #include "revutils.h"
+#include "retailadler32.h"
 #include "sectorstore.h"
 #include "gamemap.h"
 #include "mapmanager.h"
@@ -147,27 +148,22 @@ bool TSector::Load(bool lock)
 {
     int32_t version = 0;
 
-    // The working set's copy if this game has written one, else the base map.
-    FILE* fp = SectorStore::OpenForRead(filename);
-    if (!fp)
+    // The working set's copy if this game has changed the sector, else the
+    // base map's.
+    std::vector<uint8_t> buf;
+    if (!SectorStore::Read(filename, buf))
         return false;
-
-    fseek(fp, 0, SEEK_SET);
 
     // An empty file reads as a sector with no objects (the 1998 format had
     // no header). The buffer outlives `is`, which doesn't own it (retail
     // freed it after the read; the 1998 code leaked it).
-    const int32_t filesize = flen(fp);
-    std::vector<uint8_t> buf((size_t)std::max<int32_t>(filesize, sizeof(int32_t)), 0);
-    const bool readok = filesize <= 0 || fread(buf.data(), (size_t)filesize, 1, fp) == 1;
-    fclose(fp);
+    if (buf.size() < sizeof(int32_t))
+        buf.resize(sizeof(int32_t), 0);
 
     auto malformed = [this](const char* why) {
         log_error("[sector] %s: %s", filename, why);
         return false;
     };
-    if (!readok)
-        return malformed("read failed");
 
     TInputStream is(buf.data(), (int32_t)buf.size());
 
@@ -270,44 +266,6 @@ void TSector::KeepInside(TObjectInstance* inst) const
     }
 }
 
-namespace {
-
-// Adler-32 as retail computes it (0x0056ff60 / 0x0056ff80): the bytes are
-// signed chars, and the sums are reduced mod 65521 only after each
-// 5552-byte chunk, with 32-bit wraparound in between.
-class TRetailAdler32
-{
-  public:
-    void Update(const void* data, size_t count)
-    {
-        const int8_t* bytes = static_cast<const int8_t*>(data);
-        uint32_t a = state & 0xffff;
-        uint32_t b = state >> 16;
-        while (count > 0)
-        {
-            const size_t chunk = std::min<size_t>(count, kChunk);
-            for (size_t i = 0; i < chunk; i++)
-            {
-                a += (uint32_t)(int32_t)bytes[i];
-                b += a;
-            }
-            bytes += chunk;
-            count -= chunk;
-            a %= kModulus;
-            b %= kModulus;
-        }
-        state = (b << 16) | a;
-    }
-
-    [[nodiscard]] uint32_t Value() const { return state; }
-
-  private:
-    static constexpr size_t   kChunk   = 5552;
-    static constexpr uint32_t kModulus = 65521;
-    uint32_t state = 1;
-};
-
-}  // namespace
 
 // REVSYNC: the sector state hash @ 0x00499e90 (SAVE_GAME.md §11.6): the
 // sector's coordinates and object count, then the stream of each character
@@ -358,15 +316,7 @@ void TSector::Save()
     os << (uint32_t)statehash;
     os.SetPos(end);
 
-    FILE *fp = SectorStore::OpenForWrite(filename);
-    if (!fp)
-    {
-        log_error("[sector] can't write %s to the working set", filename);
-        return;
-    }
-
-    fwrite(os.Buffer(), os.DataSize(), 1, fp);
-    fclose(fp);
+    SectorStore::Write(filename, static_cast<const uint8_t*>(os.Buffer()), static_cast<size_t>(os.DataSize()));
 }
 
 // ****************************
