@@ -66,8 +66,8 @@ def run_game(args: argparse.Namespace, run_dir: Path, start: waypoints.Waypoint 
                f'--shadow={args.plan.resolve()}', f'--shadow-out={run_dir / "out"}', f'--seed={args.seed}']
     if start:
         # The start's save copied into this run's slots.
-        shutil.copytree(start.slot_dir, save / 'Save' / 'Single' / start.slot, dirs_exist_ok=True)
-        command += [f'--shadow-stage={stage}', f'--quickstart={start.slot}']
+        savepoints.copy_slot(start, save / 'Save' / 'Single')
+        command += [f'--shadow-stage={stage}', f'--quickstart={savepoints.slot_name(start)}']
     if until:
         command.append(f'--shadow-until={until}')
     if args.lenient:
