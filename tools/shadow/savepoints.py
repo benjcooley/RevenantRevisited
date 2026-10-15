@@ -84,6 +84,24 @@ class SavePoint:
         return not self.waypoint.retired and self.meta.get('round_trip') is not False
 
 
+def slot_name(waypoint: waypoints.Waypoint) -> str:
+    """The game's name for a save's slot: its save file's name without
+    `.rvsave`, or its folder's (docs/gameflow/SAVE_FORMAT.md)."""
+    return Path(waypoint.slot).stem if waypoint.slot_dir.is_file() else waypoint.slot
+
+
+def copy_slot(waypoint: waypoints.Waypoint, single: Path) -> Path:
+    """A save's slot into a game's Save/Single folder, as the game wrote it:
+    a save file, or a retail slot folder. Returns where it went."""
+    single.mkdir(parents=True, exist_ok=True)
+    target = single / waypoint.slot_dir.name
+    if waypoint.slot_dir.is_file():
+        shutil.copy2(waypoint.slot_dir, target)
+    else:
+        shutil.copytree(waypoint.slot_dir, target, dirs_exist_ok=True)
+    return target
+
+
 def record(waypoint: waypoints.Waypoint, meta: dict) -> None:
     """Writes a filed save's sidecar."""
     (waypoint.dir / SIDECAR).write_text(json.dumps(meta, indent=2) + '\n')
@@ -159,7 +177,8 @@ def cmd_list(plan: Path) -> int:
 
 def cmd_export(plan: Path, what: str, to: Path) -> int:
     """Copies save points into a game's save folder (Save/Single), each under
-    its own slot name, so the game's Load lists them."""
+    its own slot name, so the game's Load lists them. A save file needs a
+    port that reads them (SAVE_FORMAT.md); retail loads slot folders."""
     points = all_points(plan)
     names = [n for s in plan_stages(plan) for n in s.saves] if what == 'all' else [what]
     to.mkdir(parents=True, exist_ok=True)
@@ -170,9 +189,7 @@ def cmd_export(plan: Path, what: str, to: Path) -> int:
             print(f'  {name!r}: no save point')
             missing += 1
             continue
-        target = to / found.waypoint.slot
-        shutil.copytree(found.waypoint.slot_dir, target, dirs_exist_ok=True)
-        print(f'  {name!r} -> {target}')
+        print(f'  {name!r} -> {copy_slot(found.waypoint, to)}')
     return 1 if missing else 0
 
 

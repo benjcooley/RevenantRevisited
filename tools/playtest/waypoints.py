@@ -36,6 +36,7 @@ is ~/RevenantRevisited-testsaves/waypoints.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -118,8 +119,10 @@ class Catalogue:
     def add(self, game: str, name: str, story: str, index: int, parent: str, slot_dir: Path,
             obs: dict | None = None, build: dict | None = None, tick: int | None = None,
             note: str = '', slot_name: str | None = None, retired: str = '') -> Waypoint:
-        """A new waypoint from an exported (or existing) slot directory,
-        copied in under `slot_name` (default: the directory's name)."""
+        """A new waypoint from an exported (or existing) slot: a retail slot
+        directory, or the port's save file (<name>.rvsave,
+        docs/gameflow/SAVE_FORMAT.md), copied in under `slot_name` (default:
+        its own name). A save file's slot_dir is that file."""
         created = time.strftime('%Y%m%d-%H%M%S')
         directory = self.root / game / f'{slug(name)}--{created}'
         n = 1
@@ -128,11 +131,18 @@ class Catalogue:
             directory = self.root / game / f'{slug(name)}--{created}-{n}'
         slot_dir = Path(slot_dir)
         slot_name = slot_name or slot_dir.name
-        shutil.copytree(slot_dir, directory / 'slot' / slot_name)
+        if slot_dir.is_file():
+            slot_name = Path(slot_name).stem + slot_dir.suffix
+            (directory / 'slot').mkdir(parents=True)
+            shutil.copy2(slot_dir, directory / 'slot' / slot_name)
+            sha = hashlib.sha256(slot_dir.read_bytes()).hexdigest()
+        else:
+            shutil.copytree(slot_dir, directory / 'slot' / slot_name)
+            sha = rec.slot_sha(slot_dir)
         player = (obs or {}).get('player', {})
         waypoint = Waypoint(
             game=game, name=name, story=story, index=index, parent=parent, slot=slot_name,
-            slot_sha=rec.slot_sha(slot_dir), created=created, build=build or {}, tick=tick,
+            slot_sha=sha, created=created, build=build or {}, tick=tick,
             level=player.get('level'), pos=player.get('pos'),
             player={k: player.get(k) for k in ('health', 'mana', 'fatigue', 'xp', 'gold', 'skills', 'weapon')
                     if player.get(k) is not None},

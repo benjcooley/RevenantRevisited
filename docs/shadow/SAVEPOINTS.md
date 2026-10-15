@@ -11,9 +11,14 @@ can load them to test, debug or play a section without playing up to it.
   "rahul defeated", "rand questioned", …, "level 4", "jason freed". The
   plan's stages run in the order of STORY.md, so the story points cover the
   game from the Keep to Yhagoro as the plan grows.
-- **A save** is the game's own save (`TGameSession::RequestSave`, retail's
-  format), made by a passing Shadow run: Locke got there legitimately,
-  under the ledger.
+- **A save** is the game's own save (`TGameSession::RequestSave`), made by a
+  passing Shadow run: Locke got there legitimately, under the ledger. It
+  is kept as the game wrote it. That is a retail slot folder on main today
+  (`game.sav`, `ss.bmp`, `CurMap/`, about 3.7 MB). With the single-file
+  format (`<slot>.rvsave`, docs/gameflow/SAVE_FORMAT.md, on
+  `feature/savediff`), it is one file of 100–270 KB. On a test merge, all
+  eight segments passed on it, and every `.rvsave` came back unchanged in
+  its round trip.
 - **Its record** is a catalogue entry (`tools/playtest/waypoints.py`, at
   `~/RevenantRevisited-testsaves/waypoints/port/shadow-<point>--<time>/`)
   plus a sidecar, `shadow.json`, written when the run files it:
@@ -39,10 +44,11 @@ tools/shadow/savepoints.py export "jason freed" --to "<game>/Save/Single"
 tools/shadow/savepoints.py export all --to "<game>/Save/Single"
 ```
 
-`export` copies the slot folder under its own name (`Shadow jason freed`),
-so the game's Load screen lists it. That works for the port and for retail:
-port saves load in retail (save interop), so a save point is also a starting
-place in the shipped game.
+`export` copies the slot under its own name (`Shadow jason freed` or
+`Shadow jason freed.rvsave`), so the game's Load screen lists it. A retail
+folder loads in the port and in retail (save interop). A save file needs a
+port that reads them; `TSaveGame::ExportRetail` writes one out as a retail
+folder.
 
 ## Playing in segments
 
