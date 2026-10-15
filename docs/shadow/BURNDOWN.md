@@ -23,7 +23,7 @@ it has got.
 | Doors, keys, levers | `use … with …`, transitions (§5.3) | P1 | — |
 | Town teleports | stones in the route graph (§5.3) | P1 | — |
 | Fights on the way | travel and evade (§5.5) | P1–P3 | written; first exercised on the way to the Druhg camp |
-| Fights | the duel model (§6) | P2 | working (Rahul) |
+| Fights | the duel model (§6), calibrated against the arena (CALIBRATION.md) | P2 | working (Rahul); 10 of 16 calibration cells pass |
 | Getting poisoned, paralysed, buffed | real state through the duel (§8.7) | P2 | — |
 | Looting monsters | real death drop, `Pickup` of every item (§8.8) | P2 | done |
 | Opening chests, picking locks | `take` through `TContainer::Use`; keys by `with`; lockpicks to come (§8.8) | P4 | chests done (the Keep's 500 gold); lockpicks open |
@@ -36,13 +36,13 @@ it has got.
 | Using potions and food | `Consume`, retail `TFood::Use` (§8.2) | P4 | done (retail TFood::Use merged); in fights below 35% health |
 | Placing items, using bags | the real `AddToInventory`: belt for healing, pouches for consumables (§8.9) | P4 | — |
 | Talismans into the Spell Pouch | moved there on arrival; casting checks it (§8.9) | P4 | — |
-| Learning new spells | `Invent`: casting a talisman combination teaches it; scrolls to check (§8.6) | P4 | — |
+| Learning new spells | `invent`: casting a talisman combination in the spell pane teaches it; a scroll only shows its text (§8.6) | P4 | done |
 | Readying spells | quick-spell slots (§8.6) | P4 | — |
 | Casting spells | `CastByName` in the duel (§6.7) | P2 | agent extracting the damage dice |
 | Learning combos | Jong's lessons when due: AttackLevel, the lesson move landed (§8.5) | P4 | — |
 | Using combos in fights | chain attacks keyed inside their windows (§6.4) | P2 | — |
 | Grinding by level, back to town | §8.5 | P4 | — |
-| Story locations that change the town | the story-trigger map and gate (§9.4) | P5 | mapped (STORY_TRIGGERS.md); gate to build |
+| Story locations that change the town | the story-trigger map and gate (§9.4) | P5 | mapped (STORY_TRIGGERS.md); report and `--story-gate` built |
 
 ## P0 Spine
 
@@ -71,7 +71,7 @@ it has got.
 | [x] | Trigger zones (TShadowZones: every literal CUBE and player-named PROXIMITY of the level's area scripts and master.s, with an owner on the level); A* steers around them; a walk that can't stops in the zone, lets it fire, then goes on (tested on BAYNE1's tavern cube) | 2026-10-14 |
 | [~] | Encounters on the route: every aggressive enemy whose sight range and LineOfSight reach a point of the walk; the leg stops there for the fight, then goes on (written; first met on S2's way to the Druhg camp). Pricing routes by the duel model to do | 2026-10-14 |
 | [~] | Travel modes: `travel` fights what sees the walk; `evade` fights ⌈N·share⌉ (¼ slower, ½ as fast), at least one (written). The policy's choice to do | 2026-10-14 |
-| [ ] | Generator encounters on the route: exposure × slot frequency, real spawns through `TMonsterGen` (after P3) | — |
+| [~] | Generator encounters on the route: the walk's time runs the real `TMonsterGen`s, and once it has passed, what spawned in sight of the walked path meets Locke there (same fight rules: together, evading share, guarded). Written; not yet seen in a run (forest legs are short) | 2026-10-14 |
 | [x] | Travel time from Locke's real speeds (`walkf` 5.71, `runf` 8.93 units a tick); run/walk pacing by fatigue; the walk's ticks pass before he arrives | 2026-10-13 |
 | [x] | Proofs in the log (path sampled every 256 units); the ledger accepts a jump only where a proven travel said he'd land | 2026-10-13 |
 | [~] | Gate: the Keep chain's walks pass (Rand, Tendrick with every branch, the GowE scene, KeepExit, then S1: 13 min 53 s of game, 0 violations); tower door without key 42 to test | 2026-10-14 |
@@ -82,17 +82,17 @@ it has got.
 | Status | Item | Last touched |
 |---|---|---|
 | [x] | `TCharacter::RollAttack` extracted from `IsValidAttack` (and `RollDamagePercent` from the four attack choices): C3 port output byte-identical before and after (5206/5206 against retail); arena fights identical draw for draw | 2026-10-13 |
-| [x] | Duel timeline (TShadowDuel): monster cadence (ATTACKFREQ), RandomAttack's pick, OnAttacked's guard, RETREATAT; Locke's blows by IsValidAttack's animation-free tests, fatigue; one fight in one tick | 2026-10-14 |
+| [x] | Duel timeline (TShadowDuel), rebuilt against real fights. Fighters are points on open ground; actions play their animations' length and root motion from the imagery. The monster runs the AI's attack branch: its moves (PLAYANIM) as well as its blows, the timer's second decrement reading the attack before the try, OnAttacked's guard and the forced one, RETREATAT for RETREATFOR. Locke's blow is FindButtonAttack's walk, the tier compounding and his StrengthMod in. A blow strikes by reach and arc at its impact frame, and a landed blow plays its flinch. One fight in one tick | 2026-10-14 |
 | [x] | Outcomes through the game: `WeighBlow`/`LandBlow` extracted from ResolveHit (Damage, the kill, skill and stealth awards); the bodies drop their loot and Locke picks it up; the ledger's progress cause. `LastAttack` for Jong still to do | 2026-10-14 |
-| [~] | Tactics: rotation, chains first, guard a seen blow (35%), never the fatigued blow, a potion under 35% health. Disengage and the 64-run size-up (trial mode is built) to do | 2026-10-14 |
+| [~] | Tactics: the player bot's habits (hold off at reach + 24, come in when open on a 12-tick window at 60%, back off, step out of or guard (35%) or roll (15%) a seen blow, eight keys and the facing they leave), rotation, a belt potion under 35% health (`ShadowBeltHealing`). Disengage to do | 2026-10-14 |
 | [ ] | Combos: chain attacks keyed inside `chainexptime` (§6.4) | — |
 | [x] | Interrupts: anything fighting Locke in the live world is fought first (Rahul, as the opening ends) | 2026-10-14 |
-| [x] | Several monsters at once: each its own timer, at most three in reach | 2026-10-14 |
+| [x] | Several monsters at once: each its own AI, at most three in reach; Locke fights the nearest. Not calibrated yet (the matrix is one on one) | 2026-10-14 |
 | [~] | Spells: `CastByName` and the pure part of `TSpell::Damage` (static `TSpell::Damage(caster, target, spelldata, variant)`, done; the duel side waits) | 2026-10-13 |
-| [ ] | Effects: poison, paralysis, stat effects, damage types, monster spells (§8.7) | — |
-| [ ] | Calibration suite against the arena and player bot; tolerances | — |
+| [ ] | Effects: poison, paralysis, stat effects, damage types, monster spells (§8.7). Calibration shows the cost: an Arakna's SpiderPoison makes its fight 33 health and one death in four at level 1, the model 3.5 (CALIBRATION.md §5.1) | — |
+| [x] | Calibration suite (CALIBRATION.md): `--shadow-duel` harness, `tools/shadow/calibrate.py`, 16 arena cells (levels 1, 4, 8; fists and sword) with the player bot; gates on win, duration, hit rates, damage per blow, health lost. 10 of 16 pass; open: monster spells (Arakna), barehanded positioning against Mongrel and Thrush Druhgs | 2026-10-14 |
 | [ ] | `--shadow-combat=real` | — |
-| [x] | Gate: from a new game through Rahul (won barehanded, 214 ticks), Rand, Tendrick, the Keep's exit, Gus's deal and the first potions: 23 min 24 s of game in 30 s, six waypoints, no violations | 2026-10-14 |
+| [x] | Gate: from a new game through Rahul (won barehanded; 2130 ticks with the calibrated model, 214 before), Rand, Tendrick, the Keep's exit, Gus's deal and the first potions: 23 min 42 s of game in 20 s, six waypoints, no violations | 2026-10-14 |
 
 ## P3 Generators
 
@@ -109,14 +109,16 @@ it has got.
 | [x] | Retail `TFood::Use` (`0x0050e780`): health and mana to the cap, poison cured (and its spell effects ended), one fewer, the last deleted, FOODGOOD1 | 2026-10-13 |
 | [x] | `buy "<item>" [n] from <merchant>` / `sell ... to ...`: the merchant's shop script sets up the stock (Buy/Sell answer), then the shop's own `TBuySellPane::Buy`/`Sell` per item and `Exit`, no drawer keys (the author's call, 2026-10-14); the ledger allows exactly the trade. Elahni sells Locke his second Lesser Healing for 250. Selling is written, not yet exercised | 2026-10-14 |
 | [x] | `equip`, `unequip` (TPlayer::Equip with the game's CanEquip), `consume` (the item's Use), `train` (TrainStat: the level-up picks); ledger causes for the picks and for what food gives | 2026-10-14 |
-| [ ] | Shopping list scored by the duel model; selling what is no longer useful (outgrown gear, spent keep-list items) | — |
+| [x] | Selling what is no longer useful: `sell junk to <merchant>` (shadowpurse.cpp): every weapon but the one in hand and the best spare, armour no better than what he wears in its slot; the shop's own Sell takes the unworn piece first. Gina buys back a spare Short Sword for 58, Cronus the old cloth shirt for 3 | 2026-10-14 |
+| [x] | Readying armour (§8.10) whenever the pack's counts change: each armour slot wears its best piece by Protection through TPlayer::Equip and its CanEquip (a bought Black Leather Chest Plate goes on at once). The ledger audits base attributes and skills, so what equipment and stat effects add needs no cause | 2026-10-14 |
+| [ ] | Shopping list scored by the duel model (armour per gold, weapons by kill rate, jewellery by STATLINE); spent keep-list items; selling on the restock trip (needs door legs to Gina's and Cronus's) | — |
 | [ ] | Level-up markers by style | — |
 | [ ] | Jong's lessons | — |
-| [ ] | Spell invention and quick-spell slots | — |
+| [x] | Spell invention: at each step boundary after the pack changes (or `invent`), every spell.def combination he holds and doesn't know goes in the construct slot and through the pane's own `TSpellPane::Invoke`; the book learns it cast or not. The opening's Life, Moon and Soul teach Poison, Nourish, Might, Fist Mastery and Physical Paralysis. A spell the style uses goes on a free quick-spell ring (Fist Mastery for hands) | 2026-10-14 |
 | [x] | The pack kept in order whenever its counts change (shadowpack.cpp, the game's AddToInventory): talismans into the Spell Pouch (the opening's three go in at once), potions onto belt boxes F5–F9 one kind a box (the Keep chest's Lesser Healing to box 1; bought ones merge onto it), scrolls and tradeable odd bits into Pouches of their own | 2026-10-14 |
 | [ ] | The duel drinks only from the belt (`ShadowBeltHealing`), once the calibrated duel lands | — |
 | [x] | `grind until level <n> \| skill <name> <n> [restock <routine>]`: sites scored by Value against his level, trial duels size each monster up, generators farmed from out of sight, food then potions below 60%, rest out of sight to 90% when nothing is left (never set off hurt), the restock routine when out of healing with the gold for it | 2026-10-14 |
-| [ ] | Gate: the forest grind to level 4 passes. Open: a level-1 Locke loses 15–25 health an Arakna fight for ~10 exp and ~30 gold, against 250-gold potions and 1 HP a minute, so he rests an hour every few fights. Waits on the duel calibration (is that what a player takes?) | — |
+| [x] | Gate: the forest grind passes, barehanded, `until skill hands 3`, which brings level 4 (about 3.5 hours of game time; rests below 35% only, sites he can't reach remembered five minutes). `until level 4` alone left Hands at 2 in one run: levelling kills pay the skill at the new level | 2026-10-14 |
 | [ ] | Barehanded practice for Baez (S6): weapon off, `grind until skill hands 3` in the forest, `expect skill hands >= 3` before the arena (the author: without Hands Locke can't beat him) | — |
 | [x] | Chest survey: every container of a level with its lock, key and contents, logged as Locke first reaches the level | 2026-10-14 |
 | [x] | `take <chest> [with "<key>"]`: walk up, the real `TContainer::Use` a tick (open, one item each, close); the ledger allows exactly what the chest held. The Keep's three unlocked chests give their 500 gold, a Lesser Healing and an Apple | 2026-10-14 |
@@ -133,7 +135,8 @@ it has got.
 | [ ] | Readiness levels from the duel model | — |
 | [ ] | Stage-end checks: NPCs alive, keep list, control | — |
 | [x] | Story-trigger map: `tools/shadow/storymap.py`, STORY_TRIGGERS.md | 2026-10-13 |
-| [ ] | Story-trigger coverage gate: every required writer hit, town readers ran after | — |
+| [ ] | Ledger: a change is put down to "a script" when any script line ran that tick, and an area's ALWAYS block runs most ticks (FORSTYXXTOMB in the forest). Narrow it to the lines that touch the player (their command and its object), so an ambient script can't cover a change. Registered causes (a fight's progress) already come first | — |
+| [x] | Story coverage: every script line run is recorded by file, OBJECT block and line, with its last tick, and every story change (coverage.json). shadow.py reports each change with the writer that made it (`MISTSTATE 1 -> 2 by Gus1 (town.s:2474)`), and whether the town has seen it: an automatic reader (ALWAYS, CUBE, PROXIMITY) ran after it. `--story-gate` fails on one it hasn't (after the deal, Gus's house's GUS2DUMMY waits for Locke to come by) | 2026-10-14 |
 | [ ] | Script coverage report | — |
 | [ ] | Gate: new game to credits; every milestone saved and load-checked | — |
 
@@ -143,8 +146,15 @@ it has got.
 |---|---|---|
 | [ ] | 20-seed sweep | — |
 | [ ] | Waypoints load in retail (emulator or DOSBox lab) | — |
-| [ ] | Save round trip: the ledger's snapshot plus equipment and known spells recorded at each save; `--shadow-verify=<slot>` writes it from a fresh load; shadow.py --check compares field by field | — |
-| [ ] | Play styles (§8.4): `style` / `--shadow-style` = melee, hands, bow, spells, mixed: readying, duel tactics, level-up picks, shopping, spells | — |
+| [x] | Save round trip: Locke's whole state (every item where it is, bags and belt and equipment, stats, skills, picks, spells, quick spells, story variables) recorded at each save; `--shadow-verify=<file>` with `--quickstart=<slot>` writes it from a fresh load; `shadow.py --check` compares field by field. The plan's first six saves come back unchanged | 2026-10-14 |
+| [x] | A guarded way: trial duels size up a leg's fight; he runs past what he'd lose to, and turns back (travel fails as guarded) when even that is lost | 2026-10-14 |
+| [x] | Death → reload (§6.6): the newest save (the last `save` step, or a `--shadow-stage` run's start slot) is loaded within the death countdown; the run waits for the game to be idle and rebuilds its walk fields, then goes on after the save; a stage's second death fails the run. Exercised: Locke died to a Hopper his trials had been sized up from the wrong place, and the run reloaded "first potions" | 2026-10-14 |
+| [x] | `fight <type>` goes to the nearest living one of the type (it went to the last one's body) | 2026-10-14 |
+| [x] | Encounters are the AI's own look (FindCharacters ENEMY HEAR SEE): within COMBATRANGEMAX edge to edge and HEARINGRANGE (+ radius + 32), no line of sight needed; sight adds nothing to a walking Locke (Sight wants a glimpse of 99). The sight-range model had a Hopper "guard" every way from where Locke stood, though it never came for him | 2026-10-14 |
+| [x] | Trials of a walk's fight are fought where the walk meets the monsters (`TShadowDuel::StandAt`), not where Locke starts the leg | 2026-10-14 |
+| [x] | A step that fails on a guarded way says so (`Guarded()`); the grind's restock turns back instead of failing, and evading is tried only when fewer would catch him than meet him | 2026-10-14 |
+| [x] | Plan through S2: Jason freed for the Golden Sun Key, the camp's chests (the Earth talisman teaches Regeneration and Stone Skin); new game to "jason freed" in 261 s of wall time, eight waypoints, every round trip unchanged, no violations | 2026-10-14 |
+| [~] | Play styles (§8.4): `style` / `--shadow-style` = melee, hands, bow, spells, mixed. Done: the setting, the level-up picks (`train` alone takes the style's), the first forest grind barehanded for Baez in every style. To do: readying, duel tactics, shopping, spells | 2026-10-14 |
 | [ ] | Bows in the duel: bow-mode shots while a monster closes (needed for the Solifuge anyway) | — |
 | [ ] | Spells in the duel (§6.8): CastByName, the static TSpell::Damage, buffs | — |
 | [ ] | A local CI target for machines with the game data | — |

@@ -1560,6 +1560,7 @@ void GetParameters(int argc, char **argv)
         "loadmap", "lang", "test", "level", "resolution", "res",
         "cinematic", "menu", "exec", "vfx-lighting-mode", "partsys-quality", "partsys-incoming-blend",
         "seed", "combattrace", "combattrace-rng", "shadow", "shadow-out", "shadow-stage", "shadow-until",
+        "shadow-verify", "shadow-style", "shadow-duel", "shadow-duel-runs", "shadow-duel-trace",
         "vfx-review-speed", "vfx-review-watcher-rate", "vfx-review-ratio", "vfx-review-spacing",
         "vfx-review-gap", "vfx-review-offset", "vfx-review-effects",
         "vfx-review-spacing-overrides",
@@ -1601,13 +1602,30 @@ void GetParameters(int argc, char **argv)
   // --shadow=<plan>: Shadow Smoke plays the plan from a new game, or from
   // --shadow-stage=<id> on the save --quickstart=<slot> names, headless and
   // deterministic (docs/shadow/README.md). Without --seed it plays seed 1.
+  // --shadow-duel=<foe type>[,...] runs the calibration's duel harness
+  // instead (docs/shadow/CALIBRATION.md).
     {
         SShadowOptions shadow;
-        if (arg_param(cmd, "shadow", shadow.plan))
+        std::string duel;
+        if (arg_param(cmd, "shadow-duel", duel))
+        {
+            std::stringstream types(duel);
+            for (std::string type; std::getline(types, type, ',');)
+                if (!type.empty())
+                    shadow.duel.push_back(type);
+            std::string runs;
+            if (arg_param(cmd, "shadow-duel-runs", runs))
+                shadow.duelruns = std::stoi(runs);
+            if (arg_param(cmd, "shadow-duel-trace", runs))
+                shadow.dueltrace = std::stoi(runs);
+        }
+        if (arg_param(cmd, "shadow", shadow.plan) || !shadow.duel.empty())
         {
             arg_param(cmd, "shadow-out", shadow.out);
             arg_param(cmd, "shadow-stage", shadow.from);
+            arg_param(cmd, "quickstart", shadow.startslot);
             arg_param(cmd, "shadow-until", shadow.until);
+            arg_param(cmd, "shadow-style", shadow.style);
             shadow.lenient = arg_flag(cmd, "shadow-lenient");
             std::string seed;
             if (arg_param(cmd, "seed", seed))
@@ -1620,6 +1638,13 @@ void GetParameters(int argc, char **argv)
             if (Shadow.Configure(shadow))
                 StartupQuickstart = true;
             else
+                sapp_request_quit();
+        }
+        // --shadow-verify=<file> with --quickstart=<slot>: the save's
+        // reload, checked against what the run recorded (§10).
+        else if (arg_param(cmd, "shadow-verify", shadow.verify))
+        {
+            if (!Shadow.Configure(shadow))
                 sapp_request_quit();
         }
     }

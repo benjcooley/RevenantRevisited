@@ -316,6 +316,22 @@ than he can spare, or when they are worth little (monsters whose Value is
 far below his level give almost no experience, GRIND.md §1.2). Otherwise
 he travels and fights, and the route becomes part of the grind.
 
+**Who finds him.** A monster joins a leg's fight when its AI's own look
+would find Locke at some point of the walk (`TCharacter::FindCharacters`
+with ENEMY, HEAR and SEE). That means he is within its COMBATRANGEMAX,
+edge to edge (`IsValidTarget`), and it hears him, which any noise does
+within HEARINGRANGE of its edge plus 32 (`Hearing`, `CanHearCharacter`),
+with or without a line of sight. Sight adds nothing to a walking Locke:
+`Sight` wants a glimpse of 99, and only an attacking Locke gives one off
+(`ResetStealthValues`).
+
+**A guarded way.** Before a leg's fight, trial duels (§6.4,
+`ShadowSizeUp`) size up the monsters that meet him. If he would lose, he
+runs past and sizes up the share that would still catch him. If he would
+lose that too, the travel fails as *guarded*, as a player turns back:
+the grind leaves that site for later, and a plan step fails with the
+odds, which says the plan reached it under-levelled.
+
 This compresses the generators' clocks: in retail a generator that has
 been away from Locke for long only restarts its clock on the first pulse
 (GRIND.md §3.1), so a quick pass spawns less. That is the price of not
@@ -386,14 +402,20 @@ Real (called, not copied):
 - `Offense()` and `Defense()`, `CalculateDamage`, `StrengthMod`,
   `EdgeBonus`, `ToHitDamageFactor` and the rules.def to-hit constants;
 - the monster's AI numbers: `ATTACKFREQ`, `BLOCKFREQ`, block min and max,
-  `RETREATAT`, `MAGICFREQ`;
+  `RETREATAT`, `RETREATFOR`, `MAXATTACKRANGE`, `MAGICFREQ`;
+- every action's length and root motion, from the character's imagery: a
+  blow and its lunge, a monster's side step, run or jump, a flinch, a
+  roll;
 - the game's random stream (`random`), so a seed replays a run;
 - the outcome: `TCharacter::Damage`, death, `AwardKillExp`,
   `AwardSkillExp`, `AwardStealthExp`, the corpse's `DropLoot`, fatigue
   spent, mana spent, `LastAttack`.
 
-Modelled: where the two stand and when each acts. There is no
-animation, no movement, and no collision.
+Modelled: where they stand and when each acts. Each fighter is a point
+on open ground with a facing. Its actions play their frames' timing and
+root motion, but nothing is drawn, and there are no walls and no collision.
+Locke's choices are the player bot's (§6.4). How close this comes to real
+fights is measured in [CALIBRATION.md](CALIBRATION.md).
 
 ### 6.2 One implementation of the blow
 
@@ -454,38 +476,75 @@ same katas and arena traces prove it unchanged.
 
 ### 6.3 The timeline
 
-A duel is a discrete-event simulation in ticks (24 a second), resolved in
-one game tick (§6.5):
+A duel is a simulation in ticks (24 a second), resolved in one game tick
+(§6.5). Each tick, in order:
 
-- **The monster** acts as `TCharacter::AIAttack` does:
-  - its attack timer re-arms after every try at
-    `random(minattackfreq, maxattackfreq) · 24 / 100` ticks;
-  - a try is RandomAttack's: a percentage, the damage percentage, then up
-    to twice as many random picks as it has attacks, the first valid one
-    with `attackpcnt` at least the percentage (FindPcntAttack);
-  - the blow lands at its `impacttime`; the next can start at `nextwait`;
-  - attacked, it guards at `BLOCKFREQ` for `BLOCKMIN..BLOCKMAX` ticks
-    (OnAttacked);
-  - at `RETREATAT` it runs. It gets away if it outruns Locke; otherwise he
-    catches it.
-- **Locke** acts on his tactics (§6.4). Each blow is one of his attacks
-  valid where he stands (`IsValidAttack`'s tests that don't read
-  animation: mode flags, fatigue, distance band, weapon mask, AttackLevel,
-  weapon skill, chain timing). It lands at its `impacttime` and costs its
-  fatigue at impact. Fatigue comes back at the rules.def rate whenever he
-  isn't swinging.
-- **Distance.** A monster closes at its own run speed (its `runf` or
-  `combatf` motion) to its `maxattackrange`, and the fight is at that
-  range: its attacks and Locke's must be valid there.
-- **Facing.** Whoever is mid-swing is open: a blow chosen against a
-  swinging target gets the +25 (`targetopen`). Neither side fights with its
-  back turned.
-- **Several monsters.** Each runs its own timer. At most three are in reach
-  at once, as when monsters crowd a player; the rest wait at the edge.
-  Locke strikes the one nearest death.
-- **Not modelled yet:** grapples and other interactive attacks, responses
-  (an attack keyed to the target's state), stun and knockdown follow-ups,
-  knockback. Their effect on outcomes is what calibration (§6.7) measures.
+1. Locke decides, on the world as the last tick left it (the bot reads its
+   senses before the tick).
+2. Everyone's action moves on: the frame's root motion, along the facing
+   the action began with. A monster's move re-aims at its target each tick
+   (ResolveAttack), so a side step or a run circles him. A lunge stops 10
+   short of its target.
+3. The blows whose impact frame it is fall.
+4. The monsters act.
+
+The pieces:
+
+- **The monster** is `TCharacter::AI`:
+  - **Noticing him.** One not yet fighting him notices him at its next
+    look round, once every 32 frames.
+  - **Closing in.** Beyond its `MAXATTACKRANGE`, it steps in at its combat
+    step's speed.
+  - **The attack branch,** every tick in the combat stance:
+    - the timer down;
+    - then RandomAttack's try: a percentage, the damage percentage, up to
+      twice as many random picks as it has records, the first valid one
+      taken (FindPcntAttack). A **move** (a PLAYANIM record: side step,
+      jump, feint) is valid at any time. A **blow** is valid only with the
+      timer at 0;
+    - then the timer down again, unless the attack made *before* this try
+      was a move. The game records an attack only as it starts to play, so
+      a blow after a move leaves the timer at 0, and a second blow can
+      follow at once;
+    - below 0, it re-arms at `random(minattackfreq, maxattackfreq) · 24 / 100`.
+  - **Busy and open.** A blow or a move lasts its animation, and the AI
+    waits for it. While making either, the monster is open to Locke (+25).
+  - **Guarding.** Attacked, it guards at `BLOCKFREQ` for
+    `BLOCKMIN..BLOCKMAX` ticks (OnAttacked), and always against a blow
+    whose dice say it will only glance (IsValidAttack). A guard cuts short
+    whatever it was doing, its own swing included.
+  - **Retreat.** A hit that leaves it at `RETREATAT` or below sends it
+    running straight away for `RETREATFOR` ticks, striking nothing; then it
+    comes back. It has got away only once it is out of sight (640).
+- **Locke** fights on his tactics (§6.4). His blow is the game's
+  FindButtonAttack for the key he presses, at the distance he presses it:
+  - responses, then specials, then plain attacks, each in table order;
+  - `IsValidAttack`'s tests that don't read animation;
+  - the dice thrown at the first candidate that gets that far, and tiered
+    again at every one after (retail's compounding);
+  - his `StrengthMod` in the damage percentage's place.
+- **A blow strikes** when, at its impact frame, the target is within its
+  hit range edge to edge and inside its arc from the attacker's facing
+  (ResolveHit). A swing that misses both is a whiff: it strikes nothing.
+  - **Open:** the dice were thrown with +25 when the target faced away or
+    was making an attack or a move.
+  - **Guarded:** a guard counts when the target faces the blow.
+  - **Flinch:** a blow that lands plays its impact's animation on the
+    target, cutting short what it was doing; a stun or knockdown holds it
+    longer.
+- **Fatigue** is paid at the impact, struck or not; a move costs none.
+  Everyone recovers at the rules.def rate every tick.
+- **Several monsters.** Each runs its own AI. At most three are in reach at
+  once, as when monsters crowd a player; the rest wait at the edge. Locke
+  fights the nearest.
+- **Not modelled yet:**
+  - spells and their effects (§6.8, §8.7);
+  - holds, which resolve as blows under ResolveHit's hold rules;
+  - combos (§6.4);
+  - walls, collision, and knockback beyond the impact's own motion;
+  - the walk-to-combat transition at the start.
+
+  CALIBRATION.md §5 measures what these leave out.
 
 At each impact the dice thrown at the choice go through `WeighBlow` with
 the target's guard, then `LandBlow`: the real `Damage` with the attacker
@@ -494,32 +553,54 @@ earns its experience in the same calls `ResolveHit` makes.
 
 ### 6.4 Tactics
 
-`TShadowTactics` is a player's head, with the player bot's profile
-(PLAYER_BOT.md §3): reaction time, block chance, aggression. Its rules
-come from GRIND.md §9:
+`SShadowTactics` is a player's head: the player bot's habits
+(PLAYER_BOT.md §2–3), because the bot is the player the calibration fights
+against. The rules come from GRIND.md §9, and each was checked against the
+bot's real fights (CALIBRATION.md §6):
 
-- Rotate buttons: never the same button three times in a row.
-- **Use the combos he knows.** A chain attack (`CA_CHAIN`) names the
-  attack it follows (`chainname`) and must come before that attack's
-  `chainexptime`. So the duel plays a combo as a player keys it: each
-  link pressed inside its window, valid only with the right weapon in
-  hand, enough AttackLevel and the fatigue for it. Tactics prefers a
-  combo whenever its damage per second and fatigue beat single blows
-  against this target. That makes the combos that Jong's lessons unlock
-  (§8.5) part of every fight that follows.
-- Strike into a monster's swing (+25), and block its wind-up when the
-  reaction time allows it.
-- Keep fatigue above the next blow's cost. Back off to recover rather
-  than throw the fatigued blow.
-- Drink a potion below the health floor: one more of the strongest
-  attacker's best hits. Only what is on the belt (the action bar) is
-  drunk in a fight -- a player's potion is a key, not a trip into the
-  pack. The pack's potions go onto the belt between fights (§8.9).
-- Cast when a spell beats a blow on expected damage per second within
-  the mana budget, and to grind Invoke just before a levelling kill.
-- Disengage if no potion is left and the next exchange is likely lost.
-  Disengaging succeeds only if Locke's run speed beats the monster's;
-  otherwise he fights on.
+- **Hold off.** Weave just outside the monster's reach: its longest blow
+  plus a margin of 24. Step in when farther than 32 past that, back off
+  when 8 inside it.
+- **Come in when it is open.** At a moment that comes every 12 ticks, with
+  60% aggression, when he is rested (above a quarter of his fatigue) and
+  the monster isn't winding up a blow:
+  - pick a key;
+  - close to that key's longest reach less 4;
+  - press it, his last step carrying him on into the swing;
+  - back off to the band once the swing is done.
+- **Rotate keys.** Never the same key three times running. The bot picks
+  at random; the third press of a key rolls 100 (GRIND.md §2.4).
+- **Read the blows coming.** A blow is read once it has been under way
+  longer than his reaction (5 ticks). Each tick until it lands:
+  - step out of its reach or arc if there is time;
+  - else guard (35%) or roll aside (15%), else take it.
+
+  Mid-swing only the guard is left, and it cuts his own swing short. A
+  roll needs the combat stance: one tried mid-step does nothing.
+- **Eight keys.** He steps the way one of the eight direction keys points,
+  and a new key sets his facing: the forward key faces the way it points,
+  another faces his foe. He turns at the game's turn rate.
+- **Use the combos he knows (to do).** A chain attack (`CA_CHAIN`) names
+  the attack it follows (`chainname`) and must come before that attack's
+  `chainexptime`. So the duel should play a combo as a player keys it:
+  - each link pressed inside its window, with the right weapon in hand,
+    enough AttackLevel and the fatigue for it;
+  - preferred whenever its damage per second and fatigue beat single blows
+    against this target.
+
+  That would make the combos that Jong's lessons unlock (§8.5) part of
+  every fight that follows. The search already honours a link's window.
+- **Drink below the floor.** Below 35% of his health he drinks the belt's
+  healing potion that makes up the loss (`ShadowBeltHealing`), else its
+  biggest. Only what is on the belt (the action bar) is drunk in a fight:
+  a player's potion is a key, not a trip into the pack. The pack's potions
+  go onto the belt between fights (§8.9).
+- **Cast** when a spell beats a blow on expected damage per second within
+  the mana budget, and to grind Invoke just before a levelling kill (to do,
+  §6.8).
+- **Disengage** if no potion is left and the next exchange is likely lost.
+  It succeeds only if Locke's run speed beats the monster's; otherwise he
+  fights on (to do).
 
 **Should Locke take this fight?** Before a planned fight, and to price
 encounters, the tactics run the duel on a scratch copy of the numbers
@@ -558,27 +639,45 @@ The ledger resets to the save. The death and the reload are logged, and
 the stage's death count rises. Two deaths in one stage fail the run,
 because a balanced plan shouldn't lose a fight it chose to take twice.
 
+As built: a death is a dead Locke at the start of a tick, or a step that
+failed with him dead (the duel kills him inside a step). After the load,
+the run waits for the game to be idle and builds its walk fields again
+before the next step. The newest save
+is the plan's last `save` step, or the waypoint a `--shadow-stage` run
+started from. It is requested at once, within retail's 8-second death
+countdown, while the play screen is still up. The plan goes on at the
+step after that save. Deaths are rare: trial duels size up every fight on
+the way, where it will happen (`TShadowDuel::StandAt`), and he turns back
+from a guarded one (§5.5).
+
 ### 6.7 Calibration: is it realistic?
 
-The duel model is right when it matches real fights. The combat arena
-(COMBAT_ARENA.md) already runs real ones, headless and deterministic,
-with the player bot pressing Locke's keys. The calibration suite runs the
-same matrix both ways:
+The duel model is right when it matches real fights.
+[CALIBRATION.md](CALIBRATION.md) runs the same matrix both ways from one
+setup: the combat arena's scenario lines, with Locke at levels 1, 4 and 8,
+barehanded and with the Short Sword.
 
-- monsters: Araknid, Under Druhg, Mongrel Druhg, Thrush Druhg, Kantha,
-  Pale Ogrok, Vashar and Baez;
-- Locke: levels 1, 4 and 8; fists, a sword and a club;
-- 200 seeds each.
+- **Real:** the arena (COMBAT_ARENA.md), headless and deterministic, with
+  the player bot pressing Locke's keys, 100 seeds a cell.
+- **Model:** the duel harness, `--shadow-duel=<foe types>
+  --shadow-duel-runs=N`, which throws N trial fights from the state those
+  lines set up, 200 seeds a cell.
 
-For each cell it compares the distributions: win rate, duration, health
-lost, blows landed by each side, and blocks. A tolerance gates it, and
-the result goes into the report. When the two disagree, the model's
-cadence or tactics are tuned, never the retail numbers.
+`tools/shadow/calibrate.py` runs both and gates each cell on win rate,
+duration, both sides' hit rates, damage per blow and health lost. When the
+two disagree, the model's timing, distance or tactics are tuned, never the
+retail numbers.
+
+As of 2026-10-14, 10 of the 16 cells pass. Every level-1 sword cell passes
+except the Arakna, whose spell and poison the model lacks (33 health a
+fight and one death in four real, 3.5 modelled). Barehanded fights against
+the Mongrel and Thrush Druhgs still come out too short and too cheap.
+CALIBRATION.md §5 lists what differs and why.
 
 The same switch makes the real fight available inside a run:
 `--shadow-combat=real` hands each `Fight` to the player bot in the real
 game, at turbo speed. It is slower, but it is the referee for a stage
-that fails only in the duel model.
+that fails only in the duel model (to do).
 
 ### 6.8 Spells
 
@@ -641,6 +740,12 @@ The play loop gets them too. That closes the gap GRIND.md §10 lists.
    site's monsters, using the style rule (§8.4).
 5. **Jewellery.** By its STATLINE's value to the duel, when gold is left.
 
+As built so far (`shadowpurse.cpp`): step 1 as `sell junk to <merchant>`.
+That is every weapon but the one in hand and the best spare, and armour no
+better than what he wears in its slot. Potions, food, bags, talismans,
+scrolls, keys and jewellery are never junk. The shop's own `Sell` takes
+an unworn piece of a type first (`FindItemToSell`).
+
 Each candidate purchase is scored by the duel model's gain in expected
 kills per hour, divided by its price. The purse buys greedily down the
 list while gold lasts, and always leaves the reserve for the next
@@ -688,7 +793,18 @@ Whatever the style, the story's own demands come first: Baez in the arena
 is fought barehanded (`GIVEWEAPONS` takes every weapon, STORY.md S6), and
 Jong's lessons hand over the Training Sword. GRIND.md §9.1 argues for
 keeping a share of kills barehanded in every style, so Hands is never
-untrained for the arena.
+untrained for the arena. The author confirms it: without Hands, Locke
+can't beat Baez. The plan fights the first forest grind with fists in
+every style, `grind until skill hands 3`. Skill experience is the
+kill's, on the level table shifted one place, and never more than the
+level's: a levelling kill pays the skill at the new level, and a sword
+kill on the way pays it nothing. So Hands 3 comes with level 4 or a few
+kills after it, and the skill goal brings the level with it.
+
+Built so far: the `style` line and `--shadow-style` (shadow.py
+`--style`), and the level-up picks (`train` with no attributes takes the
+style's two). The duel's style tactics, readying, shopping and spells wait
+on the calibrated duel and the shopping list.
 
 ### 8.5 Grinding
 
@@ -738,9 +854,9 @@ loop goes to Jong whenever a lesson is due and he is reachable.
 
 **Learning.** In Revenant a spell is learned by casting it: casting a
 talisman combination in the spell pane teaches it (`SpellBook.Reveal`,
-then `TPlayer::LearnSpell`). Whether a scroll item such as the opening's
-`mgcscrl1` also teaches one is unconfirmed; the P4 forensics will settle
-it.
+then `TPlayer::LearnSpell`), whether the cast comes off or not
+(`TSpellPane::Invoke`). A scroll item such as the opening's `mgcscrl1`
+teaches nothing: `TScroll::Use` only opens the scroll pane on its text.
 
 Talismans come from the story (Olihoot's Sky and Sun) and from loot.
 When Locke holds a combination that makes a spell he hasn't learned,
@@ -748,6 +864,20 @@ When Locke holds a combination that makes a spell he hasn't learned,
 Shadow knows the combinations from spell.def; a player would find them
 by trying. The new spell goes into a quick-spell slot if it is useful to
 the style: damage, a fist buff, healing, cure poison.
+
+As built (`shadowspells.cpp`): `invent` runs as a step the plan didn't ask
+for at each step boundary after the pack's counts change, and as a plan
+verb. It goes through the pane's own `Invoke` with the combination in
+the construct slot, one cast every 3 seconds. The ledger allows the
+cast's Invoke experience and what a healing spell gives. The book's own
+test (`TSpellBookPane::Learnable`) picks the combinations worth trying.
+The opening's Life, Moon and Soul make Poison, Nourish, Might, Fist
+Mastery and Physical Paralysis.
+
+A buff in force when the game saves is not in the save (retail keeps no
+stat effects, PLAYER_STATS.md §4). The round trip (§10) compares base
+attributes and skills, and the modified ones only when no buff was in
+force.
 
 ### 8.7 Effects: poison and the rest
 
@@ -993,6 +1123,17 @@ So the plan has to go to those places and come back.
   have fired, and every town reader of a changed variable must have run
   after the change. A writer the run missed fails it, by name and place.
 
+As built (`shadowcoverage.cpp`; `shadow.py`, `--story-gate`): the ledger's
+step observer records each script line by its file, its OBJECT block and
+its line within the block. A prototype's text starts at the OBJECT line,
+so a line is the number of breaks before its offset. Each line keeps the
+last tick it ran. `storymap.py` gives every writer and reader its OBJECT
+line, so `file:line` ids join the two. At the end of a run, each story
+change is listed with the writer that made it. For a variable the town
+reads, the change counts as seen once an automatic town reader (ALWAYS,
+CUBE, PROXIMITY) has run after it. Dialog readers wait for Locke to talk,
+so they are only reported.
+
 ### 9.5 Coverage
 
 The script step observer counts every script line that runs. The report
@@ -1032,6 +1173,16 @@ variables and the world. The check proves the round trip:
 - They must agree item for item, stat for stat, spell for spell, and Locke
   must be on the same level near the same place. Any difference is a
   save/load bug, reported by field.
+
+As built (`shadowstate.cpp`, `tools/shadow/shadow.py --check`): the state
+is one JSON object in `waypoints.json` per save. It holds every item
+where it is (`pack 4`, `belt 1`, `equip 2`, `pack 3 / Spell Pouch 0`),
+attributes, skills with their experience, level-up picks, known and quick
+spells, and every story variable. The reload must match it exactly,
+except that position may move 32 units, health and mana 2 points, and
+fatigue (which refills in seconds) only its maximum is compared. The
+first six saves of the plan, Rahul to Elahni's potions, come back
+unchanged.
 
 ## 11. Time
 

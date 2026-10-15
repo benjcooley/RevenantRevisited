@@ -16,6 +16,10 @@
 
 void PulseStartupExec();
 
+// Whether --exec still has commands to run (or is sleeping before one):
+// a harness that runs on the state the commands set up waits for this.
+[[nodiscard]] bool StartupExecPending();
+
 // One console command, now, through the CommandInterpreter with the player
 // as its context (the playtest control channel's `exec`); its result code.
 int32_t RunConsoleCommand(const std::string& cmd);

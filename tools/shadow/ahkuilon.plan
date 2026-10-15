@@ -4,6 +4,7 @@
 # scripts (keep.s:479 is line 479 of keep.s).
 
 module Ahkuilon
+style  melee                            # --shadow-style plays the same plan as another (§8.4)
 
 routine restock "Healing at Elahni's"
     travel  healerin                    # her door from Misthaven (exit.def)
@@ -79,14 +80,38 @@ stage potions "Elahni's potions"
     expect  have "Lesser Healing" >= 2
     equip   "Short Sword"
     consume "Apple"
-    train   strn agil                   # the next level-ups: Strength and Agility
+    train                               # the next level-ups: the style's two
     save    "first potions"
 
-stage forest "The woods by the Keep, to level 4"
+stage forest "The woods by the Keep, to Hands 3 and level 4"
     # The Druhg camp wants level 4-5 (WALKTHROUGH.md §1.0). The woods east
     # and north of the gate hold Araknids, Under and Mongrel Druhg and Kantha
     # generators (GRIND.md §3.3).
     travel  healerout                   # out of Elahni's
-    train   strn agil
-    grind   until level 4 restock restock
+    # Barehanded: Baez (S6) is a fistfight Locke can't win without Hands
+    # (the author; WALKTHROUGH.md §5.2). Skill experience is the kill's, on
+    # the level table shifted one place (GRIND.md §1.5), and never more than
+    # the level's -- a levelling kill pays the skill at the new level, a
+    # sword kill on the way pays none -- so Hands 3 comes with level 4 or a
+    # little after it.
+    unequip "Short Sword"
+    grind   until skill hands 3 restock restock
+    expect  level >= 4
+    equip   "Short Sword"
     save    "level 4"
+
+stage druhgcamp "Free Jason: the Golden Sun Key"
+    # The Druhg camp on level 0, no exits from town (STORY.md S2;
+    # WALKTHROUGH.md §1.4). JASON1 shows once MISTSTATE > 1
+    # (forest.s:1998-2018); around him a Mongrel Druhg, three Thrush Druhg
+    # and an Under Druhg, whom the walk meets. Talk to the named one: an
+    # unnamed Jason twin beside him has no script.
+    talk    JASON1
+    expect  have "Golden Sun Key" >= 1  # forest.s:1976
+    expect  JASONSTATE = 3              # forest.s:1985
+    # The camp's two chests (GRIND.md §5.6): the Animal Fur set (Con 14)
+    # and the Ball Racker; the Earth talisman, 1500 gold, the Bone Sickle
+    # and magic scroll 2. Earth teaches Regeneration and Stone Skin.
+    take    ChestS@3218,15576
+    take    ChestE@2768,15760
+    save    "jason freed"

@@ -11,6 +11,7 @@
 #include "shadowplan.h"
 
 #include "../3dimage.h"
+#include "../character.h"
 #include "../exit.h"
 #include "../mappane.h"
 #include "../player.h"
@@ -194,7 +195,7 @@ const TShadowZones& TShadowNav::Zones(TShadowLog& log)
     return zones;
 }
 
-TObjectInstance* ShadowFindObject(const std::string& name, int32_t level, const S3DPoint& near)
+TObjectInstance* ShadowFindObject(const std::string& name, int32_t level, const S3DPoint& near, bool living)
 {
     std::string base = name;
     S3DPoint at = near;
@@ -210,6 +211,8 @@ TObjectInstance* ShadowFindObject(const std::string& name, int32_t level, const 
         {
             const char* n = bytype ? i->GetTypeName() : i->GetName();
             if (!n || stricmp(n, base.c_str()) != 0)
+                continue;
+            if (living && (i->ObjClass() != OBJCLASS_CHARACTER || static_cast<TCharacter*>(i.Item())->Health() <= 0))
                 continue;
             const S3DPoint p = i->Pos();
             const int64_t d = int64_t(p.x - at.x) * (p.x - at.x) + int64_t(p.y - at.y) * (p.y - at.y);
@@ -275,7 +278,7 @@ bool TShadowTravel::Destination(SShadowContext& context, S3DPoint& out, std::str
         objectname = place->object;
     }
 
-    TObjectInstance* found = ShadowFindObject(objectname, level, Player->Pos());
+    TObjectInstance* found = ShadowFindObject(objectname, level, Player->Pos(), living);
     if (!found)
     {
         failure = "no " + objectname + " on level " + std::to_string(level);
@@ -326,6 +329,63 @@ bool TShadowTravel::Destination(SShadowContext& context, S3DPoint& out, std::str
         }
     }
     out = best;
+    return true;
+}
+
+std::vector<SShadowEncounter> TShadowTravel::Encounters(const std::vector<S3DPoint>& path) const
+{
+    std::vector<SShadowEncounter> met = ShadowLegEncounters(path, Player->GetLevel());
+    met.erase(std::remove_if(met.begin(), met.end(),
+                             [&](const SShadowEncounter& e) { return e.monster.Get() == object.Get(); }),
+              met.end());
+    return met;
+}
+
+bool TShadowTravel::Meet(SShadowContext& context, const std::vector<SShadowEncounter>& met,
+                         const std::vector<S3DPoint>& path, std::string& failure)
+{
+    // Those that meet him first, or evading the share that still catches
+    // him. A fight he would lose he runs past instead, if what still catches
+    // him is one he'd win; failing that, the way is guarded and he turns
+    // back.
+    const size_t together = size_t(std::count_if(met.begin(), met.end(), [&](const SShadowEncounter& e) {
+        return e.index == met.front().index;
+    }));
+    const size_t share = ShadowEvadeShare(met, context.nav.Gait(context.log).run);
+    auto foes = [&](size_t n) {
+        std::vector<TCharacter*> out;
+        for (size_t k = 0; k < n && k < met.size(); ++k)
+            if (TCharacter* foe = met[k].monster.Get())
+                out.push_back(foe);
+        return out;
+    };
+    const S3DPoint* at = &path[met.front().index];
+    bool running = evade;
+    SShadowOdds odds = ShadowSizeUp(foes(running ? share : together), context.tick, at);
+    // Running past is worth it only when fewer would catch him than meet him.
+    if (!odds.take && !running && share < together)
+    {
+        running = true;
+        odds = ShadowSizeUp(foes(share), context.tick, at);
+    }
+    if (!odds.take)
+    {
+        std::string names;
+        for (TCharacter* foe : foes(running ? share : together))
+            names += (names.empty() ? "" : ", ") + ToUtf8(foe->GetName() && foe->GetName()[0] ? foe->GetName()
+                                                                                          : foe->GetTypeName());
+        guarded = true;
+        failure = "the way to " + target + " is guarded: " + std::to_string(met.size()) + " monsters, and Locke (" +
+                  std::to_string(Player->Health()) + " health) wins " + std::to_string(odds.wins) + " of " +
+                  std::to_string(odds.trials) + " trials against " + names + ", losing " +
+                  std::to_string(odds.meanloss) + " health on average";
+        return false;
+    }
+    for (TCharacter* foe : foes(running ? share : together))
+        meeting.push_back(foe);
+    evaded = running;
+    context.log.Event("encounter", std::to_string(met.size()) + " monsters on the way to " + target + "; Locke fights " +
+                                       std::to_string(meeting.size()) + (running ? " (evading)" : ""));
     return true;
 }
 
@@ -424,24 +484,13 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
             }
         if (!evaded)
         {
-            std::vector<SShadowEncounter> met = ShadowLegEncounters(path->points, Player->GetLevel());
-            met.erase(std::remove_if(met.begin(), met.end(),
-                                     [&](const SShadowEncounter& e) { return e.monster.Get() == object.Get(); }),
-                      met.end());
+            const std::vector<SShadowEncounter> met = Encounters(path->points);
             if (!met.empty() && met.front().index < stop)
             {
-                const size_t fights = evade ? ShadowEvadeShare(met, context.nav.Gait(context.log).run)
-                                            : size_t(std::count_if(met.begin(), met.end(), [&](const SShadowEncounter& e) {
-                                                  return e.index == met.front().index;
-                                              }));
-                for (size_t k = 0; k < fights && k < met.size(); ++k)
-                    meeting.push_back(met[k].monster);
-                evaded = evade;
+                if (!Meet(context, met, path->points, failure))
+                    return EShadowStatus::Failed;
                 crossing.clear();
                 stop = met.front().index;
-                context.log.Event("encounter", std::to_string(met.size()) + " monsters on the way to " + target +
-                                                   "; Locke fights " + std::to_string(meeting.size()) +
-                                                   (evade ? " (evading)" : ""));
             }
         }
         if (stop < path->points.size())
@@ -455,6 +504,7 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
             dest = path->points.back();
             viaexit = viadoor = false;
         }
+        walked = path->points;
         const SShadowGait& gait = context.nav.Gait(context.log);
         pace = PaceLeg(path->length, Player->Fatigue(), Player->MaxFatigue(), gait);
 
@@ -503,12 +553,26 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
     }
 
     case EStage::Walk:
+    {
         // The walk's time passes with the world running; Locke arrives at
-        // its end.
+        // its end. What the generators made beside the way meanwhile would
+        // have met him on it: the leg ends where the first of them sees him,
+        // for the fight (§5.5).
         if (++waited < pace.ticks)
             return EShadowStatus::Running;
+        if (meeting.empty() && !evaded)
+            if (const std::vector<SShadowEncounter> met = Encounters(walked); !met.empty())
+            {
+                context.log.Event("spawned", "on the way to " + target + ", while he walked");
+                if (!Meet(context, met, walked, failure))
+                    return EShadowStatus::Failed;
+                dest = walked[met.front().index];
+                crossing.clear();
+                viaexit = viadoor = false;
+            }
         stage = EStage::Arrive;
         [[fallthrough]];
+    }
 
     case EStage::Arrive:
     {

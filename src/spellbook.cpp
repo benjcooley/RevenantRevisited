@@ -229,13 +229,18 @@ void TSpellBookPane::Rebuild()
     builtversion = Player->KnownSpellsVersion();
 }
 
+bool TSpellBookPane::Learnable(const char *talismans)
+{
+    if (!talismans || !*talismans)
+        return false;
+    const SSpellData *spell = SpellList.GetSpellDataByTalismans(talismans);
+    return spell && spell->iconname[0] && DialogList.FindLine(DescriptionTag(talismans).c_str()) >= 0;
+}
+
 // REVSYNC: 0x00544fb0
 void TSpellBookPane::Reveal(const char *talismans)
 {
-    if (!Player || !talismans || !*talismans)
-        return;
-    const SSpellData *spell = SpellList.GetSpellDataByTalismans(talismans);
-    if (!spell || !spell->iconname[0] || DialogList.FindLine(DescriptionTag(talismans).c_str()) < 0)
+    if (!Player || !Learnable(talismans))
         return;
     if (!IsOpen())
     {

@@ -8,6 +8,7 @@
 #include "shadowledger.h"
 #include "shadowlog.h"
 #include "shadowloot.h"
+#include "shadowstate.h"
 #include "shadowtravel.h"
 
 #include "../container.h"
@@ -198,7 +199,7 @@ class TTravelRunner final : public TShadowStepRunner
     {
         std::string why;
         const EShadowStatus status = travel.Pulse(context, why);
-        return status == EShadowStatus::Failed ? Fail(why) : status;
+        return status == EShadowStatus::Failed ? Fail(why, travel.Guarded()) : status;
     }
 
   private:
@@ -223,7 +224,7 @@ class TApproachRunner final : public TShadowStepRunner
         {
             const EShadowStatus status = travel.Pulse(context, why);
             if (status == EShadowStatus::Failed)
-                return Fail(why);
+                return Fail(why, travel.Guarded());
             if (status == EShadowStatus::Running)
                 return status;
             if (!Act(context, why))
@@ -286,7 +287,7 @@ class TTakeRunner final : public TShadowStepRunner
             std::string why;
             const EShadowStatus status = travel.Pulse(context, why);
             if (status == EShadowStatus::Failed)
-                return Fail(why);
+                return Fail(why, travel.Guarded());
             if (status == EShadowStatus::Running)
                 return status;
             TObjectInstance* found = travel.Object();
@@ -367,7 +368,13 @@ class TPackRunner final : public TShadowStepRunner
         if (step.verb == EShadowVerb::Train)
         {
             context.ledger.AllowTraining(context.tick + 1);
-            for (const int32_t attribute : step.attributes)
+            std::vector<int32_t> picks = step.attributes;
+            if (picks.empty())
+            {
+                const std::array<int32_t, 2> style = ShadowStylePicks(context.plan.Style());
+                picks.assign(style.begin(), style.end());
+            }
+            for (const int32_t attribute : picks)
                 if (!Player->TrainStat(attribute))
                     return Fail(std::string("can't train ") + kAttributeNames[attribute] + " (at 29 or more)");
             return EShadowStatus::Done;
@@ -468,6 +475,7 @@ class TSaveRunner final : public TShadowStepRunner
         waypoint.fatigue = {Player->Fatigue(), Player->MaxFatigue()};
         waypoint.xp = {Player->Level(), Player->Exp(), Player->NextExp()};
         waypoint.gold = Player->GetInventoryAmount("Gold");
+        waypoint.state = ShadowStateJson(*Player);
         context.waypoints.push_back(waypoint);
         context.log.Event("save", "\"" + slot + "\"", [&](JsonOut& out) {
             out.FieldString("name", step.name);
@@ -551,6 +559,7 @@ std::unique_ptr<TShadowStepRunner> MakeStepRunner(const SShadowStep& step)
         case EShadowVerb::Consume: return std::make_unique<TPackRunner>(step);
         case EShadowVerb::Fight:   return MakeFightRunner(step);
         case EShadowVerb::Grind:   return MakeGrindRunner(step);
+        case EShadowVerb::Invent:  return MakeInventRunner(step);
         case EShadowVerb::Expect: return std::make_unique<TExpectRunner>(step);
         case EShadowVerb::Save:   return std::make_unique<TSaveRunner>(step);
     }
