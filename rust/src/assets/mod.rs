@@ -7,6 +7,7 @@
 pub mod bitmap;
 pub mod cache;
 pub mod catalog;
+pub mod definition;
 pub mod font;
 pub mod imagery;
 pub mod multi;

@@ -4,9 +4,9 @@ on:
   push:
     # PR branches are covered by pull_request; avoid running the matrix twice.
     branches: [main]
-    paths: ['rust/**', 'src/mappane.cpp', '.github/workflows/rust.yml']
+    paths: ['rust/**', 'src/mappane.cpp', 'assets/fonts/Arimo*', '.github/workflows/rust.yml']
   pull_request:
-    paths: ['rust/**', 'src/mappane.cpp', '.github/workflows/rust.yml']
+    paths: ['rust/**', 'src/mappane.cpp', 'assets/fonts/Arimo*', '.github/workflows/rust.yml']
   workflow_dispatch:
 
 permissions:
@@ -38,6 +38,15 @@ jobs:
         with:
           toolchain: 1.94.0
           components: clippy, rustfmt
+      - name: Identify bundled UI font
+        run: git lfs ls-files --long --include="assets/fonts/Arimo-Regular.ttf" > ../.lfs-rust-fonts.txt
+      - name: Cache bundled UI font
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: .git/lfs/objects
+          key: lfs-rust-fonts-${{ hashFiles('.lfs-rust-fonts.txt') }}
+      - name: Fetch bundled UI font
+        run: git lfs pull --include="assets/fonts/Arimo-Regular.ttf" --exclude=""
       - name: Linux window, audio and Vulkan dependencies
         if: runner.os == 'Linux'
         run: |
@@ -78,6 +87,7 @@ jobs:
             cp target/release/revenant dist/
           fi
           cp README.md dist/
+          cp ../assets/fonts/Arimo-OFL.txt dist/
           tar -czf "revenant-rust-$RUNNER_OS-$RUNNER_ARCH.tar.gz" -C dist .
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
