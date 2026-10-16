@@ -467,7 +467,7 @@ class TSaveRunner final : public TShadowStepRunner
         waypoint.slot = slot;
         // The slot as the game wrote it: the port's save file, or a retail
         // slot folder (docs/gameflow/SAVE_FORMAT.md).
-        const std::filesystem::path file = TSaveGame::SlotsDir() / (slot + ".rvsave");
+        const std::filesystem::path file = TSaveGame::SaveFilePath(slot);
         waypoint.dir = std::filesystem::exists(file) ? file : TSaveGame::SlotsDir() / slot;
         waypoint.stage = context.stage.id;
         waypoint.tick = context.tick;

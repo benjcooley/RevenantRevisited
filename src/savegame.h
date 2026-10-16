@@ -12,8 +12,13 @@
 //
 // Loading replaces the players, game states and sector working set; it does
 // not load sectors or place the players in them (TGameSession does that, as
-// retail's TPlayScreen did). Format, sequence and retail addresses:
+// retail's TPlayScreen did). Retail's format, sequence and addresses:
 // docs/gameflow/forensics/SAVE_GAME.md.
+//
+// The port saves a slot as one file (SaveFile, docs/gameflow/SAVE_FORMAT.md):
+// retail's game.sav as is, a PNG thumbnail and the modified sectors as
+// diffs against the module's. It loads those and retail's slot folders
+// alike, and writes a retail slot folder on request (ExportRetail).
 #pragma once
 
 #include <cstdint>
@@ -44,13 +49,15 @@ struct SSaveHeader
     void Write(TOutputStream& os) const;
 };
 
-// A save slot: <SaveGamePath>/Single/<name>/ holding game.sav, CurMap/ and
-// the ss.bmp thumbnail.
+// A save slot: the port's save file <SaveGamePath>Single/<name>.rvsave, or
+// retail's slot folder <SaveGamePath>Single/<name>/ holding game.sav,
+// CurMap/ and the ss.bmp thumbnail.
 struct SSaveSlot
 {
     std::string           name;
-    std::filesystem::path dir;
-    std::string           module;   // from the slot's header
+    std::filesystem::path path;               // the save file, or the folder
+    bool                  isFile = false;     // a save file (else a retail folder)
+    std::string           module;             // from the slot's header
 };
 
 class TSaveGame
@@ -65,8 +72,13 @@ class TSaveGame
     bool LoadNewGame();
 
     // REVSYNC: SaveGame @ 0x0048d720 — write the game to slot `name`
-    // ("Default Save" if null), creating it.
+    // ("Default Save" if null) as a save file, creating it.
     bool Save(const char* name);
+
+    // Writes slot `name` as a retail slot folder at `dir` (game.sav, ss.bmp,
+    // CurMap/), which retail loads, from a save file or a retail folder.
+    // A save file's sectors are rebuilt against the active module's map.
+    bool ExportRetail(const char* name, const std::filesystem::path& dir);
 
     // REVSYNC: 0x0048d260 — rescan the save slots on disk.
     void RefreshSlots();
@@ -78,6 +90,8 @@ class TSaveGame
 
     // Where the single-player slots live: <SavePath>/<SaveGamePath>Single.
     [[nodiscard]] static std::filesystem::path SlotsDir();
+    // Slot `name`'s save file there: <name>.rvsave.
+    [[nodiscard]] static std::filesystem::path SaveFilePath(const std::string& name);
     // The slot this run wrote last (empty: none yet).
     [[nodiscard]] const std::string& LastSaved() const { return lastSaved; }
 
@@ -86,7 +100,8 @@ class TSaveGame
 
     // REVSYNC: the thumbnail TPlayScreen writes when the in-game menu or the
     // save dialog opens, or on a quick save: the next frame becomes the
-    // thumbnail the next save stores. `slot`, when given, also gets a copy.
+    // thumbnail the next save stores. `slot`, when given (a save file), also
+    // gets it.
     // `captured` runs once the frame has been read back (at once when there
     // is no display to read), so a menu can open over the game only after
     // the picture without it is taken, as retail's did.
@@ -97,13 +112,12 @@ class TSaveGame
     static constexpr int32_t kThumbnailWidth  = 216;
     static constexpr int32_t kThumbnailHeight = 160;
 
-    // REVSYNC: TBitmap::LoadBMP @ 0x004a2ce0 as the load and save dialogs
-    // use it (0x00539590): `slot`'s ss.bmp into a thumbnail-sized picture.
-    // Retail took only a file of exactly the bitmap's size; thumbnails are
-    // 24-bit. RGBA8, top row first. False when the slot has none or it
-    // isn't one.
-    [[nodiscard]] static bool ReadThumbnail(const std::filesystem::path& slot,
-                                            std::vector<uint8_t>& rgba);
+    // `slot`'s thumbnail as the load and save dialogs show it, RGBA8, top
+    // row first: a save file's PNG, or a retail folder's ss.bmp through
+    // TBitmap::LoadBMP's rules (0x004a2ce0, as the dialogs use it,
+    // 0x00539590: a 24-bit file of exactly the thumbnail's size). False when
+    // the slot has none, or not one of the thumbnail's size.
+    [[nodiscard]] static bool ReadThumbnail(const SSaveSlot& slot, std::vector<uint8_t>& rgba);
 
     // Merchant unique items already bought (SAVE_GAME.md §6).
     // REVSYNC: HasPair @ 0x0048e630 / AddPair @ 0x0048e670.
@@ -117,18 +131,27 @@ class TSaveGame
         int32_t objtype  = 0;
     };
 
-    // Loads `file` (resolved through the resource layer). `slotCurMap` is
-    // the slot's sector working set, or empty for a new game.
-    bool LoadFile(const char* file, const std::filesystem::path& slotCurMap);
-    void ResetWorld(const std::filesystem::path& slotCurMap);
+    // Loads the game.sav bytes `data` (from `source`, for the log), the
+    // working set from `restoreSectors` (none: a new game's empty one).
+    bool LoadGame(const std::vector<uint8_t>& data, const std::string& source,
+                  const std::function<void()>& restoreSectors);
+    void ResetWorld(const std::function<void()>& restoreSectors);
     bool ReadSoldUniques(TInputStream& is, const SSaveHeader& header);
     bool ReadPlayers(TInputStream& is, const SSaveHeader& header);
     void WriteBody(TOutputStream& os) const;
     static SPlayerHudWords CurrentHudWords(const TPlayer& player);
     static std::filesystem::path ThumbnailFile();
     static bool WriteThumbnail(const uint8_t* rgba, int32_t width, int32_t height);
+    // The current thumbnail (ThumbnailFile) as a PNG file's bytes; empty
+    // when there is none.
+    static std::vector<uint8_t> ThumbnailPng();
+    // The current thumbnail into `slot` (a save file or a retail slot
+    // folder), or the next frame's when none is newer than the last save's.
     void StoreThumbnail(const std::filesystem::path& slot);
     void CopyThumbnailTo(const std::filesystem::path& slot);
+    [[nodiscard]] std::vector<uint8_t> GameBytes() const;
+    bool SaveFileSlot(const char* name);
+    bool SaveFolder(const char* name);
 
     std::vector<SSaveSlot>   slots;
     std::string              lastSaved;

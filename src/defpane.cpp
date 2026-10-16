@@ -1691,12 +1691,12 @@ SDefWidget* TDefPane::EditingWidget()
     return nullptr;
 }
 
-// The widget a click goes to (retail's base click 0x00436530 hit-tests in
-// DEF order): the first one shown under the pointer.
+// The widget a click goes to. REVSYNC: the base click 0x00436530 asks the
+// widgets in DEF order (0x004365de..0x0043661f); the first that takes it.
 int32_t TDefPane::WidgetAt(int32_t lx, int32_t ly) const
 {
     for (size_t i = 0; i < widgets.size(); ++i)
-        if (!widgets[i].hidden && widgets[i].Contains(lx, ly))
+        if (widgets[i].TakesClick(lx, ly))
             return static_cast<int32_t>(i);
     return -1;
 }
@@ -1731,8 +1731,6 @@ void TDefPane::OnMouseDown(int32_t lx, int32_t ly)
         if (w.flags & kCtrlSelectable)
             focusWidget = index;
     }
-    if (w.disabled)
-        return;
 
     switch (w.type)
     {
@@ -1869,7 +1867,7 @@ const char* TDefPane::OnMouseUp(int32_t lx, int32_t ly)
     if (index < 0)
         return nullptr;
     SDefWidget& list = widgets[static_cast<size_t>(index)];
-    if (list.type == EDefWidget::Listbox && !list.disabled && !InListBar(list, lx, ly))
+    if (list.type == EDefWidget::Listbox && !InListBar(list, lx, ly))
     {
         PlayClick();
         if (const int32_t item = ListItemAt(list, lx, ly); item >= 0)

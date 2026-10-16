@@ -197,6 +197,24 @@ void TMapManager::SaveCurMap(const std::filesystem::path& dir) const
     SectorStore::ExportTo(dir);
 }
 
+void TMapManager::PublishCurMap() const
+{
+    FlushSectors();
+    SectorStore::Publish();
+}
+
+std::vector<SaveFile::SSectorDelta> TMapManager::DiffCurMap() const
+{
+    FlushSectors();
+    return SectorStore::Deltas();
+}
+
+void TMapManager::LoadCurMap(const std::vector<SaveFile::SSectorDelta>& sectors)
+{
+    ClearCurMap();
+    SectorStore::SetDeltas(sectors);
+}
+
 void TMapManager::ReloadLevel(int32_t level, const std::function<void()>& editFiles)
 {
     TGameMap* map = GetCached(level);

@@ -262,6 +262,7 @@ void TPlaytest::ApplyStart()
         if (!fs::equivalent(startSlotDir, dest, ec))
         {
             fs::remove_all(dest, ec);
+            fs::remove(TSaveGame::SaveFilePath(startSlot), ec);     // the folder is the slot
             std::string error;
             if (!Bundle::CopyDirectory(startSlotDir, dest, error))
                 log_error("[playtest] %s", error.c_str());
@@ -293,10 +294,12 @@ void TPlaytest::ApplyStart()
     header.slot      = startSlot;
     if (fromSlot)
     {
+        // The bundle holds the start slot as a retail slot folder, which the
+        // retail emulator replays too (PROTOCOL.md §4).
         const fs::path copy = bundleDir / Bundle::kStartDir / startSlot;
         fs::remove_all(copy, ec);
-        if (!Bundle::CopyDirectory(TSaveGame::SlotsDir() / startSlot, copy, error))
-            log_error("[playtest] %s", error.c_str());
+        if (!::SaveGame.ExportRetail(startSlot.c_str(), copy))
+            log_error("[playtest] the start slot '%s' didn't export to %s", startSlot.c_str(), copy.string().c_str());
         header.slotSha = Bundle::SlotSha(copy);
     }
     header.iniSha    = TSha256::OfFile(ini);
@@ -909,8 +912,11 @@ bool TPlaytest::CmdExportSlot(const JsonValue& req, JsonOut& out, std::string& e
         return false;
     }
     const fs::path to = fs::absolute(req["to"].Str());
-    if (!Bundle::CopyDirectory(TSaveGame::SlotsDir() / slot, to, error))
+    if (!::SaveGame.ExportRetail(slot.c_str(), to))
+    {
+        error = "slot '" + slot + "' didn't export to " + to.string();
         return false;
+    }
     out.FieldString("path", to.string());
     out.FieldString("slot", slot);
     return true;

@@ -26,7 +26,6 @@ static inline char *strlwr(char *s)
 #include "mappane.h"
 #include "mapmanager.h"
 #include "object.h"
-#include "sectorstore.h"
 #include "tile.h"
 #include "editorstub.h"
 #include "display.h"
@@ -4297,11 +4296,9 @@ COMMAND(CmdSave)
     if (savemap)
     {
         Output("Saving map sectors...\n");
-        // Publish the edited sectors to the base map (SaveCurMap writes every
-        // loaded sector first, as retail's SaveAllSectors did), then empty the
-        // working set (the loaded sectors stay; they now match the base map).
-        MapManager.SaveCurMap(SectorStore::BaseMapDir());
-        SectorStore::Clear();
+        // Publish the edited sectors to the base map (every loaded sector is
+        // written first, as retail's SaveAllSectors did).
+        MapManager.PublishCurMap();
     }
 
     TObjectImagery::ResumeLoader();

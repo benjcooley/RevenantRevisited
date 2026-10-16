@@ -25,10 +25,10 @@
 
 namespace
 {
-// Disk scan: walk every per-sector .DAT file in the working set and the
-// base map (loose dirs) and return the (sx, sy) coordinates that exist for
-// `level`, plus a 64x64 probe through SectorStore that catches sectors
-// visible only through the VFS.
+// The (sx, sy) coordinates that exist for `level`: every per-sector .DAT file
+// in the base map's loose folders, the working set's sectors, and a 64x64
+// probe through SectorStore that catches sectors visible only through the
+// VFS.
 using SCoord = TGameMap::SSectorCoord;
 
 std::filesystem::path ResolveSectorDataRoot()
@@ -47,9 +47,7 @@ std::filesystem::path ResolveSectorDataRoot()
     {
         if (cand.empty()) continue;
         if (fs::exists(cand / "imagery.rvi", ec) ||
-            fs::exists(cand / "Modules", ec) ||
-            fs::is_directory(cand / "Curmap", ec) ||
-            fs::is_directory(cand / "curmap", ec))
+            fs::exists(cand / "Modules", ec))
             return fs::canonical(cand, ec);
     }
     return {};
@@ -82,9 +80,9 @@ std::vector<SCoord> ScanLevelCoords(int32_t level)
     namespace fs = std::filesystem;
     std::vector<SCoord> coords;
     std::vector<fs::path> scan_dirs;
-    // The game's working set and the base map (SectorStore). An install's
-    // own curmap belongs to whoever last played retail there, never to us.
-    scan_dirs.push_back(SectorStore::WorkingSetDir());
+    // The base map's loose folder (SectorStore); the game's working set is
+    // in memory, added below. An install's own curmap belongs to whoever
+    // last played retail there, never to us.
     scan_dirs.push_back(SectorStore::BaseMapDir());
     const fs::path data_root = ResolveSectorDataRoot();
     if (!data_root.empty())
@@ -99,6 +97,8 @@ std::vector<SCoord> ScanLevelCoords(int32_t level)
         scan_dirs.end());
     for (const fs::path& dir : scan_dirs)
         GatherCoordsFromDir(dir, level, coords);
+    for (const auto& [sx, sy] : SectorStore::SectorsOn(level))
+        coords.push_back({ sx, sy });
 
     // VFS / rvr-pack fallback: probe every (sx,sy) up to 64x64 the way
     // TSector::Load opens them. Picks up sectors visible only through the
@@ -109,11 +109,8 @@ std::vector<SCoord> ScanLevelCoords(int32_t level)
         for (int32_t sx = 0; sx < 64; ++sx)
         {
             std::snprintf(filename, sizeof(filename), "%d_%d_%d.DAT", level, sx, sy);
-            if (FILE* fp = SectorStore::OpenForRead(filename))
-            {
-                fclose(fp);
+            if (SectorStore::Exists(filename))
                 coords.push_back({ sx, sy });
-            }
         }
     }
 

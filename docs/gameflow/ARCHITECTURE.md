@@ -96,7 +96,8 @@ extern TGameFlow GameFlow;
 Retail's `TPlayScreen` conflated presentation with the world. The
 session takes the world half; the managers it coordinates are unchanged.
 Retail behavior: [forensics/SAVE_GAME.md](forensics/SAVE_GAME.md) (save
-format, `LoadGame`/`SaveGame`, `curmap`) and
+format, `LoadGame`/`SaveGame`, `curmap`), the port's save file in
+[SAVE_FORMAT.md](SAVE_FORMAT.md), and
 [forensics/GAME_FLOW.md](forensics/GAME_FLOW.md) §2.3 (start modes).
 
 | Responsibility | Retail | Port owner |
@@ -159,11 +160,14 @@ class TGameSession
 - **`TGameState::LoadStream/SaveStream`** move to
   `TInputStream`/`TOutputStream` (the binary streams the format uses).
 - **Working set.** `SectorStore` (`src/sectorstore.h`) owns where sector
-  files live: the working set `<SavePath>/curmap` (created on demand)
-  and the base map through the resource layer — never the install's
-  `curmap`. `TMapManager` owns the loaded sectors and gains
-  `FlushSectors`, `ClearCurMap`, `LoadCurMap(dir)`, `SaveCurMap(dir)`,
-  and, for the editor commands that edit sector files directly
+  files come from: the working set — every sector the game has written,
+  held in memory (the port keeps no `curmap` folder) — and the base map
+  through the resource layer. A save file holds the working set as object
+  changes against the base map, a retail slot folder as whole sectors
+  ([SAVE_FORMAT.md](SAVE_FORMAT.md)). `TMapManager` owns the loaded
+  sectors and gains `FlushSectors`, `ClearCurMap`, `LoadCurMap(dir)` /
+  `SaveCurMap(dir)` (retail folders), `DiffCurMap()` / `LoadCurMap(deltas)`
+  (save files), and, for the editor commands that edit sector files directly
   (`sectorcommand`, `generate`, `load sectors`), `ReloadLevel(level,
   edit)` / `ReloadSectors` (retail `TMapPane::FreeAllSectors` /
   `ReloadSectors`). `rev_fopen` write modes resolve only under SavePath.
@@ -180,8 +184,9 @@ class TGameSession
    the renderer to `MapManager`'s current map, following
    `CurrentMapChanged` from then on.
 
-A load from a slot is the same with `LoadCurMap(<slot>/CurMap)` +
-`LoadGame(slot)`. `End()` runs when the flow leaves the game (title,
+A load from a slot is the same with `LoadGame(slot)` restoring the
+working set from the slot (`LoadCurMap(deltas)` for a save file,
+`LoadCurMap(<slot>/CurMap)` for a retail folder). `End()` runs when the flow leaves the game (title,
 death, quit).
 
 ### 3.3 What this replaces

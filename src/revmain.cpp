@@ -27,6 +27,7 @@
 #include "vfxpointoption.h"
 
 #include "revenant.h"
+#include "revisited.h"
 #include "assetcache.h"
 #include "audio_backend.h"
 #include "framesnap.h"
@@ -121,7 +122,6 @@ char ResourcePath[MAXPATHLEN];               // Where to read / write the resour
 char ImageryPath[MAXPATHLEN];                // Imagery tree / imagery.rvi; class.def and rules rosters
 char ModulesPath[MAXPATHLEN];                // Root of the game modules
 char BaseMapPath[MAXPATHLEN];                // Where the untouched version of the game map is stored
-char CurMapPath[MAXPATHLEN];                 // Where the current map is stored
 char MoviePath[MAXPATHLEN];                  // Where the .smk movies live
 char SaveGamePath[MAXPATHLEN];               // Root of the save slots (INI [Paths] SaveGamePath)
 
@@ -256,6 +256,7 @@ extern bool Editor;
 bool StartInEditor = false; // Whether to start the program in editor mode
 bool RevisitedEnabled = false; // --revisited: mount Revisited overlay (FATAL if requested but missing)
 bool NoQuickLoad = false;   // true if program should not try to use IMAGERY.DAT file
+bool OldSaves = false;      // true to save retail slot folders instead of save files
 bool Force15Bit = false;    // Forces video mode to assume 15 bit
 bool Force16Bit = false;    // Forces video mode to assume 16 bit
 bool FullScreen = false;    // Full screen mode
@@ -1665,6 +1666,9 @@ void GetParameters(int argc, char **argv)
     if (arg_flag(cmd, "revisited"))        RevisitedEnabled = true;
     if (arg_flag(cmd, "windowed"))         Windowed = true;
     if (arg_flag(cmd, "noquickload"))      NoQuickLoad = true;
+    // Saves as retail's slot folders (game.sav, ss.bmp, CurMap/) instead of
+    // the port's save files (docs/gameflow/SAVE_FORMAT.md); both load either way.
+    if (arg_flag(cmd, "oldsaves") || Revisited::IsEnabled("OldSaves")) OldSaves = true;
     if (arg_flag(cmd, "borderless"))       Borderless = true;
     if (arg_flag(cmd, "nowide"))           NoWideBuffers = true;
     if (arg_flag(cmd, "fullscreen"))       FullScreen = true;
@@ -2062,7 +2066,8 @@ void GetParameters(int argc, char **argv)
 // these: shared game data under ClassDefPath / ResourcePath (resources.rvr
 // answers .\Resources\), imagery data under ImageryPath (imagery.rvi answers
 // .\Imagery\), a module's own files under ModulesPath\<module>\. See
-// docs/DATA_LAYOUT.md.
+// docs/DATA_LAYOUT.md. Retail's CurMapPath isn't read: the port keeps the
+// changed sectors in memory, not in a curmap folder (sectorstore.h).
 void GetINISettings()
 {
   // ***** Get Program Paths *****
@@ -2072,14 +2077,13 @@ void GetINISettings()
     INIGetText("ClassDefPath", ".\\Resources", ClassDefPath, MAXPATHLEN);
     INIGetText("ResourcePath", ".\\Resources", ResourcePath, MAXPATHLEN);
     INIGetText("ImageryPath", ".\\Imagery", ImageryPath, MAXPATHLEN);
-    INIGetText("CurMapPath", ".", CurMapPath, MAXPATHLEN);
     INIGetText("BaseMapPath", ".", BaseMapPath, MAXPATHLEN);
     INIGetText("MoviePath", ".\\Resources\\FMV", MoviePath, MAXPATHLEN);
     INIGetText("SaveGamePath", ".\\Save", SaveGamePath, MAXPATHLEN);
     INIGetText("ModulesPath", ".\\Modules", ModulesPath, MAXPATHLEN);
 
     // Make sure each string ends with a backslash
-    for (char *path : {ClassDefPath, ExileRCPath, ResourcePath, ImageryPath, CurMapPath,
+    for (char *path : {ClassDefPath, ExileRCPath, ResourcePath, ImageryPath,
                        BaseMapPath, MoviePath, SaveGamePath, ModulesPath})
     {
         if (path[0] == '\0' || path[strlen(path) - 1] != '\\')

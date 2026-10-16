@@ -24,8 +24,13 @@
 #include "playscreen.h"
 #include "revenant.h"
 #include "revutils.h"
+#include "savefile.h"
 #include "script.h"
+#include "sectorstore.h"
 #include "stream.h"
+
+#include "stb_image.h"
+#include "stb_image_write.h"
 
 #include <algorithm>
 #include <cctype>
@@ -76,16 +81,127 @@ fs::path SinglePlayerSlotsDir()
     return fs::path(makepath(relative, resolved, sizeof(resolved)));
 }
 
-bool ReadHeader(const fs::path& file, SSaveHeader& header)
+
+bool ReadFileBytes(const fs::path& file, std::vector<uint8_t>& bytes)
 {
-    uint8_t bytes[SSaveHeader::kSize];
+    bytes.clear();
     FILE* fp = std::fopen(file.string().c_str(), "rb");
     if (!fp)
         return false;
-    const size_t got = std::fread(bytes, 1, sizeof(bytes), fp);
+    uint8_t chunk[16384];
+    size_t got = 0;
+    while ((got = std::fread(chunk, 1, sizeof(chunk), fp)) > 0)
+        bytes.insert(bytes.end(), chunk, chunk + got);
     std::fclose(fp);
-    TInputStream is(bytes, (int32_t)got);
+    return true;
+}
+
+bool WriteFileBytes(const fs::path& file, const std::vector<uint8_t>& bytes)
+{
+    FILE* fp = std::fopen(file.string().c_str(), "wb");
+    const bool ok = fp && std::fwrite(bytes.data(), 1, bytes.size(), fp) == bytes.size();
+    return fp && (std::fclose(fp) == 0) && ok;
+}
+
+// The header of a save's game.sav bytes.
+bool ReadHeader(const std::vector<uint8_t>& game, SSaveHeader& header)
+{
+    // TInputStream takes a mutable buffer but only reads it.
+    TInputStream is(const_cast<uint8_t*>(game.data()), (int32_t)std::min<size_t>(game.size(), SSaveHeader::kSize));
     return header.Read(is);
+}
+
+// The 24-bit path of TBitmap::LoadBMP @ 0x004a2ce0: "BM", a
+// BITMAPINFOHEADER of the bitmap's own width and height, then the rows
+// bottom up, B G R per pixel.
+bool DecodeRetailThumbnail(const std::vector<uint8_t>& file, std::vector<uint8_t>& rgba)
+{
+    constexpr size_t kHeadersSize = 14 + 40;
+    auto u16 = [&](size_t at) { return (uint32_t)file[at] | ((uint32_t)file[at + 1] << 8); };
+    auto u32 = [&](size_t at) { return u16(at) | (u16(at + 2) << 16); };
+    if (file.size() < kHeadersSize || u16(0) != 0x4D42)
+        return false;
+    const uint32_t offset = u32(10);
+    const int32_t  width  = (int32_t)u32(18);
+    const int32_t  height = (int32_t)u32(22);
+    const uint32_t bits   = u16(28);
+    const size_t   stride = (size_t)(((width * 3) + 3) & ~3);
+    if (width != TSaveGame::kThumbnailWidth || height != TSaveGame::kThumbnailHeight || bits != 24 ||
+        file.size() < offset + stride * (size_t)height)
+        return false;
+
+    rgba.assign((size_t)width * height * 4, 0);
+    for (int32_t y = 0; y < height; y++)
+    {
+        const uint8_t* src = file.data() + offset + stride * (size_t)(height - 1 - y);
+        uint8_t* dst = rgba.data() + (size_t)y * width * 4;
+        for (int32_t x = 0; x < width; x++, src += 3, dst += 4)
+        {
+            dst[0] = src[2];
+            dst[1] = src[1];
+            dst[2] = src[0];
+            dst[3] = 255;
+        }
+    }
+    return true;
+}
+
+// A thumbnail as TBitmap::SaveBMP (0x004a2960) writes one, header quirks
+// and all, so retail's LoadBMP takes it.
+std::vector<uint8_t> EncodeRetailThumbnail(const std::vector<uint8_t>& rgba)
+{
+    const int32_t width = TSaveGame::kThumbnailWidth, height = TSaveGame::kThumbnailHeight;
+    std::vector<uint8_t> file;
+    auto u16 = [&](uint32_t v) { file.push_back((uint8_t)v); file.push_back((uint8_t)(v >> 8)); };
+    auto u32 = [&](uint32_t v) { u16(v & 0xffff); u16(v >> 16); };
+    u16(0x4D42);
+    u32((uint32_t)(height * width + 18) * 3);   // SaveBMP's file size
+    u16(0); u16(0);
+    u32(14 + 40);
+    u32(40);
+    u32((uint32_t)width); u32((uint32_t)height);
+    u16(1); u16(24);
+    u32(0); u32(0); u32(0); u32(0); u32(0); u32(0);
+    for (int32_t y = height - 1; y >= 0; y--)
+        for (int32_t x = 0; x < width; x++)
+        {
+            const uint8_t* p = rgba.data() + ((size_t)y * width + x) * 4;
+            file.push_back(p[2]);
+            file.push_back(p[1]);
+            file.push_back(p[0]);
+        }
+    return file;
+}
+
+// An opaque picture as an RGB PNG file.
+std::vector<uint8_t> EncodePng(const std::vector<uint8_t>& rgba, int32_t width, int32_t height)
+{
+    std::vector<uint8_t> rgb;
+    rgb.reserve((size_t)width * height * 3);
+    for (size_t i = 0; i + 3 < rgba.size(); i += 4)
+        rgb.insert(rgb.end(), rgba.begin() + (ptrdiff_t)i, rgba.begin() + (ptrdiff_t)i + 3);
+    std::vector<uint8_t> png;
+    stbi_write_png_to_func(
+        [](void* context, void* data, int size) {
+            auto* out = static_cast<std::vector<uint8_t>*>(context);
+            const auto* bytes = static_cast<const uint8_t*>(data);
+            out->insert(out->end(), bytes, bytes + size);
+        },
+        &png, width, height, 3, rgb.data(), width * 3);
+    return png;
+}
+
+bool DecodePng(const std::vector<uint8_t>& png, std::vector<uint8_t>& rgba, int32_t& width, int32_t& height)
+{
+    int w = 0, h = 0, comp = 0;
+    stbi_uc* pixels = stbi_load_from_memory(png.data(), (int)png.size(), &w, &h, &comp, 4);
+    if (!pixels)
+        return false;
+    rgba.assign(pixels, pixels + (size_t)w * h * 4);
+    stbi_image_free(pixels);
+    width = w;
+    height = h;
+    return true;
 }
 
 const char* ActiveModuleName()
@@ -154,8 +270,26 @@ bool TSaveGame::Load(const char* name)
     }
 
     const SSaveSlot& slot = slots[index];
-    const fs::path file = slot.dir / kSaveFile;
-    return LoadFile(file.string().c_str(), slot.dir / kSlotCurMapDir);
+    if (slot.isFile)
+    {
+        SaveFile::SSaveFile save;
+        std::string error;
+        if (!SaveFile::Read(slot.path, save, error))
+        {
+            log_warn("[savegame] %s", error.c_str());
+            return false;
+        }
+        return LoadGame(save.game, slot.path.string(), [&save] { MapManager.LoadCurMap(save.sectors); });
+    }
+
+    const fs::path file = slot.path / kSaveFile;
+    std::vector<uint8_t> data;
+    if (!ReadFileBytes(file, data))
+    {
+        log_warn("[savegame] can't read %s", file.string().c_str());
+        return false;
+    }
+    return LoadGame(data, file.string(), [dir = slot.path / kSlotCurMapDir] { MapManager.LoadCurMap(dir); });
 }
 
 bool TSaveGame::LoadNewGame()
@@ -164,22 +298,23 @@ bool TSaveGame::LoadNewGame()
     // in the mounted module, packed or loose.
     char file[MAXPATHLEN];
     std::snprintf(file, sizeof(file), "Modules\\%s\\%s", ActiveModuleName(), kNewGameFile);
-    return LoadFile(file, {});
-}
-
-// REVSYNC: LoadGame @ 0x0048df70 (flags & 2 clear). REVSYNC-DIVERGENCE: the
-// file is read and its header checked before the world is reset; retail reset
-// first, so a missing or damaged save left an empty world.
-bool TSaveGame::LoadFile(const char* file, const fs::path& slotCurMap)
-{
     std::vector<uint8_t> data;
     if (!rev_read_file(file, data))
     {
         log_warn("[savegame] can't read %s", file);
         return false;
     }
+    return LoadGame(data, file, {});
+}
 
-    TInputStream is(data.data(), (int32_t)data.size());
+// REVSYNC: LoadGame @ 0x0048df70 (flags & 2 clear). REVSYNC-DIVERGENCE: the
+// file is read and its header checked before the world is reset; retail reset
+// first, so a missing or damaged save left an empty world.
+bool TSaveGame::LoadGame(const std::vector<uint8_t>& data, const std::string& source,
+                         const std::function<void()>& restoreSectors)
+{
+    const char* file = source.c_str();
+    TInputStream is(const_cast<uint8_t*>(data.data()), (int32_t)data.size());   // read only
     SSaveHeader header;
     if (!header.Read(is))
     {
@@ -198,7 +333,7 @@ bool TSaveGame::LoadFile(const char* file, const fs::path& slotCurMap)
     }
 
     loading = true;
-    ResetWorld(slotCurMap);
+    ResetWorld(restoreSectors);
 
     bool ok = true;
     if (header.version >= kGameStatesVersion && !ScriptManager.GameStates().LoadStream(is))
@@ -240,12 +375,12 @@ bool TSaveGame::LoadFile(const char* file, const fs::path& slotCurMap)
 
 // The reset block of LoadGame @ 0x0048df70, in retail order
 // (SAVE_GAME.md §4).
-void TSaveGame::ResetWorld(const fs::path& slotCurMap)
+void TSaveGame::ResetWorld(const std::function<void()>& restoreSectors)
 {
-    if (slotCurMap.empty())
-        MapManager.ClearCurMap();               // 0x0044e460
+    if (restoreSectors)
+        restoreSectors();                       // 0x0044e460 + 0x0044e050
     else
-        MapManager.LoadCurMap(slotCurMap);      // 0x0044e460 + 0x0044e050
+        MapManager.ClearCurMap();               // 0x0044e460
     PlayScreen.CloseDrawer();                   // 0x0047ece0: the shop, or the bottom bar
     DialogPane.ResetForLoad();                  // 0x005360f0
     BuySellPane.Clear();                        // 0x00532f40
@@ -350,6 +485,8 @@ SPlayerHudWords TSaveGame::CurrentHudWords(const TPlayer& player)
 
 // REVSYNC: SaveGame @ 0x0048d720. Not ported: the editor path that writes
 // the module's own newgame.sav (the port never writes into the install).
+// The port writes a save file (SAVE_FORMAT.md); with OldSaves, retail's slot
+// folder.
 bool TSaveGame::Save(const char* name)
 {
     if (!Player)
@@ -359,7 +496,65 @@ bool TSaveGame::Save(const char* name)
     }
     if (!name)
         name = kDefaultSlotName;
+    const bool ok = OldSaves ? SaveFolder(name) : SaveFileSlot(name);
+    if (ok)
+        lastSaved = name;
+    return ok;
+}
 
+// The game.sav bytes: the header, then the body.
+std::vector<uint8_t> TSaveGame::GameBytes() const
+{
+    SSaveHeader header;
+    header.gametime     = PlayScreen.GameTime();
+    header.playerformat = kPlayerListFormat;
+    header.version      = MAP_VERSION;
+    strncpyz(header.module, SaveModuleName().c_str(), SSaveHeader::kModuleNameLen);
+
+    TOutputStream os(0x8000, 0x4000);
+    header.Write(os);
+    WriteBody(os);
+    const auto* bytes = static_cast<const uint8_t*>(os.Buffer());
+    return std::vector<uint8_t>(bytes, bytes + os.DataSize());
+}
+
+bool TSaveGame::SaveFileSlot(const char* name)
+{
+    const fs::path file = SaveFilePath(name);
+    SaveFile::SSaveFile save;
+    save.game    = GameBytes();
+    save.sectors = MapManager.DiffCurMap();
+
+    // The thumbnail captured since the last save; with none, the next frame,
+    // put into the file once it is read back.
+    const bool fresh = thumbnailVersion != storedThumbnailVersion;
+    if (fresh)
+    {
+        save.thumbnail = ThumbnailPng();
+        storedThumbnailVersion = thumbnailVersion;
+    }
+
+    std::string error;
+    if (!SaveFile::Write(file, save, error))
+    {
+        log_error("[savegame] %s", error.c_str());
+        return false;
+    }
+    if (!fresh)
+        CaptureThumbnail(file);
+    size_t changes = 0, whole = 0;
+    for (const SaveFile::SSectorDelta& delta : save.sectors)
+        delta.whole ? ++whole : changes += delta.changes.size();
+    log_info("[savegame] saved '%s' to %s: game %zu bytes, %zu sectors (%zu object changes, %zu whole), "
+             "thumbnail %zu bytes", name, file.string().c_str(), save.game.size(), save.sectors.size(), changes,
+             whole, save.thumbnail.size());
+    return true;
+}
+
+// Retail's slot folder: game.sav, ss.bmp and CurMap/ with the working set's
+// sectors whole.
+bool TSaveGame::SaveFolder(const char* name)
+{
     const fs::path slot = SinglePlayerSlotsDir() / name;
     std::error_code ec;
     fs::create_directories(slot, ec);
@@ -372,25 +567,13 @@ bool TSaveGame::Save(const char* name)
 
     MapManager.SaveCurMap(slot / kSlotCurMapDir);
     StoreThumbnail(slot);
-
-    SSaveHeader header;
-    header.gametime     = PlayScreen.GameTime();
-    header.playerformat = kPlayerListFormat;
-    header.version      = MAP_VERSION;
-    strncpyz(header.module, SaveModuleName().c_str(), SSaveHeader::kModuleNameLen);
-
-    TOutputStream os(0x8000, 0x4000);
-    header.Write(os);
-    WriteBody(os);
+    const std::vector<uint8_t> game = GameBytes();
 
     // Write beside the old file and swap, so a failed write never destroys
     // the slot's previous save.
     const fs::path file = slot / kSaveFile;
     const fs::path partial = slot / (std::string(kSaveFile) + ".partial");
-    FILE* fp = std::fopen(partial.string().c_str(), "wb");
-    bool ok = fp && std::fwrite(os.Buffer(), 1, os.DataSize(), fp) == (size_t)os.DataSize();
-    if (fp)
-        ok = (std::fclose(fp) == 0) && ok;
+    bool ok = WriteFileBytes(partial, game);
     if (ok)
     {
         fs::rename(partial, file, ec);
@@ -402,15 +585,72 @@ bool TSaveGame::Save(const char* name)
         log_error("[savegame] writing %s failed", file.string().c_str());
         return false;
     }
+    log_info("[savegame] saved '%s' as a retail slot folder (%zu bytes)", name, game.size());
+    return true;
+}
 
-    log_info("[savegame] saved '%s' (%d bytes, time=%d)", name, os.DataSize(), header.gametime);
-    lastSaved = name;
+bool TSaveGame::ExportRetail(const char* name, const fs::path& dir)
+{
+    RefreshSlots();
+    const int32_t index = FindSlot(name);
+    if (index < 0)
+    {
+        log_warn("[savegame] no save slot named '%s' to export", name ? name : "");
+        return false;
+    }
+    const SSaveSlot& slot = slots[index];
+    std::error_code ec;
+    if (!slot.isFile)
+    {
+        if (fs::equivalent(slot.path, dir, ec))
+            return true;
+        fs::create_directories(dir, ec);
+        fs::copy(slot.path, dir, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+        if (ec)
+            log_error("[savegame] can't copy %s to %s: %s", slot.path.string().c_str(), dir.string().c_str(),
+                      ec.message().c_str());
+        return !ec;
+    }
+
+    SaveFile::SSaveFile save;
+    std::string error;
+    if (!SaveFile::Read(slot.path, save, error))
+    {
+        log_error("[savegame] %s", error.c_str());
+        return false;
+    }
+    fs::create_directories(dir, ec);
+    if (ec || !WriteFileBytes(dir / kSaveFile, save.game))
+    {
+        log_error("[savegame] can't write %s", (dir / kSaveFile).string().c_str());
+        return false;
+    }
+    std::vector<uint8_t> rgba;
+    int32_t width = 0, height = 0;
+    fs::remove(dir / kThumbnailFile, ec);
+    if (!save.thumbnail.empty() && DecodePng(save.thumbnail, rgba, width, height) &&
+        width == kThumbnailWidth && height == kThumbnailHeight)
+        WriteFileBytes(dir / kThumbnailFile, EncodeRetailThumbnail(rgba));
+    const int32_t sectors = SectorStore::ExportDeltasTo(save.sectors, dir / kSlotCurMapDir);
+    if (sectors != (int32_t)save.sectors.size())
+    {
+        log_error("[savegame] '%s': %d of %zu sectors couldn't be rebuilt against the module's map; the "
+                  "folder at %s is incomplete", name, (int32_t)save.sectors.size() - sectors,
+                  save.sectors.size(), dir.string().c_str());
+        return false;
+    }
+    log_info("[savegame] exported '%s' as a retail slot folder to %s", name, dir.string().c_str());
     return true;
 }
 
 fs::path TSaveGame::SlotsDir()
 {
     return SinglePlayerSlotsDir();
+}
+
+fs::path TSaveGame::SaveFilePath(const std::string& name)
+{
+    return SinglePlayerSlotsDir() / (name + SaveFile::kExtension);
 }
 
 // <SavePath>/ss.bmp: retail's ".\ss.bmp" in the install directory; the port
@@ -424,7 +664,8 @@ fs::path TSaveGame::ThumbnailFile()
 // in-game menu or the save dialog, or quick-saves (0x0047cb52, 0x0047dc05,
 // 0x0047dd08; SAVE_GAME.md §11.7): the screen in a 640x480 16-bit bitmap,
 // written by SaveBMP at scale 3. The port captures the next frame the display
-// presents. `slot`, when given, also gets a copy.
+// presents. `slot`, when given (a save file or a retail slot folder), also
+// gets it.
 void TSaveGame::CaptureThumbnail(const fs::path& slot, std::function<void()> captured)
 {
     const bool requested = Display.RequestCapture(
@@ -446,55 +687,44 @@ void TSaveGame::CaptureThumbnail(const fs::path& slot, std::function<void()> cap
     }
 }
 
-// The 24-bit path of 0x004a2ce0: "BM", a BITMAPINFOHEADER of the bitmap's
-// own width and height, then the rows bottom up, B G R per pixel.
-bool TSaveGame::ReadThumbnail(const fs::path& slot, std::vector<uint8_t>& rgba)
+bool TSaveGame::ReadThumbnail(const SSaveSlot& slot, std::vector<uint8_t>& rgba)
 {
-    const fs::path path = slot / kThumbnailFile;
-    std::vector<uint8_t> file;
+    if (slot.isFile)
     {
-        FILE* fp = std::fopen(path.string().c_str(), "rb");
-        if (!fp)
+        SaveFile::SSaveFile save;
+        std::string error;
+        int32_t width = 0, height = 0;
+        if (!SaveFile::Read(slot.path, save, error) || save.thumbnail.empty())
             return false;
-        uint8_t chunk[4096];
-        size_t got = 0;
-        while ((got = std::fread(chunk, 1, sizeof(chunk), fp)) > 0)
-            file.insert(file.end(), chunk, chunk + got);
-        std::fclose(fp);
+        if (!DecodePng(save.thumbnail, rgba, width, height) || width != kThumbnailWidth ||
+            height != kThumbnailHeight)
+        {
+            log_warn("[savegame] %s: the thumbnail isn't a %dx%d PNG", slot.path.string().c_str(),
+                     kThumbnailWidth, kThumbnailHeight);
+            return false;
+        }
+        return true;
     }
 
-    constexpr size_t kHeadersSize = 14 + 40;
-    auto u16 = [&](size_t at) { return (uint32_t)file[at] | ((uint32_t)file[at + 1] << 8); };
-    auto u32 = [&](size_t at) { return u16(at) | (u16(at + 2) << 16); };
-    if (file.size() < kHeadersSize || u16(0) != 0x4D42)
+    std::vector<uint8_t> file;
+    if (!ReadFileBytes(slot.path / kThumbnailFile, file))
         return false;
-    const uint32_t offset = u32(10);
-    const int32_t  width  = (int32_t)u32(18);
-    const int32_t  height = (int32_t)u32(22);
-    const uint32_t bits   = u16(28);
-    const size_t   stride = (size_t)(((width * 3) + 3) & ~3);
-    if (width != kThumbnailWidth || height != kThumbnailHeight || bits != 24 ||
-        file.size() < offset + stride * (size_t)height)
+    if (!DecodeRetailThumbnail(file, rgba))
     {
-        log_warn("[savegame] %s: not a %dx%d 24-bit thumbnail", path.string().c_str(),
+        log_warn("[savegame] %s: not a %dx%d 24-bit thumbnail", (slot.path / kThumbnailFile).string().c_str(),
                  kThumbnailWidth, kThumbnailHeight);
         return false;
     }
-
-    rgba.assign((size_t)width * height * 4, 0);
-    for (int32_t y = 0; y < height; y++)
-    {
-        const uint8_t* src = file.data() + offset + stride * (size_t)(height - 1 - y);
-        uint8_t* dst = rgba.data() + (size_t)y * width * 4;
-        for (int32_t x = 0; x < width; x++, src += 3, dst += 4)
-        {
-            dst[0] = src[2];
-            dst[1] = src[1];
-            dst[2] = src[0];
-            dst[3] = 255;
-        }
-    }
     return true;
+}
+
+// The current thumbnail, as a PNG file.
+std::vector<uint8_t> TSaveGame::ThumbnailPng()
+{
+    std::vector<uint8_t> file, rgba;
+    if (!ReadFileBytes(ThumbnailFile(), file) || !DecodeRetailThumbnail(file, rgba))
+        return {};
+    return EncodePng(rgba, kThumbnailWidth, kThumbnailHeight);
 }
 
 // Retail copied the current thumbnail into the slot (SAVE_GAME.md §5 step 6).
@@ -511,12 +741,26 @@ void TSaveGame::StoreThumbnail(const fs::path& slot)
 
 void TSaveGame::CopyThumbnailTo(const fs::path& slot)
 {
+    storedThumbnailVersion = thumbnailVersion;
+    if (slot.extension() == SaveFile::kExtension)
+    {
+        // A save file written before the thumbnail was: rewritten with it.
+        SaveFile::SSaveFile save;
+        std::string error;
+        if (SaveFile::Read(slot, save, error))
+        {
+            save.thumbnail = ThumbnailPng();
+            if (SaveFile::Write(slot, std::move(save), error))
+                return;
+        }
+        log_warn("[savegame] can't put the thumbnail into %s: %s", slot.string().c_str(), error.c_str());
+        return;
+    }
     std::error_code ec;
     fs::copy_file(ThumbnailFile(), slot / kThumbnailFile, fs::copy_options::overwrite_existing, ec);
     if (ec)
         log_warn("[savegame] can't copy the thumbnail into %s: %s", slot.string().c_str(),
                  ec.message().c_str());
-    storedThumbnailVersion = thumbnailVersion;
 }
 
 // The 640x480 16-bit screen retail captured, from the display's RGBA frame.
@@ -586,26 +830,60 @@ void TSaveGame::WriteBody(TOutputStream& os) const
     }
 }
 
+// The slots: save files and retail slot folders. A name held by both is the
+// newer one's.
 void TSaveGame::RefreshSlots()
 {
     slots.clear();
 
     const fs::path root = SinglePlayerSlotsDir();
+    std::vector<std::pair<SSaveSlot, fs::file_time_type>> found;
     std::error_code ec;
     for (fs::directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec))
     {
         std::error_code entryError;
-        const fs::path file = it->path() / kSaveFile;
-        if (!it->is_directory(entryError) || !fs::is_regular_file(file, entryError))
-            continue;
-
         SSaveSlot slot;
-        slot.name = it->path().filename().string();
-        slot.dir  = it->path();
         SSaveHeader header;
-        slot.module = (ReadHeader(file, header) && header.module[0]) ? header.module
-                                                                     : ActiveModuleName();
-        slots.push_back(std::move(slot));
+        std::vector<uint8_t> game;
+        fs::path stamped;
+        if (it->is_directory(entryError))
+        {
+            stamped = it->path() / kSaveFile;
+            if (!fs::is_regular_file(stamped, entryError) || !ReadFileBytes(stamped, game))
+                continue;
+            slot.name = it->path().filename().string();
+        }
+        else if (it->path().extension() == SaveFile::kExtension)
+        {
+            SaveFile::SSaveFile save;
+            std::string error;
+            if (!SaveFile::Read(it->path(), save, error))
+            {
+                log_warn("[savegame] %s", error.c_str());
+                continue;
+            }
+            game = std::move(save.game);
+            stamped = it->path();
+            slot.name = it->path().stem().string();
+            slot.isFile = true;
+        }
+        else
+            continue;
+        slot.path = it->path();
+        slot.module = (ReadHeader(game, header) && header.module[0]) ? header.module : ActiveModuleName();
+        found.emplace_back(std::move(slot), fs::last_write_time(stamped, entryError));
+    }
+
+    std::sort(found.begin(), found.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
+    for (auto& [slot, written] : found)
+    {
+        const auto same = std::find_if(slots.begin(), slots.end(), [&](const SSaveSlot& other) {
+            return stricmp(other.name.c_str(), slot.name.c_str()) == 0;
+        });
+        if (same == slots.end())
+            slots.push_back(std::move(slot));
+        else
+            *same = std::move(slot);            // the newer of the two
     }
 
     // Retail listed slots in directory order, which on its file system was

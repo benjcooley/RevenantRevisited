@@ -46,15 +46,18 @@ TObjectInstance* LookupMapIndex(int32_t) { return nullptr; }
 int stricmp(const char* a, const char* b) { return strcasecmp(a, b); }
 extern "C" void log_log(int, const char*, int, const char*, ...) {}
 namespace SectorStore {
-std::filesystem::path WorkingSetDir() { ++reads; return fixture / "working"; }
 std::filesystem::path BaseMapDir() { ++reads; return fixture / "base"; }
-FILE* OpenForRead(const char* name) {
+std::vector<std::pair<int32_t, int32_t>> SectorsOn(int32_t) { ++reads; return {}; }
+bool Exists(const char* name) {
     ++reads;
-    return std::fopen((fixture / "base" / name).string().c_str(), "rb");
+    return std::filesystem::exists(fixture / "base" / name);
 }
 void Clear() {}
 int32_t ImportFrom(const std::filesystem::path&) { return 0; }
 int32_t ExportTo(const std::filesystem::path&) { return 0; }
+std::vector<SaveFile::SSectorDelta> Deltas() { return {}; }
+void SetDeltas(const std::vector<SaveFile::SSectorDelta>&) {}
+int32_t Publish() { return 0; }
 }
 
 int main(int argc, char** argv) {

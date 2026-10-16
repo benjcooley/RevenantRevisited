@@ -12,7 +12,6 @@
 
 // Game directories
 #define BASEMAPDIR "map"
-#define CURMAPDIR "curmap"
 
 // Screen size and color depth defines
 #define WIDTH  640
