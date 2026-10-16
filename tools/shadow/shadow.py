@@ -10,14 +10,19 @@ state the run recorded as it saved, field by field. Exits with the game's
 code (0 pass, 1 a step failed, 2 a ledger violation), or 3 when a save
 doesn't come back as it went.
 
+Segments play the plan in pieces from the save point repository
+(tools/shadow/savepoints.py): `--segment <stage>` plays up to and through
+that stage from the newest save point before it, and `--segments` plays
+every segment at once, each from its own.
+
     tools/shadow/shadow.py                          # the whole plan, seed 1
     tools/shadow/shadow.py --until opening --check  # one stage, then check its save
-    tools/shadow/shadow.py --stage s1 --start "left the keep" --until s1
+    tools/shadow/shadow.py --segment druhgcamp      # S2, from the "level 4" save point
+    tools/shadow/shadow.py --segments --jobs 4 --check
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import shutil
@@ -26,13 +31,15 @@ import sys
 import tempfile
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / 'tools' / 'playtest'))
 import waypoints  # noqa: E402  (the catalogue)
+import savepoints  # noqa: E402  (the save point repository)
 
-PLAN = REPO / 'tools' / 'shadow' / 'ahkuilon.plan'
+PLAN = savepoints.PLAN
 BINARY = REPO / 'build' / 'Revenant'
 INI = Path.home() / 'RevenantRevisited-testsaves' / 'Revenant.ini'
 STORY = 'shadow'                     # the catalogue's story list for these saves
@@ -46,22 +53,23 @@ def private_binary(binary: Path) -> Path:
     return copy
 
 
-def run_game(args: argparse.Namespace, run_dir: Path) -> int:
+def run_game(args: argparse.Namespace, run_dir: Path, start: waypoints.Waypoint | None = None,
+             stage: str | None = None, until: str | None = None) -> int:
     """The run itself, in `run_dir`: its save path, the game's output, the
-    run's log in `out/`. Returns the game's exit code."""
+    run's log in `out/`. From a new game, or from `start`'s save at `stage`;
+    to the plan's end, or through `until`. Returns the game's exit code."""
     save = run_dir / 'save'
     save.mkdir(parents=True, exist_ok=True)
     shutil.copy2(args.ini, save / 'Revenant.ini')
     binary = private_binary(args.binary)
     command = [str(binary), '--headless', f'--max-runtime={args.max_runtime}',
                f'--shadow={args.plan.resolve()}', f'--shadow-out={run_dir / "out"}', f'--seed={args.seed}']
-    if args.stage:
-        # Start at a stage, from a waypoint's save copied into this run's slots.
-        waypoint = waypoints.Catalogue().get('port', args.start)
-        shutil.copytree(waypoint.slot_dir, save / 'Save' / 'Single' / waypoint.slot, dirs_exist_ok=True)
-        command += [f'--shadow-stage={args.stage}', f'--quickstart={waypoint.slot}']
-    if args.until:
-        command.append(f'--shadow-until={args.until}')
+    if start:
+        # The start's save copied into this run's slots.
+        savepoints.copy_slot(start, save / 'Save' / 'Single')
+        command += [f'--shadow-stage={stage}', f'--quickstart={savepoints.slot_name(start)}']
+    if until:
+        command.append(f'--shadow-until={until}')
     if args.lenient:
         command.append('--shadow-lenient')
     if args.style:
@@ -110,14 +118,14 @@ def compare_states(saved: dict, loaded: dict) -> list[str]:
     return found
 
 
-def verify_saves(args: argparse.Namespace, run_dir: Path) -> list[str]:
+def verify_saves(args: argparse.Namespace, run_dir: Path, quiet: bool = False) -> dict[str, list[str]]:
     """The round trip of each save the run made: a fresh game loads it and
     writes Locke's state, which must match the state recorded at the save.
-    Returns the differences, by save."""
+    Returns the differences, by slot (none: it held)."""
     listing = run_dir / 'out' / 'waypoints.json'
     if not listing.exists():
-        return []
-    problems = []
+        return {}
+    problems: dict[str, list[str]] = {}
     save = run_dir / 'save'
     verify = run_dir / 'verify'
     verify.mkdir(exist_ok=True)
@@ -137,10 +145,11 @@ def verify_saves(args: argparse.Namespace, run_dir: Path) -> list[str]:
             found = [f'the reload wrote no state (see {verify / (saved["slot"] + ".txt")})']
         else:
             found = compare_states(saved['state'], json.loads(state.read_text()))
-        print(f'  round trip {saved["slot"]!r}: {"ok" if not found else f"{len(found)} differences"}')
-        for f in found:
-            print(f'    {f}')
-        problems += [f'{saved["slot"]}: {f}' for f in found]
+        if not quiet:
+            print(f'  round trip {saved["slot"]!r}: {"ok" if not found else f"{len(found)} differences"}')
+            for f in found:
+                print(f'    {f}')
+        problems[saved['slot']] = found
     return problems
 
 
@@ -198,33 +207,79 @@ def story_report(run_dir: Path) -> list[str]:
     return unseen
 
 
-def file_waypoints(run_dir: Path, plan: Path, seed: int) -> None:
-    """Adds the run's saves to the catalogue."""
+def file_waypoints(run_dir: Path, plan: Path, start: str, trips: dict[str, list[str]], quiet: bool = False) -> None:
+    """Adds the run's saves to the catalogue, each with its save point
+    sidecar (savepoints.py): the plan and stage that made it, the seed, the
+    style, and its round trip (None when unchecked). `start`: the save
+    point the run started from, or 'newgame'."""
     listing = run_dir / 'out' / 'waypoints.json'
     if not listing.exists():
         return
     run = json.loads(listing.read_text())
     catalogue = waypoints.Catalogue()
-    plan_sha = hashlib.sha256(plan.read_bytes()).hexdigest()[:12]
-    parent = 'newgame'
+    sha = savepoints.plan_sha(plan)
+    parent = start
     for index, saved in enumerate(run['waypoints'], 1):
         name = f'shadow {saved["name"]}'
         added = catalogue.add(
-            'port', name, STORY, index, parent, Path(saved['dir']), obs={'player': saved['player']},
+            savepoints.GAME, name, STORY, index, parent, Path(saved['dir']), obs={'player': saved['player']},
             build={'sha': run['sha'], 'name': run['build']}, tick=saved['tick'],
-            note=f'Shadow Smoke, plan {plan.name}@{plan_sha}, seed {seed}, stage {saved["stage"]}',
+            note=f'Shadow Smoke, plan {plan.name}@{sha}, seed {run["seed"]}, stage {saved["stage"]}',
             slot_name=saved['slot'])
-        print(f'  filed {name!r} -> {added.dir}')
+        trip = trips.get(saved['slot'])
+        savepoints.record(added, {
+            'point': saved['name'], 'plan': plan.name, 'plan_sha': sha, 'stage': saved['stage'],
+            'seed': run['seed'], 'style': run.get('style'), 'started_from': start,
+            'round_trip': None if trip is None else not trip, 'differences': trip or [],
+        })
+        if not quiet:
+            print(f'  filed {name!r} -> {added.dir}')
         parent = name
+
+
+def play(args: argparse.Namespace, run_dir: Path, start: savepoints.SavePoint | None = None,
+         stage: str | None = None, until: str | None = None, quiet: bool = False) -> int:
+    """One run, start to end: the game, the round trips (--check), the story
+    report, and the saves filed. Returns the exit code."""
+    run_dir.mkdir(parents=True, exist_ok=True)
+    code = run_game(args, run_dir, start.waypoint if start else None, stage, until)
+    summary = run_dir / 'out' / 'summary.txt'
+    if not quiet:
+        print(summary.read_text() if summary.exists() else f'no summary; see {run_dir / "game.txt"}')
+    trips = verify_saves(args, run_dir, quiet) if args.check else {}
+    if any(trips.values()) and code == 0:
+        code = 3
+    unseen = story_report(run_dir) if not quiet else []
+    if args.story_gate and unseen and code == 0:
+        print('  story gate:\n' + '\n'.join(f'    {u}' for u in unseen))
+        code = 4
+    if not args.no_file:
+        file_waypoints(run_dir, args.plan.resolve(), f'shadow {start.name}' if start else 'newgame', trips, quiet)
+    return code
+
+
+def play_segment(args: argparse.Namespace, run_root: Path, stage: str, quiet: bool = False) -> tuple[int, str]:
+    """The segment that ends with `stage`, from the newest save point before
+    it. Returns the exit code and a line on it."""
+    start, first = savepoints.start_for(args.plan.resolve(), stage)
+    began = time.monotonic()
+    code = play(args, run_root / stage, start, first if start else None, stage, quiet)
+    where = f'from {start.name!r}' if start else 'from a new game'
+    span = first if first == stage else f'{first}..{stage}'
+    return code, f'{stage:<10} {span:<22} {where:<26} {RESULTS.get(code, code)} in {time.monotonic() - began:.0f} s'
+
+
+RESULTS = {0: 'pass', 1: 'FAIL', 2: 'VIOLATION', 3: 'ROUND TRIP', 4: 'STORY'}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('plan', type=Path, nargs='?', default=PLAN)
     parser.add_argument('--seed', type=int, default=1)
-    parser.add_argument('--stage', help='start at this stage, from the waypoint --start names')
-    parser.add_argument('--start', help='the waypoint (catalogue name or directory) --stage starts from')
     parser.add_argument('--until', help='stop after this stage')
+    parser.add_argument('--segment', help="play the segment that ends with this stage, from the save point before it")
+    parser.add_argument('--segments', action='store_true', help='play every segment, each from its save point')
+    parser.add_argument('--jobs', type=int, default=3, help='segments played at once')
     parser.add_argument('--story-gate', action='store_true',
                         help="fail (4) when the town hasn't seen a story change by the end of the run")
     parser.add_argument('--style', choices=['melee', 'hands', 'bow', 'spells', 'mixed'],
@@ -239,24 +294,24 @@ def main() -> int:
     parser.add_argument('--ini', type=Path, default=INI)
     parser.add_argument('--max-runtime', type=int, default=3600, help='seconds of wall time')
     args = parser.parse_args()
-    if bool(args.stage) != bool(args.start):
-        parser.error('--stage and --start go together')
+    if sum(bool(x) for x in (args.until, args.segment, args.segments)) > 1:
+        parser.error('--until, --segment and --segments go one at a time')
 
     run_dir = args.run_dir.resolve()
-    run_dir.mkdir(parents=True, exist_ok=True)
     print(f'shadow: {args.plan} seed {args.seed} in {run_dir}')
-    code = run_game(args, run_dir)
-    summary = run_dir / 'out' / 'summary.txt'
-    print(summary.read_text() if summary.exists() else f'no summary; see {run_dir / "game.txt"}')
-    if args.check and verify_saves(args, run_dir) and code == 0:
-        code = 3
-    unseen = story_report(run_dir)
-    if args.story_gate and unseen and code == 0:
-        print('  story gate:\n' + '\n'.join(f'    {u}' for u in unseen))
-        code = 4
-    if not args.no_file:
-        file_waypoints(run_dir, args.plan.resolve(), args.seed)
-    return code
+    if args.segment:
+        code, line = play_segment(args, run_dir, args.segment)
+        print('  ' + line)
+        return code
+    if args.segments:
+        stages = savepoints.segments(args.plan.resolve())
+        with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
+            results = list(pool.map(lambda s: play_segment(args, run_dir, s, quiet=True), stages))
+        print('segments:')
+        for _, line in results:
+            print('  ' + line)
+        return max((code for code, _ in results), default=0)
+    return play(args, run_dir, until=args.until)
 
 
 if __name__ == '__main__':
