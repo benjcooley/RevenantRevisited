@@ -490,6 +490,7 @@ void TShadowRun::WriteWaypoints() const
     out.Begin('{');
     out.FieldString("plan", plan.Path());
     out.Field("seed", options.seed);
+    out.FieldString("style", kShadowStyleNames[size_t(plan.Style())]);
     out.FieldString("build", kBuildName);
     out.FieldString("sha", kBuildSha);
     out.Key("waypoints").Begin('[');

@@ -37,7 +37,7 @@ struct SShadowWaypoint
 {
     std::string           name;
     std::string           slot;
-    std::filesystem::path dir;
+    std::filesystem::path dir;          // the slot: its save file, or its folder
     std::string           stage;
     int64_t               tick = 0;
     // Locke as he was saved, for the catalogue's manifest.
