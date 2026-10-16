@@ -7,7 +7,12 @@
 //! Compare the Rust readers with the actual C++ bitmap decoder and resource
 //! structures. Retail bytes pass over stdin without extracting asset files.
 use anyhow::{Context, Result, ensure};
-use revenant::assets::{bitmap::Bitmap, font::Font, multi::Multi, vfs::Vfs};
+use revenant::assets::{
+    bitmap::{Bitmap, Decode},
+    font::Font,
+    multi::Multi,
+    vfs::Vfs,
+};
 use std::{
     fs,
     io::Write,
@@ -72,7 +77,7 @@ void FatalError(const char* message) { throw std::runtime_error(message); }
         r#"
 using TBitmap = TBitmapData;
 using PTBitmap = TBitmap*;
-class TMulti : public TMultiData { public: void* Object(char* name); };
+class TMulti : public TMultiData { public: void* Find(const char* name); void* Object(const char* name); };
 static_assert(sizeof(FileResHdr) == 20);
 static_assert(offsetof(TBitmapData, data8) == 72);
 static_assert(sizeof(TMultiData) == 2052);
@@ -83,16 +88,19 @@ static_assert(offsetof(TFontData, chars) == 1032);
         src.join("multi.cpp"),
     )?));
     harness.push_str(&without_includes(&fs::read_to_string(
+        src.join("bitmapdecode.h"),
+    )?));
+    harness.push_str(&without_includes(&fs::read_to_string(
         src.join("bitmapdecode.cpp"),
     )?));
     harness.push_str(r#"
 void value(int32_t v) { if (std::fwrite(&v, sizeof(v), 1, stdout) != 1) throw std::runtime_error("stdout"); }
-void bitmap(PTBitmap bm, bool alias) {
+void bitmap(PTBitmap bm, EBitmapDecode decode) {
     if (!bm || bm->width <= 0 || bm->height <= 0 || bm->width > 4096 || bm->height > 4096)
         throw std::runtime_error("invalid bitmap dimensions");
     value(bm->width); value(bm->height); value(bm->regx); value(bm->regy);
     std::vector<uint8_t> rgba(size_t(bm->width) * bm->height * 4);
-    if (!DecodeBitmapToRGBA(bm, rgba.data(), bm->width * 4, 0, 0, alias))
+    if (!DecodeBitmapToRGBA(bm, rgba.data(), bm->width * 4, 0, 0, decode))
         throw std::runtime_error("native bitmap decode failed");
     for (size_t i = 0; i < rgba.size(); i += 4) {
         uint32_t argb = uint32_t(rgba[i+3]) << 24 | uint32_t(rgba[i]) << 16
@@ -121,11 +129,12 @@ int main(int argc, char** argv) {
                 if (index < 0 || index >= font->numchars) throw std::runtime_error("font range");
                 value(font->height); value(-font->drawleft[index]); value(-font->startheight[index]);
                 value(int(font->drawright[index]) - font->drawleft[index]);
-                bitmap(reinterpret_cast<PTBitmap>(font->chars[index].ptr()), false);
+                bitmap(reinterpret_cast<PTBitmap>(font->chars[index].ptr()), EBitmapDecode::PixelsAndAlias);
             } else {
-                bool alias = argv[i][0] == '@';
+                const char prefix = argv[i][0];
+                const auto mode = prefix == '@' ? EBitmapDecode::Alias : prefix == '!' ? EBitmapDecode::Unkeyed : prefix == '%' ? EBitmapDecode::Overlay4444 : prefix == '+' ? EBitmapDecode::MagentaKeyed : EBitmapDecode::Pixels;
                 auto* multi = reinterpret_cast<TMulti*>(body);
-                bitmap(reinterpret_cast<PTBitmap>(multi->Object(argv[i] + (alias ? 1 : 0))), alias);
+                bitmap(reinterpret_cast<PTBitmap>(multi->Object(argv[i] + (mode != EBitmapDecode::Pixels ? 1 : 0))), mode);
             }
         }
     } catch (const std::exception& error) {
@@ -243,10 +252,30 @@ fn retail_cursor_hud_and_font_pixels_match_native_cpp() -> Result<()> {
                 "Ring",
             ][..],
         ),
-        ("portraits.dat", &["LockeFace"][..]),
+        (
+            "statusbar.dat",
+            &[
+                "BackPanel",
+                "Bars",
+                "HealthIcon",
+                "ManaIcon",
+                "FatigueIcon",
+                "Ring",
+            ][..],
+        ),
+        ("sidebartabs.dat", &["Up", "Down", "Select"][..]),
+        (
+            "widgetsalpha.dat",
+            &["!FillFrame1", "!CheckU", "!HScrollBar"][..],
+        ),
+        (
+            "widgetstex.dat",
+            &["!FillFrame1", "!CheckU", "!HScrollBar"][..],
+        ),
+        ("portraits.dat", &["LockeFace", "%LockeFace"][..]),
         (
             "bottombar.dat",
-            &["UtilityBar", "BarEndCap", "BarInvBox"][..],
+            &["!UtilityBar", "!BarEndCap", "!BarInvBox"][..],
         ),
         ("sidebartabsnotex.dat", &["Up", "Down", "Select"][..]),
         (
@@ -264,7 +293,7 @@ fn retail_cursor_hud_and_font_pixels_match_native_cpp() -> Result<()> {
         ("spellscroll.dat", &["Scroll"][..]),
         ("spellpane.dat", &["spellconstr"][..]),
         ("automap.dat", &["Amap", "Marker"][..]),
-        ("spellicons.dat", &["RingG"][..]),
+        ("spellicons.dat", &["!RingG"][..]),
     ] {
         let bytes = vfs.read(file)?;
         let multi = Multi::parse(&bytes)?;
@@ -273,6 +302,12 @@ fn retail_cursor_hud_and_font_pixels_match_native_cpp() -> Result<()> {
         for &name in names {
             let rust = if let Some(name) = name.strip_prefix('@') {
                 multi.bitmap_alias(name)?
+            } else if let Some(name) = name.strip_prefix('!') {
+                multi.bitmap_mode(name, Decode::Unkeyed)?
+            } else if let Some(name) = name.strip_prefix('%') {
+                multi.bitmap_mode(name, Decode::Overlay4444)?
+            } else if let Some(name) = name.strip_prefix('+') {
+                multi.bitmap_mode(name, Decode::MagentaKeyed)?
             } else {
                 multi.bitmap(name)?
             };

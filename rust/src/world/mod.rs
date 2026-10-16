@@ -63,26 +63,55 @@ pub fn sector_ids(vfs: &Vfs) -> Result<BTreeSet<SectorId>> {
         .collect())
 }
 
-impl Scene {
-    pub fn load(vfs: &mut Vfs, catalog: &Catalog, ids: &[SectorId]) -> Result<Self> {
-        Self::load_with_assets(vfs, catalog, ids, &mut AssetCache::default())
-    }
-    pub fn load_with_assets(
-        vfs: &mut Vfs,
-        catalog: &Catalog,
-        ids: &[SectorId],
-        assets: &mut AssetCache,
-    ) -> Result<Self> {
-        let mut scene = Self {
+/// Incremental scene assembly: one sector per step, then the walkmap. The
+/// synchronous loader below uses the same path, so validation and gameplay agree.
+pub struct SceneLoader {
+    scene: Scene,
+    tiles: BTreeMap<(String, u16), Option<Arc<Tile>>>,
+    meshes: BTreeMap<String, Option<Arc<Mesh>>>,
+    pending: std::vec::IntoIter<SectorId>,
+    total: usize,
+    finished: bool,
+}
+impl SceneLoader {
+    pub fn new(ids: &[SectorId]) -> Self {
+        let scene = Scene {
             sectors: BTreeMap::new(),
             draws: Vec::new(),
             sources: Vec::new(),
             walkmap: walkmap::WalkMap::default(),
             report: SceneReport::default(),
         };
-        let mut cache: BTreeMap<(String, u16), Option<Arc<Tile>>> = BTreeMap::new();
-        let mut meshes: BTreeMap<String, Option<Arc<Mesh>>> = BTreeMap::new();
-        for &id in ids {
+        Self {
+            scene,
+            tiles: BTreeMap::new(),
+            meshes: BTreeMap::new(),
+            pending: Vec::from(ids).into_iter(),
+            total: ids.len() + 1,
+            finished: false,
+        }
+    }
+    pub fn progress(&self) -> u16 {
+        if self.finished {
+            1000
+        } else {
+            ((self.total - self.pending.len() - 1) * 1000 / self.total) as u16
+        }
+    }
+    /// True means another step remains. Errors leave this loader disposable.
+    pub fn step(
+        &mut self,
+        vfs: &mut Vfs,
+        catalog: &Catalog,
+        assets: &mut AssetCache,
+    ) -> Result<bool> {
+        if self.finished {
+            return Ok(false);
+        }
+        let scene = &mut self.scene;
+        let cache = &mut self.tiles;
+        let meshes = &mut self.meshes;
+        if let Some(id) = self.pending.next() {
             let bytes = vfs.read(&id.path())?;
             let sector = Sector::parse(id, &bytes)?;
             scene.report.sectors += 1;
@@ -192,6 +221,7 @@ impl Scene {
                 scene.sources.push(source);
             }
             scene.sectors.insert(id, sector);
+            return Ok(true);
         }
         scene.report.mesh_assets = meshes.values().flatten().count();
         scene.report.tile_assets = cache.values().flatten().count();
@@ -203,7 +233,28 @@ impl Scene {
             "selected sectors contain no renderable imagery; {} decode warnings",
             scene.report.warnings.len()
         );
-        Ok(scene)
+        self.finished = true;
+        Ok(false)
+    }
+    pub fn finish(self) -> Result<Scene> {
+        ensure!(self.finished, "scene loading is incomplete");
+        Ok(self.scene)
+    }
+}
+
+impl Scene {
+    pub fn load(vfs: &mut Vfs, catalog: &Catalog, ids: &[SectorId]) -> Result<Self> {
+        Self::load_with_assets(vfs, catalog, ids, &mut AssetCache::default())
+    }
+    pub fn load_with_assets(
+        vfs: &mut Vfs,
+        catalog: &Catalog,
+        ids: &[SectorId],
+        assets: &mut AssetCache,
+    ) -> Result<Self> {
+        let mut loader = SceneLoader::new(ids);
+        while loader.step(vfs, catalog, assets)? {}
+        loader.finish()
     }
 
     /// Match native map lighting: cull by projected radius, retain the nearest 16.

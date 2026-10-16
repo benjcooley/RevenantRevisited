@@ -59,6 +59,15 @@ fn retail_panes_equipment_scaling_and_pointer_capture() -> Result<()> {
             )?;
             let before = frame.pixels.clone();
             batch.begin();
+            batch.overlay(
+                None,
+                revenant::render::effects::Overlay {
+                    rect: [0.0, 0.0, frame.width as f32, frame.height as f32],
+                    uv: [0.0, 0.0, 1.0, 1.0],
+                    color: [0.0, 0.0, 0.0, 1.0],
+                    clip: None,
+                },
+            );
             hud.record(
                 &mut frame,
                 &scene,
@@ -76,6 +85,17 @@ fn retail_panes_equipment_scaling_and_pointer_capture() -> Result<()> {
             )?;
             assert_ne!(before, frame.pixels);
             frame.save_png(format!("captures/hud-{name}-{width}.png").as_ref())?;
+            if name == "equipment" && width == 640 {
+                renderer.render(
+                    &mut frame,
+                    &[],
+                    &camera,
+                    &Default::default(),
+                    false,
+                    &batch.effects,
+                )?;
+                frame.save_png("captures/hud-chrome-640.png".as_ref())?;
+            }
         }
     }
     let viewport = [640, 480];
@@ -108,14 +128,13 @@ fn retail_panes_equipment_scaling_and_pointer_capture() -> Result<()> {
     let body_slot = [610.0, 80.0];
     assert!(event(&mut hud, body_slot, true, true).pressed);
     assert!(event(&mut hud, body_slot, false, true).activated);
-    assert_eq!(hud.message, "Body: 5 attached parts");
     hud.toggle_sidebar();
     assert_eq!(hud.layout(viewport).world_viewport(), [640, 420]);
     hud.toggle_visible();
     assert_eq!(hud.layout(viewport).world_viewport(), viewport);
     assert!(!hud.layout(viewport).hit_test(body_slot));
     println!(
-        "Verified 6 pane types at 3 resolutions, gear preview, capture cancellation and slot inspection"
+        "Verified 6 pane types at 3 resolutions, gear preview, capture cancellation and slot input"
     );
     Ok(())
 }

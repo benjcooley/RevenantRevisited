@@ -113,7 +113,7 @@ impl Exploration {
         let owner = scene.draws.len();
         scene.draws.push(Draw::Mesh(draw));
         scene.sources.push(DrawSource {
-            name: "Locke (walk preview)".into(),
+            name: "Locke".into(),
             sector,
             slot: 0,
             map_id: MapId(-1),

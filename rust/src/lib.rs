@@ -11,6 +11,7 @@
 
 pub mod assets;
 pub mod audio;
+pub mod game;
 pub mod input;
 pub mod render;
 pub mod ui;

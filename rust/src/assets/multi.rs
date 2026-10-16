@@ -45,8 +45,24 @@ impl<'a> Multi<'a> {
     pub fn bitmap(&self, name: &str) -> Result<Bitmap> {
         self.decode(name, false)
     }
+    pub fn bitmap_native(&self, name: &str) -> Result<Bitmap> {
+        let (_, at) = self
+            .entries
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .with_context(|| format!("missing bitmap {name}"))?;
+        Bitmap::decode_native(self.body, *at).with_context(|| format!("bitmap {name}"))
+    }
     pub fn bitmap_alias(&self, name: &str) -> Result<Bitmap> {
         self.decode(name, true)
+    }
+    pub fn bitmap_mode(&self, name: &str, mode: super::bitmap::Decode) -> Result<Bitmap> {
+        let (_, at) = self
+            .entries
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .with_context(|| format!("missing bitmap {name}"))?;
+        Bitmap::decode_mode(self.body, *at, false, mode).with_context(|| format!("bitmap {name}"))
     }
     fn decode(&self, name: &str, alias: bool) -> Result<Bitmap> {
         let (_, at) = self

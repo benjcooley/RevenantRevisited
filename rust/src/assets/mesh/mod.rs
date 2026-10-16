@@ -178,6 +178,41 @@ fn decode_materials(b: Bytes<'_>, at: usize, count: usize) -> Result<Vec<Materia
 }
 
 impl Mesh {
+    /// Retail's status portrait comes from the imagery's state-zero inventory
+    /// icon, not Portraits.dat. Read it independently of geometry residency.
+    pub fn portrait(data: &[u8]) -> Result<Option<super::bitmap::Bitmap>> {
+        let resource = Resource::parse(data)?;
+        ensure!(resource.header.i32(0)? == 1, "portrait is not 3D imagery");
+        let b = resource.body;
+        let flags = b.u32(0)?;
+        if flags & 2 == 0 {
+            return Ok(None);
+        }
+        let state = if flags & 16 != 0 {
+            ensure!((1..=3).contains(&b.u32(4)?), "unsupported I3D body version");
+            b.relative(8)?
+        } else {
+            b.relative(6876)? // SOld3DImageryBody.imagery[0]
+        };
+        let Some(state) = state else { return Ok(None) };
+        let Some(bitmap) = b.relative(state + 4)? else {
+            // Animated inventory icons expose their first frame as a portrait.
+            let Some(animation) = b.relative(state + 8)? else {
+                return Ok(None);
+            };
+            ensure!(b.i32(animation + 12)? > 0, "empty portrait animation");
+            let frame = pointer(b, animation + 20 + 36)?;
+            return super::bitmap::Bitmap::decode_mode(
+                b,
+                frame,
+                false,
+                super::bitmap::Decode::Overlay4444,
+            )
+            .map(Some);
+        };
+        super::bitmap::Bitmap::decode_mode(b, bitmap, false, super::bitmap::Decode::Overlay4444)
+            .map(Some)
+    }
     /// Frame snapshots stay immutable, allowing simultaneous instances at different poses.
     pub fn vertex_sample(&self, state: usize, frame: u32) -> usize {
         if self.morph.is_empty() || self.morph[state].is_empty() {
