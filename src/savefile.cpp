@@ -502,7 +502,9 @@ bool ApplySectorDelta(const SSectorDelta& delta, const std::vector<uint8_t>* bas
         EState state = EState::Base;
         const std::vector<uint8_t>* replacement = nullptr;
     };
-    std::vector<SOut> out(was.slots.size());
+    // MSVC: vector(n) cannot default-construct_at SOut here (C2672); the
+    // copy-insert form compiles everywhere.
+    std::vector<SOut> out(was.slots.size(), SOut{});
     const std::vector<uint64_t> keys = KeysOf(delta.level, delta.x, delta.y, *base, was);
     std::multimap<uint64_t, size_t> byKey;
     for (size_t i = 0; i < keys.size(); ++i)
