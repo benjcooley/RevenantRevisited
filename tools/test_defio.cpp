@@ -225,8 +225,10 @@ TEST(DefIo, FlatObject)
 // is not next to the sources (CI without the data tree).
 TEST(DefIo, RealEffectsDef)
 {
-    std::ifstream in(std::string(REV_SOURCE_DIR) + "/data/Resources/effects.def");
-    if (!in) GTEST_SKIP() << "effects.def not found";
+    // assets/effects.def is the tracked file the game loads (data/ is a
+    // local-only install copy), so this runs in CI too.
+    std::ifstream in(std::string(REV_SOURCE_DIR) + "/assets/effects.def");
+    ASSERT_TRUE(bool(in)) << "assets/effects.def not found";
     std::stringstream ss;
     ss << in.rdbuf();
     const std::string text = ss.str();
@@ -244,7 +246,7 @@ TEST(DefIo, RealEffectsDef)
     ASSERT_EQ(torch->bucket.size(), 1u);
     EXPECT_TRUE(torch->bucket[0].chroma_key_enabled);                 // [255, 0, 0] -> PostLoad
     EXPECT_FLOAT_EQ(torch->bucket[0].chroma_key_rgb[0], 1.0f);
-    EXPECT_TRUE(torch->bucket[0].additive);
+    EXPECT_FALSE(torch->bucket[0].additive);                          // tracked file: blend = alpha
     ASSERT_EQ(torch->emitter.size(), 1u);
     EXPECT_FLOAT_EQ(torch->emitter[0].local_pos.Z, 32.0f);
     ASSERT_EQ(torch->emitter[0].output.size(), 1u);
