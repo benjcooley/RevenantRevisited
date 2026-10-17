@@ -59,6 +59,7 @@ class TNodeInst : public TSafeObjectBase<TNodeInst>
     virtual ~TNodeInst();
 
     // ---- Identity --------------------------------------------------------
+    DEF_BLOCK("node")
     PROP_FN(1, std::string, name,   GetName,     );                   // read-only
     PROP_FN(2, hmm_vec3,    pos,    LocalPos,    SetLocalPos);
     PROP_FN(3, hmm_vec3,    rot,    LocalRotDeg, SetLocalRotDeg);     // euler, degrees

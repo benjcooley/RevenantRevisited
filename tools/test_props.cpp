@@ -4,7 +4,6 @@
 
 #include "test_props_types.h"
 #include "../src/packed.h"
-#include "../src/propdef.h"
 
 #include <gtest/gtest.h>
 
@@ -31,7 +30,15 @@ TEST(Props, TableFromAnnotations)
     EXPECT_EQ(t[0].id, 1);
     EXPECT_STREQ(t[1].name, "diffuse");
     EXPECT_EQ(t[1].type, EPropType::Color);
-    EXPECT_EQ(t[2].flags, uint8_t(PropFlag_NoSave));
+    EXPECT_FALSE(t[2].serialized);
+    EXPECT_STREQ(t[2].desc, "UV scroll rate");
+    EXPECT_TRUE(t[1].serialized);
+    EXPECT_TRUE(t[7].read_only);
+    EXPECT_EQ(t[0].def.type, EPropType::Bool);  EXPECT_TRUE(t[0].def.b);
+    EXPECT_EQ(t[1].def.type, EPropType::Color); EXPECT_FLOAT_EQ(t[1].def.c4[3], 1.0f);
+    EXPECT_EQ(t[7].def.i, 7);
+    EXPECT_EQ(t[6].def.i, int32_t(ETestBlend::Alpha));
+    EXPECT_EQ(t[5].def.str, "");
     EXPECT_EQ(t[6].type, EPropType::Enum);
     ASSERT_EQ(t[6].option_count, 3);
     EXPECT_STREQ(t[6].options[2].name, "additive_straight");
@@ -196,64 +203,6 @@ TEST(Packed, Varints)
     EXPECT_FALSE(r.Next(f));
 }
 
-TEST(PropDef, ApplyAndWrite)
-{
-    const char* text =
-        "mesh core\n"
-        "{\n"
-        "    visible = false\n"
-        "    diffuse = [0.5, 0.25, 0.0]\n"
-        "    pos = [10, 20, 30]\n"
-        "    frame = 4\n"
-        "    object = \"cyl01\"\n"
-        "    blend = additive_straight\n"
-        "    child sub { frame = 1 }\n"       // sub-block: ignored by Apply
-        "}\n";
-    defdoc::Document doc = defdoc::Document::parse(text);
-    const defdoc::Node* block = doc.root().blocks("mesh").front();
-    ASSERT_NE(block, nullptr);
-
-    STestMesh m;
-    std::string err;
-    EXPECT_TRUE(propdef::Apply(m, *block, &err)) << err;
-    EXPECT_FALSE(m.visible);
-    EXPECT_EQ(m.diffuse, (SRgba{0.5f, 0.25f, 0.0f, 1.0f}));
-    EXPECT_FLOAT_EQ(m.pos.Y, 20.0f);
-    EXPECT_EQ(m.frame, 4);
-    EXPECT_EQ(m.object, "cyl01");
-    EXPECT_EQ(m.blend, ETestBlend::AdditiveStraight);
-
-    // Write back, re-apply onto a fresh object, compare.
-    defdoc::Node out;
-    propdef::Write(m, out);
-    EXPECT_FALSE(out.contains("uv_scroll"));       // NoSave
-    EXPECT_FALSE(out.contains("generation"));      // ReadOnly
-    EXPECT_EQ(out["blend"].as_string(), "additive_straight");
-    STestMesh m2;
-    EXPECT_TRUE(propdef::Apply(m2, out, &err)) << err;
-    EXPECT_EQ(m2.object, "cyl01");
-    EXPECT_EQ(m2.diffuse, m.diffuse);
-    EXPECT_EQ(m2.blend, m.blend);
-}
-
-TEST(PropDef, StrictErrors)
-{
-    STestMesh m;
-    std::string err;
-    defdoc::Document doc = defdoc::Document::parse("mesh x { colour = [1,1,1] }");
-    EXPECT_FALSE(propdef::Apply(m, *doc.root().blocks("mesh").front(), &err));
-    EXPECT_NE(err.find("unknown property 'colour'"), std::string::npos) << err;
-
-    doc = defdoc::Document::parse("mesh x { blend = subtractive }");
-    EXPECT_FALSE(propdef::Apply(m, *doc.root().blocks("mesh").front(), &err));
-    EXPECT_NE(err.find("unknown option 'subtractive'"), std::string::npos) << err;
-
-    doc = defdoc::Document::parse("mesh x { generation = 3 }");
-    EXPECT_FALSE(propdef::Apply(m, *doc.root().blocks("mesh").front(), &err));
-    EXPECT_NE(err.find("read-only"), std::string::npos) << err;
-    EXPECT_EQ(m.generation, 7);
-}
-
 TEST(Props, AccessorBacked)
 {
     const refl::SType& type = *refl::Of<STestAccessor>();
@@ -261,8 +210,10 @@ TEST(Props, AccessorBacked)
     ASSERT_EQ(type.prop_count, 4);
     const refl::SProp* t = type.props;
     EXPECT_STREQ(t[0].name, "pos");
-    EXPECT_EQ(t[2].flags & PropFlag_ReadOnly, PropFlag_ReadOnly);
-    EXPECT_EQ(t[3].flags & PropFlag_Hidden, PropFlag_Hidden);
+    EXPECT_TRUE(t[2].read_only);
+    EXPECT_FALSE(t[3].visible_in_editor);
+    EXPECT_EQ(t[3].def.i, int32_t(ETestBlend::Alpha));
+    EXPECT_FLOAT_EQ(t[1].def.f, 1.0f);
 
     EXPECT_TRUE(refl::Set(type, &a, 1, SPropValue::Vec3(1, 2, 3)));
     EXPECT_FLOAT_EQ(a.LocalPos().Z, 3.0f);

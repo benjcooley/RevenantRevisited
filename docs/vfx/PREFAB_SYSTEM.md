@@ -88,123 +88,117 @@ Files: `src/nodeinst.{h,cpp}` (new), `src/objectcomponent.{h,cpp}`,
 `src/object.{h,cpp}`, `src/transform.{h,cpp}`, `src/saferef.h` comment.
 `tools/test_transform.cpp` gains node-tree + path-resolution tests.
 
-## 2. Properties: C++26 annotations, polyfilled by a generator
+## 2. Reflection: C++26 annotations, polyfilled by a generator
 
-Members that are tweakable, serializable or animatable carry a C++26
-annotation (P2996 reflection + P3394 annotations, both in the C++26
-draft). No compiler we ship on reads them yet (GCC 16 and Bloomberg's
-experimental Clang fork do; Apple Clang and MSVC do not), so a **small
-build-time generator** polyfills exactly what reflection would give us.
-When the compiler catches up, the generator is deleted and nothing in a
-header changes.
+**Landed 2026-10-16** as `src/refl.{h,cpp}` + `tools/reflect/gen.py`;
+tests in `tools/test_props.cpp`.
+
+Reflection is its own module. A class that wants tweakable, serializable
+or animatable state annotates members and nothing else: no base class,
+no declared overrides, no enum, no switch.
 
 ```cpp
-#if __cpp_annotations
-#  define PROP(...) [[=SPropMeta{__VA_ARGS__}]]
-#else
-#  define PROP(...)
-#endif
-
 class TMeshComponent : public TObjectComponent
 {
-    PROP(1)                  bool        visible   = true;
-    PROP(2)                  SColor      diffuse   = {1, 1, 1, 1};
-    PROP(3, PropFlag_NoSave) float       uv_scroll = 0.0f;
-    PROP(6)                  std::string object;
-    void OnPropChanged(uint16_t id);     // optional: rebind the mesh when `object` changes
+    DEF_COMPONENT("mesh")                             // block keyword + factory
+    PROP(1, "Draw this mesh")       bool        visible   = true;
+    PROP(2, "Material colour")      SRgba       diffuse   = {1, 1, 1, 1};
+    PROP_NOSAVE(3)                  float       uv_scroll = 0.0f;
+    PROP_FN(4, hmm_vec3, pos, LocalPos, SetLocalPos, "Local position");
+    void OnPropChanged(uint16_t id);                  // optional hook
 };
 ```
 
-The generator (`tools/reflect/gen.py`, run by CMake into the build
-directory) reads only `class X` / `struct X`, the matching close brace,
-and lines of the form `PROP(id[, flags]) type name [= default];`. It
-emits per class: the static table (id, name = the identifier, type from
-a closed type map, flags), `SetProp` / `GetProp` as one switch each,
-`Pack` / `Unpack` for the byte buffer, and a call to `OnPropChanged(id)`
-after a set when the class declares it. The hand-written side never
-contains a property enum or a switch.
+`PROP` is the C++26 member annotation (P2996 reflection + P3394
+annotations, both in the C++26 draft) and expands to nothing until Apple
+Clang and MSVC read them (GCC 16 and Bloomberg's Clang fork already do).
+Until then `tools/reflect/gen.py`, run by CMake (`rev_reflect(<target>
+<headers>)`), emits into the build tree exactly what reflection would
+give us, **outside the class**: a `refl::SType` (property table + typed
+get/set thunks) registered under the class's `type_info`, plus name
+tables for any `enum class` an annotated member uses. When the compiler
+catches up the generator is deleted and no header changes.
+
+**The property record** is id, name, description, type, three booleans and
+a default:
+
+| Field | Source |
+|---|---|
+| `id` | the integer in the annotation; also the wire tag (append-only, never reused) |
+| `name` | the member identifier (trailing `_` dropped) — the DEF key |
+| `desc` | the quoted string in the annotation, if any |
+| `type` | closed map: bool, int32_t, float, std::string, hmm_vec3, SRgba, `enum class` declared in the same header |
+| `serialized` / `visible_in_editor` / `read_only` | true / true / false by default; the rare cases are separate macros `PROP_NOSAVE`, `PROP_HIDDEN`, `PROP_READONLY` (and `PROP_FN_NOSAVE` / `PROP_FN_HIDDEN`; a `PROP_FN` with no setter is read-only) |
+| `def` | the member initializer, which must be a **simple literal** (number, `true`/`false`, string literal, brace list of numbers, `EType::Enumerator`); named constants, macros and expressions are rejected at generation. Accessor-backed properties state it with `def(literal)` |
 
 Rules that keep it honest:
 
-- **The parser stays dumb.** A `PROP` line it cannot parse is a build
-  error, never a guess. Supported member types are a closed list: bool,
-  int32_t, float, std::string, vec3, color, enums with a sibling name
-  table, soft-ref ids, and nested annotated structs (the bucket def).
-  Templates, inheritance and macros in member declarations are out of
-  scope on purpose.
-- **The id is the wire tag.** Append-only, never renumbered, never
-  reused. Names exist only for DEF text, the editor and track binding.
-- **One interface for every consumer.** `TPropertyHost` on both
-  `TNodeInst` and `TObjectComponent`: `Props(count)`, `SetProp(id, value)`,
-  `GetProp(id, out)`, plus lane-generic `SetPropLane` / `GetPropLane`.
-  The packed codec, the DEF bake, the inspector, undo and tracks talk to
-  this and nothing else.
-- Lanes are derived from the type (`Vec3` → `.x .y .z`, `Color` →
-  `.r .g .b .a`). `Bool` is 0 / 1 under a track; `Trigger` fires on a
-  rising edge and reads as 0.
+- **The parser stays dumb.** It recognises `class` / `struct` (brace on
+  the same or next line), `enum class`, `PROP*` lines, `DEF_BLOCK` /
+  `DEF_COMPONENT`, and the `OnPropChanged` hook. A line it cannot parse
+  is a build error with file and line, never a guess.
+- Annotated members must be accessible (public) or exposed through
+  `PROP_FN` accessors; the generated thunks live outside the class.
+- A derived annotated class sees its base's properties (`SType::base`,
+  linked by name on first lookup).
+- **Everything else talks to the registry**: `refl::Of<T>()` /
+  `refl::Of(obj)` (dynamic type), `refl::FindByDefName("mesh")`,
+  `FindProp`, `Set` / `Get`, `SetLane` / `GetLane` (lanes derived from
+  the type: `Vec3` → x y z, `Color` → r g b a; bool is 0 / 1 under a
+  track), `Pack` / `Unpack`, `Reset` (to defaults), `Equals`.
 - **Track / script targets** are `node/path.component.property[.lane]`:
-  `"core.mesh.diffuse.a"`, `"ring.scl.z"`, `"burst.emitter.burst"`.
-  Component segment omitted for node properties; two components of one
-  type on a node are named (`mesh:outer`). Resolved at stamp time to
-  `SPropertyBinding { TSafeRef<TNodeInst> node; int16_t slot; uint32_t gen; uint16_t id; uint8_t lane; }`.
-  A dead node makes the binding a no-op. Unknown names are a load-time
+  `"core.mesh.diffuse.a"`, `"ring.scl.z"`. The component segment is
+  omitted for node properties; two components of one type on a node are
+  told apart by their DEF label (`mesh outer { }`). Resolved at stamp time
+  to `SPropertyBinding { TSafeRef<TNodeInst> node; int16_t slot; uint32_t gen; uint16_t id; uint8_t lane; }`;
+  a dead node makes the binding a no-op, unknown names are a load-time
   error.
 - `TNodeInst` annotates `pos`, `rot` (euler degrees), `scl`, `active`
   (bool; inactive = subtree neither ticked nor drawn) and `name`
-  (read-only).
-- The editor inspector and undo already walk a (name, type, get, set)
-  table; they move onto `TPropertyHost`, which also lets the
-  `TInstanceAdapter` table move onto `TObjectInstance` itself as the
-  editor memory already calls for.
+  (read-only), and is `DEF_BLOCK("node")`.
+- The editor inspector and undo walk the same records; `IObject` /
+  `IReflection` and the adapters are deleted (phase 1 follow-up).
 
 `SParticleBucketEffectDef` becomes an annotated struct and
 `ParseParticleEffectDef` (effect.cpp:163, thirty hand-parsed keys) is
 deleted. Same for every `Parse*Def` of that shape.
 
-### 2.5 Packed buffers: bake from DEF once, read fast forever
+### 2.5 DEF reader / writer and the packed form
+
+**Landed 2026-10-16** as `src/defio.{h,cpp}` (text), `src/nodepack.{h,cpp}`
+(bytes), `src/packed.{h,cpp}` (wire codec); tests in `tools/test_defio.cpp`.
+The DEF reader/writer is a separate module that *uses* reflection.
 
 ```
    DEF text  (data/Resources/prefabs/*.def; embedded in the shipped binary)
-      │  bake at startup: generic walk — defdoc key → table name → id, encode by type
-      ▼
-   packed byte buffer per prefab  (TPrefabLibrary)
-      │  decode on every stamp: cursor over fields, switch on id
+      │  defio::Read — the defdoc lexer/parser streams statements (Sink) straight
+      │  into live classes: key = value → setter; `node x { }` → child TNodeInst;
+      │  `<component> [label] { }` → DEF_COMPONENT factory + AddComponent.
+      │  No document tree exists on this path. Unknown key / block = error with line.
       ▼
    live TNodeInst tree + components
+      │  nodepack::Pack — the baked form (one per prefab, held by TPrefabLibrary)
+      ▼
+   packed bytes          ── nodepack::Unpack on every stamp (cursor + factories)
       ▲
-      │  editor: inspector edits the live tree; "Apply to prefab" re-packs
-      │          the buffer; "Save" writes DEF text back to the source file
+      │  editor: inspector edits the live tree; "Apply to prefab" re-packs;
+      │          "Save" writes DEF text with defio::Write (only non-default values)
 ```
 
-**Wire format.** A message is a sequence of fields; each field is a
-varint tag = `(id << 2) | wire_kind` followed by its payload. Wire kinds:
-`0` varint (bool, int, enum, ref id, zigzag for signed), `1` fixed32
-(float), `2` fixed (vec3 = 12 B, color = 16 B), `3` length-delimited
-(varint length + bytes: strings and nested messages). An unknown id is
-skipped by its wire kind without any table. A missing id keeps the
-field's declared default. Tags are the only version.
+**Document shape.** A document *is* the root's body: top-level statements
+are the root node's properties, components and `node` children; the root's
+name lives outside (prefab name, file name). `Write` emits exactly that
+shape, so write → read is the identity. A flat annotated struct reads with
+`defio::ReadObject` (no blocks allowed).
 
-**Reader.**
-
-```cpp
-struct SPackedField { uint16_t id; uint8_t wire; const uint8_t* value; uint32_t size; };
-bool TPackedReader::Next(SPackedField& f);     // false at end of message
-
-while (reader.Next(f))
-    switch (EProp(f.id)) {
-        case EProp::Diffuse: diffuse = ReadColor(f); break;
-        case EProp::Object:  object  = ReadString(f); RebindMesh(); break;
-        default: break;    // retired or unknown id, already skipped
-    }
-```
-
-**Prefab message layout.** `node` = its own fields, then `component`
-fields (length-delimited: type-name string, then the component's
-fields), then `child` fields (length-delimited node messages). The
-decoder constructs by type name, then hands the sub-reader to the new
-object. One codec serves prefabs, clipboard, undo snapshots and any
-save-game block of this shape; the `revenant.objects.v1` text walk is the
-same table read the other way.
+**Wire format** (`packed.h`): a message is a run of fields, each a varint
+tag `(id << 2) | wire` and a payload: wire 0 varint (bool, zigzag int,
+enum, ref id), 1 fixed32 (float), 2 length-delimited (string, vec3 = 12 B,
+color = 16 B, nested message). Unknown ids skip by wire kind; missing ids
+keep the C++ default; tags are the only version. A node message is its own
+fields, then `kTagComponent` sub-messages (def name, label, fields) and
+`kTagChild` sub-messages (name, node message). The reader is a cursor:
+`TPackedReader::Next(f)` → id, wire, pointer, size.
 
 ## 3. Prefab file format
 
@@ -425,14 +419,13 @@ file exists, the A/B passes, and the shim is gone.
 
 ## 8. Phases
 
-1. **PR: generator + node split.** `tools/reflect/gen.py` + CMake hook,
-   `TPropertyHost`, packed reader/writer, generic DEF → packed bake, with
-   a gtest that round-trips an annotated struct through DEF text, bytes
-   and Set/Get. Then `TNodeInst`, component owner retype,
-   `TSafeComponentRef` relocation, `TTransform` back-pointer, update-list
-   move; node properties are the first real annotated class. No
-   behaviour change; main stays runnable. (The `TInstanceAdapter` table
-   moves onto `TObjectInstance` in a follow-up.)
+1. **PR: reflection + DEF reader/writer + node split** (landed
+   2026-10-16, feature/vfx). `tools/reflect/gen.py` + CMake hook, `refl`,
+   `packed`, `defio`, `nodepack`, defdoc parser turned into a Sink stream,
+   `TNodeInst` split with annotated node properties; gtests for each.
+   Follow-up in the same PR: annotate `TObjectInstance` / `TSector`,
+   move the editor inspector, undo and clipboard onto `refl`, delete
+   `iobject.h` and the adapters.
 2. **PR: core + two archetypes.** Generic DEF → packed bake, packed
    reader/writer, prefab library (bake at startup, decode on stamp),
    `TPrefabComponent`, node / `mesh` / `billboard` / `light`

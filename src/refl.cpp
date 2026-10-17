@@ -62,6 +62,17 @@ const SType* Find(const std::type_info& info)
     return nullptr;
 }
 
+const SType* FindByDefName(std::string_view def_name)
+{
+    for (SType* t : Types())
+        if (t->def_name && *t->def_name && IEquals(def_name, t->def_name))
+        {
+            LinkBase(*t);
+            return t;
+        }
+    return nullptr;
+}
+
 const SType* Find(std::string_view class_name)
 {
     for (SType* t : Types())
@@ -97,6 +108,40 @@ const SProp* FindProp(const SType& type, uint16_t id)
             LinkBase(const_cast<SType&>(*t));
     }
     return nullptr;
+}
+
+bool Equals(const SPropValue& a, const SPropValue& b)
+{
+    if (a.type != b.type) return false;
+    switch (a.type)
+    {
+        case EPropType::Bool:
+        case EPropType::Trigger: return a.b == b.b;
+        case EPropType::Int:
+        case EPropType::Enum:
+        case EPropType::Ref:     return a.i == b.i;
+        case EPropType::Float:   return a.f == b.f;
+        case EPropType::String:  return a.str == b.str;
+        case EPropType::Vec3:    return a.v3[0] == b.v3[0] && a.v3[1] == b.v3[1] && a.v3[2] == b.v3[2];
+        case EPropType::Color:   return a.c4[0] == b.c4[0] && a.c4[1] == b.c4[1] && a.c4[2] == b.c4[2] && a.c4[3] == b.c4[3];
+    }
+    return false;
+}
+
+void Reset(const SType& type, void* obj)
+{
+    for (const SType* t = &type; t; t = t->base)
+    {
+        for (int32_t i = 0; i < t->prop_count; ++i)
+        {
+            const SProp& p = t->props[i];
+            if (p.read_only) continue;
+            if (p.type == EPropType::Trigger) continue;
+            if (t->set) t->set(obj, p.id, p.def);
+        }
+        if (t->base == nullptr && t->base_name && *t->base_name)
+            LinkBase(const_cast<SType&>(*t));
+    }
 }
 
 const SEnumOption* FindEnumOption(const SProp& prop, std::string_view name)
@@ -170,7 +215,7 @@ void Pack(const SType& type, const void* obj, TPackedWriter& w)
         for (int32_t i = 0; i < t->prop_count; ++i)
         {
             const SProp& p = t->props[i];
-            if (p.flags & (PropFlag_NoSave | PropFlag_ReadOnly))
+            if (!p.serialized || p.read_only)
                 continue;
             SPropValue v;
             if (!t->get || !t->get(obj, p.id, v))

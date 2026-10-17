@@ -283,11 +283,24 @@ target_compile_definitions(test_particlefx PRIVATE REV_ASSETS_DIR="${CMAKE_SOURC
 add_executable(test_props
   tools/test_props.cpp
   src/refl.cpp
-  src/packed.cpp
-  src/propdef.cpp)
+  src/packed.cpp)
 target_include_directories(test_props PRIVATE ${HANDMADE_MATH_DIR})
 target_link_libraries(test_props PRIVATE GTest::gtest_main)
 rev_reflect(test_props tools/test_props_types.h)
+
+add_executable(test_defio
+  tools/test_defio.cpp
+  src/defio.cpp
+  src/nodepack.cpp
+  src/nodeinst.cpp
+  src/transform.cpp
+  src/animsystem.cpp
+  src/math3d.cpp
+  src/refl.cpp
+  src/packed.cpp)
+target_include_directories(test_defio PRIVATE ${HANDMADE_MATH_DIR})
+target_link_libraries(test_defio PRIVATE GTest::gtest_main)
+rev_reflect(test_defio tools/test_defio_types.h src/nodeinst.h)
 
 add_executable(test_nodeinst
   tools/test_nodeinst.cpp
@@ -492,6 +505,7 @@ endforeach()
 foreach(test IN ITEMS
     test_audio_decode
     test_classiclighting
+    test_defio
     test_defwidget
     test_particlefx
     test_nodeinst

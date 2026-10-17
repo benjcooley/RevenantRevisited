@@ -38,6 +38,7 @@
 #include "revenant.h"
 
 #include <cstdint>
+#include <string>
 
 _CLASSDEF(TNodeInst)
 _CLASSDEF(TObjectInstance)
@@ -57,6 +58,10 @@ class TObjectComponent
     [[nodiscard]] int32_t ComponentSlot() const { return slot; }
     [[nodiscard]] uint32_t Generation() const { return generation; }
     [[nodiscard]] virtual const char* ComponentName() const { return "component"; }
+    // Optional per-instance label (the DEF block's name: `mesh outer { }`),
+    // for addressing one of several components of a type on a node.
+    [[nodiscard]] const std::string& Label() const { return label_; }
+    void SetLabel(std::string label) { label_ = std::move(label); }
     virtual void OnAttach() {}
     virtual void OnDetach() {}
     void Update() { OnUpdate(); }
@@ -77,6 +82,7 @@ class TObjectComponent
     void Detach()
         { if (active) { OnDetach(); active = false; } UnregisterUpdate(nullptr); owner = nullptr; slot = -1; ++generation; }
 
+    std::string label_;
     TNodeInst* owner = nullptr;
     int32_t slot = -1;
     uint32_t generation = 1;

@@ -111,7 +111,7 @@ TEST(NodeInst, AnnotatedProperties)
     EXPECT_NE(refl::FindProp(*tp, "rot"), nullptr);
     EXPECT_NE(refl::FindProp(*tp, "scl"), nullptr);
     EXPECT_NE(refl::FindProp(*tp, "active"), nullptr);
-    EXPECT_TRUE(refl::FindProp(*tp, "name")->flags & PropFlag_ReadOnly);
+    EXPECT_TRUE(refl::FindProp(*tp, "name")->read_only);
 
     TNodeInst n("glow");
     EXPECT_TRUE(refl::Set(*tp, &n, refl::FindProp(*tp, "pos")->id, SPropValue::Vec3(1, 2, 3)));

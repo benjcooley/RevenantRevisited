@@ -1,0 +1,74 @@
+// *************************************************************************
+// *                         Cinematix Revenant                            *
+// *                  Revenant Revisited (port) - 2026                     *
+// *     defio.h - DEF reader / writer over reflection: text in, classes   *
+// *               out; classes in, text out. No document tree.            *
+// *************************************************************************
+//
+// Reading streams the defdoc lexer / parser (its Sink interface) straight
+// into live objects:
+//
+//   key = value         -> refl::Set on the current object (table lookup by name)
+//   node <name> { }     -> a child TNodeInst (any DEF_BLOCK type), parented to
+//                          the current node, owned by the caller's `owned` list
+//   <component> [label] { }
+//                       -> a DEF_COMPONENT type, created through its factory
+//                          and attached to the current node
+//
+// Unknown keys and blocks are errors with line numbers (the bake is
+// strict). Reading never builds a defdoc::Node tree; the only Nodes that
+// exist are the per-statement leaf values the parser hands over.
+//
+// Writing walks the same tables the other way and emits text in the house
+// style, one `key = value` per saveable property, components and child
+// nodes as nested blocks.
+//
+// *************************************************************************
+
+#pragma once
+
+#include "refl.h"
+
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
+
+class TNodeInst;
+
+namespace defio {
+
+// Read a node-tree document. Top-level statements apply to `root`. Child
+// nodes are appended to `owned`. Returns false with the first error (and
+// keeps going so later errors don't hide behind it).
+bool Read(std::string_view text, TNodeInst& root,
+          std::vector<std::unique_ptr<TNodeInst>>& owned, std::string* error = nullptr);
+
+// Read a flat document into one reflected object (no sub-blocks allowed).
+bool ReadObject(std::string_view text, const refl::SType& type, void* obj, std::string* error = nullptr);
+template <class T>
+bool ReadObject(std::string_view text, T& obj, std::string* error = nullptr)
+{
+    const refl::SType* t = refl::Of(obj);
+    if (!t) { if (error) *error = "type is not annotated"; return false; }
+    return ReadObject(text, *t, &obj, error);
+}
+
+// Write a node tree as a document: the root's properties, components and
+// child `node` blocks at top level (the form Read expects for its root).
+[[nodiscard]] std::string Write(const TNodeInst& root);
+
+// Write one object's saveable properties, one `key = value` line each,
+// at `indent` levels (4 spaces). NoSave and ReadOnly fields are skipped.
+void WriteObject(const refl::SType& type, const void* obj, std::string& out, int32_t indent = 0);
+template <class T>
+void WriteObject(const T& obj, std::string& out, int32_t indent = 0)
+{
+    if (const refl::SType* t = refl::Of(obj))
+        WriteObject(*t, &obj, out, indent);
+}
+
+// Text form of one value (what Write emits after `key = `).
+[[nodiscard]] std::string FormatValue(const refl::SProp& prop, const SPropValue& v);
+
+} // namespace defio

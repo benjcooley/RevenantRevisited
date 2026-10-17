@@ -19,12 +19,12 @@ struct STestMesh
 {
     PROP(1)                  bool        visible   = true;
     PROP(2)                  SRgba       diffuse   = {1, 1, 1, 1};
-    PROP(3, PropFlag_NoSave) float       uv_scroll = 0.0f;
+    PROP_NOSAVE(3, "UV scroll rate") float   uv_scroll = 0.0f;
     PROP(4)                  hmm_vec3    pos       = {{0, 0, 0}};
     PROP(5)                  int32_t     frame     = 0;
     PROP(6)                  std::string object;
     PROP(7)                  ETestBlend  blend     = ETestBlend::Alpha;
-    PROP(8, PropFlag_ReadOnly) int32_t   generation = 7;
+    PROP_READONLY(8)         int32_t     generation = 7;
 
     int32_t changed_count = 0;
     uint16_t last_changed = 0;
@@ -48,9 +48,9 @@ struct STestDerived : public STestMesh
 struct STestAccessor
 {
     PROP_FN(1, hmm_vec3,    pos,   LocalPos, SetLocalPos);
-    PROP_FN(2, float,       scale, Scale,    SetScale);
+    PROP_FN(2, float,       scale, Scale,    SetScale, def(1.0f));
     PROP_FN(3, std::string, name,  Name,     );                   // read-only: no setter
-    PROP_FN(4, ETestBlend,  blend, Blend,    SetBlend, PropFlag_Hidden);
+    PROP_FN_HIDDEN(4, ETestBlend, blend, Blend, SetBlend, def(ETestBlend::Alpha));
 
     hmm_vec3    LocalPos() const { return pos_; }
     void        SetLocalPos(const hmm_vec3& p) { pos_ = p; ++sets; }

@@ -10,12 +10,22 @@
 //
 //     class TMeshComponent : public TObjectComponent
 //     {
-//         PROP(1)                  bool        visible   = true;
-//         PROP(2)                  SRgba       diffuse   = {1, 1, 1, 1};
-//         PROP(3, PropFlag_NoSave) float       uv_scroll = 0.0f;
-//         PROP_FN(4, hmm_vec3, pos, LocalPos, SetLocalPos);   // accessor-backed
-//         void OnPropChanged(uint16_t id);                     // optional hook
+//         PROP(1, "Draw this mesh")              bool   visible   = true;
+//         PROP(2, "Material colour")             SRgba  diffuse   = {1, 1, 1, 1};
+//         PROP_NOSAVE(3)                         float  uv_scroll = 0.0f;
+//         PROP_FN(4, hmm_vec3, pos, LocalPos, SetLocalPos, "Local position");
+//         void OnPropChanged(uint16_t id);       // optional hook
 //     };
+//
+// Each property record carries id, name, description, type, default and
+// three booleans: serialized, visible_in_editor, read_only. The default
+// comes from the member initializer (so the C++ default and the table
+// default are one thing) and must be a simple literal; accessor-backed
+// properties state it with def(...). A property is serialized and visible
+// in the editor unless declared with one of the rare variants
+// (PROP_NOSAVE, PROP_HIDDEN, PROP_READONLY and the PROP_FN_* forms).
+// Annotation arguments are order-free: an integer is the id, a quoted
+// string the description, def(literal) the default.
 //
 // No base class, no macro that declares members, no virtuals. The
 // annotation is the C++26 one (P3394) when the compiler has it and
@@ -43,16 +53,32 @@
 
 class TPackedWriter;
 class TPackedReader;
+class TNodeInst;
+class TObjectComponent;
 
 // C++26 annotation (P3394) when the compiler has it; nothing otherwise.
 #if defined(__cpp_annotations)
-#  define PROP(...) [[=refl::SMeta{__VA_ARGS__}]]
+#  define PROP(...)          [[=refl::Meta(__VA_ARGS__)]]
+#  define PROP_NOSAVE(...)   [[=refl::Meta(__VA_ARGS__).NoSave()]]
+#  define PROP_HIDDEN(...)   [[=refl::Meta(__VA_ARGS__).Hidden()]]
+#  define PROP_READONLY(...) [[=refl::Meta(__VA_ARGS__).ReadOnly()]]
 #else
 #  define PROP(...)
+#  define PROP_NOSAVE(...)     // runtime-only: never packed / written to DEF
+#  define PROP_HIDDEN(...)     // not shown in the inspector
+#  define PROP_READONLY(...)   // shown but not writable
 #endif
 // Accessor-backed property: Getter() returns `type`, Setter(const type&)
-// stores it; empty Setter = read-only. An annotation on the class.
+// stores it; empty Setter = read-only. Annotations on the class.
 #define PROP_FN(...)
+#define PROP_FN_NOSAVE(...)
+#define PROP_FN_HIDDEN(...)
+// Block keyword this class is written as in a DEF / packed document, and
+// a factory so a document can create it by name. DEF_COMPONENT is for
+// TObjectComponent subclasses (created and attached to a node),
+// DEF_BLOCK for nodes. Annotations on the class.
+#define DEF_BLOCK(name)
+#define DEF_COMPONENT(name)
 
 enum class EPropType : uint8_t
 {
@@ -65,14 +91,6 @@ enum class EPropType : uint8_t
     Enum,       // int payload; the table names the options
     Ref,        // soft-ref id of another node
     Trigger,    // write 1 to fire; reads as 0
-};
-
-enum EPropFlag : uint8_t
-{
-    PropFlag_None     = 0,
-    PropFlag_ReadOnly = 1 << 0,   // shown but not writable
-    PropFlag_Hidden   = 1 << 1,   // not shown in the inspector
-    PropFlag_NoSave   = 1 << 2,   // runtime-only; never packed / written to DEF
 };
 
 // Color as the property system carries it (floats 0..1).
@@ -98,18 +116,18 @@ struct SPropValue
     };
     std::string_view str;
 
-    SPropValue() : c4{0, 0, 0, 0} {}
+    constexpr SPropValue() : c4{0, 0, 0, 0} {}
 
-    static SPropValue Bool(bool v)               { SPropValue p; p.type = EPropType::Bool;    p.b = v;  return p; }
-    static SPropValue Int(int32_t v)             { SPropValue p; p.type = EPropType::Int;     p.i = v;  return p; }
-    static SPropValue Float(float v)             { SPropValue p; p.type = EPropType::Float;   p.f = v;  return p; }
-    static SPropValue Enum(int32_t v)            { SPropValue p; p.type = EPropType::Enum;    p.i = v;  return p; }
-    static SPropValue Ref(int32_t id)            { SPropValue p; p.type = EPropType::Ref;     p.i = id; return p; }
-    static SPropValue Trigger()                  { SPropValue p; p.type = EPropType::Trigger; p.b = true; return p; }
-    static SPropValue String(std::string_view s) { SPropValue p; p.type = EPropType::String;  p.str = s; return p; }
-    static SPropValue Vec3(float x, float y, float z)
+    static constexpr SPropValue Bool(bool v)               { SPropValue p; p.type = EPropType::Bool;    p.b = v;  return p; }
+    static constexpr SPropValue Int(int32_t v)             { SPropValue p; p.type = EPropType::Int;     p.i = v;  return p; }
+    static constexpr SPropValue Float(float v)             { SPropValue p; p.type = EPropType::Float;   p.f = v;  return p; }
+    static constexpr SPropValue Enum(int32_t v)            { SPropValue p; p.type = EPropType::Enum;    p.i = v;  return p; }
+    static constexpr SPropValue Ref(int32_t id)            { SPropValue p; p.type = EPropType::Ref;     p.i = id; return p; }
+    static constexpr SPropValue Trigger()                  { SPropValue p; p.type = EPropType::Trigger; p.b = true; return p; }
+    static constexpr SPropValue String(std::string_view s) { SPropValue p; p.type = EPropType::String;  p.str = s; return p; }
+    static constexpr SPropValue Vec3(float x, float y, float z)
         { SPropValue p; p.type = EPropType::Vec3; p.v3[0] = x; p.v3[1] = y; p.v3[2] = z; return p; }
-    static SPropValue Color(float r, float g, float b, float a)
+    static constexpr SPropValue Color(float r, float g, float b, float a)
         { SPropValue p; p.type = EPropType::Color; p.c4[0] = r; p.c4[1] = g; p.c4[2] = b; p.c4[3] = a; return p; }
 
     [[nodiscard]] float AsFloat() const
@@ -185,9 +203,21 @@ namespace refl {
 // What the annotation carries (the generator reads the same arguments).
 struct SMeta
 {
-    uint16_t id;
-    uint8_t  flags = PropFlag_None;
+    uint16_t    id                = 0;
+    const char* desc              = "";
+    bool        serialized        = true;    // packed / written to DEF
+    bool        visible_in_editor = true;    // shown in the inspector
+    bool        read_only         = false;   // shown but not writable
+
+    constexpr SMeta NoSave()   const { SMeta m = *this; m.serialized = false; return m; }
+    constexpr SMeta Hidden()   const { SMeta m = *this; m.visible_in_editor = false; return m; }
+    constexpr SMeta ReadOnly() const { SMeta m = *this; m.read_only = true; return m; }
 };
+
+// Builder the real annotation uses: Meta(id[, "desc"]). def(...) is read by
+// the generator only (a literal default); under real reflection the member
+// initializer itself is the default.
+constexpr SMeta Meta(uint16_t id, const char* desc = "") { return SMeta{ id, desc }; }
 
 struct SEnumOption
 {
@@ -197,12 +227,16 @@ struct SEnumOption
 
 struct SProp
 {
-    uint16_t           id           = 0;
-    const char*        name         = "";
-    EPropType          type         = EPropType::Float;
-    uint8_t            flags        = PropFlag_None;
-    const SEnumOption* options      = nullptr;   // Enum only
-    int32_t            option_count = 0;
+    uint16_t           id                = 0;
+    const char*        name              = "";
+    const char*        desc              = "";
+    EPropType          type              = EPropType::Float;
+    bool               serialized        = true;
+    bool               visible_in_editor = true;
+    bool               read_only         = false;
+    SPropValue         def               = {};        // the member initializer / def(...)
+    const SEnumOption* options           = nullptr;   // Enum only
+    int32_t            option_count      = 0;
 };
 
 // One per annotated class, emitted by the generator and registered at
@@ -218,12 +252,18 @@ struct SType
     bool (*set)(void* obj, uint16_t id, const SPropValue& v)  = nullptr;
     bool (*get)(const void* obj, uint16_t id, SPropValue& out) = nullptr;
     const SType*          base       = nullptr;
+    // DEF_BLOCK / DEF_COMPONENT: the block keyword and a factory. At most
+    // one factory is set; which one says what the class is.
+    const char*           def_name          = "";
+    TNodeInst*        (*create_node)()      = nullptr;
+    TObjectComponent* (*create_component)() = nullptr;
 };
 
 // Registry. Generated code registers; everyone else looks up.
 void Register(SType& type);
 [[nodiscard]] const SType* Find(const std::type_info& info);
 [[nodiscard]] const SType* Find(std::string_view class_name);
+[[nodiscard]] const SType* FindByDefName(std::string_view def_name);   // "mesh", "node", ...
 
 // Description of an object's dynamic type (polymorphic classes) or
 // static type (plain structs). nullptr if the type is not annotated.
@@ -231,6 +271,12 @@ template <class T>
 [[nodiscard]] const SType* Of(const T& obj) { return Find(typeid(obj)); }
 template <class T>
 [[nodiscard]] const SType* Of() { return Find(typeid(T)); }
+
+// Value equality by type (lanes compared exactly; strings by content).
+[[nodiscard]] bool Equals(const SPropValue& a, const SPropValue& b);
+
+// Reset every writable property to its table default.
+void Reset(const SType& type, void* obj);
 
 // Property lookup, walking the base chain.
 [[nodiscard]] const SProp* FindProp(const SType& type, std::string_view name);

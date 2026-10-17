@@ -521,22 +521,106 @@ private:
     int col_ = 1;
 };
 
+// Event sink the parser drives. The grammar lives in Parser; what to do
+// with each statement lives in a Sink. NodeSink builds the Node tree
+// (Document::parse); other sinks consume the stream directly -- the DEF
+// reader loads reflected classes without ever holding a tree.
+//
+//   Value(key, v)            key = v         (v is a leaf: scalar / array / inline object)
+//   Item(row)                a bare value row (legacy lists), the "$items" of a block
+//   BeginBlock(key, header)  key [label] [header kvs] { ... }   header carries
+//                            "$name" (label) / "$args" / header key-values
+//   EndBlock()
+class Sink
+{
+public:
+    virtual ~Sink() = default;
+    virtual void Value(const std::string& key, Node value, int line) = 0;
+    virtual void Item(Node row, int line) = 0;
+    virtual void BeginBlock(const std::string& key, Node header, int line) = 0;
+    virtual void EndBlock() = 0;
+};
+
+class NodeSink : public Sink
+{
+public:
+    NodeSink() : root_(Node::Object{}) {}
+
+    void Value(const std::string& key, Node value, int) override { top()[key] = std::move(value); }
+    void Item(Node row, int) override { append_repeated(top(), "$items", std::move(row)); }
+    void BeginBlock(const std::string& key, Node header, int) override
+        { stack_.emplace_back(key, std::move(header)); }
+    void EndBlock() override
+    {
+        if (stack_.empty()) return;
+        std::pair<std::string, Node> done = std::move(stack_.back());
+        stack_.pop_back();
+        append_repeated(top(), done.first, std::move(done.second));
+    }
+
+    Node take_root() { return std::move(root_); }
+
+    // Repeated keys (several `bucket` blocks) collect into an array under
+    // one key; the first occurrence is promoted to a one-element array.
+    static void append_repeated(Node::Object& obj, const std::string& key, Node value)
+    {
+        auto it = obj.find(key);
+        if (it == obj.end())
+        {
+            for (auto cand = obj.begin(); cand != obj.end(); ++cand)
+            {
+                if (Node::iequals(cand->first, key))
+                {
+                    it = cand;
+                    break;
+                }
+            }
+        }
+        if (it == obj.end())
+        {
+            obj.emplace(key, Node::Array{std::move(value)});
+            return;
+        }
+        if (!it->second.is_array())
+        {
+            Node::Array arr;
+            arr.push_back(std::move(it->second));
+            it->second = std::move(arr);
+        }
+        it->second.as_array().push_back(std::move(value));
+    }
+
+private:
+    Node::Object& top()
+        { return stack_.empty() ? root_.as_object() : stack_.back().second.as_object(); }
+
+    Node root_;
+    std::vector<std::pair<std::string, Node>> stack_;
+};
+
 class Parser
 {
 public:
     explicit Parser(std::vector<Token> tokens, ParseOptions options = {})
         : tokens_(std::move(tokens)), options_(options) {}
 
-    Node parse_document()
+    // Stream the document into `sink`.
+    void parse_document(Sink& sink)
     {
-        Node root(Node::Object{});
         while (!at(TokKind::Eof))
         {
             pending_meta_ = collect_leading_meta();
             if (at(TokKind::Eof)) break;
-            parse_statement(root.as_object());
+            parse_statement(sink);
         }
-        return root;
+    }
+
+    // Build the Node tree (the historical entry point).
+    Node parse_document()
+    {
+        NodeSink sink;
+        parse_document(sink);
+        return sink.take_root();
     }
 
     const std::map<std::string, Metadata>& metadata() const { return metadata_; }
@@ -591,15 +675,16 @@ private:
         return meta;
     }
 
-    void parse_statement(Node::Object& obj)
+    void parse_statement(Sink& sink)
     {
         Metadata meta = std::move(pending_meta_);
         if (!at(TokKind::Ident))
         {
             if (is_value_start(peek().kind))
             {
+                const int line = peek().line;
                 Node row = parse_legacy_value_list();
-                append_anonymous_item(obj, std::move(row));
+                sink.Item(std::move(row), line);
                 return;
             }
             throw Error(peek().line, peek().col, "expected identifier");
@@ -633,8 +718,9 @@ private:
                 take(); // '='
                 if (!is_value_start(peek().kind))
                     throw Error(peek().line, peek().col, "expected value after =");
-                obj[full_key] = parse_value();
+                Node value = parse_value();
                 store_metadata(child_metadata_key(full_key), std::move(meta));
+                sink.Value(full_key, std::move(value), key.line);
                 return;
             }
         }
@@ -705,9 +791,10 @@ private:
             const std::string block_path = block_metadata_key(key.text, has_label ? &label : nullptr);
             store_metadata(block_path, std::move(meta));
             path_stack_.push_back(block_path);
-            parse_block_body(block.as_object());
+            sink.BeginBlock(key.text, std::move(block), key.line);
+            parse_block_body(sink);
+            sink.EndBlock();
             path_stack_.pop_back();
-            append_repeated(obj, key.text, block);
             return;
         }
 
@@ -733,24 +820,16 @@ private:
             else if (!row.is_null())
                 values.push_back(row);
         }
+        store_metadata(child_metadata_key(key.text), std::move(meta));
         if (values.empty())
-        {
-            obj[key.text] = true;
-            store_metadata(child_metadata_key(key.text), std::move(meta));
-        }
+            sink.Value(key.text, Node(true), key.line);
         else if (values.size() == 1)
-        {
-            obj[key.text] = std::move(values[0]);
-            store_metadata(child_metadata_key(key.text), std::move(meta));
-        }
+            sink.Value(key.text, std::move(values[0]), key.line);
         else
-        {
-            obj[key.text] = Node::Array(std::move(values));
-            store_metadata(child_metadata_key(key.text), std::move(meta));
-        }
+            sink.Value(key.text, Node::Array(std::move(values)), key.line);
     }
 
-    void parse_block_body(Node::Object& obj)
+    void parse_block_body(Sink& sink)
     {
         const bool brace = at(TokKind::LBrace);
         take();
@@ -759,7 +838,7 @@ private:
             pending_meta_ = collect_leading_meta();
             if (brace && at(TokKind::RBrace)) { take(); return; }
             if (!brace && at(TokKind::End)) { take(); return; }
-            parse_statement(obj);
+            parse_statement(sink);
         }
         throw Error(peek().line, peek().col, brace ? "missing }" : "missing END");
     }
@@ -859,39 +938,6 @@ private:
             if (at(TokKind::Comma)) take();
         }
         throw Error(peek().line, peek().col, "missing }");
-    }
-
-    static void append_repeated(Node::Object& obj, const std::string& key, Node value)
-    {
-        auto it = obj.find(key);
-        if (it == obj.end())
-        {
-            for (auto cand = obj.begin(); cand != obj.end(); ++cand)
-            {
-                if (Node::iequals(cand->first, key))
-                {
-                    it = cand;
-                    break;
-                }
-            }
-        }
-        if (it == obj.end())
-        {
-            obj.emplace(key, Node::Array{std::move(value)});
-            return;
-        }
-        if (!it->second.is_array())
-        {
-            Node::Array arr;
-            arr.push_back(std::move(it->second));
-            it->second = std::move(arr);
-        }
-        it->second.as_array().push_back(std::move(value));
-    }
-
-    static void append_anonymous_item(Node::Object& obj, Node value)
-    {
-        append_repeated(obj, "$items", std::move(value));
     }
 
     std::vector<Token> tokens_;
@@ -1207,6 +1253,9 @@ inline void emit_object_def(std::ostream& os, const Node::Object& obj, int inden
 
 } // namespace detail
 
+using Sink = detail::Sink;
+using NodeSink = detail::NodeSink;
+
 class Document
 {
 public:
@@ -1220,6 +1269,14 @@ public:
     {
         auto it = metadata_.find(key);
         return it == metadata_.end() ? nullptr : &it->second;
+    }
+
+    // Stream `text` into a sink without building a tree. Throws Error.
+    static void parse_into(const std::string& text, Sink& sink, ParseOptions options = {})
+    {
+        detail::Lexer lex(text);
+        detail::Parser parser(lex.lex(), options);
+        parser.parse_document(sink);
     }
 
     static Document parse(const std::string& text, ParseOptions options = {})
