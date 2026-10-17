@@ -420,7 +420,7 @@ class TParticleEffectComponent : public TObjectComponent
     void OnDetach() override
     {
         if (ParticleEffectManager)
-            ParticleEffectManager->StopEffect(effect_def, Owner());
+            ParticleEffectManager->StopEffect(effect_def, OwnerInstance());
         UnregisterUpdate(&TObjectComponent::Update);
     }
 

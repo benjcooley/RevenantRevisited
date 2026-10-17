@@ -7,6 +7,7 @@
 #pragma once
 
 #include "revenant.h"
+#include "nodeinst.h"
 #include "objectcomponent.h"
 #include "imagery.h"
 #include "invicon.h"
@@ -697,7 +698,7 @@ class SObjectDef
 #define DAMAGE_POISON       20      // taking poison damage
 
 _CLASSDEF(TObjectInstance)
-class TObjectInstance : protected SObjectDef
+class TObjectInstance : public TNodeInst, protected SObjectDef
 {
   // Function Members
 
@@ -724,8 +725,10 @@ class TObjectInstance : protected SObjectDef
         // Get type name
     void SetTypeName(char *newname) { strcpy(inf->name, newname); }
         // Set type name
-    const char *GetName() const { return name; }
+    const char *GetName() const override { return name; }
         // Get instance-specific name
+    TObjectInstance*       AsObjectInstance() override       { return this; }
+    const TObjectInstance* AsObjectInstance() const override { return this; }
     void SetName(char *newname);
         // Set context name
     uint32_t ObjId() const { return inf->uniqueid; }
@@ -851,41 +854,13 @@ class TObjectInstance : protected SObjectDef
     virtual bool DrawShadow() { return false; }
         // Returns true of the object wants a simple alpha-channel circle shadow to follow it
 
-    [[nodiscard]] TTransform&       Transform()       { return transform_; }
-    [[nodiscard]] const TTransform& Transform() const { return transform_; }
-        // Direct access to this instance's spatial transform. Use it
-        // for hierarchy operations (SetParent / GetChildAt) and for
-        // reading the cached world matrix. Phase A: position is the
-        // only field driven through transform_; rotation continues to
-        // live on the legacy rotatex / rotatey / rotatez fields.
-
-  // Component functions
-    int32_t AddComponent(std::unique_ptr<TObjectComponent> component);
-        // Adds an owned component and returns its component slot, or -1.
-    void RemoveComponent(int32_t component_slot);
-        // Deletes and removes the owned component in the given slot.
-    void ActivateComponents();
-        // Calls Activate() (and thus OnAttach() / RegisterUpdate hooks) on
-        // every owned component that isn't already active. AddComponent
-        // normally activates the new component automatically, but only
-        // when the owner already has a positive mapindex; standalone
-        // instances built up component-then-mapindex (e.g. the --test=vfx
-        // harness) call this once after SetMapIndex to bring them online.
-    TObjectComponent* GetComponent(int32_t component_slot) const;
-        // Returns the component in the given slot, or nullptr.
-    int32_t NumComponents() const { return int32_t(components.size()); }
-        // Number of component slots currently in use.
-    template <class T>
-    T* GetComponent() const
-    {
-        for (const auto& component : components)
-            if (TObjectComponent* c = component.get())
-                if (T* typed = dynamic_cast<T*>(c))
-                    return typed;
-        return nullptr;
-    }
-    template <class T>
-    T* FindComponent() const { return GetComponent<T>(); }
+  // Transform / hierarchy / components are inherited from TNodeInst.
+  // Phase A: position is the only field driven through transform_;
+  // rotation continues to live on the legacy rotatex / rotatey /
+  // rotatez fields and is mirrored by SyncTransformRot(). Components
+  // activate when the instance gets a map index (SetMapIndex), not on
+  // AddComponent; standalone instances (--test=vfx harness) call
+  // ActivateComponents() themselves.
 
   // Object flag functions  
     int32_t GetNumFlags() const;
@@ -1404,25 +1379,15 @@ class TObjectInstance : protected SObjectDef
     int32_t anim_last_loop_wrap_state;
     int32_t anim_last_loop_wrap_frame;
     int32_t anim_last_loop_wrap_game_frame;
-    // Animator + visual components live here. The animator was a dedicated
-    // pointer field; it is now stored as a TObjectComponent and looked up
-    // through GetAnimator() / GetComponent<TObjectAnimator>().
-    std::vector<std::unique_ptr<TObjectComponent>> components;
 
-    // Spatial transform: SafeRef-able, supports parent / children
-    // hierarchy, lazy / sweep matrix recompute. Phase A integration
-    // tracks position only -- rotation / scale stay on the legacy
-    // rotatex / rotatey / rotatez fields for now (rotation needs a
-    // ZXY-vs-XYZ Tait-Bryan conversion that's its own follow-up).
-    // The legacy `pos` field is kept in lockstep with transform_
-    // by SyncTransformPos() so existing const S3DPoint& Pos()
-    // callers see the same value through either path.
-    TTransform transform_;
-        // Authoritative spatial state. Pos() / GetPos() and the world
-        // matrix all flow through this. The legacy `pos` field stays
-        // as a synced shadow (mirrored from transform_ on every
-        // setter) so the 349-odd direct `oi->pos.x` reads scattered
-        // across the codebase don't have to change in lockstep.
+    // The animator and visual components live in TNodeInst's component
+    // slots (GetAnimator() / GetComponent<TObjectAnimator>()). The
+    // spatial transform is TNodeInst::transform_; the legacy `pos` field
+    // is kept in lockstep with it by SyncTransformPos() so the 349-odd
+    // direct `oi->pos.x` reads scattered across the codebase don't have
+    // to change in lockstep.
+
+    [[nodiscard]] bool ActivatesComponentsOnAdd() const override { return GetMapIndex() >= 0; }
 
     void SyncTransformRot();
         // Rebuild transform_'s rotation from the current rotatex /
@@ -1465,54 +1430,6 @@ class TObjectInstance : protected SObjectDef
     mutable int32_t screenx = 0, screeny = 0, screenz = 0;  // Pixel/zbuf coords as of oldpos
     void Project() const;
       // pos's screen point into screenx/y/z, oldpos = pos (GetScreenPos)
-};
-
-// TSafeRef<T>, safe_cast helpers, and TSafeObjectBase<Self> live in
-// saferef.h so types that just need them (e.g. TTransform) don't have
-// to drag the umbrella include chain in. TSafeComponentRef stays here
-// because it needs full TObjectInstance / TObjectComponent definitions.
-
-// Safe reference to a component owned by a TObjectInstance. It resolves the
-// owner through the normal mapindex registry, then validates the component slot
-// and generation before returning a pointer.
-template <typename T = TObjectComponent>
-class TSafeComponentRef
-{
-  public:
-    TSafeComponentRef() = default;
-    TSafeComponentRef(const T* component) { Set(component); }
-
-    void Set(const T* component)
-    {
-        owner = component ? component->Owner() : nullptr;
-        component_slot = component ? component->ComponentSlot() : -1;
-        generation = component ? component->Generation() : 0;
-    }
-    void Clear()
-    {
-        owner.Clear();
-        component_slot = -1;
-        generation = 0;
-    }
-
-    [[nodiscard]] T* Get() const
-    {
-        TObjectInstance* inst = owner.Get();
-        if (!inst || component_slot < 0) return nullptr;
-        TObjectComponent* component = inst->GetComponent(component_slot);
-        if (!component || component->Generation() != generation) return nullptr;
-        return static_cast<T*>(component);
-    }
-    [[nodiscard]] bool IsValid() const { return Get() != nullptr; }
-
-    explicit operator bool() const { return IsValid(); }
-    T* operator->() const { return Get(); }
-    T& operator*() const { return *Get(); }
-
-  private:
-    TSafeRef<TObjectInstance> owner;
-    int32_t component_slot = -1;
-    uint32_t generation = 0;
 };
 
 inline void rollover(int32_t &i, int32_t &j)

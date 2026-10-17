@@ -89,14 +89,6 @@ int32_t FreshRuntimeMapIndex()
     return fresh;
 }
 
-struct SComponentUpdateEntry
-{
-    TSafeComponentRef<TObjectComponent> component;
-    TObjectComponentUpdateMethod method = nullptr;
-};
-
-std::vector<SComponentUpdateEntry> g_component_updates;
-
 } // namespace
 
 // Declarations of global arrays for object classes, imagery, and builders
@@ -405,50 +397,6 @@ const TObjectInstance* TConstInventoryIterator::NextItem() const
 // * TObjectInstance *
 // *******************
 
-void TObjectComponent::RegisterUpdate(TObjectComponentUpdateMethod method)
-{
-    if (!method || !Owner())
-        return;
-
-    for (const SComponentUpdateEntry& entry : g_component_updates)
-        if (entry.method == method && entry.component.Get() == this)
-            return;
-
-    SComponentUpdateEntry entry = {};
-    entry.component.Set(this);
-    entry.method = method;
-    g_component_updates.push_back(entry);
-}
-
-void TObjectComponent::UnregisterUpdate(TObjectComponentUpdateMethod method)
-{
-    for (size_t i = 0; i < g_component_updates.size(); )
-    {
-        TObjectComponent* component = g_component_updates[i].component.Get();
-        if (!component || (component == this && (!method || g_component_updates[i].method == method)))
-            g_component_updates.erase(g_component_updates.begin() + ptrdiff_t(i));
-        else
-            ++i;
-    }
-}
-
-void TObjectComponent::RunUpdateList()
-{
-    for (size_t i = 0; i < g_component_updates.size(); )
-    {
-        SComponentUpdateEntry entry = g_component_updates[i];
-        TObjectComponent* component = entry.component.Get();
-        if (!component || !entry.method)
-        {
-            g_component_updates.erase(g_component_updates.begin() + ptrdiff_t(i));
-            continue;
-        }
-
-        (component->*entry.method)();
-        ++i;
-    }
-}
-
 // World-space position. Reads through the transform's global matrix,
 // so the cost is at worst a parent-chain recompute (cached afterwards).
 S3DPoint TObjectInstance::Pos() const
@@ -711,9 +659,7 @@ void TObjectInstance::SetMapIndex(int32_t newindex)
     if (mapindex >= 0)
     {
         MapPane.RegisterInstance(this, mapindex);
-        for (const auto& component_ptr : components)
-            if (TObjectComponent* component = component_ptr.get())
-                component->Activate();
+        ActivateComponents();
     }
 }
 
@@ -749,10 +695,7 @@ TObjectInstance::~TObjectInstance()
     // plus any components added through AddComponent(). The objclass!=-1
     // gate now guards only the post-init bookkeeping that genuinely depends
     // on cl / inf / inventory / sector / script being populated.
-    for (const auto& component_ptr : components)
-        if (TObjectComponent* component = component_ptr.get())
-            component->Detach();
-    components.clear();
+    DetachComponents();
 
     TObjectImagery::FreeImagery(imagery);
     imagery = nullptr;
@@ -839,60 +782,6 @@ void TObjectInstance::FreeAnimator()
 {
     if (TObjectAnimator* a = GetComponent<TObjectAnimator>())
         RemoveComponent(a->ComponentSlot());
-}
-
-int32_t TObjectInstance::AddComponent(std::unique_ptr<TObjectComponent> component)
-{
-    if (!component || component->Owner())
-        return -1;
-
-    static uint32_t s_next_component_generation = 1;
-    int32_t slot = -1;
-    for (int32_t i = 0; i < int32_t(components.size()); ++i)
-    {
-        if (!components[size_t(i)])
-        {
-            slot = i;
-            break;
-        }
-    }
-    if (slot < 0)
-    {
-        slot = int32_t(components.size());
-        components.push_back(nullptr);
-    }
-
-    TObjectComponent* raw = component.get();
-    components[size_t(slot)] = std::move(component);
-
-    raw->Attach(this, slot, ++s_next_component_generation);
-    if (GetMapIndex() >= 0)
-        raw->Activate();
-    return slot;
-}
-
-void TObjectInstance::ActivateComponents()
-{
-    for (const auto& component_ptr : components)
-        if (TObjectComponent* c = component_ptr.get())
-            c->Activate();
-}
-
-void TObjectInstance::RemoveComponent(int32_t component_slot)
-{
-    if ((uint32_t)component_slot >= (uint32_t)components.size())
-        return;
-    TObjectComponent* component = components[size_t(component_slot)].get();
-    if (component)
-        component->Detach();
-    components[size_t(component_slot)].reset();
-}
-
-TObjectComponent* TObjectInstance::GetComponent(int32_t component_slot) const
-{
-    if ((uint32_t)component_slot >= (uint32_t)components.size())
-        return nullptr;
-    return components[size_t(component_slot)].get();
 }
 
 bool TObjectInstance::NeedsAnimator() const

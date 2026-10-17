@@ -205,6 +205,9 @@ endif()
 
 add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
 target_link_libraries(Revenant PRIVATE imgui revsmk)
+# Annotated classes (PROP / PROP_FN). One line per header; see rev_reflect.
+rev_reflect(Revenant
+  src/nodeinst.h)
 
 # buildinfo.h: the commit the binary is built from (the playtest recordings
 # name it) and its version (the main menu shows it). Regenerated every
@@ -285,6 +288,18 @@ add_executable(test_props
 target_include_directories(test_props PRIVATE ${HANDMADE_MATH_DIR})
 target_link_libraries(test_props PRIVATE GTest::gtest_main)
 rev_reflect(test_props tools/test_props_types.h)
+
+add_executable(test_nodeinst
+  tools/test_nodeinst.cpp
+  src/nodeinst.cpp
+  src/transform.cpp
+  src/animsystem.cpp
+  src/math3d.cpp
+  src/refl.cpp
+  src/packed.cpp)
+target_include_directories(test_nodeinst PRIVATE ${HANDMADE_MATH_DIR})
+target_link_libraries(test_nodeinst PRIVATE GTest::gtest_main)
+rev_reflect(test_nodeinst src/nodeinst.h)
 
 add_executable(test_savefile
   tools/test_savefile.cpp
@@ -479,6 +494,7 @@ foreach(test IN ITEMS
     test_classiclighting
     test_defwidget
     test_particlefx
+    test_nodeinst
     test_playerstats
     test_props
     test_savefile

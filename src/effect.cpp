@@ -1106,16 +1106,16 @@ void TParticleEffectManager::StopRuntime(size_t runtime_index)
 
 void TParticleEffectComponent::DrawPulse()
 {
-    if (!ParticleEffectManager || !effect_def || !Owner())
+    if (!ParticleEffectManager || !effect_def || !OwnerInstance())
         return;
-    ParticleEffectManager->PulseEffect(effect_def, Owner());
+    ParticleEffectManager->PulseEffect(effect_def, OwnerInstance());
     // Per-frame integration: tick the runtime's bucket expressions
     // (spawn_expr / tick_expr / kill_expr) against the live owner. dt is
     // the shared render-frame delta -- buckets with tick_hz > 0 accumulate
     // and integrate at their fixed cadence; others integrate once per
     // render frame.
     const float dt = float(TTime::DeltaTime());
-    ParticleEffectManager->IntegrateEffect(effect_def, Owner(), dt);
+    ParticleEffectManager->IntegrateEffect(effect_def, OwnerInstance(), dt);
 }
 
 TObjectClass EffectClass("EFFECT", OBJCLASS_EFFECT, 0);
@@ -6609,7 +6609,7 @@ class TSparkBurstComponent final : public TFlipbookBillboardComponent
     {
         burst_->Advance(TTime::DeltaTime());
         if (kill_owner_ && !burst_->IsAlive())
-            if (TObjectInstance* owner = Owner())
+            if (TObjectInstance* owner = OwnerInstance())
                 owner->SetFlags(OF_KILL);
     }
 
