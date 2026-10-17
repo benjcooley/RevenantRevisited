@@ -69,6 +69,7 @@
 #include "3dimage.h"
 #include "character.h"
 #include "defdoc.h"
+#include "defio.h"
 #include "mappane.h"
 #include "math3d.h"
 #include "retailsoftwaretransform.h"
@@ -98,43 +99,6 @@ void ParticleFatal(const std::string& msg)
     FatalError(msg.c_str());
 }
 
-const defdoc::Node* FindNamedBlock(const defdoc::Node& parent, const char* block_type,
-                                   const std::string& name)
-{
-    for (const defdoc::Node* block : parent.blocks(block_type))
-        if ((*block)["$name"].as_string() == name)
-            return block;
-    return nullptr;
-}
-
-void ParseVec3(const defdoc::Node& node, const char* key, float out[3])
-{
-    const defdoc::Node& value = node[key];
-    const defdoc::Node::Array& arr = value.as_array();
-    if (arr.size() != 3)
-        ParticleFatal(std::string("[particle] expected vec3 array for ") + key);
-    out[0] = float(arr[0].as_double());
-    out[1] = float(arr[1].as_double());
-    out[2] = float(arr[2].as_double());
-}
-
-void ParseOptionalColorRgb01(const defdoc::Node& node, const char* key, bool& enabled, float out[3])
-{
-    if (!node.contains(key))
-        return;
-
-    const defdoc::Node::Array& arr = node[key].as_array();
-    if (arr.size() != 3)
-        ParticleFatal(std::string("[particle] expected RGB array for ") + key);
-    out[0] = float(arr[0].as_double() / 255.0);
-    out[1] = float(arr[1].as_double() / 255.0);
-    out[2] = float(arr[2].as_double() / 255.0);
-    enabled = true;
-}
-
-// effects.def is port-authored engine data (the particle definitions the
-// engine's effect reconstructions run on), not a retail file, so it lives in
-// the engine's own assets rather than the install.
 std::string ReadParticleEffectsFile()
 {
     const std::string fname = rev_engine_asset("effects.def");
@@ -157,129 +121,29 @@ std::string ReadParticleEffectsFile()
     return text;
 }
 
+// The whole effects.def, read once through the DEF reader (defio) into
+// the annotated records in particledef.h, then validated.
+const SParticleEffectsFile& ParticleEffectsFile()
+{
+    static const SParticleEffectsFile file = [] {
+        SParticleEffectsFile f;
+        std::string err;
+        if (!defio::ReadObject(ReadParticleEffectsFile(), f, &err))
+            ParticleFatal("[particle] effects.def: " + err);
+        for (const SParticleEffectDef& e : f.effect)
+            if (!e.Validate(&err))
+                ParticleFatal("[particle] effects.def: " + err);
+        return f;
+    }();
+    return file;
+}
+
 SParticleEffectDef ParseParticleEffectDef(const char* wanted)
 {
-    const std::string text = ReadParticleEffectsFile();
-    SParticleEffectDef def = {};
-
-    defdoc::Document doc;
-    try
-    {
-        doc = defdoc::Document::parse(text);
-    }
-    catch (const std::exception& e)
-    {
-        ParticleFatal(std::string("[particle] effects.def parse failed: ") + e.what());
-    }
-
-    const defdoc::Node* effect = FindNamedBlock(doc.root(), "effect", wanted);
-    if (!effect)
-        ParticleFatal(std::string("[particle] missing effect definition ") + wanted);
-
-    def.name = (*effect)["$name"].as_string();
-    def.debug_solid = effect->get_string("debug") == "solid_green";
-    def.inactive_ttl_pulses = uint32_t(effect->get_int("inactive_ttl_pulses", 1));
-
-    for (const defdoc::Node* bucket_node : effect->blocks("bucket"))
-    {
-        SParticleBucketEffectDef bucket = {};
-        bucket.name = (*bucket_node)["$name"].as_string();
-        bucket.texture_slot = int32_t(bucket_node->get_int("texture_slot"));
-        bucket.atlas_cols = int32_t(bucket_node->get_int("atlas_cols", 1));
-        bucket.atlas_rows = int32_t(bucket_node->get_int("atlas_rows", 1));
-        bucket.atlas_frames = int32_t(bucket_node->get_int("atlas_frames", 1));
-        bucket.random_start_frame = bucket_node->get_bool("random_start_frame", false);
-        bucket.width = float(bucket_node->get_double("width", 1.0));
-        bucket.height = float(bucket_node->get_double("height", 1.0));
-        bucket.scale = float(bucket_node->get_double("scale", 1.0));
-        // Legacy `blend = "additive"|"alpha"` toggle preserved for the
-        // existing TorchFlame consumer. The richer `blend_mode` slot
-        // (additive_straight, premul_alpha) is read in BuildRuntimeBucketDesc
-        // if present and overrides the legacy bool.
-        bucket.additive = bucket_node->get_string("blend", "additive") == "additive";
-        bucket.flip_v = bucket_node->get_bool("flip_v", false);
-        ParseOptionalColorRgb01(*bucket_node, "chroma_key", bucket.chroma_key, bucket.chroma_key_rgb);
-        bucket.frame_expr = bucket_node->get_string("frame_expr");
-        bucket.uv_rect_expr = bucket_node->get_string("uv_rect_expr");
-
-        // VM-extension fields (all optional; absence preserves legacy behaviour).
-        bucket.imagery_path  = bucket_node->get_string("imagery_path");
-        bucket.blend_mode    = bucket_node->get_string("blend_mode");
-        bucket.light_mode    = bucket_node->get_string("light_mode");
-        bucket.depth_mode    = bucket_node->get_string("depth_mode");
-        bucket.orientation   = bucket_node->get_string("orientation");
-        bucket.spawn_expr    = bucket_node->get_string("spawn_expr");
-        bucket.tick_expr     = bucket_node->get_string("tick_expr");
-        bucket.kill_expr     = bucket_node->get_string("kill_expr");
-        bucket.spawn_burst   = int32_t(bucket_node->get_int("spawn_burst", 0));
-        bucket.spawn_count   = int32_t(bucket_node->get_int("spawn_count", 0));
-        bucket.tick_hz       = int32_t(bucket_node->get_int("tick_hz", 0));
-        bucket.default_life  = float(bucket_node->get_double("default_life", -1.0));
-        bucket.chain_bucket  = bucket_node->get_string("chain_bucket");
-        def.buckets.push_back(std::move(bucket));
-    }
-
-    for (const defdoc::Node* emitter_node : effect->blocks("emitter"))
-    {
-        SParticleEmitterEffectDef emitter = {};
-        emitter.name = (*emitter_node)["$name"].as_string();
-        ParseVec3(*emitter_node, "local_pos", emitter.local_pos);
-        for (const defdoc::Node* output_node : emitter_node->blocks("output"))
-        {
-            SParticleEmitterOutputDef output = {};
-            output.bucket = (*output_node)["$name"].as_string();
-            output.life = float(output_node->get_double("life", -1.0));
-            emitter.outputs.push_back(std::move(output));
-        }
-        def.emitters.push_back(std::move(emitter));
-    }
-
-    if (def.buckets.empty())
-        ParticleFatal("[particle] effect " + def.name + " has no buckets");
-    // Emitters are now optional -- buckets with spawn_burst/spawn_count
-    // self-emit and don't need an emitter/output block.
-    bool any_self_spawn = false;
-    for (const SParticleBucketEffectDef& bucket : def.buckets)
-        if (bucket.spawn_burst > 0 || bucket.spawn_count > 0)
-            any_self_spawn = true;
-    if (def.emitters.empty() && !any_self_spawn)
-        ParticleFatal("[particle] effect " + def.name + " has no emitters and no self-spawning buckets");
-    for (const SParticleBucketEffectDef& bucket : def.buckets)
-    {
-        if (bucket.name.empty())
-            ParticleFatal("[particle] effect " + def.name + " has unnamed bucket");
-        if (bucket.texture_slot < 0)
-            ParticleFatal("[particle] bucket " + bucket.name + " has invalid texture_slot");
-        if (bucket.atlas_cols <= 0 || bucket.atlas_rows <= 0 || bucket.atlas_frames <= 0)
-            ParticleFatal("[particle] bucket " + bucket.name + " has invalid atlas settings");
-        if (bucket.width <= 0.0f || bucket.height <= 0.0f)
-            ParticleFatal("[particle] bucket " + bucket.name + " has invalid size");
-        if (bucket.scale <= 0.0f)
-            ParticleFatal("[particle] bucket " + bucket.name + " has invalid scale");
-        // frame_expr / uv_rect_expr are now optional. A single-frame sprite
-        // (B01 droplets, M05 wisp) leaves them empty -- the runtime stamps
-        // a default DrawUvRect = full quad at spawn.
-        if (bucket.spawn_burst > 0 && bucket.spawn_count > 0)
-            ParticleFatal("[particle] bucket " + bucket.name + " has both spawn_burst and spawn_count set");
-        if (bucket.tick_hz < 0)
-            ParticleFatal("[particle] bucket " + bucket.name + " has negative tick_hz");
-        if (!bucket.chain_bucket.empty()
-            && !FindNamedBlock(*effect, "bucket", bucket.chain_bucket))
-            ParticleFatal("[particle] bucket " + bucket.name +
-                          " chain_bucket='" + bucket.chain_bucket +
-                          "' targets unknown bucket");
-    }
-    for (const SParticleEmitterEffectDef& emitter : def.emitters)
-    {
-        if (emitter.name.empty())
-            ParticleFatal("[particle] effect " + def.name + " has unnamed emitter");
-        if (emitter.outputs.empty())
-            ParticleFatal("[particle] emitter " + emitter.name + " has no outputs");
-        for (const SParticleEmitterOutputDef& output : emitter.outputs)
-            if (!FindNamedBlock(*effect, "bucket", output.bucket))
-                ParticleFatal("[particle] emitter " + emitter.name + " targets unknown bucket " + output.bucket);
-    }
-    return def;
+    if (const SParticleEffectDef* e = ParticleEffectsFile().Find(wanted))
+        return *e;
+    ParticleFatal(std::string("[particle] missing effect definition ") + wanted);
+    return {};
 }
 
 const SParticleEffectDef& TorchFlameDef()
@@ -317,7 +181,7 @@ SParticleBufferLayout ParticleEffectBucketLayout()
 const SParticleBucketEffectDef* FindEffectBucketDef(const SParticleEffectDef& effect_def,
                                                     const std::string& name)
 {
-    for (const SParticleBucketEffectDef& bucket : effect_def.buckets)
+    for (const SParticleBucketEffectDef& bucket : effect_def.bucket)
         if (bucket.name == name)
             return &bucket;
     return nullptr;
@@ -441,7 +305,7 @@ SParticleBucketDesc BuildRuntimeBucketDesc(const SParticleEffectDef& effect_def,
     desc.default_height = bucket_def.height;
     desc.debug_solid = effect_def.debug_solid;
     desc.flip_v = bucket_def.flip_v;
-    desc.chroma_key = bucket_def.chroma_key;
+    desc.chroma_key = bucket_def.chroma_key_enabled;
     desc.chroma_key_rgb[0] = bucket_def.chroma_key_rgb[0];
     desc.chroma_key_rgb[1] = bucket_def.chroma_key_rgb[1];
     desc.chroma_key_rgb[2] = bucket_def.chroma_key_rgb[2];
@@ -456,15 +320,15 @@ void InitializeRuntimeParticle(TParticleBucket& bucket, int32_t particle_index,
     if (float* draw_pos = bucket.VarPtr(particle_index, EParticleVar::DrawPos))
     {
         const S3DPoint& p = owner->Pos();
-        draw_pos[0] = float(p.x) + emitter.local_pos[0];
-        draw_pos[1] = float(p.y) + emitter.local_pos[1];
-        draw_pos[2] = float(p.z) + emitter.local_pos[2];
+        draw_pos[0] = float(p.x) + emitter.local_pos.X;
+        draw_pos[1] = float(p.y) + emitter.local_pos.Y;
+        draw_pos[2] = float(p.z) + emitter.local_pos.Z;
     }
     if (float* emit_pos = bucket.VarPtr(particle_index, EParticleVar::EmitPos))
     {
-        emit_pos[0] = emitter.local_pos[0];
-        emit_pos[1] = emitter.local_pos[1];
-        emit_pos[2] = emitter.local_pos[2];
+        emit_pos[0] = emitter.local_pos.X;
+        emit_pos[1] = emitter.local_pos.Y;
+        emit_pos[2] = emitter.local_pos.Z;
     }
     if (float* draw_scl = bucket.VarPtr(particle_index, EParticleVar::DrawScl))
     {
@@ -592,12 +456,12 @@ void UpdateRuntimeParticles(const SParticleEffectDef& effect_def, float owner_pa
     if (!owner)
         return;
 
-    for (const SParticleEmitterEffectDef& emitter : effect_def.emitters)
+    for (const SParticleEmitterEffectDef& emitter : effect_def.emitter)
     {
-        for (const SParticleEmitterOutputDef& output : emitter.outputs)
+        for (const SParticleEmitterOutputDef& output : emitter.output)
         {
-            const SParticleBucketEffectDef* bucket_def = FindEffectBucketDef(effect_def, output.bucket);
-            TParticleBucket* bucket = ParticleManager().FindGlobalBucket(output.bucket.c_str());
+            const SParticleBucketEffectDef* bucket_def = FindEffectBucketDef(effect_def, output.name);
+            TParticleBucket* bucket = ParticleManager().FindGlobalBucket(output.name.c_str());
             if (!bucket_def || !bucket)
                 continue;
 
@@ -1012,7 +876,7 @@ void TParticleEffectManager::StartRuntime(SRuntime& runtime, TObjectInstance* ow
     runtime.buckets.clear();
     runtime.bucket_runtimes.clear();
     const SParticleBufferLayout layout = ParticleEffectBucketLayout();
-    for (const SParticleBucketEffectDef& bucket_def : runtime.effect_def->buckets)
+    for (const SParticleBucketEffectDef& bucket_def : runtime.effect_def->bucket)
     {
         SParticleBucketDesc desc = BuildRuntimeBucketDesc(*runtime.effect_def, bucket_def, owner);
         TParticleBucket* bucket = ParticleManager().GetOrCreateGlobalBucket(desc, layout);
@@ -1052,15 +916,15 @@ void TParticleEffectManager::StartRuntime(SRuntime& runtime, TObjectInstance* ow
     // Legacy emitter/output path -- still drives TorchFlame. New
     // self-spawning buckets (spawn_burst / spawn_count) are handled by
     // IntegrateEffect's spawn-topup.
-    for (const SParticleEmitterEffectDef& emitter : runtime.effect_def->emitters)
+    for (const SParticleEmitterEffectDef& emitter : runtime.effect_def->emitter)
     {
-        for (const SParticleEmitterOutputDef& output : emitter.outputs)
+        for (const SParticleEmitterOutputDef& output : emitter.output)
         {
-            const SParticleBucketEffectDef* bucket_def = FindEffectBucketDef(*runtime.effect_def, output.bucket);
+            const SParticleBucketEffectDef* bucket_def = FindEffectBucketDef(*runtime.effect_def, output.name);
             if (!bucket_def)
                 continue;
 
-            TParticleBucket* bucket = ParticleManager().FindGlobalBucket(output.bucket.c_str());
+            TParticleBucket* bucket = ParticleManager().FindGlobalBucket(output.name.c_str());
             if (!bucket)
                 continue;
 
@@ -1574,7 +1438,7 @@ void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* 
         return;
 
     const SParticleEffectDef& def = TorchFlameDef();
-    const SParticleBucketEffectDef& primary_bucket = def.buckets.front();
+    const SParticleBucketEffectDef& primary_bucket = def.bucket.front();
     const bool needs_flipbook = !inst->GetComponent<TFlipbookBillboardComponent>();
     if (!needs_flipbook)
         return;

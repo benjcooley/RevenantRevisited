@@ -63,6 +63,7 @@
 
 class TPackedWriter;
 class TPackedReader;
+struct SPackedField;
 class TNodeInst;
 class TObjectComponent;
 
@@ -108,6 +109,8 @@ enum class EPropType : uint8_t
     Enum,       // int payload; the table names the options
     Ref,        // soft-ref id of another node
     Trigger,    // write 1 to fire; reads as 0
+    Struct,     // one nested annotated object  (DEF: `key { ... }`)
+    List,       // std::vector of nested annotated objects (DEF: repeated `key [name] { ... }`)
 };
 
 // Color as the property system carries it (floats 0..1).
@@ -159,7 +162,9 @@ struct SPropValue
             case EPropType::Float:   return f;
             case EPropType::Vec3:    return v3[0];
             case EPropType::Color:   return c4[0];
-            case EPropType::String:  return 0.0f;
+            case EPropType::String:
+            case EPropType::Struct:
+            case EPropType::List:    return 0.0f;
         }
         return 0.0f;
     }
@@ -171,7 +176,9 @@ struct SPropValue
     {
         case EPropType::Vec3:   return 3;
         case EPropType::Color:  return 4;
-        case EPropType::String: return 0;
+        case EPropType::String:
+        case EPropType::Struct:
+        case EPropType::List:   return 0;
         default:                return 1;
     }
 }
@@ -211,7 +218,9 @@ inline void PropSetLane(SPropValue& v, int32_t lane, float x)
         case EPropType::Enum:
         case EPropType::Ref:     v.i = int32_t(x); break;
         case EPropType::Float:   v.f = x; break;
-        case EPropType::String:  break;
+        case EPropType::String:
+        case EPropType::Struct:
+        case EPropType::List:    break;
     }
 }
 
@@ -259,6 +268,7 @@ struct SProp
     SPropValue         def               = {};        // the member initializer / def(...)
     const SEnumOption* options           = nullptr;   // Enum only
     int32_t            option_count      = 0;
+    const char*        elem_type_name    = "";        // Struct / List: the nested class
 };
 
 // One per annotated class, emitted by the generator and registered at
@@ -280,6 +290,13 @@ struct SType
     TNodeInst*        (*create_node)()      = nullptr;
     TObjectComponent* (*create_component)() = nullptr;
     void (*post_load)(void* obj)            = nullptr;   // the class's PostLoad(), if any
+    // Struct / List access (generated): the nested object, list size,
+    // element, append (returns the new element), clear.
+    void*   (*nested)(void* obj, uint16_t id)                    = nullptr;
+    int32_t (*list_count)(const void* obj, uint16_t id)          = nullptr;
+    void*   (*list_at)(void* obj, uint16_t id, int32_t index)    = nullptr;
+    void*   (*list_add)(void* obj, uint16_t id)                  = nullptr;
+    void    (*list_clear)(void* obj, uint16_t id)                = nullptr;
 };
 
 // Registry. Generated code registers; everyone else looks up.
@@ -303,6 +320,20 @@ void Reset(const SType& type, void* obj);
 
 // Post-deserialize hook: runs PostLoad() for the base chain, base first.
 void PostLoad(const SType& type, void* obj);
+
+// The nested class of a Struct / List property (resolved by name).
+[[nodiscard]] const SType* ElemType(const SProp& prop);
+
+// Struct / List access through the owning type's thunks (base chain aware).
+[[nodiscard]] void*   Nested(const SType& type, void* obj, uint16_t id);
+[[nodiscard]] int32_t ListCount(const SType& type, const void* obj, uint16_t id);
+[[nodiscard]] void*   ListAt(const SType& type, void* obj, uint16_t id, int32_t index);
+[[nodiscard]] void*   ListAdd(const SType& type, void* obj, uint16_t id);
+void                  ListClear(const SType& type, void* obj, uint16_t id);
+
+// Apply one packed field to `obj` (scalars set; Struct / List decode the
+// nested message, appending for a List). Unknown ids are ignored.
+void ApplyPacked(const SType& type, void* obj, const SPackedField& field);
 
 // Property lookup, walking the base chain.
 [[nodiscard]] const SProp* FindProp(const SType& type, std::string_view name);

@@ -126,8 +126,8 @@ a default:
 |---|---|
 | `id` | the integer in the annotation; also the wire tag (append-only, never reused) |
 | `name` | the member identifier (trailing `_` dropped) — the DEF key |
-| `desc` | the quoted string in the annotation, if any |
-| `type` | closed map: bool, int32_t, float, std::string, hmm_vec3, SRgba, `enum class` declared in the same header |
+| `desc` | the quoted string in the annotation, else the declaration's trailing `//` comment (the house style for documenting a member) |
+| `type` | closed map: bool, int32_t, float, std::string, hmm_vec3, SRgba, `enum class` declared in the same header; plus nested records: another annotated class (`Struct`, a `key { }` block) or `std::vector` of one (`List`, repeated `key [name] { }` blocks whose label fills the record's `name`) |
 | `serialized` / `visible_in_editor` / `read_only` | true / true / false by default; the rare cases are separate macros `PROP_NOSAVE`, `PROP_HIDDEN`, `PROP_READONLY` (and `PROP_FN_NOSAVE` / `PROP_FN_HIDDEN`; a `PROP_FN` with no setter is read-only) |
 | `def` | the member initializer, which must be a **simple literal** (number, `true`/`false`, string literal, brace list of numbers, `EType::Enumerator`); named constants, macros and expressions are rejected at generation. Accessor-backed properties state it with `def(literal)` |
 
@@ -173,9 +173,14 @@ Rules that keep it honest:
   legacy fields; `TSector` annotates level / sector_x / sector_y /
   num_items.
 
-`SParticleBucketEffectDef` becomes an annotated struct and
-`ParseParticleEffectDef` (effect.cpp:163, thirty hand-parsed keys) is
-deleted. Same for every `Parse*Def` of that shape.
+**Done 2026-10-16:** `src/particledef.h` holds the annotated
+`SParticleEffectsFile` / `SParticleEffectDef` / bucket / emitter / output
+records (member names are the DEF keys, cooked fields derived in
+`PostLoad`, structural checks in `Validate`); effects.def loads through
+`defio::ReadObject` and the thirty-key hand parser is gone. A test
+round-trips the shipped effects.def: read, validate, write, read,
+identical packed bytes. Every other `Parse*Def` of that shape follows
+the same recipe.
 
 ### 2.5 DEF reader / writer and the packed form
 

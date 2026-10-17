@@ -59,8 +59,12 @@ bool ReadObject(std::string_view text, T& obj, std::string* error = nullptr)
 [[nodiscard]] std::string Write(const TNodeInst& root);
 
 // Write one object's saveable properties, one `key = value` line each,
-// at `indent` levels (4 spaces). NoSave and ReadOnly fields are skipped.
-void WriteObject(const refl::SType& type, const void* obj, std::string& out, int32_t indent = 0);
+// then nested Struct / List records as `key [name] { }` blocks, at
+// `indent` levels (4 spaces). NoSave and ReadOnly fields and values equal
+// to their defaults are skipped. `skip_name` omits a String `name`
+// property (it is written as the block label by the caller).
+void WriteObject(const refl::SType& type, const void* obj, std::string& out, int32_t indent = 0,
+                 bool skip_name = false);
 template <class T>
 void WriteObject(const T& obj, std::string& out, int32_t indent = 0)
 {

@@ -8,6 +8,7 @@
 #include <HandmadeMath.h>
 
 #include <string>
+#include <vector>
 
 enum class ETestMode : uint8_t
 {
@@ -37,7 +38,21 @@ class STestGlow : public TObjectComponent
     const char* ComponentName() const override { return "glow"; }
 };
 
-// A flat annotated struct (no node, no components): the ReadObject path.
+struct STestRange
+{
+    PROP(1) float lo = 0.0f;
+    PROP(2) float hi = 1.0f;
+};
+
+struct STestKey
+{
+    PROP(1) std::string name;
+    PROP(2) float       time  = 0.0f;
+    PROP(3) float       value = 0.0f;
+};
+
+// A flat annotated struct (no node, no components): the ReadObject path,
+// with a nested record (`range { }`) and a list of records (`key x { }`).
 struct STestSettings
 {
     PROP(1) bool    enabled = true;
@@ -45,4 +60,6 @@ struct STestSettings
     PROP(3) float   rate    = 0.5f;
     PROP(4) SRgba   tint    = {0.2f, 0.4f, 0.6f, 1.0f};
     PROP(5) std::string name = "default";
+    PROP(6) STestRange range;
+    PROP(7) std::vector<STestKey> key;
 };

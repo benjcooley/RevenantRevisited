@@ -9,6 +9,7 @@
 #include "nodeinst.h"
 
 #include <cstdio>
+#include <cstring>
 
 namespace defio {
 
@@ -82,6 +83,10 @@ bool NodeToValue(const refl::SProp& p, const defdoc::Node& n, SPropValue& v,
         case EPropType::Trigger:
             why = "trigger properties cannot be set from a DEF";
             return false;
+        case EPropType::Struct:
+        case EPropType::List:
+            why = "expected a block";
+            return false;
     }
     return false;
 }
@@ -138,6 +143,45 @@ class TReaderSink : public defdoc::Sink
     void BeginBlock(const std::string& key, defdoc::Node header, int line) override
     {
         SFrame& cur = frames_.back();
+        const std::string label = header["$name"].as_string();
+
+        // A Struct / List property of the current object named like the
+        // block: the block fills a nested record (a List appends one).
+        if (cur.type)
+        {
+            if (const refl::SProp* np = refl::FindProp(*cur.type, key);
+                np && (np->type == EPropType::Struct || np->type == EPropType::List))
+            {
+                const refl::SType* et = refl::ElemType(*np);
+                void* elem = !et ? nullptr
+                           : np->type == EPropType::List ? refl::ListAdd(*cur.type, cur.obj, np->id)
+                                                         : refl::Nested(*cur.type, cur.obj, np->id);
+                if (!et || !elem)
+                {
+                    Fail(line, "block '" + key + "': nested type unavailable");
+                    frames_.push_back({});
+                    return;
+                }
+                SFrame f;
+                f.type = et;
+                f.obj = elem;
+                frames_.push_back(std::move(f));
+                // The label is the record's `name`, if it has one.
+                if (!label.empty())
+                {
+                    if (const refl::SProp* name_prop = refl::FindProp(*et, "name");
+                        name_prop && name_prop->type == EPropType::String && !name_prop->read_only)
+                        refl::Set(*et, elem, name_prop->id, SPropValue::String(label));
+                    else
+                        Fail(line, "block '" + key + "' takes no name");
+                }
+                for (const auto& kv : header.as_object())
+                    if (!kv.first.empty() && kv.first[0] != '$')
+                        Value(kv.first, kv.second, line);
+                return;
+            }
+        }
+
         const refl::SType* type = cur.type ? refl::FindByDefName(key) : nullptr;
         if (!type)
         {
@@ -146,7 +190,6 @@ class TReaderSink : public defdoc::Sink
             frames_.push_back({});                   // skip frame
             return;
         }
-        const std::string label = header["$name"].as_string();
         if (type->create_node)
         {
             if (!cur.node)
@@ -413,17 +456,55 @@ std::string FormatValue(const refl::SProp& p, const SPropValue& v)
         case EPropType::Color:
             return "[" + Fmt("%g", double(v.c4[0])) + ", " + Fmt("%g", double(v.c4[1])) + ", "
                        + Fmt("%g", double(v.c4[2])) + ", " + Fmt("%g", double(v.c4[3])) + "]";
-        case EPropType::Trigger: return "";
+        case EPropType::Trigger:
+        case EPropType::Struct:
+        case EPropType::List:    return "";
     }
     return "";
 }
 
-void WriteObject(const refl::SType& type, const void* obj, std::string& out, int32_t indent)
+namespace {
+
+// `key [name] { body }` for one nested record; the record's `name` is the
+// label and is not repeated inside.
+void WriteNestedBlock(const refl::SProp& p, const refl::SType& et, const void* elem,
+                      std::string& out, int32_t indent)
+{
+    // A Struct at its defaults is implicit, like a scalar at its default.
+    // A List element is always written: its presence is the information.
+    std::string body;
+    WriteObject(et, elem, body, indent + 1, /*skip_name=*/true);
+    if (p.type == EPropType::Struct && body.empty())
+        return;
+    Indent(out, indent);
+    out += p.name;
+    if (const refl::SProp* name_prop = refl::FindProp(et, "name");
+        name_prop && name_prop->type == EPropType::String)
+    {
+        SPropValue nv;
+        if (refl::Get(et, elem, name_prop->id, nv) && !nv.str.empty())
+        {
+            const std::string s(nv.str);
+            out += " ";
+            out += defdoc::detail::needs_quotes(s) ? defdoc::detail::quote(s) : s;
+        }
+    }
+    out += "\n";
+    Indent(out, indent); out += "{\n";
+    out += body;
+    Indent(out, indent); out += "}\n";
+}
+
+} // namespace
+
+void WriteObject(const refl::SType& type, const void* obj, std::string& out, int32_t indent, bool skip_name)
 {
     // Base properties first, then the class's own: reads top-down.
+    // Scalars first, nested blocks after.
     std::vector<const refl::SType*> chain;
     for (const refl::SType* t = &type; t; t = t->base)
         chain.push_back(t);
+    for (int pass = 0; pass < 2; ++pass)
     for (auto it = chain.rbegin(); it != chain.rend(); ++it)
     {
         const refl::SType& t = **it;
@@ -433,6 +514,29 @@ void WriteObject(const refl::SType& type, const void* obj, std::string& out, int
             if (!p.serialized || p.read_only)
                 continue;
             if (p.type == EPropType::Trigger)
+                continue;
+            const bool nested = p.type == EPropType::Struct || p.type == EPropType::List;
+            if (nested != (pass == 1))
+                continue;
+            if (nested)
+            {
+                const refl::SType* et = refl::ElemType(p);
+                if (!et) continue;
+                void* o = const_cast<void*>(obj);
+                if (p.type == EPropType::Struct)
+                {
+                    if (void* n = refl::Nested(type, o, p.id))
+                        WriteNestedBlock(p, *et, n, out, indent);
+                }
+                else
+                {
+                    const int32_t n = refl::ListCount(type, obj, p.id);
+                    for (int32_t k = 0; k < n; ++k)
+                        WriteNestedBlock(p, *et, refl::ListAt(type, o, p.id, k), out, indent);
+                }
+                continue;
+            }
+            if (skip_name && std::strcmp(p.name, "name") == 0 && p.type == EPropType::String)
                 continue;
             SPropValue v;
             if (!refl::Get(type, obj, p.id, v))

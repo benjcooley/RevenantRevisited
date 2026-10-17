@@ -123,23 +123,8 @@ bool UnpackNode(TPackedReader& r, TNodeInst& node,
             continue;
         }
         // A plain property of this node.
-        if (!t) continue;
-        const refl::SProp* p = refl::FindProp(*t, f.id);
-        if (!p) continue;
-        SPropValue v;
-        switch (p->type)
-        {
-            case EPropType::Bool:    v = SPropValue::Bool(TPackedReader::Bool(f));     break;
-            case EPropType::Int:     v = SPropValue::Int(TPackedReader::Int(f));       break;
-            case EPropType::Enum:    v = SPropValue::Enum(TPackedReader::Int(f));      break;
-            case EPropType::Ref:     v = SPropValue::Ref(TPackedReader::Int(f));       break;
-            case EPropType::Float:   v = SPropValue::Float(TPackedReader::Float(f));   break;
-            case EPropType::String:  v = SPropValue::String(TPackedReader::String(f)); break;
-            case EPropType::Vec3:    v.type = EPropType::Vec3;  if (!TPackedReader::Vec3(f, v.v3))  continue; break;
-            case EPropType::Color:   v.type = EPropType::Color; if (!TPackedReader::Color(f, v.c4)) continue; break;
-            case EPropType::Trigger: continue;
-        }
-        refl::Set(*t, &node, p->id, v);
+        if (t)
+            refl::ApplyPacked(*t, &node, f);
     }
     if (t)
         refl::PostLoad(*t, &node);                     // node complete: fields, components, children

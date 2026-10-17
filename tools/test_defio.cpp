@@ -7,8 +7,12 @@
 #include "../src/nodeinst.h"
 #include "../src/nodepack.h"
 #include "../src/packed.h"
+#include "../src/particledef.h"
 
 #include <gtest/gtest.h>
+
+#include <fstream>
+#include <sstream>
 
 #include <memory>
 #include <string>
@@ -177,6 +181,32 @@ TEST(DefIo, FlatObject)
     defio::WriteObject(s, out);
     EXPECT_EQ(out, "enabled = false\ncount = 9\ntint = [1, 0, 0, 1]\nname = custom\n");
 
+    // Nested record + list of records.
+    STestSettings n;
+    ASSERT_TRUE(defio::ReadObject(
+        "range { lo = 2 hi = 5 }\n"
+        "key a { time = 0 value = 1 }\n"
+        "key b { time = 1.5 value = 0.25 }\n", n, &err)) << err;
+    EXPECT_FLOAT_EQ(n.range.lo, 2.0f);
+    EXPECT_FLOAT_EQ(n.range.hi, 5.0f);
+    ASSERT_EQ(n.key.size(), 2u);
+    EXPECT_EQ(n.key[1].name, "b");
+    EXPECT_FLOAT_EQ(n.key[1].time, 1.5f);
+    std::string nout;
+    defio::WriteObject(n, nout);
+    EXPECT_EQ(nout,
+        "range\n{\n    lo = 2\n    hi = 5\n}\n"
+        "key a\n{\n    value = 1\n}\n"
+        "key b\n{\n    time = 1.5\n    value = 0.25\n}\n") << nout;
+    TPackedWriter pw;
+    refl::Pack(*refl::Of(n), &n, pw);
+    STestSettings n2;
+    TPackedReader pr(pw.Buffer());
+    refl::Unpack(*refl::Of(n2), &n2, pr);
+    ASSERT_EQ(n2.key.size(), 2u);
+    EXPECT_EQ(n2.key[0].name, "a");
+    EXPECT_FLOAT_EQ(n2.range.hi, 5.0f);
+
     EXPECT_FALSE(defio::ReadObject("node x { }", s, &err));       // no blocks in a flat object
     EXPECT_NE(err.find("needs a node"), std::string::npos) << err;
     EXPECT_FALSE(defio::ReadObject("sparkle { }", s, &err));
@@ -188,4 +218,56 @@ TEST(DefIo, FlatObject)
     EXPECT_EQ(s.count, 4);
     EXPECT_EQ(s.name, "default");
     EXPECT_EQ(s.tint, (SRgba{0.2f, 0.4f, 0.6f, 1.0f}));
+}
+
+// The shipped effects.def through the annotated records: read, validate,
+// write back, read again, identical packed bytes. Skips if the data file
+// is not next to the sources (CI without the data tree).
+TEST(DefIo, RealEffectsDef)
+{
+    std::ifstream in(std::string(REV_SOURCE_DIR) + "/data/Resources/effects.def");
+    if (!in) GTEST_SKIP() << "effects.def not found";
+    std::stringstream ss;
+    ss << in.rdbuf();
+    const std::string text = ss.str();
+
+    SParticleEffectsFile f;
+    std::string err;
+    ASSERT_TRUE(defio::ReadObject(text, f, &err)) << err;
+    ASSERT_EQ(f.effect.size(), 3u);
+    for (const SParticleEffectDef& e : f.effect)
+        EXPECT_TRUE(e.Validate(&err)) << err;
+
+    const SParticleEffectDef* torch = f.Find("torchflame");          // case-insensitive
+    ASSERT_NE(torch, nullptr);
+    EXPECT_EQ(torch->name, "TorchFlame");
+    ASSERT_EQ(torch->bucket.size(), 1u);
+    EXPECT_TRUE(torch->bucket[0].chroma_key_enabled);                 // [255, 0, 0] -> PostLoad
+    EXPECT_FLOAT_EQ(torch->bucket[0].chroma_key_rgb[0], 1.0f);
+    EXPECT_TRUE(torch->bucket[0].additive);
+    ASSERT_EQ(torch->emitter.size(), 1u);
+    EXPECT_FLOAT_EQ(torch->emitter[0].local_pos.Z, 32.0f);
+    ASSERT_EQ(torch->emitter[0].output.size(), 1u);
+    EXPECT_EQ(torch->emitter[0].output[0].name, "flame_billboard");
+    EXPECT_FLOAT_EQ(torch->emitter[0].output[0].life, -1.0f);
+
+    const SParticleEffectDef* blood = f.Find("Blood");
+    ASSERT_NE(blood, nullptr);
+    ASSERT_EQ(blood->bucket.size(), 2u);
+    EXPECT_EQ(blood->bucket[0].chain_bucket, "blood_splat");
+    EXPECT_EQ(blood->bucket[0].spawn_burst, 10);
+    EXPECT_NE(blood->bucket[0].spawn_expr.find("pos = emit_pos"), std::string::npos);
+    EXPECT_EQ(blood->bucket[0].blend_mode, "alpha");
+    EXPECT_FALSE(blood->bucket[0].chroma_key_enabled);
+
+    // Write back and read again: same records.
+    std::string out;
+    defio::WriteObject(f, out);
+    SParticleEffectsFile g;
+    ASSERT_TRUE(defio::ReadObject(out, g, &err)) << err << "\n" << out;
+    TPackedWriter a, b;
+    refl::Pack(*refl::Of(f), &f, a);
+    refl::Pack(*refl::Of(g), &g, b);
+    EXPECT_EQ(a.Buffer(), b.Buffer());
+    EXPECT_GT(a.Buffer().size(), 1000u);
 }

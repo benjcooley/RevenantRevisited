@@ -13,7 +13,9 @@ The parser is deliberately dumb. It understands exactly:
 
     class|struct Name [: bases] {        (one per line; nesting tracked by braces)
     enum class Name [: type] { A, B, ... };   (possibly spanning lines)
-    PROP(args...) type name [= default];         (one per line)
+    PROP(args...) type name [= default];         (one per line; the annotation may
+                                                  also sit alone on the line above
+                                                  the declaration)
     PROP_FN(id, type, name, Getter, Setter[, args...]);   accessor-backed property:
                                          Getter() returns `type`, Setter(const type&)
                                          (Setter empty -> read-only)
@@ -21,7 +23,9 @@ The parser is deliberately dumb. It understands exactly:
     A property is serialized and visible in the editor by default. The rare
     variants are separate macros: PROP_NOSAVE / PROP_HIDDEN / PROP_READONLY and
     PROP_FN_NOSAVE / PROP_FN_HIDDEN. Annotation args are order-free: an integer
-    is the id, a "quoted string" the description, def(literal) the default.
+    is the id, a "quoted string" the description, def(literal) the default. When
+    the annotation gives no description, the declaration's trailing // comment
+    is used (the house style for documenting a member).
     Defaults come from the member initializer and must be simple literals:
     numbers, true / false, a string literal, a brace list of numbers, or an
     enumerator (EType::Name). Named constants, macros and expressions are
@@ -33,7 +37,10 @@ The parser is deliberately dumb. It understands exactly:
     DEF_BLOCK("name") | DEF_COMPONENT("name")   block keyword + factory (one per class)
 
 Anything else is ignored. A PROP line it cannot parse is a build error.
-Supported member types are a closed list (see TYPE_MAP). When a real
+Supported member types are a closed list (see TYPE_MAP), plus nested records:
+a member whose type is another annotated class in the same header is a
+Struct (`key { }` in a DEF), and std::vector<ThatClass> is a List (repeated
+`key [name] { }`; the label fills the record's `name` property). When a real
 compiler reads the annotations, delete this file and the CMake hook; the
 headers do not change.
 
@@ -57,8 +64,10 @@ TYPE_MAP = {
 RE_CLASS = re.compile(r"^\s*(?:class|struct)\s+([A-Za-z_]\w*)\s*(?:final\s*)?(?::\s*(?:(?:public|protected|private|virtual)\s+)*([\w:]+)[^{;]*)?\{")
 RE_ENUM  = re.compile(r"^\s*enum\s+class\s+([A-Za-z_]\w*)\s*(?::\s*[\w:]+)?\s*\{")
 RE_DECL_HEAD = re.compile(r"^\s*(?:(?:class|struct)\s+[A-Za-z_]\w*\s*(?:final\s*)?(?::[^{;]*)?|enum\s+class\s+[A-Za-z_]\w*\s*(?::\s*[\w:]+)?)\s*$")
-RE_PROP  = re.compile(r"^\s*(PROP|PROP_NOSAVE|PROP_HIDDEN|PROP_READONLY)\((.*?)\)\s+([\w:]+)\s+([A-Za-z_]\w*)\s*(?:=\s*([^;]*?))?\s*;")
+RE_PROP  = re.compile(r"^\s*(PROP|PROP_NOSAVE|PROP_HIDDEN|PROP_READONLY)\((.*?)\)\s+([\w:]+(?:<[\w:]+>)?)\s+([A-Za-z_]\w*)\s*(?:=\s*([^;]*?))?\s*;")
+RE_VECTOR = re.compile(r"^std::vector<([A-Za-z_]\w*)>$")
 RE_PROP_ANY = re.compile(r"^\s*PROP(_NOSAVE|_HIDDEN|_READONLY)?\(")
+RE_PROP_ALONE = re.compile(r"^\s*(PROP|PROP_NOSAVE|PROP_HIDDEN|PROP_READONLY)\((.*)\)\s*$")
 RE_PROP_FN  = re.compile(r"^\s*(PROP_FN|PROP_FN_NOSAVE|PROP_FN_HIDDEN)\((.*)\)\s*;?")
 RE_HOOK  = re.compile(r"\bvoid\s+PropChanged\s*\(")
 RE_POSTLOAD = re.compile(r"\bvoid\s+PostLoad\s*\(\s*\)")
@@ -273,9 +282,20 @@ def parse(path: Path):
                                           getter=raw[3], setter=setter or None, default=default))
                 i += 1
                 continue
+            # Annotation alone on a line: it applies to the next declaration.
+            if RE_PROP_ALONE.match(code):
+                j = i + 1
+                while j < len(lines) and lines[j].split("//", 1)[0].strip() == "":
+                    j += 1
+                if j < len(lines):
+                    code = code.rstrip() + " " + lines[j].split("//", 1)[0].strip()
+                    i = j
+            trailing = line.split("//", 1)[1].strip() if "//" in line and not line.lstrip().startswith("//") else ""
             m_prop = RE_PROP.match(code)
             if m_prop:
                 pid, meta, override = classify_args(m_prop.group(1), split_args(m_prop.group(2)), path, i + 1)
+                if meta["desc"] == '""' and trailing:
+                    meta["desc"] = '"' + trailing.replace("\\", "\\\\").replace('"', '\\"') + '"'
                 if pid == 0 or pid > 0x3FFF:
                     fail(path, i + 1, f"PROP id {pid} out of range 1..16383")
                 if pid in cur.ids:
@@ -295,6 +315,8 @@ def parse(path: Path):
 
 def default_expr(m, ptype, path):
     """SPropValue factory expression for the member's default (literals only)."""
+    if ptype in ("List", "Struct"):
+        return "SPropValue()"
     init = check_literal(m.default, ptype, m.ctype, path, m.line_no) if m.default is not None else None
     if ptype == "Enum":
         return "SPropValue::Enum(int32_t(%s))" % (init if init else "%s(0)" % m.ctype)
@@ -340,33 +362,55 @@ def emit(path: Path, out: Path, include: str):
         for n in names:
             o.append('    { int32_t(%s::%s), "%s" },\n' % (ename, n, snake(n)))
         o.append("};\n")
+    annotated = {k.name for k in classes if k.members}
+
+    def kind_of(m):
+        """-> (ptype, elem_class or None)"""
+        if m.ctype in TYPE_MAP:
+            return TYPE_MAP[m.ctype][0], None
+        if m.ctype in enums:
+            return "Enum", None
+        mv = RE_VECTOR.match(m.ctype)
+        if mv and mv.group(1) in annotated:
+            return "List", mv.group(1)
+        if m.ctype in annotated:
+            return "Struct", m.ctype
+        fail(path, m.line_no, f"unsupported PROP type `{m.ctype}` (closed list: "
+             + ", ".join(TYPE_MAP) + ", an enum class, an annotated class, or std::vector of one, "
+             "all declared in this header)")
+
     for k in targets:
         if not k.members:
             continue
         o.append("const refl::SProp kProps_%s[] = {\n" % k.name)
         for m in k.members:
-            if m.ctype in TYPE_MAP:
-                ptype = TYPE_MAP[m.ctype][0]
-                opts, nopts = "nullptr", "0"
-            elif m.ctype in enums:
-                ptype = "Enum"
+            ptype, elem = kind_of(m)
+            if ptype == "Enum":
                 opts, nopts = "kEnum_%s" % m.ctype, str(len(enums[m.ctype]))
             else:
-                fail(path, m.line_no, f"unsupported PROP type `{m.ctype}` (closed list: "
-                     + ", ".join(TYPE_MAP) + ", or an enum class declared in this header)")
-            o.append('    { %d, "%s", %s, EPropType::%s, %s, %s, %s, %s, %s, %s },\n'
+                opts, nopts = "nullptr", "0"
+            if ptype in ("List", "Struct") and m.getter:
+                fail(path, m.line_no, "nested records cannot be accessor-backed (PROP_FN)")
+            o.append('    { %d, "%s", %s, EPropType::%s, %s, %s, %s, %s, %s, %s, "%s" },\n'
                      % (m.id, m.name, m.desc, ptype,
                         "true" if m.serialized else "false",
                         "true" if m.visible else "false",
                         "true" if m.read_only else "false",
-                        default_expr(m, ptype, path), opts, nopts))
+                        default_expr(m, ptype, path), opts, nopts, elem or ""))
         o.append("};\n\n")
 
         o.append("} // namespace\n\n")
+        nested_members = [m for m in k.members if kind_of(m)[0] in ("List", "Struct")]
         o.append("template <> struct refl::Access<%s>\n{\n" % k.name)
         if k.members:
             o.append("    static bool Set(void* obj, uint16_t id, const SPropValue& v);\n")
             o.append("    static bool Get(const void* obj, uint16_t id, SPropValue& out);\n")
+        if nested_members:
+            o.append("    static void*   Nested(void* obj, uint16_t id);\n")
+            o.append("    static int32_t ListCount(const void* obj, uint16_t id);\n")
+            o.append("    static void*   ListAt(void* obj, uint16_t id, int32_t index);\n")
+            o.append("    static void*   ListAdd(void* obj, uint16_t id);\n")
+            o.append("    static void    ListClear(void* obj, uint16_t id);\n")
         if k.has_postload:
             o.append("    static void PostLoad(void* obj) { static_cast<%s*>(obj)->PostLoad(); }\n" % k.name)
         o.append("};\n\n")
@@ -375,8 +419,8 @@ def emit(path: Path, out: Path, include: str):
           o.append("    %s& self = *static_cast<%s*>(obj);\n" % (k.name, k.name))
           o.append("    switch (id)\n    {\n")
           for m in k.members:
-              if m.read_only:
-                  o.append("        case %d: return false;   // read-only\n" % m.id)
+              if m.read_only or kind_of(m)[0] in ("List", "Struct"):
+                  o.append("        case %d: return false;   // read-only / nested\n" % m.id)
                   continue
               if m.setter:
                   if m.ctype in TYPE_MAP:
@@ -412,6 +456,8 @@ def emit(path: Path, out: Path, include: str):
           o.append("    switch (id)\n    {\n")
           for m in k.members:
               read = "self." + m.read
+              if kind_of(m)[0] in ("List", "Struct"):
+                  continue
               if m.ctype in TYPE_MAP:
                   if m.getter and m.ctype in ("hmm_vec3", "SRgba"):
                       o.append("        case %d: { const %s _g = %s; %s return true; }\n"
@@ -422,6 +468,34 @@ def emit(path: Path, out: Path, include: str):
                   o.append("        case %d: out = SPropValue::Enum(int32_t(%s)); return true;\n" % (m.id, read))
           o.append("        default: return false;\n    }\n}\n\n")
 
+        if nested_members:
+            structs = [m for m in nested_members if kind_of(m)[0] == "Struct"]
+            lists   = [m for m in nested_members if kind_of(m)[0] == "List"]
+            o.append("void* refl::Access<%s>::Nested(void* obj, uint16_t id)\n{\n" % k.name)
+            o.append("    %s& self = *static_cast<%s*>(obj); (void)self;\n    switch (id)\n    {\n" % (k.name, k.name))
+            for m in structs:
+                o.append("        case %d: return &self.%s;\n" % (m.id, m.member))
+            o.append("        default: return nullptr;\n    }\n}\n")
+            o.append("int32_t refl::Access<%s>::ListCount(const void* obj, uint16_t id)\n{\n" % k.name)
+            o.append("    const %s& self = *static_cast<const %s*>(obj); (void)self;\n    switch (id)\n    {\n" % (k.name, k.name))
+            for m in lists:
+                o.append("        case %d: return int32_t(self.%s.size());\n" % (m.id, m.member))
+            o.append("        default: return 0;\n    }\n}\n")
+            o.append("void* refl::Access<%s>::ListAt(void* obj, uint16_t id, int32_t index)\n{\n" % k.name)
+            o.append("    %s& self = *static_cast<%s*>(obj); (void)self; (void)index;\n    switch (id)\n    {\n" % (k.name, k.name))
+            for m in lists:
+                o.append("        case %d: return (index >= 0 && index < int32_t(self.%s.size())) ? &self.%s[size_t(index)] : nullptr;\n" % (m.id, m.member, m.member))
+            o.append("        default: return nullptr;\n    }\n}\n")
+            o.append("void* refl::Access<%s>::ListAdd(void* obj, uint16_t id)\n{\n" % k.name)
+            o.append("    %s& self = *static_cast<%s*>(obj); (void)self;\n    switch (id)\n    {\n" % (k.name, k.name))
+            for m in lists:
+                o.append("        case %d: self.%s.emplace_back(); return &self.%s.back();\n" % (m.id, m.member, m.member))
+            o.append("        default: return nullptr;\n    }\n}\n")
+            o.append("void refl::Access<%s>::ListClear(void* obj, uint16_t id)\n{\n" % k.name)
+            o.append("    %s& self = *static_cast<%s*>(obj); (void)self;\n    switch (id)\n    {\n" % (k.name, k.name))
+            for m in lists:
+                o.append("        case %d: self.%s.clear(); break;\n" % (m.id, m.member))
+            o.append("        default: break;\n    }\n}\n\n")
         o.append("namespace {\n")
         props = ("kProps_%s" % k.name) if k.members else "nullptr"
         setf  = ("&refl::Access<%s>::Set" % k.name) if k.members else "nullptr"
@@ -429,8 +503,12 @@ def emit(path: Path, out: Path, include: str):
         cnode = ("[]() -> TNodeInst* { return new %s(); }" % k.name) if k.def_kind == "node" else "nullptr"
         ccomp = ("[]() -> TObjectComponent* { return new %s(); }" % k.name) if k.def_kind == "component" else "nullptr"
         loaded = ("&refl::Access<%s>::PostLoad" % k.name) if k.has_postload else "nullptr"
-        o.append('refl::SType kType_%s = { "%s", "%s", &typeid(%s), %s, %d, %s, %s, nullptr, "%s", %s, %s, %s };\n'
-                 % (k.name, k.name, k.base, k.name, props, len(k.members), setf, getf, k.def_name, cnode, ccomp, loaded))
+        if nested_members:
+            nest = ", ".join("&refl::Access<%s>::%s" % (k.name, fn) for fn in ("Nested", "ListCount", "ListAt", "ListAdd", "ListClear"))
+        else:
+            nest = "nullptr, nullptr, nullptr, nullptr, nullptr"
+        o.append('refl::SType kType_%s = { "%s", "%s", &typeid(%s), %s, %d, %s, %s, nullptr, "%s", %s, %s, %s, %s };\n'
+                 % (k.name, k.name, k.base, k.name, props, len(k.members), setf, getf, k.def_name, cnode, ccomp, loaded, nest))
         o.append("refl::SRegistrar kReg_%s(kType_%s);\n\n" % (k.name, k.name))
     o.append("} // namespace\n")
     out.parent.mkdir(parents=True, exist_ok=True)

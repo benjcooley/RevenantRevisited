@@ -115,6 +115,8 @@ bool Equals(const SPropValue& a, const SPropValue& b)
     if (a.type != b.type) return false;
     switch (a.type)
     {
+        case EPropType::Struct:
+        case EPropType::List:    return false;
         case EPropType::Bool:
         case EPropType::Trigger: return a.b == b.b;
         case EPropType::Int:
@@ -137,6 +139,14 @@ void Reset(const SType& type, void* obj)
             const SProp& p = t->props[i];
             if (p.read_only) continue;
             if (p.type == EPropType::Trigger) continue;
+            if (p.type == EPropType::List) { if (t->list_clear) t->list_clear(obj, p.id); continue; }
+            if (p.type == EPropType::Struct)
+            {
+                if (const SType* et = ElemType(p))
+                    if (void* n = t->nested ? t->nested(obj, p.id) : nullptr)
+                        Reset(*et, n);
+                continue;
+            }
             if (t->set) t->set(obj, p.id, p.def);
         }
         if (t->base == nullptr && t->base_name && *t->base_name)
@@ -172,6 +182,54 @@ const char* EnumName(const SProp& prop, int32_t value)
         if (prop.options[i].value == value)
             return prop.options[i].name;
     return "";
+}
+
+const SType* ElemType(const SProp& prop)
+{
+    if (!prop.elem_type_name || !*prop.elem_type_name) return nullptr;
+    return Find(prop.elem_type_name);
+}
+
+namespace {
+// Finds the type in the chain whose own table holds `id`.
+const SType* OwnerOf(const SType& type, uint16_t id)
+{
+    for (const SType* t = &type; t; t = t->base)
+    {
+        for (int32_t i = 0; i < t->prop_count; ++i)
+            if (t->props[i].id == id)
+                return t;
+        if (t->base == nullptr && t->base_name && *t->base_name)
+            LinkBase(const_cast<SType&>(*t));
+    }
+    return nullptr;
+}
+} // namespace
+
+void* Nested(const SType& type, void* obj, uint16_t id)
+{
+    const SType* t = OwnerOf(type, id);
+    return (t && t->nested) ? t->nested(obj, id) : nullptr;
+}
+int32_t ListCount(const SType& type, const void* obj, uint16_t id)
+{
+    const SType* t = OwnerOf(type, id);
+    return (t && t->list_count) ? t->list_count(obj, id) : 0;
+}
+void* ListAt(const SType& type, void* obj, uint16_t id, int32_t index)
+{
+    const SType* t = OwnerOf(type, id);
+    return (t && t->list_at) ? t->list_at(obj, id, index) : nullptr;
+}
+void* ListAdd(const SType& type, void* obj, uint16_t id)
+{
+    const SType* t = OwnerOf(type, id);
+    return (t && t->list_add) ? t->list_add(obj, id) : nullptr;
+}
+void ListClear(const SType& type, void* obj, uint16_t id)
+{
+    const SType* t = OwnerOf(type, id);
+    if (t && t->list_clear) t->list_clear(obj, id);
 }
 
 bool Set(const SType& type, void* obj, uint16_t id, const SPropValue& value)
@@ -231,6 +289,28 @@ void Pack(const SType& type, const void* obj, TPackedWriter& w)
             const SProp& p = t->props[i];
             if (!p.serialized || p.read_only)
                 continue;
+            if (p.type == EPropType::List)
+            {
+                const SType* et = ElemType(p);
+                if (!et || !t->list_count || !t->list_at) continue;
+                const int32_t n = t->list_count(obj, p.id);
+                for (int32_t k = 0; k < n; ++k)
+                {
+                    TPackedWriter sub;
+                    Pack(*et, t->list_at(const_cast<void*>(obj), p.id, k), sub);
+                    w.Message(p.id, sub);
+                }
+                continue;
+            }
+            if (p.type == EPropType::Struct)
+            {
+                const SType* et = ElemType(p);
+                if (!et || !t->nested) continue;
+                TPackedWriter sub;
+                Pack(*et, t->nested(const_cast<void*>(obj), p.id), sub);
+                w.Message(p.id, sub);
+                continue;
+            }
             SPropValue v;
             if (!t->get || !t->get(obj, p.id, v))
                 continue;
@@ -244,7 +324,9 @@ void Pack(const SType& type, const void* obj, TPackedWriter& w)
                 case EPropType::String:  w.String(p.id, v.str);  break;
                 case EPropType::Vec3:    w.Vec3(p.id, v.v3);     break;
                 case EPropType::Color:   w.Color(p.id, v.c4);    break;
-                case EPropType::Trigger: break;                  // never persisted
+                case EPropType::Trigger:
+                case EPropType::Struct:
+                case EPropType::List:    break;
             }
         }
         if (t->base == nullptr && t->base_name && *t->base_name)
@@ -252,29 +334,45 @@ void Pack(const SType& type, const void* obj, TPackedWriter& w)
     }
 }
 
+void ApplyPacked(const SType& type, void* obj, const SPackedField& f)
+{
+    const SProp* p = FindProp(type, f.id);
+    if (!p)
+        return;     // retired or unknown id: already skipped by wire kind
+    if (p->type == EPropType::List || p->type == EPropType::Struct)
+    {
+        const SType* et = ElemType(*p);
+        if (!et || f.wire != EPackedWire::Bytes) return;
+        void* elem = p->type == EPropType::List ? ListAdd(type, obj, p->id) : Nested(type, obj, p->id);
+        if (!elem) return;
+        TPackedReader sub(f);
+        Unpack(*et, elem, sub);
+        PostLoad(*et, elem);
+        return;
+    }
+    SPropValue v;
+    switch (p->type)
+    {
+        case EPropType::Bool:    v = SPropValue::Bool(TPackedReader::Bool(f));     break;
+        case EPropType::Int:     v = SPropValue::Int(TPackedReader::Int(f));       break;
+        case EPropType::Enum:    v = SPropValue::Enum(TPackedReader::Int(f));      break;
+        case EPropType::Ref:     v = SPropValue::Ref(TPackedReader::Int(f));       break;
+        case EPropType::Float:   v = SPropValue::Float(TPackedReader::Float(f));   break;
+        case EPropType::String:  v = SPropValue::String(TPackedReader::String(f)); break;
+        case EPropType::Vec3:    v.type = EPropType::Vec3;  if (!TPackedReader::Vec3(f, v.v3))  return; break;
+        case EPropType::Color:   v.type = EPropType::Color; if (!TPackedReader::Color(f, v.c4)) return; break;
+        case EPropType::Trigger:
+        case EPropType::Struct:
+        case EPropType::List:    return;
+    }
+    Set(type, obj, p->id, v);
+}
+
 void Unpack(const SType& type, void* obj, TPackedReader& r)
 {
     SPackedField f;
     while (r.Next(f))
-    {
-        const SProp* p = FindProp(type, f.id);
-        if (!p)
-            continue;   // retired or unknown id: already skipped by wire kind
-        SPropValue v;
-        switch (p->type)
-        {
-            case EPropType::Bool:    v = SPropValue::Bool(TPackedReader::Bool(f));     break;
-            case EPropType::Int:     v = SPropValue::Int(TPackedReader::Int(f));       break;
-            case EPropType::Enum:    v = SPropValue::Enum(TPackedReader::Int(f));      break;
-            case EPropType::Ref:     v = SPropValue::Ref(TPackedReader::Int(f));       break;
-            case EPropType::Float:   v = SPropValue::Float(TPackedReader::Float(f));   break;
-            case EPropType::String:  v = SPropValue::String(TPackedReader::String(f)); break;
-            case EPropType::Vec3:    v.type = EPropType::Vec3;  if (!TPackedReader::Vec3(f, v.v3))  continue; break;
-            case EPropType::Color:   v.type = EPropType::Color; if (!TPackedReader::Color(f, v.c4)) continue; break;
-            case EPropType::Trigger: continue;
-        }
-        Set(type, obj, p->id, v);
-    }
+        ApplyPacked(type, obj, f);
 }
 
 } // namespace refl

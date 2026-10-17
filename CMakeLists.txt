@@ -209,7 +209,8 @@ target_link_libraries(Revenant PRIVATE imgui revsmk)
 rev_reflect(Revenant
   src/nodeinst.h
   src/object.h
-  src/sector.h)
+  src/sector.h
+  src/particledef.h)
 
 # buildinfo.h: the commit the binary is built from (the playtest recordings
 # name it) and its version (the main menu shows it). Regenerated every
@@ -299,10 +300,12 @@ add_executable(test_defio
   src/animsystem.cpp
   src/math3d.cpp
   src/refl.cpp
-  src/packed.cpp)
+  src/packed.cpp
+  src/particledef.cpp)
 target_include_directories(test_defio PRIVATE ${HANDMADE_MATH_DIR})
+target_compile_definitions(test_defio PRIVATE REV_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(test_defio PRIVATE GTest::gtest_main)
-rev_reflect(test_defio tools/test_defio_types.h src/nodeinst.h)
+rev_reflect(test_defio tools/test_defio_types.h src/nodeinst.h src/particledef.h)
 
 add_executable(test_nodeinst
   tools/test_nodeinst.cpp
