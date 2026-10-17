@@ -97,8 +97,8 @@ class TReaderSink : public defdoc::Sink
 {
   public:
     TReaderSink(const refl::SType& root_type, void* root_obj, TNodeInst* root_node,
-                std::vector<std::unique_ptr<TNodeInst>>* owned)
-        : owned_(owned)
+                std::vector<std::unique_ptr<TNodeInst>>* owned, bool post_load)
+        : owned_(owned), post_load_(post_load)
     {
         frames_.push_back({ &root_type, root_obj, root_node });
     }
@@ -250,7 +250,8 @@ class TReaderSink : public defdoc::Sink
         frames_.pop_back();
         if (!done.type)
             return;                                  // skipped block
-        refl::PostLoad(*done.type, done.obj);
+        if (post_load_)
+            refl::PostLoad(*done.type, done.obj);
         if (done.pending && done.attach_to)
             done.attach_to->AddComponent(std::move(done.pending));
     }
@@ -258,7 +259,7 @@ class TReaderSink : public defdoc::Sink
     // Root: the document is complete.
     void Finish()
     {
-        if (!frames_.empty() && frames_.front().type)
+        if (post_load_ && !frames_.empty() && frames_.front().type)
             refl::PostLoad(*frames_.front().type, frames_.front().obj);
     }
 
@@ -281,6 +282,7 @@ class TReaderSink : public defdoc::Sink
 
     std::vector<SFrame> frames_;
     std::vector<std::unique_ptr<TNodeInst>>* owned_ = nullptr;
+    bool post_load_ = true;
     std::string error_;
 };
 
@@ -376,7 +378,7 @@ void WriteNode(const TNodeInst& node, std::string& out, int32_t indent)
 } // namespace
 
 bool Read(std::string_view text, TNodeInst& root,
-          std::vector<std::unique_ptr<TNodeInst>>& owned, std::string* error)
+          std::vector<std::unique_ptr<TNodeInst>>& owned, std::string* error, bool post_load)
 {
     const refl::SType* t = refl::Of(root);
     if (!t)
@@ -384,13 +386,13 @@ bool Read(std::string_view text, TNodeInst& root,
         if (error) *error = "root type is not annotated";
         return false;
     }
-    TReaderSink sink(*t, &root, &root, &owned);
+    TReaderSink sink(*t, &root, &root, &owned, post_load);
     return Run(text, sink, error);
 }
 
-bool ReadObject(std::string_view text, const refl::SType& type, void* obj, std::string* error)
+bool ReadObject(std::string_view text, const refl::SType& type, void* obj, std::string* error, bool post_load)
 {
-    TReaderSink sink(type, obj, nullptr, nullptr);
+    TReaderSink sink(type, obj, nullptr, nullptr, post_load);
     return Run(text, sink, error);
 }
 
@@ -409,6 +411,18 @@ class TOneValueSink : public defdoc::Sink
 };
 
 } // namespace
+
+bool ConvertValue(const refl::SProp& p, const defdoc::Node& value, SPropValue& out,
+                  std::string& storage, std::string* error)
+{
+    std::string why;
+    if (!NodeToValue(p, value, out, storage, why))
+    {
+        if (error) *error = why;
+        return false;
+    }
+    return true;
+}
 
 bool ParseValue(const refl::SProp& p, std::string_view text, SPropValue& out,
                 std::string& storage, std::string* error)

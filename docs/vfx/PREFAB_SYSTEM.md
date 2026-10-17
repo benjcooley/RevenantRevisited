@@ -379,6 +379,23 @@ submissions. No blend trees, no layers, no retargeting.
 
 ## 6. Stamping
 
+**Landed 2026-10-17 (first slice):** `src/prefab.{h,cpp}` — `TPrefabLibrary`
+bakes `assets/prefabs/<Name>.def` on first use (deserialize with PostLoad
+off, serialize to one packed buffer, drop the scratch tree) and
+`TPrefabComponent` stamps that buffer under its owner with
+`nodepack::Unpack` (root properties untouched; PostLoad runs here).
+`TParticleEffectComponent` is the `particles` DEF component with its
+effect block inline (`src/particlecomponent.h`); the particle runtime is
+keyed by node id and anchored at the node's world position, so it serves
+map objects and prefab nodes alike. The map walk pulses stamped nodes
+with their root; the harness registers `Prefab:<Name>` per file and
+drives pulse + submit. `assets/prefabs/Mist.def` and `Blood.def` stamp and
+render frame for frame like their effects.def entries. Found and fixed
+on the way: the particle manager stored global buckets by value, so a
+second bucket's creation moved the first and left runtimes with dangling
+pointers. Still to do from this section: the in-game type-name hook,
+the `SubmitFx` / `SubmitWorld` component virtuals.
+
 - **`TPrefabLibrary`** parses every `prefabs/*.def` once (boot or first
   use), validates all track targets against the component tables, and
   exposes `Find(name)`.

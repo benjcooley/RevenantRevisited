@@ -13,11 +13,6 @@ namespace nodepack {
 
 namespace {
 
-constexpr uint16_t kSubName  = 1;    // def_name (component) / name (child)
-constexpr uint16_t kSubLabel = 2;
-constexpr uint16_t kSubBody  = 3;    // component props
-constexpr uint16_t kSubNode  = 2;    // child node message
-
 void PackNode(const TNodeInst& node, TPackedWriter& w)
 {
     if (const refl::SType* t = refl::Of(node))
@@ -54,7 +49,8 @@ void PackNode(const TNodeInst& node, TPackedWriter& w)
 }
 
 bool UnpackNode(TPackedReader& r, TNodeInst& node,
-                std::vector<std::unique_ptr<TNodeInst>>& owned, std::string& error)
+                std::vector<std::unique_ptr<TNodeInst>>& owned, std::string& error,
+                bool apply_props, bool post_load)
 {
     const refl::SType* t = refl::Of(node);
     bool ok = true;
@@ -88,7 +84,8 @@ bool UnpackNode(TPackedReader& r, TNodeInst& node,
                 TPackedReader br(body);
                 refl::Unpack(*ct, c.get(), br);
             }
-            refl::PostLoad(*ct, c.get());              // fields complete, before attach
+            if (post_load)
+                refl::PostLoad(*ct, c.get());          // fields complete, before attach
             node.AddComponent(std::move(c));
             continue;
         }
@@ -117,16 +114,16 @@ bool UnpackNode(TPackedReader& r, TNodeInst& node,
             if (have_body)
             {
                 TPackedReader br(body);
-                if (!UnpackNode(br, *child, owned, error))
+                if (!UnpackNode(br, *child, owned, error, true, post_load))
                     ok = false;
             }
             continue;
         }
         // A plain property of this node.
-        if (t)
+        if (t && apply_props)
             refl::ApplyPacked(*t, &node, f);
     }
-    if (t)
+    if (t && post_load)
         refl::PostLoad(*t, &node);                     // node complete: fields, components, children
     return ok;
 }
@@ -139,10 +136,11 @@ void Pack(const TNodeInst& root, TPackedWriter& w)
 }
 
 bool Unpack(TPackedReader& r, TNodeInst& root,
-            std::vector<std::unique_ptr<TNodeInst>>& owned, std::string* error)
+            std::vector<std::unique_ptr<TNodeInst>>& owned, std::string* error,
+            bool apply_root_props, bool post_load)
 {
     std::string err;
-    const bool ok = UnpackNode(r, root, owned, err);
+    const bool ok = UnpackNode(r, root, owned, err, apply_root_props, post_load);
     if (error) *error = err;
     return ok;
 }

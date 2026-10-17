@@ -143,6 +143,36 @@ TEST(DefIo, WriteThenReadAgain)
     EXPECT_EQ(a.Buffer(), b.Buffer());
 }
 
+TEST(DefIo, ReadWithoutPostLoadThenBake)
+{
+    // Baking a prefab: deserialize as data only (no PostLoad), serialize
+    // to one buffer. The bytes equal those of a fully loaded tree, and the
+    // derived state only appears when the buffer is stamped.
+    TNodeInst data("root");
+    std::vector<std::unique_ptr<TNodeInst>> owned;
+    std::string err;
+    ASSERT_TRUE(defio::Read(kDoc, data, owned, &err, /*post_load=*/false)) << err;
+    const STestGlow* g = data.FindPath("core")->GetComponent<STestGlow>();
+    ASSERT_NE(g, nullptr);
+    EXPECT_EQ(g->loaded_count, 0);                       // no PostLoad
+    EXPECT_FLOAT_EQ(g->radius_sq, -1.0f);
+    TPackedWriter baked;
+    nodepack::Pack(data, baked);
+
+    TNodeInst full("root");
+    std::vector<std::unique_ptr<TNodeInst>> owned_full;
+    ASSERT_TRUE(defio::Read(kDoc, full, owned_full));
+    TPackedWriter packed;
+    nodepack::Pack(full, packed);
+    EXPECT_EQ(baked.Buffer(), packed.Buffer());
+
+    TNodeInst stamped("root");
+    std::vector<std::unique_ptr<TNodeInst>> owned_stamped;
+    TPackedReader r(baked.Buffer());
+    ASSERT_TRUE(nodepack::Unpack(r, stamped, owned_stamped, &err)) << err;
+    CheckTree(stamped);                                  // PostLoad ran on stamp
+}
+
 TEST(DefIo, StrictErrorsWithLines)
 {
     TNodeInst root("root");

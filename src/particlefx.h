@@ -9,6 +9,7 @@
 #include "render3d_types.h"
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -214,7 +215,10 @@ class TParticleManager
     void Clear();
 
   private:
-    std::vector<TParticleBucket> global_buckets;
+    // Owned by pointer: runtimes cache TParticleBucket* across the
+    // lifetime of the manager, so bucket addresses must survive later
+    // creations (a vector of values moved them on growth).
+    std::vector<std::unique_ptr<TParticleBucket>> global_buckets;
     uint32_t draw_pulse_pass = 0;
 };
 

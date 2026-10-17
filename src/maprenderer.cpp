@@ -19,6 +19,7 @@
 #include "decompdata.h"
 #include "display.h"
 #include "effect.h"
+#include "prefab.h"
 #include "renderer.h"
 #include "kinsecretdoorprofile.h"
 #include "punchandjudyprofile.h"
@@ -3717,8 +3718,12 @@ void TMapRenderer::RenderFrame()
                 obj_id |= kObjFlagSelected;
         }
         if (TObjectInstance* oi = s.sectorDrawInst[idx].src.Get())
+        {
             if (TParticleEffectComponent* particle_effect = oi->GetComponent<TParticleEffectComponent>())
                 particle_effect->DrawPulse();
+            if (TPrefabComponent* prefab = oi->GetComponent<TPrefabComponent>())
+                prefab->DrawPulse();
+        }
         s.sectorDrawInst[idx].Submit(drawctx, stats, obj_id);
 
         // A player's equipment draws with its body, once.

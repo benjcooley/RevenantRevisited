@@ -38,6 +38,7 @@ _CLASSDEF(TSpellBlock)
 
 #include "particlefx.h"
 #include "particledef.h"
+#include "particlecomponent.h"
 #include "photoncore.h"
 #include "effectlightramp.h"
 #include "iceboltcore.h"
@@ -239,16 +240,24 @@ class TFlipbookBillboardComponent : public TObjectComponent
     EFxDebugMode debug_mode = EFxDebugMode::Normal;
 };
 
+// Owners are nodes: a map object or a prefab node. Runtimes are keyed by
+// (definition, node id) and emission is anchored at the node's world
+// position. Buckets without an imagery_path take their texture from the
+// owner's imagery, which needs the owner to be a map object.
 class TParticleEffectManager
 {
   public:
-    void PulseEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner);
-    void StopEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner);
+    void PulseEffect(const SParticleEffectDef* effect_def, TNodeInst* owner);
+    void StopEffect(const SParticleEffectDef* effect_def, TNodeInst* owner);
     // Per-frame integration tick. Called from TParticleEffectComponent::
     // DrawPulse via the render-frame walk so each runtime's bucket
     // expressions (spawn / tick / kill) advance once per frame using the
     // shared TTime::DeltaTime.
-    void IntegrateEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner, float dt_seconds);
+    void IntegrateEffect(const SParticleEffectDef* effect_def, TNodeInst* owner, float dt_seconds);
+    // Submit the buckets of this owner's runtime to the renderer. The map
+    // walk drains every global bucket once per frame instead; this is for
+    // a standalone driver (the --test=vfx harness) that shows one effect.
+    void SubmitEffect(const SParticleEffectDef* effect_def, TNodeInst* owner, EFxDebugMode debug_mode);
     void ExpireInactiveEffects();
     void Clear();
 
@@ -273,23 +282,23 @@ class TParticleEffectManager
     struct SRuntime
     {
         const SParticleEffectDef* effect_def = nullptr;
-        TSafeRef<> owner;
-        float owner_particle_id = -1.0f;
+        TSafeRef<TNodeInst> owner;
+        float owner_particle_id = -1.0f;    // the owner's NodeId()
         uint32_t last_draw_pulse_pass = 0;
         std::vector<TParticleBucket*> buckets;
         std::vector<SBucketRuntime> bucket_runtimes;
     };
 
-    SRuntime* FindRuntime(const SParticleEffectDef* effect_def, int32_t owner_map_index);
-    void StartRuntime(SRuntime& runtime, TObjectInstance* owner);
+    SRuntime* FindRuntime(const SParticleEffectDef* effect_def, int32_t owner_node_id);
+    void StartRuntime(SRuntime& runtime, TNodeInst* owner);
     void StopRuntime(size_t runtime_index);
-    void IntegrateBucket(SRuntime& runtime, SBucketRuntime& brt, TObjectInstance* owner,
+    void IntegrateBucket(SRuntime& runtime, SBucketRuntime& brt, TNodeInst* owner,
                          float dt_seconds, float owner_particle_id);
-    void EmitSpawnTopup(SBucketRuntime& brt, TObjectInstance* owner, float owner_particle_id);
+    void EmitSpawnTopup(SBucketRuntime& brt, TNodeInst* owner, float owner_particle_id);
     // Emit one chain particle into `chain_brt` using `(pos, vel)` as the
     // chain spawn's emit_pos / emit_vel. Returns the new particle index
     // (-1 if the chain bucket is full or the chain runtime is missing).
-    int32_t EmitChainParticle(SBucketRuntime& chain_brt, TObjectInstance* owner,
+    int32_t EmitChainParticle(SBucketRuntime& chain_brt, TNodeInst* owner,
                               float owner_particle_id,
                               const float dying_pos[3],
                               const float dying_vel[3]);
@@ -302,38 +311,6 @@ class TParticleEffectManager
 };
 
 extern TParticleEffectManager* ParticleEffectManager;
-
-class TParticleEffectComponent : public TObjectComponent
-{
-  public:
-    [[nodiscard]] const char* ComponentName() const override { return "particle_effect"; }
-
-    void Configure(const SParticleEffectDef* def) { effect_def = def; }
-
-    void OnAttach() override
-    {
-        RegisterUpdate(&TObjectComponent::Update);
-    }
-
-    void OnDetach() override
-    {
-        if (ParticleEffectManager)
-            ParticleEffectManager->StopEffect(effect_def, OwnerInstance());
-        UnregisterUpdate(&TObjectComponent::Update);
-    }
-
-    void DrawPulse();
-
-  protected:
-    void OnUpdate() override
-    {
-        if (ParticleEffectManager)
-            ParticleEffectManager->ExpireInactiveEffects();
-    }
-
-  private:
-    const SParticleEffectDef* effect_def = nullptr;
-};
 
 // ***************
 // * TFireEffect *

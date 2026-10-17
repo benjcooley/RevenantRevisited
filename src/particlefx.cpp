@@ -138,17 +138,17 @@ TParticleBucket* TParticleManager::GetOrCreateGlobalBucket(const SParticleBucket
         return existing;
     SParticleBucketDesc global_desc = desc;
     global_desc.scope = EParticleBucketScope::Global;
-    global_buckets.emplace_back(global_desc, layout);
-    return &global_buckets.back();
+    global_buckets.push_back(std::make_unique<TParticleBucket>(global_desc, layout));
+    return global_buckets.back().get();
 }
 
 TParticleBucket* TParticleManager::FindGlobalBucket(const char* name)
 {
     if (!name)
         return nullptr;
-    for (TParticleBucket& bucket : global_buckets)
-        if (bucket.Desc().name == name)
-            return &bucket;
+    for (const auto& bucket : global_buckets)
+        if (bucket->Desc().name == name)
+            return bucket.get();
     return nullptr;
 }
 
@@ -156,7 +156,7 @@ TParticleBucket* TParticleManager::GlobalBucket(int32_t index)
 {
     if ((uint32_t)index >= (uint32_t)global_buckets.size())
         return nullptr;
-    return &global_buckets[size_t(index)];
+    return global_buckets[size_t(index)].get();
 }
 
 const TParticleBucket* TParticleManager::GlobalBucket(int32_t index) const

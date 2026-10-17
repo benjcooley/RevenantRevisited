@@ -210,7 +210,8 @@ rev_reflect(Revenant
   src/nodeinst.h
   src/object.h
   src/sector.h
-  src/particledef.h)
+  src/particledef.h
+  src/particlecomponent.h)
 
 # buildinfo.h: the commit the binary is built from (the playtest recordings
 # name it) and its version (the main menu shows it). Regenerated every

@@ -342,6 +342,33 @@ def default_expr(m, ptype, path):
     return "SPropValue()"
 
 
+RE_INCLUDE = re.compile(r'^\s*#\s*include\s+"([^"]+)"')
+
+
+def included_annotated(path: Path, seen=None):
+    """Names of annotated classes declared in headers this one includes
+    (quoted includes resolved next to the header, recursively), so a member
+    of such a type is a Struct / List here."""
+    if seen is None:
+        seen = set()
+    names = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        m = RE_INCLUDE.match(line)
+        if not m:
+            continue
+        dep = (path.parent / m.group(1)).resolve()
+        if dep in seen or not dep.is_file():
+            continue
+        seen.add(dep)
+        try:
+            dep_classes, _ = parse(dep)
+        except SystemExit:
+            continue
+        names.update(k.name for k in dep_classes if k.members)
+        names.update(included_annotated(dep, seen))
+    return names
+
+
 def emit(path: Path, out: Path, include: str):
     classes, enums = parse(path)
     targets = [k for k in classes if k.members or k.def_name]
@@ -362,7 +389,7 @@ def emit(path: Path, out: Path, include: str):
         for n in names:
             o.append('    { int32_t(%s::%s), "%s" },\n' % (ename, n, snake(n)))
         o.append("};\n")
-    annotated = {k.name for k in classes if k.members}
+    annotated = {k.name for k in classes if k.members} | included_annotated(path)
 
     def kind_of(m):
         """-> (ptype, elem_class or None)"""

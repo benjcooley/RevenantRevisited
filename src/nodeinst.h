@@ -71,6 +71,10 @@ class TNodeInst : public TSafeObjectBase<TNodeInst>
     [[nodiscard]] virtual const char* GetName() const { return node_name_.c_str(); }
     void SetNodeName(std::string name) { node_name_ = std::move(name); }
 
+    // The node-registry id (what TSafeRef<TNodeInst> captures). Distinct
+    // from a map object's map index; the particle runtime keys owners by it.
+    [[nodiscard]] int32_t NodeId() const { return TSafeObjectBase<TNodeInst>::SafeRefId(); }
+
     // Checked downcast without RTTI. nullptr for plain nodes.
     [[nodiscard]] virtual TObjectInstance*       AsObjectInstance()       { return nullptr; }
     [[nodiscard]] virtual const TObjectInstance* AsObjectInstance() const { return nullptr; }

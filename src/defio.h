@@ -35,23 +35,30 @@
 #include <vector>
 
 class TNodeInst;
+namespace defdoc { class Node; }
 
 namespace defio {
 
 // Read a node-tree document. Top-level statements apply to `root`. Child
 // nodes are appended to `owned`. Returns false with the first error (and
 // keeps going so later errors don't hide behind it).
+//
+// `post_load = false` deserializes without running any PostLoad(): the
+// objects are data only, for baking to a buffer or for tools. Stamping
+// from the buffer is where PostLoad belongs.
 bool Read(std::string_view text, TNodeInst& root,
-          std::vector<std::unique_ptr<TNodeInst>>& owned, std::string* error = nullptr);
+          std::vector<std::unique_ptr<TNodeInst>>& owned, std::string* error = nullptr,
+          bool post_load = true);
 
 // Read a flat document into one reflected object (no sub-blocks allowed).
-bool ReadObject(std::string_view text, const refl::SType& type, void* obj, std::string* error = nullptr);
+bool ReadObject(std::string_view text, const refl::SType& type, void* obj, std::string* error = nullptr,
+                bool post_load = true);
 template <class T>
-bool ReadObject(std::string_view text, T& obj, std::string* error = nullptr)
+bool ReadObject(std::string_view text, T& obj, std::string* error = nullptr, bool post_load = true)
 {
     const refl::SType* t = refl::Of(obj);
     if (!t) { if (error) *error = "type is not annotated"; return false; }
-    return ReadObject(text, *t, &obj, error);
+    return ReadObject(text, *t, &obj, error, post_load);
 }
 
 // Write a node tree as a document: the root's properties, components and
@@ -71,6 +78,11 @@ void WriteObject(const T& obj, std::string& out, int32_t indent = 0)
     if (const refl::SType* t = refl::Of(obj))
         WriteObject(*t, &obj, out, indent);
 }
+
+// Leaf conversion the reader uses: a parsed DEF value into a typed property
+// value (`storage` backs a String's view).
+bool ConvertValue(const refl::SProp& prop, const defdoc::Node& value, SPropValue& out,
+                  std::string& storage, std::string* error = nullptr);
 
 // Text form of one value (what Write emits after `key = `).
 [[nodiscard]] std::string FormatValue(const refl::SProp& prop, const SPropValue& v);

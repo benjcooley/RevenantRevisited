@@ -52,6 +52,7 @@
 #include "character.h"   // TCharacter::DefaultRootState (rig boot anim pick)
 #include "display.h"
 #include "effect.h"
+#include "prefab.h"
 #include "effects/cure.h"
 #include "effects/goldpreview.h"
 #include "effects/punchpreview.h"
@@ -1493,6 +1494,7 @@ bool Initialize()
 
     for (const auto& e : g_state.deferred)
         Register(e);
+    RegisterPrefabs();
 
     g_state.initialized = true;
 
@@ -5100,6 +5102,75 @@ void FaultFireBespokeSubmit(void* cp, EFxDebugMode dbg)
 }
 
 }  // namespace
+
+// --- Prefabs: one entry per assets/prefabs/<Name>.def -------------------
+// The root is a standalone effect instance at the harness origin; the
+// prefab component stamps the file's node tree under it. Each frame the
+// root's own particle component and the stamped nodes are pulsed, which
+// is exactly what the map walk does for a stamped effect in game.
+namespace {
+struct SPrefabCtx {
+    TEffect* root = nullptr;
+};
+
+void* PrefabSpawn(const std::string& name, const S3DPoint& origin)
+{
+    const SPrefab* prefab = PrefabLibrary().Find(name);
+    if (!prefab)
+        return nullptr;
+    auto* c = new SPrefabCtx();
+    c->root = new TEffect(static_cast<TObjectImagery*>(nullptr));
+    c->root->ForcePos(origin);
+    c->root->SetMapIndex(MapPane.MakeIndex());
+    auto stamp = std::make_unique<TPrefabComponent>();
+    stamp->Configure(prefab);
+    c->root->AddComponent(std::move(stamp));
+    c->root->ActivateComponents();
+    log_info("[vfx] prefab '%s' stamped: %d child nodes", name.c_str(),
+             c->root->GetComponent<TPrefabComponent>()->NodeCount());
+    return c;
+}
+
+void PrefabDestroy(void* cp)
+{
+    auto* c = static_cast<SPrefabCtx*>(cp);
+    if (!c) return;
+    delete c->root;
+    delete c;
+}
+
+void PrefabSubmit(void* cp, EFxDebugMode dbg)
+{
+    auto* c = static_cast<SPrefabCtx*>(cp);
+    if (!c || !c->root) return;
+    if (auto* particles = c->root->GetComponent<TParticleEffectComponent>())
+    {
+        particles->DrawPulse();
+        particles->Submit(dbg);
+    }
+    if (auto* prefab = c->root->GetComponent<TPrefabComponent>())
+    {
+        prefab->DrawPulse();
+        prefab->Submit(dbg);
+    }
+}
+}  // namespace
+
+void VfxTest::RegisterPrefabs()
+{
+    for (const std::string& name : PrefabLibrary().List())
+    {
+        SEffect e = {};
+        e.id            = "Prefab:" + name;
+        e.family        = "prefab";
+        e.pipeline      = "PE";
+        e.preview_style = EVfxPreviewStyle::Static;
+        e.factory       = [name](const S3DPoint& o) -> void* { return PrefabSpawn(name, o); };
+        e.submit        = [](void* c, EFxDebugMode d) { PrefabSubmit(c, d); };
+        e.destroy       = [](void* c) { PrefabDestroy(c); };
+        Register(e);
+    }
+}
 
 // Defer registration until VfxTest::Initialize runs (renderer must
 // exist for SolidColorTexture). The deferred queue is replayed at the
