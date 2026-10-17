@@ -5,9 +5,11 @@
 // *************************************************************************
 
 #include "testmodes.h"
+#include "screen.h"
 
 #include <sokol_app.h>          // sapp_request_quit on script drain
 #include <stb_image_write.h>   // for i3ddump test mode (impl lives in framesnap.cpp)
+#include "retailab_json.h"      // i3ddump motion.json
 
 #include "3dimage.h"
 #include "animimage.h"
@@ -19,41 +21,43 @@
 #include "font.h"
 #include "fonttable.h"
 #include "framesnap.h"
+#include "fireballruntimetest.h"
 #include "hudstate.h"
 #include "imagery.h"
 #include "imageres.h"
 #include "imgui.h"
 #include "chunkcache.h"
 #include "character.h"
+#include "command.h"
+#include "mappane.h"
 #include "cursor.h"
 #include "logging.h"
 #include "maprenderer.h"
 #include "meshextract.h"
 #include "multi.h"
 #include "render_metadata.h"
+#include "inputqueue.h"
 #include "renderer.h"
 #include "revenant.h"
+#include "revutils.h"
 #include "sound.h"
 #include "testconfig.h"
 #include "time.h"
 #include "tile.h"
 #include "uidragstate.h"
+#include "uidemoplayer.h"
 #include "uianchortest.h"
-#include "uibarinvtest.h"
 #include "uibottombartest.h"
 #include "uicliptest.h"
-#include "uideathtest.h"
 #include "uiequiptest.h"
 #include "uihudtest.h"
 #include "uidefscreentest.h"
 #include "uiinventorytest.h"
 #include "uilayouttest.h"
 #include "uiloadscreentest.h"
-#include "uimainmenutest.h"
 #include "uimaptest.h"
 #include "uinineslicetest.h"
 #include "uiplyrstatusbartest.h"
-#include "uiquickspelltest.h"
 #include "uisidebartest.h"
 #include "uisidetabstest.h"
 #include "uiscrollpanetest.h"
@@ -63,7 +67,8 @@
 #include "uistyletest.h"
 #include "uitextbartest.h"
 #include "vfxtest.h"
-// uihudmockuptest + uistatusbartest moved to attic/: the rects/labels they
+#include "vfxreview.h"
+// uihudmockuptest + uistatusbartest were retired (attic-final:attic/src/): the rects/labels they
 // encoded were derived from the pre-release src/ defines (HEALTHBARX etc)
 // and the AI-generated docs/HUD.md, neither of which match the shipped
 // retail HUD layout. See docs/ui/BURNDOWN.md "Phase B retraction" note.
@@ -119,6 +124,314 @@ void MatrixMul16(const float a[16], const float b[16], float out[16])
     }
 }
 
+// Shared minimal-PNG writer + bitmap decoder for the asset dump modes
+// (--dumptiles, --dumpicons).
+namespace fs = std::filesystem;
+
+auto append_be32 = [](std::vector<uint8_t>& out, uint32_t v) {
+    out.push_back(uint8_t((v >> 24) & 0xFF));
+    out.push_back(uint8_t((v >> 16) & 0xFF));
+    out.push_back(uint8_t((v >>  8) & 0xFF));
+    out.push_back(uint8_t((v      ) & 0xFF));
+};
+auto crc32_bytes = [](const uint8_t* data, size_t len) -> uint32_t {
+    static uint32_t table[256] = {};
+    static bool init = false;
+    if (!init) {
+        for (uint32_t i = 0; i < 256; ++i) {
+            uint32_t c = i;
+            for (int k = 0; k < 8; ++k)
+                c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
+            table[i] = c;
+        }
+        init = true;
+    }
+    uint32_t c = 0xFFFFFFFFu;
+    for (size_t i = 0; i < len; ++i)
+        c = table[(c ^ data[i]) & 0xFFu] ^ (c >> 8);
+    return c ^ 0xFFFFFFFFu;
+};
+auto adler32_bytes = [](const uint8_t* data, size_t len) -> uint32_t {
+    uint32_t s1 = 1, s2 = 0;
+    for (size_t i = 0; i < len; ++i) {
+        s1 = (s1 + data[i]) % 65521u;
+        s2 = (s2 + s1) % 65521u;
+    }
+    return (s2 << 16) | s1;
+};
+auto write_png_rgba = [](const fs::path& path, int32_t w, int32_t h, const std::vector<uint8_t>& rgba) -> bool {
+    if (w <= 0 || h <= 0 || rgba.size() != size_t(w) * size_t(h) * 4) return false;
+    std::vector<uint8_t> raw;
+    raw.reserve(size_t(h) * (size_t(w) * 4 + 1));
+    for (int32_t y = 0; y < h; ++y) {
+        raw.push_back(0); // filter type 0
+        const uint8_t* row = rgba.data() + size_t(y) * size_t(w) * 4;
+        raw.insert(raw.end(), row, row + size_t(w) * 4);
+    }
+
+    std::vector<uint8_t> zlib;
+    zlib.reserve(raw.size() + raw.size() / 65535 * 5 + 16);
+    zlib.push_back(0x78);
+    zlib.push_back(0x01);
+    size_t off = 0;
+    while (off < raw.size()) {
+        const size_t chunk = (std::min)(size_t(65535), raw.size() - off);
+        const bool final = (off + chunk) == raw.size();
+        zlib.push_back(final ? 0x01 : 0x00);
+        zlib.push_back(uint8_t(chunk & 0xFF));
+        zlib.push_back(uint8_t((chunk >> 8) & 0xFF));
+        const uint16_t nlen = uint16_t(~uint16_t(chunk));
+        zlib.push_back(uint8_t(nlen & 0xFF));
+        zlib.push_back(uint8_t((nlen >> 8) & 0xFF));
+        zlib.insert(zlib.end(), raw.begin() + ptrdiff_t(off), raw.begin() + ptrdiff_t(off + chunk));
+        off += chunk;
+    }
+    append_be32(zlib, adler32_bytes(raw.data(), raw.size()));
+
+    std::vector<uint8_t> png;
+    const uint8_t sig[8] = { 137,80,78,71,13,10,26,10 };
+    png.insert(png.end(), sig, sig + 8);
+
+    auto append_chunk = [&](const char type[4], const std::vector<uint8_t>& payload) {
+        append_be32(png, uint32_t(payload.size()));
+        const size_t type_off = png.size();
+        png.push_back(uint8_t(type[0]));
+        png.push_back(uint8_t(type[1]));
+        png.push_back(uint8_t(type[2]));
+        png.push_back(uint8_t(type[3]));
+        png.insert(png.end(), payload.begin(), payload.end());
+        const uint32_t crc = crc32_bytes(png.data() + type_off, 4 + payload.size());
+        append_be32(png, crc);
+    };
+
+    std::vector<uint8_t> ihdr;
+    ihdr.reserve(13);
+    append_be32(ihdr, uint32_t(w));
+    append_be32(ihdr, uint32_t(h));
+    ihdr.push_back(8); // bit depth
+    ihdr.push_back(6); // RGBA
+    ihdr.push_back(0); // compression
+    ihdr.push_back(0); // filter
+    ihdr.push_back(0); // interlace
+    append_chunk("IHDR", ihdr);
+    append_chunk("IDAT", zlib);
+    append_chunk("IEND", {});
+
+    std::ofstream f(path, std::ios::binary);
+    if (!f) return false;
+    f.write((const char*)png.data(), std::streamsize(png.size()));
+    return f.good();
+};
+// zlib stored-block "compression" of a raw filtered-scanline buffer, shared
+// by the APNG writer's IDAT and fdAT payloads.
+auto zlib_store = [](const std::vector<uint8_t>& raw) -> std::vector<uint8_t> {
+    std::vector<uint8_t> zlib;
+    zlib.reserve(raw.size() + raw.size() / 65535 * 5 + 16);
+    zlib.push_back(0x78);
+    zlib.push_back(0x01);
+    size_t off = 0;
+    while (off < raw.size()) {
+        const size_t chunk = (std::min)(size_t(65535), raw.size() - off);
+        const bool final = (off + chunk) == raw.size();
+        zlib.push_back(final ? 0x01 : 0x00);
+        zlib.push_back(uint8_t(chunk & 0xFF));
+        zlib.push_back(uint8_t((chunk >> 8) & 0xFF));
+        const uint16_t nlen = uint16_t(~uint16_t(chunk));
+        zlib.push_back(uint8_t(nlen & 0xFF));
+        zlib.push_back(uint8_t((nlen >> 8) & 0xFF));
+        zlib.insert(zlib.end(), raw.begin() + ptrdiff_t(off), raw.begin() + ptrdiff_t(off + chunk));
+        off += chunk;
+    }
+    append_be32(zlib, adler32_bytes(raw.data(), raw.size()));
+    return zlib;
+};
+// Minimal animated-PNG (APNG) writer. `frames` are full-frame RGBA buffers,
+// each w*h*4 bytes; every frame replaces the whole canvas (dispose=background,
+// blend=source) at delay_num/delay_den seconds. Plays forever.
+auto write_apng_rgba = [](const fs::path& path, int32_t w, int32_t h,
+                          const std::vector<std::vector<uint8_t>>& frames,
+                          uint16_t delay_num, uint16_t delay_den) -> bool {
+    if (w <= 0 || h <= 0 || frames.empty()) return false;
+    const size_t need = size_t(w) * size_t(h) * 4;
+    for (const auto& fr : frames)
+        if (fr.size() != need) return false;
+
+    std::vector<uint8_t> png;
+    const uint8_t sig[8] = { 137,80,78,71,13,10,26,10 };
+    png.insert(png.end(), sig, sig + 8);
+    auto append_chunk = [&](const char type[4], const std::vector<uint8_t>& payload) {
+        append_be32(png, uint32_t(payload.size()));
+        const size_t type_off = png.size();
+        png.push_back(uint8_t(type[0])); png.push_back(uint8_t(type[1]));
+        png.push_back(uint8_t(type[2])); png.push_back(uint8_t(type[3]));
+        png.insert(png.end(), payload.begin(), payload.end());
+        append_be32(png, crc32_bytes(png.data() + type_off, 4 + payload.size()));
+    };
+    auto filter_frame = [&](const std::vector<uint8_t>& rgba) {
+        std::vector<uint8_t> raw;
+        raw.reserve(size_t(h) * (size_t(w) * 4 + 1));
+        for (int32_t y = 0; y < h; ++y) {
+            raw.push_back(0);
+            const uint8_t* row = rgba.data() + size_t(y) * size_t(w) * 4;
+            raw.insert(raw.end(), row, row + size_t(w) * 4);
+        }
+        return raw;
+    };
+
+    std::vector<uint8_t> ihdr;
+    append_be32(ihdr, uint32_t(w));
+    append_be32(ihdr, uint32_t(h));
+    ihdr.push_back(8); ihdr.push_back(6);
+    ihdr.push_back(0); ihdr.push_back(0); ihdr.push_back(0);
+    append_chunk("IHDR", ihdr);
+
+    std::vector<uint8_t> actl;          // animation control
+    append_be32(actl, uint32_t(frames.size()));
+    append_be32(actl, 0);               // num_plays = 0 => infinite
+    append_chunk("acTL", actl);
+
+    uint32_t seq = 0;
+    auto append_fctl = [&](void) {
+        std::vector<uint8_t> fctl;
+        append_be32(fctl, seq++);
+        append_be32(fctl, uint32_t(w));
+        append_be32(fctl, uint32_t(h));
+        append_be32(fctl, 0);           // x_offset
+        append_be32(fctl, 0);           // y_offset
+        fctl.push_back(uint8_t(delay_num >> 8)); fctl.push_back(uint8_t(delay_num & 0xFF));
+        fctl.push_back(uint8_t(delay_den >> 8)); fctl.push_back(uint8_t(delay_den & 0xFF));
+        fctl.push_back(1);              // dispose_op = background
+        fctl.push_back(0);              // blend_op = source
+        append_chunk("fcTL", fctl);
+    };
+
+    // Frame 0: fcTL + IDAT (the default image).
+    append_fctl();
+    append_chunk("IDAT", zlib_store(filter_frame(frames[0])));
+    // Frames 1..n: fcTL + fdAT (payload = sequence number + zlib data).
+    for (size_t i = 1; i < frames.size(); ++i) {
+        append_fctl();
+        std::vector<uint8_t> z = zlib_store(filter_frame(frames[i]));
+        std::vector<uint8_t> fdat;
+        append_be32(fdat, seq++);
+        fdat.insert(fdat.end(), z.begin(), z.end());
+        append_chunk("fdAT", fdat);
+    }
+    append_chunk("IEND", {});
+
+    std::ofstream f(path, std::ios::binary);
+    if (!f) return false;
+    f.write((const char*)png.data(), std::streamsize(png.size()));
+    return f.good();
+};
+auto decode_bitmap_rgba = [](PTBitmap bm, std::vector<uint8_t>& rgba_out,
+                                  std::vector<float>* zraw_out = nullptr,
+                                  std::vector<uint8_t>* alpha_out = nullptr,
+                                  int32_t* valid_out = nullptr,
+                                  float* zmin_out = nullptr,
+                                  float* zmax_out = nullptr) -> bool {
+    if (!bm || bm->width <= 0 || bm->height <= 0) return false;
+    const bool is_8bit = (bm->flags & BM_8BIT) != 0;
+    const bool is_16bit = (bm->flags & (BM_15BIT | BM_16BIT)) != 0;
+    const bool has_zbuffer = (bm->flags & BM_ZBUFFER) != 0;
+    if (!is_8bit && !is_16bit) return false;
+    SPalette* pal = (SPalette*)bm->palette.ptr();
+    if (is_8bit && !pal) return false;
+    const int32_t w = bm->width, h = bm->height;
+    const size_t npx = size_t(w) * size_t(h);
+    const uint8_t key8 = (uint8_t)bm->keycolor;
+    const uint16_t key16 = (uint16_t)bm->keycolor;
+    std::unique_ptr<uint8_t[]> idxplane;
+    std::unique_ptr<uint16_t[]> rgbplane16;
+    if (is_8bit) idxplane.reset(new uint8_t[npx]); else rgbplane16.reset(new uint16_t[npx]);
+    std::unique_ptr<uint16_t[]> zplane;
+    if (has_zbuffer) zplane.reset(new uint16_t[npx]);
+
+    if (bm->flags & BM_CHUNKED)
+    {
+        if (!bm->CacheChunks()) return false;
+        SChunkHeader* hdr = (SChunkHeader*)(void*)bm->data8;
+        SChunkHeader* zhdr = has_zbuffer ? (SChunkHeader*)bm->zbuffer.ptr() : nullptr;
+        if (!hdr || (has_zbuffer && !zhdr)) return false;
+        const int32_t cw = hdr->width, ch = hdr->height;
+        if (is_8bit) std::memset(idxplane.get(), key8, npx);
+        else std::fill_n(rgbplane16.get(), npx, key16);
+        if (has_zbuffer) for (size_t i = 0; i < npx; ++i) zplane[i] = 0;
+        for (int32_t by = 0; by < ch; ++by)
+        for (int32_t bx = 0; bx < cw; ++bx)
+        {
+            void* cptr = hdr->block[by * cw + bx].ptr();
+            void* zptr = zhdr ? zhdr->block[by * cw + bx].ptr() : nullptr;
+            const uint8_t*  c8  = (is_8bit && cptr) ? (const uint8_t*)ChunkCache.AddChunk(cptr, 1) : nullptr;
+            const uint16_t* c16 = (is_16bit && cptr) ? (const uint16_t*)ChunkCache.AddChunk16(cptr, 1) : nullptr;
+            const uint16_t* z16 = (has_zbuffer && zptr) ? (const uint16_t*)ChunkCache.AddChunkZ(zptr, 2) : nullptr;
+            const int32_t x0 = bx * CHUNKWIDTH, y0 = by * CHUNKHEIGHT;
+            const int32_t cxmax = (w - x0 < CHUNKWIDTH) ? (w - x0) : CHUNKWIDTH;
+            const int32_t cymax = (h - y0 < CHUNKHEIGHT) ? (h - y0) : CHUNKHEIGHT;
+            if (cxmax <= 0 || cymax <= 0) continue;
+            for (int32_t y = 0; y < cymax; ++y)
+            {
+                if (c8) std::memcpy(&idxplane[(y0 + y) * w + x0], &c8[y * CHUNKWIDTH], cxmax);
+                if (c16) std::memcpy(&rgbplane16[(y0 + y) * w + x0], &c16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
+                if (z16) std::memcpy(&zplane[(y0 + y) * w + x0], &z16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
+            }
+        }
+    }
+    else
+    {
+        if (is_8bit) std::memcpy(idxplane.get(), bm->data8, npx);
+        else std::memcpy(rgbplane16.get(), bm->data16, npx * sizeof(uint16_t));
+        if (has_zbuffer)
+        {
+            uint16_t* zbuf = (uint16_t*)bm->zbuffer.ptr();
+            if (zbuf) std::memcpy(zplane.get(), zbuf, npx * sizeof(uint16_t));
+        }
+    }
+
+    rgba_out.assign(npx * 4, 0);
+    if (zraw_out) zraw_out->assign(npx, 0.0f);
+    if (alpha_out) alpha_out->assign(npx, 0);
+    int32_t valid = 0;
+    float zmin = FLT_MAX;
+    float zmax = -FLT_MAX;
+    for (size_t i = 0; i < npx; ++i)
+    {
+        const uint8_t idx8 = is_8bit ? idxplane[i] : 0;
+        const uint16_t px16 = is_16bit ? rgbplane16[i] : 0;
+        const uint16_t z = has_zbuffer ? zplane[i] : 1;
+        const bool transparent = has_zbuffer ? (z == 0 || z == 0x7F7F)
+                                             : (is_8bit ? (idx8 == key8) : (px16 == key16));
+        uint8_t* row = rgba_out.data() + i * 4;
+        if (transparent)
+            continue;
+        ++valid;
+        if (alpha_out) (*alpha_out)[i] = 255;
+        const float zraw = has_zbuffer ? float(int16_t(z)) : 0.0f;
+        if (zraw_out) (*zraw_out)[i] = zraw;
+        zmin = (std::min)(zmin, zraw);
+        zmax = (std::max)(zmax, zraw);
+        if (is_8bit)
+        {
+            const uint32_t c = pal->rgbcolors[idx8];
+            row[0] = (uint8_t)( c        & 0xFF);
+            row[1] = (uint8_t)((c >> 8)  & 0xFF);
+            row[2] = (uint8_t)((c >> 16) & 0xFF);
+        }
+        else
+        {
+            row[0] = (uint8_t)(((px16 >> 10) & 0x1F) << 3);
+            row[1] = (uint8_t)(((px16 >> 5)  & 0x1F) << 3);
+            row[2] = (uint8_t)(( px16        & 0x1F) << 3);
+        }
+        row[3] = 255;
+    }
+    if (valid == 0) { zmin = 0.0f; zmax = 0.0f; }
+    if (valid_out) *valid_out = valid;
+    if (zmin_out) *zmin_out = zmin;
+    if (zmax_out) *zmax_out = zmax;
+    return true;
+};
+
 bool DumpTilesToPath(const char* out_path_cstr)
 {
     namespace fs = std::filesystem;
@@ -139,208 +452,6 @@ bool DumpTilesToPath(const char* out_path_cstr)
     std::ofstream report(out_dir / "tile_z_report.csv");
     if (report)
         report << "objtype,name,width,height,valid,zmin,zmax,expected_flat_zmin,expected_flat_zmax,mean_abs_flat_error,max_abs_flat_error,flat_fit_offset,mean_abs_fit_error,max_abs_fit_error\n";
-
-    auto append_be32 = [](std::vector<uint8_t>& out, uint32_t v) {
-        out.push_back(uint8_t((v >> 24) & 0xFF));
-        out.push_back(uint8_t((v >> 16) & 0xFF));
-        out.push_back(uint8_t((v >>  8) & 0xFF));
-        out.push_back(uint8_t((v      ) & 0xFF));
-    };
-    auto crc32_bytes = [](const uint8_t* data, size_t len) -> uint32_t {
-        static uint32_t table[256] = {};
-        static bool init = false;
-        if (!init) {
-            for (uint32_t i = 0; i < 256; ++i) {
-                uint32_t c = i;
-                for (int k = 0; k < 8; ++k)
-                    c = (c & 1) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1);
-                table[i] = c;
-            }
-            init = true;
-        }
-        uint32_t c = 0xFFFFFFFFu;
-        for (size_t i = 0; i < len; ++i)
-            c = table[(c ^ data[i]) & 0xFFu] ^ (c >> 8);
-        return c ^ 0xFFFFFFFFu;
-    };
-    auto adler32_bytes = [](const uint8_t* data, size_t len) -> uint32_t {
-        uint32_t s1 = 1, s2 = 0;
-        for (size_t i = 0; i < len; ++i) {
-            s1 = (s1 + data[i]) % 65521u;
-            s2 = (s2 + s1) % 65521u;
-        }
-        return (s2 << 16) | s1;
-    };
-    auto write_png_rgba = [&](const fs::path& path, int32_t w, int32_t h, const std::vector<uint8_t>& rgba) -> bool {
-        if (w <= 0 || h <= 0 || rgba.size() != size_t(w) * size_t(h) * 4) return false;
-        std::vector<uint8_t> raw;
-        raw.reserve(size_t(h) * (size_t(w) * 4 + 1));
-        for (int32_t y = 0; y < h; ++y) {
-            raw.push_back(0); // filter type 0
-            const uint8_t* row = rgba.data() + size_t(y) * size_t(w) * 4;
-            raw.insert(raw.end(), row, row + size_t(w) * 4);
-        }
-
-        std::vector<uint8_t> zlib;
-        zlib.reserve(raw.size() + raw.size() / 65535 * 5 + 16);
-        zlib.push_back(0x78);
-        zlib.push_back(0x01);
-        size_t off = 0;
-        while (off < raw.size()) {
-            const size_t chunk = (std::min)(size_t(65535), raw.size() - off);
-            const bool final = (off + chunk) == raw.size();
-            zlib.push_back(final ? 0x01 : 0x00);
-            zlib.push_back(uint8_t(chunk & 0xFF));
-            zlib.push_back(uint8_t((chunk >> 8) & 0xFF));
-            const uint16_t nlen = uint16_t(~uint16_t(chunk));
-            zlib.push_back(uint8_t(nlen & 0xFF));
-            zlib.push_back(uint8_t((nlen >> 8) & 0xFF));
-            zlib.insert(zlib.end(), raw.begin() + ptrdiff_t(off), raw.begin() + ptrdiff_t(off + chunk));
-            off += chunk;
-        }
-        append_be32(zlib, adler32_bytes(raw.data(), raw.size()));
-
-        std::vector<uint8_t> png;
-        const uint8_t sig[8] = { 137,80,78,71,13,10,26,10 };
-        png.insert(png.end(), sig, sig + 8);
-
-        auto append_chunk = [&](const char type[4], const std::vector<uint8_t>& payload) {
-            append_be32(png, uint32_t(payload.size()));
-            const size_t type_off = png.size();
-            png.push_back(uint8_t(type[0]));
-            png.push_back(uint8_t(type[1]));
-            png.push_back(uint8_t(type[2]));
-            png.push_back(uint8_t(type[3]));
-            png.insert(png.end(), payload.begin(), payload.end());
-            const uint32_t crc = crc32_bytes(png.data() + type_off, 4 + payload.size());
-            append_be32(png, crc);
-        };
-
-        std::vector<uint8_t> ihdr;
-        ihdr.reserve(13);
-        append_be32(ihdr, uint32_t(w));
-        append_be32(ihdr, uint32_t(h));
-        ihdr.push_back(8); // bit depth
-        ihdr.push_back(6); // RGBA
-        ihdr.push_back(0); // compression
-        ihdr.push_back(0); // filter
-        ihdr.push_back(0); // interlace
-        append_chunk("IHDR", ihdr);
-        append_chunk("IDAT", zlib);
-        append_chunk("IEND", {});
-
-        std::ofstream f(path, std::ios::binary);
-        if (!f) return false;
-        f.write((const char*)png.data(), std::streamsize(png.size()));
-        return f.good();
-    };
-    auto decode_tile_bitmap_rgba = [](PTBitmap bm, std::vector<uint8_t>& rgba_out,
-                                      std::vector<float>* zraw_out = nullptr,
-                                      std::vector<uint8_t>* alpha_out = nullptr,
-                                      int32_t* valid_out = nullptr,
-                                      float* zmin_out = nullptr,
-                                      float* zmax_out = nullptr) -> bool {
-        if (!bm || bm->width <= 0 || bm->height <= 0) return false;
-        const bool is_8bit = (bm->flags & BM_8BIT) != 0;
-        const bool is_16bit = (bm->flags & (BM_15BIT | BM_16BIT)) != 0;
-        const bool has_zbuffer = (bm->flags & BM_ZBUFFER) != 0;
-        if (!is_8bit && !is_16bit) return false;
-        SPalette* pal = (SPalette*)bm->palette.ptr();
-        if (is_8bit && !pal) return false;
-        const int32_t w = bm->width, h = bm->height;
-        const size_t npx = size_t(w) * size_t(h);
-        const uint8_t key8 = (uint8_t)bm->keycolor;
-        const uint16_t key16 = (uint16_t)bm->keycolor;
-        std::unique_ptr<uint8_t[]> idxplane;
-        std::unique_ptr<uint16_t[]> rgbplane16;
-        if (is_8bit) idxplane.reset(new uint8_t[npx]); else rgbplane16.reset(new uint16_t[npx]);
-        std::unique_ptr<uint16_t[]> zplane;
-        if (has_zbuffer) zplane.reset(new uint16_t[npx]);
-
-        if (bm->flags & BM_CHUNKED)
-        {
-            if (!bm->CacheChunks()) return false;
-            SChunkHeader* hdr = (SChunkHeader*)(void*)bm->data8;
-            SChunkHeader* zhdr = has_zbuffer ? (SChunkHeader*)bm->zbuffer.ptr() : nullptr;
-            if (!hdr || (has_zbuffer && !zhdr)) return false;
-            const int32_t cw = hdr->width, ch = hdr->height;
-            if (is_8bit) std::memset(idxplane.get(), key8, npx);
-            else std::fill_n(rgbplane16.get(), npx, key16);
-            if (has_zbuffer) for (size_t i = 0; i < npx; ++i) zplane[i] = 0;
-            for (int32_t by = 0; by < ch; ++by)
-            for (int32_t bx = 0; bx < cw; ++bx)
-            {
-                void* cptr = hdr->block[by * cw + bx].ptr();
-                void* zptr = zhdr ? zhdr->block[by * cw + bx].ptr() : nullptr;
-                const uint8_t*  c8  = (is_8bit && cptr) ? (const uint8_t*)ChunkCache.AddChunk(cptr, 1) : nullptr;
-                const uint16_t* c16 = (is_16bit && cptr) ? (const uint16_t*)ChunkCache.AddChunk16(cptr, 1) : nullptr;
-                const uint16_t* z16 = (has_zbuffer && zptr) ? (const uint16_t*)ChunkCache.AddChunkZ(zptr, 2) : nullptr;
-                const int32_t x0 = bx * CHUNKWIDTH, y0 = by * CHUNKHEIGHT;
-                const int32_t cxmax = (w - x0 < CHUNKWIDTH) ? (w - x0) : CHUNKWIDTH;
-                const int32_t cymax = (h - y0 < CHUNKHEIGHT) ? (h - y0) : CHUNKHEIGHT;
-                if (cxmax <= 0 || cymax <= 0) continue;
-                for (int32_t y = 0; y < cymax; ++y)
-                {
-                    if (c8) std::memcpy(&idxplane[(y0 + y) * w + x0], &c8[y * CHUNKWIDTH], cxmax);
-                    if (c16) std::memcpy(&rgbplane16[(y0 + y) * w + x0], &c16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
-                    if (z16) std::memcpy(&zplane[(y0 + y) * w + x0], &z16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
-                }
-            }
-        }
-        else
-        {
-            if (is_8bit) std::memcpy(idxplane.get(), bm->data8, npx);
-            else std::memcpy(rgbplane16.get(), bm->data16, npx * sizeof(uint16_t));
-            if (has_zbuffer)
-            {
-                uint16_t* zbuf = (uint16_t*)bm->zbuffer.ptr();
-                if (zbuf) std::memcpy(zplane.get(), zbuf, npx * sizeof(uint16_t));
-            }
-        }
-
-        rgba_out.assign(npx * 4, 0);
-        if (zraw_out) zraw_out->assign(npx, 0.0f);
-        if (alpha_out) alpha_out->assign(npx, 0);
-        int32_t valid = 0;
-        float zmin = FLT_MAX;
-        float zmax = -FLT_MAX;
-        for (size_t i = 0; i < npx; ++i)
-        {
-            const uint8_t idx8 = is_8bit ? idxplane[i] : 0;
-            const uint16_t px16 = is_16bit ? rgbplane16[i] : 0;
-            const uint16_t z = has_zbuffer ? zplane[i] : 1;
-            const bool transparent = has_zbuffer ? (z == 0 || z == 0x7F7F)
-                                                 : (is_8bit ? (idx8 == key8) : (px16 == key16));
-            uint8_t* row = rgba_out.data() + i * 4;
-            if (transparent)
-                continue;
-            ++valid;
-            if (alpha_out) (*alpha_out)[i] = 255;
-            const float zraw = has_zbuffer ? float(int16_t(z)) : 0.0f;
-            if (zraw_out) (*zraw_out)[i] = zraw;
-            zmin = (std::min)(zmin, zraw);
-            zmax = (std::max)(zmax, zraw);
-            if (is_8bit)
-            {
-                const uint32_t c = pal->rgbcolors[idx8];
-                row[0] = (uint8_t)( c        & 0xFF);
-                row[1] = (uint8_t)((c >> 8)  & 0xFF);
-                row[2] = (uint8_t)((c >> 16) & 0xFF);
-            }
-            else
-            {
-                row[0] = (uint8_t)(((px16 >> 10) & 0x1F) << 3);
-                row[1] = (uint8_t)(((px16 >> 5)  & 0x1F) << 3);
-                row[2] = (uint8_t)(( px16        & 0x1F) << 3);
-            }
-            row[3] = 255;
-        }
-        if (valid == 0) { zmin = 0.0f; zmax = 0.0f; }
-        if (valid_out) *valid_out = valid;
-        if (zmin_out) *zmin_out = zmin;
-        if (zmax_out) *zmax_out = zmax;
-        return true;
-    };
 
     for (int32_t objtype = 0; objtype < TileClass.NumTypes(); ++objtype)
     {
@@ -375,7 +486,7 @@ bool DumpTilesToPath(const char* out_path_cstr)
         std::vector<uint8_t> alpha;
         int32_t valid_count = 0;
         float zmin = 0.0f, zmax = 0.0f;
-        if (!decode_tile_bitmap_rgba(bm, rgba, &zraw, &alpha, &valid_count, &zmin, &zmax))
+        if (!decode_bitmap_rgba(bm, rgba, &zraw, &alpha, &valid_count, &zmin, &zmax))
         {
             ++failed;
             log_warn("[tiledump] decode failed for tile[%d] '%s' flags=0x%x", objtype, info->name, bm->flags);
@@ -484,6 +595,135 @@ bool InitializeTileDumpMode()
     return DumpTilesToPath(StartupDumpTilesPath);
 }
 
+// Walk every object class/type, load its imagery, and export every baked
+// inventory icon (GetInvImage per state) as a PNG. This captures all item
+// icons and character portraits (portrait = state 0 of the body imagery);
+// only I3D imagery bakes icons, types without them are silently skipped.
+bool DumpIconsToPath(const char* out_path_cstr)
+{
+    const fs::path out_dir = (out_path_cstr && out_path_cstr[0])
+        ? fs::path(out_path_cstr)
+        : (fs::current_path() / "icons");
+    std::error_code ec;
+    fs::create_directories(out_dir, ec);
+    if (ec)
+    {
+        log_error("[icondump] create_directories failed for '%s': %s",
+                  out_dir.string().c_str(), ec.message().c_str());
+        return false;
+    }
+
+    int dumped = 0;
+    int animated = 0;
+    int failed = 0;
+
+    // Chroma-key the magenta background to transparent. The .i3d-baked
+    // portraits (CHARACTER/PLAYER) come back with an opaque magenta fill
+    // instead of the keyed/zbuffered transparency item icons use, so
+    // decode_bitmap_rgba leaves it solid. Inv icons are chroma-keyed by
+    // definition and real icon art never uses pure (248,0,248) magenta.
+    auto chroma_key = [](std::vector<uint8_t>& rgba) {
+        for (size_t p = 0; p + 3 < rgba.size(); p += 4)
+            if (rgba[p] >= 224 && rgba[p + 1] <= 32 && rgba[p + 2] >= 224)
+                rgba[p] = rgba[p + 1] = rgba[p + 2] = rgba[p + 3] = 0;
+    };
+
+    for (int32_t classid = 0; classid < TObjectClass::NumClasses(); ++classid)
+    {
+        const TObjectClass* cls = TObjectClass::GetClass(classid);
+        if (!cls)
+            continue;
+        const std::string safe_class = SanitizeFilenameComponent(cls->ClassName());
+
+        for (int32_t objtype = 0; objtype < cls->NumTypes(); ++objtype)
+        {
+            SObjectInfo* info = cls->GetObjType(objtype);
+            if (!info || !info->name)
+                continue;
+
+            TObjectImagery* imagery = TObjectImagery::LoadImagery(info->imageryid);
+            if (!imagery)
+                continue;
+
+            const std::string safe_name = SanitizeFilenameComponent(info->name);
+            const int32_t nstates = imagery->NumStates();
+            for (int32_t state = 0; state < nstates; ++state)
+            {
+                // An item may ship a static inventory bitmap, an inventory
+                // animation, or both. Potions et al. have only the animation,
+                // so fall back to its first frame for the still (mirrors
+                // TObjectInstance::InventoryImage).
+                TAnimation* anim = imagery->GetInvAnimation(state);
+                const int32_t nframes = anim ? anim->NumFrames() : 0;
+                TBitmap* bm = imagery->GetInvImage(state);
+                if (!bm && anim && nframes > 0)
+                    bm = anim->GetFrame(0);
+                if (!bm)
+                    continue;
+
+                std::vector<uint8_t> rgba;
+                if (!decode_bitmap_rgba(bm, rgba))
+                {
+                    ++failed;
+                    log_warn("[icondump] decode failed for %s '%s' state=%d flags=0x%x",
+                             cls->ClassName(), info->name, state, bm->flags);
+                    continue;
+                }
+                chroma_key(rgba);
+
+                char stem[512];
+                if (state == 0)
+                    std::snprintf(stem, sizeof(stem), "%s_%04d_%s",
+                                  safe_class.c_str(), objtype, safe_name.c_str());
+                else
+                    std::snprintf(stem, sizeof(stem), "%s_%04d_%s_s%02d",
+                                  safe_class.c_str(), objtype, safe_name.c_str(), state);
+
+                if (!write_png_rgba(out_dir / (std::string(stem) + ".png"),
+                                    bm->width, bm->height, rgba))
+                {
+                    ++failed;
+                    log_warn("[icondump] png write failed for %s '%s' state=%d",
+                             cls->ClassName(), info->name, state);
+                    continue;
+                }
+                ++dumped;
+
+                // Multi-frame inventory animation -> APNG alongside the still.
+                if (nframes > 1)
+                {
+                    std::vector<std::vector<uint8_t>> aframes;
+                    aframes.reserve(size_t(nframes));
+                    const int32_t aw = bm->width, ah = bm->height;
+                    bool ok = true;
+                    for (int32_t fr = 0; fr < nframes; ++fr)
+                    {
+                        TBitmap* fb = anim->GetFrame(fr);
+                        std::vector<uint8_t> frgba;
+                        if (!fb || fb->width != aw || fb->height != ah ||
+                            !decode_bitmap_rgba(fb, frgba))
+                        { ok = false; break; }
+                        chroma_key(frgba);
+                        aframes.push_back(std::move(frgba));
+                    }
+                    // 10 fps is a sensible default; the engine steps these
+                    // off the game tick and the source carries no per-clip rate.
+                    if (ok && write_apng_rgba(out_dir / (std::string(stem) + "_anim.png"),
+                                              aw, ah, aframes, 1, 10))
+                        ++animated;
+                    else if (!ok)
+                        log_warn("[icondump] anim frame decode failed for %s '%s' state=%d",
+                                 cls->ClassName(), info->name, state);
+                }
+            }
+        }
+    }
+
+    log_info("[icondump] dumped=%d animated=%d failed=%d folder='%s'",
+             dumped, animated, failed, out_dir.string().c_str());
+    return dumped > 0;
+}
+
 // =========================================================================
 // * i3ddump — extract everything from an I3D file into a folder.          *
 // *                                                                       *
@@ -585,6 +825,33 @@ bool DumpI3DToPath(const char* asset_path_cstr, const char* out_dir_cstr)
         if (r.empty()) r = "unnamed";
         return r;
     };
+
+    // ---- motion.json: each state's name, frames, flags as loaded and its
+    // motion a frame in SMotionData's units ([dist, vert, ang, rotx, roty,
+    // rotz]; GetMotion's dist and vert are those << 8) -- the motion tables
+    // of the combat dojo's sequence cases (docs/gameplay/COMBAT_DOJO.md M8).
+    if (!img3d->MeshInitialized())
+        img3d->InitializeMesh((S3DImageryBody*)img3d->GetBody());
+    {
+        RetailAB::JsonOut j;
+        j.Begin('{').FieldString("asset", asset_path_cstr).Key("states").Begin('[');
+        for (int32_t st = 0; st < img3d->NumStates(); ++st)
+        {
+            j.Begin('{').FieldString("name", img3d->GetHeader()->states[st].animname);
+            j.Field("frames", img3d->GetAniLength(st)).Field("aniflags", img3d->GetAniFlags(st));
+            j.Key("motion").Begin('[');
+            for (int32_t fr = 0; fr < img3d->GetAniLength(st); ++fr)
+            {
+                int32_t dist, vert, ang, rotx, roty, rotz;
+                if (!img3d->GetMotion(st, fr, dist, vert, ang, rotx, roty, rotz))
+                    break;
+                j.Begin('[').Value(dist >> 8).Value(vert >> 8).Value(ang).Value(rotx).Value(roty).Value(rotz).End(']');
+            }
+            j.End(']').End('}');
+        }
+        j.End(']').End('}');
+        std::ofstream(out_dir / "motion.json") << j.str() << "\n";
+    }
 
     // ---- manifest.txt ----
     std::ofstream mf(out_dir / "manifest.txt");
@@ -2089,11 +2356,10 @@ bool InitializeI3DStaticMode()
 bool InitializeWaterPreviewMode()
 {
     std::string meta_error;
-    const std::filesystem::path meta_path =
-        std::filesystem::current_path() / ".." / "data" / "Resources" / "render_metadata.def";
-    if (!LoadRenderMetadataFile(meta_path.string().c_str(), g_i3dTest.render_meta, &meta_error))
+    const std::string meta_path = rev_engine_asset("render_metadata.def");
+    if (!LoadRenderMetadataFile(meta_path.c_str(), g_i3dTest.render_meta, &meta_error))
         log_warn("[water3d] failed to load render metadata '%s': %s",
-                 meta_path.string().c_str(), meta_error.c_str());
+                 meta_path.c_str(), meta_error.c_str());
 
     g_i3dTest.roster = {
         "Misc\\Water.I3D",
@@ -2320,7 +2586,7 @@ bool InitializeIconMode()
         return true;
     }
     log_info("[icon] atlas %dx%d for %d glyphs",
-        atlas->width, atlas->height, (int)atlas->numchars);
+        atlas->width, atlas->height, (int)atlas->glyphs.size() - 1);
     return true;
 }
 
@@ -2661,19 +2927,19 @@ void RenderAudioMode()
         ImGui::Text("SFX registry (%d entries)", SoundPlayer.NumItems());
         if (ImGui::BeginChild("sfxlist", ImVec2(0, 0), true)) {
             for (int32_t i = 0; i < SoundPlayer.NumItems(); ++i) {
-                PSSoundRef ref = SoundPlayer.GetRef(i);
-                if (!ref || !ref->name) continue;
+                const SSoundRef* ref = SoundPlayer.GetRef(i);
+                if (!ref) continue;
                 ImGui::PushID(i);
                 if (ImGui::Button("Play")) {
                     if (SoundPlayer.Mount(i)) {
                         SoundPlayer.Play(i);
                         SoundPlayer.Unmount(i);
                     } else {
-                        log_warn("[audio] mount failed for sound[%d] '%s'", i, ref->name);
+                        log_warn("[audio] mount failed for sound[%d] '%s'", i, ref->name.c_str());
                     }
                 }
                 ImGui::SameLine();
-                ImGui::Text("%s", ref->name);
+                ImGui::Text("%s", ref->file.c_str());
                 ImGui::PopID();
             }
         }
@@ -2691,18 +2957,18 @@ void RenderAudioMode()
 // mode's input dispatch, so UI behavior can be driven and verified headlessly
 // (no real input). The script is a timeline: `pause` advances a running clock;
 // `moveto`/`left_down`/`key_down`/etc. emit an event at the current clock +
-// cursor position. Each frame, InputSimTick() fires every event whose timestamp
-// has elapsed (measured against TTime), calling the same HandleMouseMove /
-// HandleMouseClick / HandleKeyPress path real input uses. Coordinates are in
+// cursor position. Each frame, InputSimTick() queues every event whose timestamp
+// has elapsed (measured against TTime) on the input queue, which dispatches it
+// the way it dispatches real input (inputqueue.h). Coordinates are in
 // Classic 640x480 content pixels (the UI test modes letterbox internally).
 // =====================================================================
-enum { MS_MOVE = 0, MS_CLICK, MS_KEY, MS_LOG, MS_SNAP };
+enum { MS_MOVE = 0, MS_CLICK, MS_KEY, MS_CHAR, MS_LOG, MS_SNAP };
 
-struct SInputEvent
+struct SScriptEvent
 {
     double      at_ms = 0.0;   // fire time, ms from script start
     int32_t     kind  = MS_MOVE;
-    int32_t     button = 0;    // MB_* for MS_CLICK; VK code for MS_KEY
+    int32_t     button = 0;    // MB_* for MS_CLICK; VK code for MS_KEY; character for MS_CHAR
     int32_t     x = 0, y = 0;  // for MS_KEY: x = 1 (down) / 0 (up)
     std::string text;          // for MS_LOG
 };
@@ -2737,6 +3003,9 @@ int32_t InputSimKeyCode(const std::string& tokIn)
     if (t == "end")                         return VK_END;
     if (t == "pgup" || t == "pageup")       return VK_PRIOR;
     if (t == "pgdn" || t == "pagedown")     return VK_NEXT;
+    if (t == "ctrl" || t == "control")      return VK_CONTROL;
+    if (t == "shift")                       return VK_SHIFT;
+    if (t == "alt")                         return VK_MENU;
     if (t.size() >= 2 && t[0] == 'f' && std::isdigit((unsigned char)t[1]))
     {
         const int32_t n = (int32_t)std::strtol(t.c_str() + 1, nullptr, 10);
@@ -2749,7 +3018,7 @@ int32_t InputSimKeyCode(const std::string& tokIn)
     return 0;
 }
 
-std::vector<SInputEvent> g_inputSimEvents;
+std::vector<SScriptEvent> g_inputSimEvents;
 size_t  g_inputSimNext   = 0;
 double  g_inputSimStartMs = 0.0;   // 0 until the first tick stamps it
 bool    g_inputSimActive = false;
@@ -2784,7 +3053,6 @@ void InputSimStart(const char* script)
     g_inputSimStartMs = 0.0;
     g_inputSimActive  = false;
     g_inputSimLoop    = false;
-    mousebutton       = 0;   // start with no buttons held (drag-state baseline)
     if (!script || !script[0]) return;
 
     // Default glide duration for `moveto` — the cursor animates from its
@@ -2888,6 +3156,30 @@ void InputSimStart(const char* script)
                 log_warn("[input-sim] key_press: unknown key '%s'",
                          tok.size() > 1 ? tok[1].c_str() : "");
         }
+        else if (op == "type" || op == "type_text")
+        {
+            // Typed text: one character event per character, 30 ms apart.
+            constexpr int32_t kTypeIntervalMs = 30;
+            const size_t sp = cmd.find(' ');
+            const std::string text = (sp == std::string::npos) ? "" : cmd.substr(sp + 1);
+            for (const char c : text)
+            {
+                g_inputSimEvents.push_back({ t_ms, MS_CHAR, (int32_t)(unsigned char)c, 0, 0, "" });
+                t_ms += kTypeIntervalMs;
+            }
+        }
+        else if (op == "char")
+        {
+            // One character event: a code (13) or enter / backspace / escape,
+            // the characters those keys send besides their key events.
+            const std::string arg = (tok.size() > 1) ? tok[1] : "";
+            const int32_t ch = arg == "enter" ? 0x0d : arg == "backspace" ? 0x08 : arg == "escape" ? 0x1b
+                             : (int32_t)std::strtol(arg.c_str(), nullptr, 0);
+            if (ch > 0)
+                g_inputSimEvents.push_back({ t_ms, MS_CHAR, ch, 0, 0, "" });
+            else
+                log_warn("[input-sim] char: unknown character '%s'", arg.c_str());
+        }
         else if (op == "loop")
             g_inputSimLoop = true;
         else if (op == "take_snapshot" || op == "snapshot" || op == "snap")
@@ -2915,15 +3207,186 @@ void InputSimStart(const char* script)
                  g_inputSimEvents.size(), g_inputSimLoop ? 1 : 0);
 }
 
+// Optional --test=sector timeline. Commands go through the same interpreter
+// as story scripts; @expect/@absent are observations, never object mutation.
+// Format: legacy_tick | context type/name (or -) | command
+struct SSceneCommandEvent {
+    double tick = 0;
+    std::string context, command;
+    int line = 0;
+};
+struct SSceneCommandIdentity {
+    std::string selector;
+    int32_t map_index = -1;
+    uint32_t id = 0;
+};
+std::vector<SSceneCommandEvent> g_sceneCommands;
+std::vector<SSceneCommandIdentity> g_sceneIdentities;
+size_t g_sceneCommandNext = 0;
+double g_sceneCommandTicks = 0;
+int64_t g_sceneCommandPulsedTick = -1;
+bool g_sceneCommandFailed = false;
+bool g_sceneCommandCompleted = false;
+
+std::string SceneTrim(const std::string& value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    return first == std::string::npos ? "" : value.substr(first, value.find_last_not_of(" \t\r\n") - first + 1);
+}
+bool SceneCommandsStart() {
+    g_sceneCommands.clear(); g_sceneIdentities.clear();
+    g_sceneCommandNext = 0; g_sceneCommandTicks = 0; g_sceneCommandPulsedTick = -1; g_sceneCommandFailed = false; g_sceneCommandCompleted = false;
+    if (!StartupSceneCommandFile[0]) return true;
+    if (!StartupSceneCameraSet) {
+        log_error("[scene-command] requires explicit --scene-camera=L,X,Y,Z"); return false;
+    }
+    std::ifstream input(StartupSceneCommandFile);
+    if (!input) { log_error("[scene-command] cannot read '%s'", StartupSceneCommandFile); return false; }
+    std::string line; int number = 0;
+    while (std::getline(input, line)) {
+        ++number; line = SceneTrim(line);
+        if (line.empty() || line[0] == '#') continue;
+        const auto a = line.find('|'), b = a == std::string::npos ? a : line.find('|', a + 1);
+        if (a == std::string::npos || b == std::string::npos) {
+            log_error("[scene-command] invalid row at line %d", number); return false;
+        }
+        SSceneCommandEvent event;
+        const std::string tick = SceneTrim(line.substr(0, a));
+        char* end = nullptr; event.tick = strtod(tick.c_str(), &end);
+        event.context = SceneTrim(line.substr(a + 1, b - a - 1));
+        event.command = SceneTrim(line.substr(b + 1)); event.line = number;
+        if (tick.empty() || *end || !std::isfinite(event.tick) || event.tick < 0 ||
+            (!g_sceneCommands.empty() && event.tick < g_sceneCommands.back().tick) ||
+            event.context.empty() || event.command.empty()) {
+            log_error("[scene-command] invalid or unsorted row at line %d", number); return false;
+        }
+        g_sceneCommands.push_back(std::move(event));
+    }
+    const S3DPoint center = { StartupSceneCamera[1], StartupSceneCamera[2], StartupSceneCamera[3] };
+    if (!MapPane.BindCommandMapWindow(StartupSceneCamera[0], center)) {
+        log_error("[scene-command] cannot borrow current map active window"); return false;
+    }
+    log_info("[scene-command] loaded %zu rows from '%s' (24Hz ticks)", g_sceneCommands.size(), StartupSceneCommandFile);
+    return true;
+}
+TObjectInstance* SceneCommandContext(const std::string& selector) {
+    if (selector == "-") return nullptr;
+    for (const auto& identity : g_sceneIdentities) if (identity.selector == selector) {
+        TObjectInstance* object = MapPane.GetInstance(identity.map_index);
+        return object && object->ObjId() == identity.id ? object : nullptr;
+    }
+    std::string name = selector;
+    TObjectInstance* object = MapPane.FindClosestObject(name.data());
+    if (object) g_sceneIdentities.push_back({selector, object->GetMapIndex(), object->ObjId()});
+    return object;
+}
+void SceneCommandLogObject(const char* phase, const std::string& selector, TObjectInstance* object) {
+    if (!object) { log_info("[scene-command] %s context=%s alive=0", phase, selector.c_str()); return; }
+    const S3DPoint pos = object->Pos();
+    log_info("[scene-command] %s context=%s alive=1 id=%08x map_index=%d pos=%d,%d,%d amount=%d components=%d state=%d frame=%d",
+        phase, selector.c_str(), object->ObjId(), object->GetMapIndex(), pos.x, pos.y, pos.z,
+        object->Amount(), object->NumComponents(), object->GetState(), object->GetFrame());
+    for (int32_t slot = 0; slot < object->NumComponents(); ++slot)
+        if (TObjectComponent* component = object->GetComponent(slot))
+            log_info("[scene-command] component context=%s slot=%d name=%s generation=%u",
+                selector.c_str(), slot, component->ComponentName(), component->Generation());
+    if (auto* animator = dynamic_cast<T3DAnimator*>(object->GetAnimator())) {
+        const auto stats = animator->PartSysStats();
+        if (stats.controllers || stats.unsupported)
+            log_info("[scene-command] partsys phase=%s context=%s controllers=%zu emitters=%zu capacity=%zu alive=%zu next_emitter=%zu ticks=%llu quads=%llu renders=%llu unsupported=%d",
+                phase, selector.c_str(), stats.controllers, stats.emitters, stats.capacity,
+                stats.alive, stats.next_emitter, (unsigned long long)stats.ticks,
+                (unsigned long long)stats.quads, (unsigned long long)stats.renders, int(stats.unsupported));
+    }
+}
+void SceneCommandsTick() {
+    if (!StartupSceneCommandFile[0] || g_sceneCommandFailed) return;
+    // The renderer samples poses; opt-in scene tests use the real map tick
+    // functions for authored frames, pulses/scripts, movement and OF_KILL reap.
+    while (g_sceneCommandPulsedTick < int64_t(std::floor(g_sceneCommandTicks + 1e-6))) {
+        ++g_sceneCommandPulsedTick;
+        MapPane.NextFrameObjects();
+        MapPane.PulseObjects();
+        MapPane.MoveObjects();
+    }
+    while (g_sceneCommandNext < g_sceneCommands.size() &&
+           g_sceneCommands[g_sceneCommandNext].tick <= g_sceneCommandTicks + 1e-6) {
+        const auto& event = g_sceneCommands[g_sceneCommandNext++];
+        TObjectInstance* object = SceneCommandContext(event.context);
+        SceneCommandLogObject("before", event.context, object);
+        bool ok = true; int32_t result = 0;
+        if (event.command == "@absent") {
+            // A selector must have previously bound an identity; otherwise a
+            // misspelled name could produce a false passing deletion check.
+            bool bound = false;
+            for (const auto& identity : g_sceneIdentities) if (identity.selector == event.context) bound = true;
+            ok = bound && !object;
+        } else if (event.command.rfind("@partsys ", 0) == 0) {
+            // Observe actual map-owned controller state and submitted particles.
+            // Whole-image changes alone cannot prove that an emitter is running.
+            unsigned long long controllers = 0, emitters = 0, capacity = 0;
+            unsigned long long min_alive = 0, min_ticks = 0, min_quads = 0;
+            char extra = 0;
+            auto* animator = object ? dynamic_cast<T3DAnimator*>(object->GetAnimator()) : nullptr;
+            ok = animator && sscanf(event.command.c_str(), "@partsys %llu %llu %llu %llu %llu %llu %c",
+                &controllers, &emitters, &capacity, &min_alive, &min_ticks, &min_quads, &extra) == 6;
+            if (ok) {
+                const auto stats = animator->PartSysStats();
+                ok = !stats.unsupported && stats.controllers == controllers &&
+                    stats.emitters == emitters && stats.capacity == capacity &&
+                    stats.alive >= min_alive && stats.ticks >= min_ticks && stats.quads >= min_quads;
+            }
+        } else if (event.command.rfind("@frame ", 0) == 0) {
+            int expected = 0; char extra = 0;
+            ok = sscanf(event.command.c_str(), "@frame %d %c", &expected, &extra) == 1 &&
+                 object && object->GetFrame() == expected;
+        } else if (event.command.rfind("@expect ", 0) == 0) {
+            unsigned id = 0; int x = 0, y = 0, z = 0, count = 0; char component[128] = {}, extra = 0;
+            ok = sscanf(event.command.c_str(), "@expect %x %d %d %d %127s %d %c", &id, &x, &y, &z,
+                        component, &count, &extra) == 6 && object;
+            if (ok) {
+                const S3DPoint pos = object->Pos(); int actual = 0;
+                for (int32_t slot = 0; slot < object->NumComponents(); ++slot)
+                    if (TObjectComponent* c = object->GetComponent(slot))
+                        if (strcmp(c->ComponentName(), component) == 0) ++actual;
+                ok = object->ObjId() == id && pos.x == x && pos.y == y && pos.z == z && actual == count;
+            }
+        } else if (event.command[0] == '@') {
+            ok = false;
+        } else if (event.context != "-" && !object) {
+            ok = false;
+        } else {
+            std::string command = event.command + "\n";
+            TStringParseStream stream(command.data()); TToken token(stream); token.WhiteGet();
+            result = CommandInterpreter(object, token);
+            ok = (result & CMD_ERROR) == 0;
+        }
+        log_info("[scene-command] row line=%d tick=%.3f elapsed=%.3f context=%s result=%d status=%s command=%s",
+            event.line, event.tick, g_sceneCommandTicks, event.context.c_str(), result,
+            ok ? "PASS" : "FAIL", event.command.c_str());
+        SceneCommandLogObject("after", event.context, SceneCommandContext(event.context));
+        if (!ok) {
+            g_sceneCommandFailed = true;
+            log_error("[scene-command] FAILED at line %d", event.line);
+            sapp_request_quit(); return;
+        }
+    }
+    if (!g_sceneCommandCompleted && g_sceneCommandNext == g_sceneCommands.size()) {
+        g_sceneCommandCompleted = true;
+        log_info("[scene-command] COMPLETE rows=%zu failures=0", g_sceneCommands.size());
+    }
+    g_sceneCommandTicks += TTime::DeltaTime() * 24.0;
+}
+
 }  // namespace
 
 namespace TestModes {
 
-// Defined here (in the TestModes namespace) so it can call the dispatch
-// functions directly. Fires all synthetic input events whose timestamp has
-// elapsed since the script started.
-static void InputSimTick(const char* mode)
+// Queues every synthetic input event whose timestamp has elapsed since the
+// script started; the frame's input drain (AppFrame) dispatches them with the
+// hardware's, the way real input goes.
+void InputSimTick(TScreen* screen)
 {
+    if (!screen) return;
     if (!g_inputSimActive) return;
     const double now_ms = TTime::Time() * 1000.0;
     if (g_inputSimStartMs == 0.0) g_inputSimStartMs = now_ms;
@@ -2932,37 +3395,33 @@ static void InputSimTick(const char* mode)
     while (g_inputSimNext < g_inputSimEvents.size() &&
            g_inputSimEvents[g_inputSimNext].at_ms <= elapsed)
     {
-        const SInputEvent& e = g_inputSimEvents[g_inputSimNext++];
+        const SScriptEvent& e = g_inputSimEvents[g_inputSimNext++];
         switch (e.kind)
         {
         case MS_MOVE:
-            // Drive the shared cursor position so the in-frame game cursor
-            // (TCursorHud, when a mode disables the hardware cursor) follows
-            // the script. Same globals the real mouse handler writes. Pass the
-            // held-button mask so moves between down/up read as a drag.
-            cursorx = e.x; cursory = e.y;
-            HandleMouseMove(mode, mousebutton, e.x, e.y);
+            // The pointer moves with whatever buttons the script holds, so
+            // moves between a down and an up read as a drag.
+            InputQueue.PushMove(e.x, e.y);
             break;
         case MS_CLICK:
-            cursorx = e.x; cursory = e.y;
-            // Mirror the real handler's mousebutton bookkeeping so a held
-            // press persists across subsequent moves (drag support).
             switch (e.button)
             {
-            case MB_LEFTDOWN:   mousebutton |= MB_LEFTDOWN;    break;
-            case MB_LEFTUP:     mousebutton &= ~MB_LEFTDOWN;   break;
-            case MB_RIGHTDOWN:  mousebutton |= MB_RIGHTDOWN;   break;
-            case MB_RIGHTUP:    mousebutton &= ~MB_RIGHTDOWN;  break;
-            case MB_MIDDLEDOWN: mousebutton |= MB_MIDDLEDOWN;  break;
-            case MB_MIDDLEUP:   mousebutton &= ~MB_MIDDLEDOWN; break;
+            case MB_LEFTDOWN:   InputQueue.PushButton(SInputEvent::kButtonLeft,   true,  e.x, e.y); break;
+            case MB_LEFTUP:     InputQueue.PushButton(SInputEvent::kButtonLeft,   false, e.x, e.y); break;
+            case MB_RIGHTDOWN:  InputQueue.PushButton(SInputEvent::kButtonRight,  true,  e.x, e.y); break;
+            case MB_RIGHTUP:    InputQueue.PushButton(SInputEvent::kButtonRight,  false, e.x, e.y); break;
+            case MB_MIDDLEDOWN: InputQueue.PushButton(SInputEvent::kButtonMiddle, true,  e.x, e.y); break;
+            case MB_MIDDLEUP:   InputQueue.PushButton(SInputEvent::kButtonMiddle, false, e.x, e.y); break;
             default: break;
             }
-            HandleMouseClick(mode, e.button, e.x, e.y);
             break;
         case MS_KEY:
-            // e.button = VK code, e.x = 1 (down) / 0 (up). Same path real keys
-            // take; real keyboard is NOT gated, so synthetic + real coexist.
-            HandleKeyPress(mode, e.button, e.x != 0);
+            // e.button = VK code, e.x = 1 (down) / 0 (up). Real keyboard is
+            // NOT gated, so synthetic + real coexist.
+            InputQueue.PushKey(e.button, e.x != 0);
+            break;
+        case MS_CHAR:
+            InputQueue.PushChar(e.button);
             break;
         case MS_SNAP:
             // Manual filmstrip capture (--filmstrip=N,0). Captures the LAST
@@ -3005,6 +3464,11 @@ static void InputSimTick(const char* mode)
     }
 }
 
+void InputSimArm()
+{
+    InputSimStart(StartupInputScript.c_str());
+}
+
 bool InputScriptActive()
 {
     // Own the mouse only while the script still has work to do: events pending,
@@ -3018,15 +3482,42 @@ bool DumpTilesToFolder(const char* path)
     return DumpTilesToPath(path);
 }
 
+bool DumpIconsToFolder(const char* path)
+{
+    return DumpIconsToPath(path);
+}
+
+// The --test=ui-* modes whose panes read the main player. They run against
+// the demo player (uidemoplayer.h), installed around the mode.
+static bool UsesDemoPlayer(const char* mode)
+{
+    static constexpr const char* kModes[] = {
+        "ui-hud", "ui-plyrstatusbar", "ui-bottombar", "ui-stats", "ui-equip",
+        "ui-inventory", "ui-sidebar", "ui-spellbook", "ui-spellcreate",
+    };
+    for (const char* m : kModes)
+        if (strcmp(mode, m) == 0)
+            return true;
+    return false;
+}
+
 bool Initialize(const char* mode)
 {
-    // Arm the scripted input simulator (no-op if --input-script was not given).
-    InputSimStart(StartupInputScript);
+    if (UsesDemoPlayer(mode) && !UIDemoPlayer::Install())
+        log_warn("[test] %s: no demo player; the panes show no player", mode);
 
     if (strcmp(mode, "blank") == 0 || strcmp(mode, "ticker") == 0)
         return true;
     if (strcmp(mode, "sector") == 0)
-        return g_mapRenderer.InitializeFromStartupArgs();
+        return g_mapRenderer.InitializeFromStartupArgs() && SceneCommandsStart();
+    if (strcmp(mode, "vfx-review") == 0)
+        return VfxReview::Initialize();
+    if (strcmp(mode, "fireball-runtime") == 0)
+    {
+        const bool result=RunFireballRuntimeTest(g_mapRenderer);
+        sapp_request_quit();
+        return result;
+    }
     if (strcmp(mode, "mesh") == 0)
         return InitializeMeshMode();
     if (strcmp(mode, "char3d") == 0)
@@ -3068,6 +3559,8 @@ bool Initialize(const char* mode)
         return InitializeUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         return InitializeUIPlyrStatusBarMode();
+    if (strcmp(mode, "ab-plyrstatusbar") == 0)
+        return InitializeABPlyrStatusBarMode();
     if (strcmp(mode, "ui-sidetabs") == 0)
         return InitializeUISideTabsMode();
     if (strcmp(mode, "ui-sidebar") == 0)
@@ -3075,15 +3568,10 @@ bool Initialize(const char* mode)
         SetUISidebarSyntheticStateEnabled(true);
         return InitializeUISidebarMode();
     }
-    if (strcmp(mode, "ui-quickspell") == 0)
-    {
-        SetUIQuickSpellSyntheticStateEnabled(true);
-        return InitializeUIQuickSpellMode();
-    }
     if (strcmp(mode, "ui-bottombar") == 0)
         return InitializeUIBottomBarMode();
-    if (strcmp(mode, "ui-barinv") == 0)
-        return InitializeUIBarInvMode();
+    if (strcmp(mode, "ab-bottombar") == 0)
+        return InitializeABBottomBarMode();
     if (strcmp(mode, "ui-map") == 0)
         return InitializeUIMapMode();
     if (strcmp(mode, "ui-scrollpane") == 0)
@@ -3098,19 +3586,28 @@ bool Initialize(const char* mode)
         return InitializeUIEquipMode();
     if (strcmp(mode, "ui-inventory") == 0)
         return InitializeUIInventoryMode();
+    if (strcmp(mode, "ab-inventory") == 0)
+        return InitializeABInventoryMode();
+    if (strcmp(mode, "ab-spellpane") == 0)
+        return InitializeABSpellPaneMode();
+    if (strcmp(mode, "ab-automap") == 0)
+        return InitializeABAutoMapMode();
+    if (strcmp(mode, "ab-spellbook") == 0)
+        return InitializeABSpellBookMode();
+    if (strcmp(mode, "ab-statpane") == 0)
+        return InitializeABStatPaneMode();
+    if (strcmp(mode, "ab-options") == 0)
+        return InitializeABOptionsMode();
     if (strcmp(mode, "ui-hud") == 0)
     {
         SetUISidebarSyntheticStateEnabled(true);
-        SetUIQuickSpellSyntheticStateEnabled(true);
         SetUIHudCursorOverlayEnabled(true);
-        return InitializeUIHudMode();
+        return InitializeUIHudMode() && InitializeUIBottomBarModeEmbedded() && InitializeUIInventoryModeEmbedded()
+            && InitializeUISpellCreateModeEmbedded() && InitializeUIMapModeEmbedded()
+            && InitializeUISpellbookModeEmbedded() && InitializeUIStatsModeEmbedded();
     }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return InitializeUILoadScreenMode();
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return InitializeUIMainMenuMode();
-    if (strcmp(mode, "ui-death") == 0)
-        return InitializeUIDeathMode();
     if (IsUIDefScreenMode(mode))
         return InitializeUIDefScreenMode(mode);
     if (strcmp(mode, "audio") == 0)
@@ -3124,8 +3621,11 @@ bool Initialize(const char* mode)
 
 void Close(const char* mode)
 {
-    if (strcmp(mode, "sector") == 0)
+    if (strcmp(mode, "sector") == 0 || strcmp(mode, "fireball-runtime") == 0) {
+        g_sceneCommands.clear(); g_sceneIdentities.clear();
+        MapPane.ReleaseCommandMapWindow();
         g_mapRenderer.Shutdown();
+    }
     if (strcmp(mode, "mesh") == 0)
         CloseMeshMode();
     if (strcmp(mode, "char3d") == 0)
@@ -3148,16 +3648,16 @@ void Close(const char* mode)
         CloseUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         CloseUIPlyrStatusBarMode();
+    if (strcmp(mode, "ab-plyrstatusbar") == 0)
+        CloseABPlyrStatusBarMode();
     if (strcmp(mode, "ui-sidetabs") == 0)
         CloseUISideTabsMode();
     if (strcmp(mode, "ui-sidebar") == 0)
         CloseUISidebarMode();
-    if (strcmp(mode, "ui-quickspell") == 0)
-        CloseUIQuickSpellMode();
     if (strcmp(mode, "ui-bottombar") == 0)
         CloseUIBottomBarMode();
-    if (strcmp(mode, "ui-barinv") == 0)
-        CloseUIBarInvMode();
+    if (strcmp(mode, "ab-bottombar") == 0)
+        CloseABBottomBarMode();
     if (strcmp(mode, "ui-map") == 0)
         CloseUIMapMode();
     if (strcmp(mode, "ui-scrollpane") == 0)
@@ -3172,21 +3672,41 @@ void Close(const char* mode)
         CloseUIEquipMode();
     if (strcmp(mode, "ui-inventory") == 0)
         CloseUIInventoryMode();
+    if (strcmp(mode, "ab-inventory") == 0)
+        CloseABInventoryMode();
+    if (strcmp(mode, "ab-spellpane") == 0)
+        CloseABSpellPaneMode();
+    if (strcmp(mode, "ab-automap") == 0)
+        CloseABAutoMapMode();
+    if (strcmp(mode, "ab-spellbook") == 0)
+        CloseABSpellBookMode();
+    if (strcmp(mode, "ab-statpane") == 0)
+        CloseABStatPaneMode();
+    if (strcmp(mode, "ab-options") == 0)
+        CloseABOptionsMode();
     if (strcmp(mode, "ui-hud") == 0)
+    {
+        CloseUIStatsMode();
+        CloseUISpellbookMode();
+        CloseUIMapMode();
+        CloseUISpellCreateMode();
+        CloseUIInventoryMode();
+        CloseUIBottomBarMode();
         CloseUIHudMode();
+    }
     if (strcmp(mode, "ui-loadscreen") == 0)
         CloseUILoadScreenMode();
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        CloseUIMainMenuMode();
-    if (strcmp(mode, "ui-death") == 0)
-        CloseUIDeathMode();
     if (IsUIDefScreenMode(mode))
         CloseUIDefScreenMode();
     if (strcmp(mode, "audio") == 0)
         CloseAudioMode();
     if (strcmp(mode, "vfx") == 0)
         VfxTest::Close();
+    if (strcmp(mode, "vfx-review") == 0)
+        VfxReview::Close();
     DestroyBitmapAtlas(&g_uiAtlas);
+    if (UsesDemoPlayer(mode))
+        UIDemoPlayer::Remove();
 }
 
 void Render(const char* mode)
@@ -3194,12 +3714,15 @@ void Render(const char* mode)
     if (!Display.IsActive() || !Display.BackBuffer())
         return;
 
-    // Advance the scripted input simulator before painting so any hover/down
-    // state change is reflected in this frame (no-op without --input-script).
-    InputSimTick(mode);
+    if (UsesDemoPlayer(mode))
+        UIDemoPlayer::Pulse();
 
-    if (strcmp(mode, "sector") == 0)
+    if (strcmp(mode, "sector") == 0) {
+        SceneCommandsTick();
         return g_mapRenderer.RenderFrame();
+    }
+    if (strcmp(mode, "vfx-review") == 0)
+        return VfxReview::Render();
     if (strcmp(mode, "mesh") == 0)
         return RenderMeshMode();
     if (strcmp(mode, "char3d") == 0)
@@ -3230,16 +3753,16 @@ void Render(const char* mode)
         return RenderUITextBarMode();
     if (strcmp(mode, "ui-plyrstatusbar") == 0)
         return RenderUIPlyrStatusBarMode();
+    if (strcmp(mode, "ab-plyrstatusbar") == 0)
+        return RenderABPlyrStatusBarMode();
     if (strcmp(mode, "ui-sidetabs") == 0)
         return RenderUISideTabsMode();
     if (strcmp(mode, "ui-sidebar") == 0)
         return RenderUISidebarMode();
-    if (strcmp(mode, "ui-quickspell") == 0)
-        return RenderUIQuickSpellMode();
     if (strcmp(mode, "ui-bottombar") == 0)
         return RenderUIBottomBarMode();
-    if (strcmp(mode, "ui-barinv") == 0)
-        return RenderUIBarInvMode();
+    if (strcmp(mode, "ab-bottombar") == 0)
+        return RenderABBottomBarMode();
     if (strcmp(mode, "ui-map") == 0)
         return RenderUIMapMode();
     if (strcmp(mode, "ui-scrollpane") == 0)
@@ -3254,14 +3777,31 @@ void Render(const char* mode)
         return RenderUIEquipMode();
     if (strcmp(mode, "ui-inventory") == 0)
         return RenderUIInventoryMode();
+    if (strcmp(mode, "ab-inventory") == 0)
+        return RenderABInventoryMode();
+    if (strcmp(mode, "ab-spellpane") == 0)
+        return RenderABSpellPaneMode();
+    if (strcmp(mode, "ab-automap") == 0)
+        return RenderABAutoMapMode();
+    if (strcmp(mode, "ab-spellbook") == 0)
+        return RenderABSpellBookMode();
+    if (strcmp(mode, "ab-statpane") == 0)
+        return RenderABStatPaneMode();
+    if (strcmp(mode, "ab-options") == 0)
+        return RenderABOptionsMode();
     if (strcmp(mode, "ui-hud") == 0)
-        return RenderUIHudMode();
+    {
+        RenderUIHudMode();
+        RenderUIBottomBarMode();
+        RenderUIInventoryMode();
+        RenderUISpellCreateMode();
+        RenderUIMapMode();
+        RenderUISpellbookMode();
+        RenderUIStatsMode();
+        return;
+    }
     if (strcmp(mode, "ui-loadscreen") == 0)
         return RenderUILoadScreenMode();
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return RenderUIMainMenuMode();
-    if (strcmp(mode, "ui-death") == 0)
-        return RenderUIDeathMode();
     if (IsUIDefScreenMode(mode))
         return RenderUIDefScreenMode();
     if (strcmp(mode, "audio") == 0)
@@ -3273,37 +3813,20 @@ void Render(const char* mode)
 
 void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 {
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return HandleMouseClickUIMainMenuMode(button, x, y);
-    if (strcmp(mode, "ui-death") == 0)
-        return HandleMouseClickUIDeathMode(button, x, y);
-    if (IsUIDefScreenMode(mode))
-        return HandleMouseClickUIDefScreenMode(button, x, y);
     if (strcmp(mode, "ui-hud") == 0)
     {
+        // The test screen has routed the click to its panes (the bottom bar).
         const SHudState& s = GetHudState();
         if (HandleMouseClickUISidebarModeConsumed(button, x, y))
             return;
-        if (s.bottomBarOpen ||
-            (UIDragState::IsActive() &&
-             UIDragState::Get().source == EDragSource::SpellPane))
-        {
-            HandleMouseClickUIQuickSpellMode(button, x, y);
-        }
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseClickUISpellbookMode(button, x, y);
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
             HandleMouseClickUIEquipMode(button, x, y);
+        if (button == MB_LEFTUP)
+            UIDragState::ReleaseUnclaimed();
         return;
     }
     if (strcmp(mode, "ui-sidebar") == 0)
         return HandleMouseClickUISidebarMode(button, x, y);
-    if (strcmp(mode, "ui-quickspell") == 0)
-        return HandleMouseClickUIQuickSpellMode(button, x, y);
-    if (strcmp(mode, "ui-spellbook") == 0)
-        return HandleMouseClickUISpellbookMode(button, x, y);
-    if (strcmp(mode, "ui-spellcreate") == 0)
-        return HandleMouseClickUISpellCreateMode(button, x, y);
     if (strcmp(mode, "ui-equip") == 0)
         return HandleMouseClickUIEquipMode(button, x, y);
     if (strcmp(mode, "ui-scrollpane") == 0)
@@ -3363,34 +3886,17 @@ void HandleMouseClick(const char* mode, int32_t button, int32_t x, int32_t y)
 
 void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
 {
-    if (strcmp(mode, "ui-mainmenu") == 0)
-        return HandleMouseMoveUIMainMenuMode(x, y);
-    if (strcmp(mode, "ui-death") == 0)
-        return HandleMouseMoveUIDeathMode(x, y);
-    if (IsUIDefScreenMode(mode))
-        return HandleMouseMoveUIDefScreenMode(button, x, y);
-    // #8 iOS-style velocity drag for the spellbook scroll
-    if (strcmp(mode, "ui-spellbook") == 0)
-        return HandleMouseMoveUISpellbookMode(button, x, y);
     if (strcmp(mode, "ui-hud") == 0)
     {
         const SHudState& s = GetHudState();
         if (HandleMouseMoveUISidebarModeConsumed(button, x, y))
             return;
-        if (UIDragState::IsActive() &&
-            UIDragState::Get().source == EDragSource::SpellPane)
-        {
-            HandleMouseMoveUIQuickSpellMode(button, x, y);
-            return;
-        }
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseMoveUISpellbookMode(button, x, y);
+        if (UIDragState::IsActive())
+            UIDragState::UpdateDrag(x, y);
         if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
             HandleMouseMoveUIEquipMode(button, x, y);
         return;
     }
-    if (strcmp(mode, "ui-quickspell") == 0)
-        return HandleMouseMoveUIQuickSpellMode(button, x, y);
     if (strcmp(mode, "ui-equip") == 0)
         return HandleMouseMoveUIEquipMode(button, x, y);
     if (strcmp(mode, "sector") != 0) return;
@@ -3399,16 +3905,17 @@ void HandleMouseMove(const char* mode, int32_t button, int32_t x, int32_t y)
 
 void HandleKeyPress(const char* mode, int32_t key, bool down)
 {
+    if (strcmp(mode, "vfx-review") == 0) {
+        VfxReview::HandleKeyPress(key, down);
+        return;
+    }
     if (strcmp(mode, "vfx") == 0)
     {
         VfxTest::HandleKeyPress(key, down);
         return;
     }
     if (IsUIDefScreenMode(mode))
-    {
-        HandleKeyPressUIDefScreenMode(key, down);
-        return;
-    }
+        return;   // keys reach the DEF pane through the screen's pane routing
     // HUD test modes that compose the sidebar / bottom-bar / six-button
     // strip receive keyboard control: V toggles sidebar, B toggles
     // bottom-bar, 1-6 select panels (per uisidebartest.h docstring).

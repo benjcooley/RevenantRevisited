@@ -5,7 +5,7 @@
 // *************************************************************************
 //
 // The retail TPane-based editor (Console / StatusBar / ToolBar / ClassPane
-// / ScriptEditor / ScrollEditor) was retired to attic/src/editor.{h,cpp}
+// / ScriptEditor / ScrollEditor) was retired to attic-final:attic/src/editor.{h,cpp}
 // during the 2026 port. The replacement is being built on ImGui; while
 // that's standing up this header keeps the *names* the rest of the engine
 // references (notably src/command.cpp + src/mappane.cpp) so the existing

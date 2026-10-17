@@ -1,0 +1,218 @@
+#pragma once
+#include <cstdint>
+// Literal shipped identities; only exact named records enter this adapter.
+namespace retail_static_particles {
+struct Object {const char* name;int material,key_count;uint64_t keys;int vertices,faces;uint64_t mesh_vertices=0,mesh_faces=0;};
+struct Profile {uint32_t id;const char* suffix;int frames,objects,materials,texture_size,tag_frame;
+ const Object* object;const uint64_t* material;uint64_t vertices;const char* parameters;
+ int ani_flags,total_vertices,total_faces,prototype,partsys_tag,blend_tag,blend_frame;
+ int states=1;bool camera_emitters=false;};
+inline constexpr Object regeneration_objects[]={
+{"#particle",0,6,0x3825b2a582bb7cd1ull,4,2},
+{"regen01",1,9,0x0d90e605c542d570ull,0,0},
+{"regen04",1,9,0x97bbd93188d8dc0dull,0,0},
+{"regen03",1,9,0x98f5384076d691d5ull,0,0},
+{"regen06",1,9,0xa014d0201faca85eull,0,0},
+{"regen07",1,9,0x7d2d783938dc62f2ull,0,0},
+{"regen08",1,9,0xc3605699c292be81ull,0,0},
+{"regen11",1,9,0xd7ba62fa5a3f0e86ull,0,0},
+{"regen12",1,9,0x367cda506c2562edull,0,0},
+{"regen15",1,9,0x5eb38bc0433b8513ull,0,0},
+{"regen17",1,9,0xc5a3d7ffcce7779eull,0,0},
+{"regen20",1,9,0xac08e091cff2a419ull,0,0},
+{"regen22",1,9,0xd4de38a8d13c7fbbull,0,0},
+{"regen23",1,9,0x05da22c4bb2fdee9ull,0,0},
+{"regen27",1,9,0xe230b79600c81b91ull,0,0},
+{"regen28",1,9,0x2f14cba6fce63b5cull,0,0},
+{"regen30",1,9,0x2ef3347d8599d023ull,0,0},
+{"regen32",1,9,0x72738e64e9944db2ull,0,0},
+{"regen02",1,9,0x68276b8e0d880cbcull,0,0},
+{"regen05",1,9,0x602df7d22255edbeull,0,0},
+{"regen09",1,9,0xf7439dd583d85d85ull,0,0},
+{"regen10",1,9,0x6c1a3ac2e0789434ull,0,0},
+{"regen13",1,9,0x664e5978004888efull,0,0},
+{"regen14",1,9,0x7ea4a6063f7799d2ull,0,0},
+{"regen16",1,9,0x6e8db3e92966fc11ull,0,0},
+{"regen18",1,9,0xa6d96da48b3430eeull,0,0},
+{"regen19",1,9,0x00fcf36ced46660cull,0,0},
+{"regen21",1,9,0xb2bfccc26f4bd6f0ull,0,0},
+{"regen24",1,9,0xaf83e84985fa3507ull,0,0},
+{"regen25",1,9,0xd39899aa34f2d6dbull,0,0},
+{"regen26",1,9,0x857bc9a2efb4e85dull,0,0},
+{"regen29",1,9,0x3a2cf9469b235f49ull,0,0},
+{"regen31",1,9,0x5f8dbf66ddda734full,0,0},
+{"rarmpad",2,6,0xd2c4f58f0af4da49ull,0,0},
+};
+inline constexpr uint64_t regeneration_materials[]={0xd8e513ea1c37f4adull,0x8237bf10191e1de0ull,0x51495411ce7c242full};
+inline constexpr Object swiftstrike_objects[]={
+{"#particle",0,6,0x3825b2a582bb7cd1ull,4,2},
+{"regen01",1,9,0x2b5cf95101aace72ull,0,0},
+{"regen04",1,9,0x640a0fc535b76d69ull,0,0},
+{"regen03",1,9,0x7902d9962a7ab24bull,0,0},
+{"regen06",1,9,0x9df2acfd102374abull,0,0},
+{"regen07",1,9,0xb5cfed1bef9e78e4ull,0,0},
+{"regen08",1,9,0x1d5d749ccb8763f8ull,0,0},
+{"regen11",1,9,0x333acdda08cdda9dull,0,0},
+{"regen12",1,9,0x118f7ef161b93ceaull,0,0},
+{"regen15",1,9,0xe68709617f108d83ull,0,0},
+{"regen17",1,9,0x1e00878830aeddf6ull,0,0},
+{"regen20",1,9,0x06d9962ceb1ed74full,0,0},
+{"regen22",1,9,0x106ce1c2f6772b6aull,0,0},
+{"regen23",1,9,0xc656ec54fe8c16ffull,0,0},
+{"regen27",1,9,0x99803abc8acf1477ull,0,0},
+{"regen28",1,9,0xd11d57de7ca5fb29ull,0,0},
+{"regen30",1,9,0x7d78410dce9c0257ull,0,0},
+{"regen32",1,9,0x75e8b44309c8b2c1ull,0,0},
+{"regen02",1,9,0x91007199c420a96dull,0,0},
+{"regen05",1,9,0x7b74373cce9e5bc7ull,0,0},
+{"regen09",1,9,0xc236f308959d5684ull,0,0},
+{"regen10",1,9,0x2f940f314dcecea1ull,0,0},
+{"regen13",1,9,0x2bf58f3496a1b079ull,0,0},
+{"regen14",1,9,0x7e194f178d419abbull,0,0},
+{"regen16",1,9,0x8341686fbb0053d9ull,0,0},
+{"regen18",1,9,0xee9c4e4fd0c8b283ull,0,0},
+{"regen19",1,9,0x5b1ce7141ba3b58eull,0,0},
+{"regen21",1,9,0x5228ab3086cf33fcull,0,0},
+{"regen24",1,9,0x61938a005e241e8full,0,0},
+{"regen25",1,9,0x6aea117cfaee368dull,0,0},
+{"regen26",1,9,0x3413704e1055579dull,0,0},
+{"regen29",1,9,0x6b0ceb74d5e16fd8ull,0,0},
+{"regen31",1,9,0x70b8845db4b6a864ull,0,0},
+};
+inline constexpr uint64_t swiftstrike_materials[]={0xd8e513ea1c37f4adull,0x8237bf10191e1de0ull};
+inline constexpr Object fspray_objects[]={
+{"#particle",0,6,0x3825b2a582bb7cd1ull,4,2},
+{"spray",1,9,0x63861e19c8e2a9b1ull,0,0},
+};
+inline constexpr uint64_t fspray_materials[]={0xd8e513ea1c37f4adull,0x8237bf10191e1de0ull};
+inline constexpr Object yenergy_objects[]={
+{"#particle",0,9,0x18077238f721f4d8ull,4,2},
+{"emitter",1,6,0xdb7529335d5fefd7ull,0,0},
+};
+inline constexpr uint64_t yenergy_materials[]={0x2d6e7c4f0d54f390ull,0x8237bf10191e1de0ull};
+inline constexpr Object yenergylose_objects[]={
+{"#particle",0,9,0x18077238f721f4d8ull,4,2},
+{"emitter",1,6,0xdb7529335d5fefd7ull,0,0},
+};
+inline constexpr uint64_t yenergylose_materials[]={0x2d6e7c4f0d54f390ull,0x8237bf10191e1de0ull};
+inline constexpr Object yabsorb_objects[]={
+{"#particle",0,9,0xeb0073d4b2e3605cull,4,2},
+{"emitter01",1,9,0xeef3d2cf9dcd67e0ull,0,0},
+{"emitter02",1,9,0xcb233be0c091428dull,0,0},
+{"emitter03",1,9,0x116be318f4be21ddull,0,0},
+{"emitter04",1,9,0xaac121c885f9136aull,0,0},
+{"emitter05",1,9,0x268b3c4b7d162285ull,0,0},
+{"emitter06",1,9,0x5f720e03979f0d9bull,0,0},
+{"emitter07",1,9,0x8c39b9642270e4a5ull,0,0},
+{"emitter08",1,9,0x590c1b65de48ea96ull,0,0},
+{"emitter09",1,9,0x4dba2de3a9c330a2ull,0,0},
+{"emitter10",1,9,0xfe778a1f1ce0598eull,0,0},
+{"emitter11",1,9,0x79ccb1cd8f5b6f35ull,0,0},
+{"emitter12",1,9,0x326a4b21b13e5fe4ull,0,0},
+{"emitter13",1,9,0x8491f28a38c92473ull,0,0},
+{"emitter14",1,9,0x49effcb4fb9fe07bull,0,0},
+{"emitter15",1,9,0xfc9aa5a557d7fa53ull,0,0},
+{"emitter16",1,9,0x48d157c70851648eull,0,0},
+{"emitter17",1,9,0x6e72b78a4b6801c8ull,0,0},
+{"emitter18",1,9,0x7a8eaaab603367bcull,0,0},
+{"emitter19",1,9,0x7c6bc9a03a8c65d2ull,0,0},
+{"emitter20",1,6,0x748a9b3d6a91bd68ull,0,0},
+{"emitter21",1,9,0xfbbd87471ff3f31full,0,0},
+{"emitter22",1,9,0x57f8ea40c8bc1ef3ull,0,0},
+{"emitter23",1,9,0x38353a51ff78e57bull,0,0},
+{"emitter24",1,9,0x1c0cd90d0a832c93ull,0,0},
+};
+inline constexpr uint64_t yabsorb_materials[]={0xd255f18bf062cb9cull,0x8237bf10191e1de0ull};
+inline constexpr Object nullifier_objects[]={
+{"emitter01",0,33,0x9cf1f9dc4e51e560ull,0,0},
+{"#particle",1,6,0xd1a1e085bc2acfefull,4,2},
+{"emitter02",0,33,0x152f6f70b112a16bull,0,0},
+{"emitter03",0,33,0x43b178d1444bdc4bull,0,0},
+{"emitter04",0,33,0x2a599fa417f7fabfull,0,0},
+{"emitter05",0,33,0xe199acfa24ee91eeull,0,0},
+{"emitter06",0,33,0x09087d6c5ac33821ull,0,0},
+{"emitter07",0,33,0x6e62eda366195e24ull,0,0},
+{"emitter08",0,33,0x66b78223c3ad220bull,0,0},
+{"*line01",0,9,0x7b78da8de30d3d8bull,46,0},
+{"*line02",0,9,0x337f932273955d61ull,46,0},
+{"*line03",0,9,0x8a1f81e396ddee8dull,46,0},
+{"*line04",0,9,0x10f8a32c99deaafaull,46,0},
+{"*line05",0,9,0x95cd91a9d80c22ffull,46,0},
+{"*line06",0,9,0x07ada6bd001f11f1ull,46,0},
+{"*line07",0,9,0x6a46e045da68964eull,46,0},
+{"*line08",0,9,0xcf88625cae9d195dull,46,0},
+};
+inline constexpr uint64_t nullifier_materials[]={0x8237bf10191e1de0ull,0x49ab2bff2e73c095ull};
+inline constexpr Object ogrestrength_objects[]={
+{"#trail",0,6,0x4ba6648400430bafull,4,2,0x0000000000000000ull,0x0000000000000000ull},
+{"*ogreloop",1,9,0x0c2b7ebdf6ec02bbull,601,0,0x0000000000000000ull,0x0000000000000000ull},
+{"#ogre01",0,208,0xcd458dd2b574396bull,4,2,0x24b5b08e801111a2ull,0x8de70ea438f81391ull},
+{"#ogre02",0,208,0x6db79b31c5b7ac0aull,4,2,0x96c8115277220961ull,0x8de70ea438f81391ull},
+{"#ogre03",0,208,0x105ca84dc2311887ull,4,2,0x66f248b3097f3e9dull,0x8de70ea438f81391ull}
+};
+inline constexpr uint64_t ogrestrength_materials[]={0xaa234e3981f0b7b3ull,0x8237bf10191e1de0ull};
+inline constexpr Object trollblood_objects[]={
+{"#drop",0,9,0x786a5015816f788cull,4,2,0x0000000000000000ull,0x0000000000000000ull},
+{"#blood2",0,115,0xe3b85169dcd632f0ull,4,2,0x5232658b014862beull,0x8de70ea438f81391ull},
+{"#blood1",0,122,0x5cffbc8f9985f966ull,4,2,0x8e65d58b9681233full,0x8de70ea438f81391ull},
+{"#blood3",0,124,0xe7fb794cb6675514ull,4,2,0x08c7ed79c9bfbd2full,0x8de70ea438f81391ull},
+{"*path3",0,9,0x058619952657f2f8ull,28,26,0x0000000000000000ull,0x0000000000000000ull},
+{"*path1",0,9,0x058619952657f2f8ull,28,26,0x0000000000000000ull,0x0000000000000000ull},
+{"*path2",0,9,0x058619952657f2f8ull,28,26,0x0000000000000000ull,0x0000000000000000ull}
+};
+inline constexpr uint64_t trollblood_materials[]={0xaa234e3981f0b7b3ull};
+inline constexpr Object waterflft_objects[]={
+{"#particle01",0,6,0x3825b2a582bb7cd1ull,4,2},
+{"bounce",1,9,0x1ca22b60bac86171ull,0,0},
+{"bounce01",1,9,0x09f1aec47df55151ull,0,0},
+{"bounce02",1,9,0xc748aa13eb394a99ull,0,0},
+{"bounce03",1,9,0xa770fe27a3015bffull,0,0},
+{"bounce04",1,9,0xdb3eff8fee31da5eull,0,0},
+{"bounce05",1,9,0x9e396893d76c2385ull,0,0}
+};
+inline constexpr uint64_t waterflft_materials[]={0xd8e513ea1c37f4adull,0x8237bf10191e1de0ull};
+inline constexpr Object waterfrt_objects[]={
+{"#particle01",0,6,0x3825b2a582bb7cd1ull,4,2},
+{"bounce",1,9,0x64da0b8ee8a67fceull,0,0},
+{"bounce01",1,9,0x734799badbbc321cull,0,0},
+{"bounce02",1,9,0x8c47f5256d41880full,0,0},
+{"bounce03",1,9,0x5b6f050a72ad8526ull,0,0},
+{"bounce04",1,9,0x02a3c7f1bb73b708ull,0,0},
+{"bounce05",1,9,0xa25909b826b610d1ull,0,0}
+};
+inline constexpr uint64_t waterfrt_materials[]={0xd8e513ea1c37f4adull,0x8237bf10191e1de0ull};
+inline constexpr Object waterclft_objects[]={
+{"#particle01",0,9,0xde3330c2ce1fb18bull,4,2},
+{"bounce01",1,9,0x59090a62f304a4f5ull,0,0},
+{"bounce02",1,9,0x4f8b398b537430b3ull,0,0},
+{"bounce03",1,9,0x4d71d180b8035cb4ull,0,0},
+{"bounce04",1,9,0x5f1032b27f19b4ebull,0,0},
+{"bounce05",1,9,0x7941a15816fcff9cull,0,0},
+{"bounce",1,9,0x31eaa4a522d38589ull,0,0}
+};
+inline constexpr uint64_t waterclft_materials[]={0xd8e513ea1c37f4adull,0x8237bf10191e1de0ull};
+inline constexpr Object watercrt_objects[]={
+{"#particle01",0,9,0xde3330c2ce1fb18bull,4,2},
+{"bounce01",1,9,0xee0a5d6ffdf41022ull,0,0},
+{"bounce02",1,9,0xb57a1ca26686c16dull,0,0},
+{"bounce03",1,9,0x442cb5fe521a1f00ull,0,0},
+{"bounce04",1,9,0xf4fceeb4124333feull,0,0},
+{"bounce05",1,9,0x72dcd3b23f8b98dbull,0,0},
+{"bounce",1,9,0x4b5e45501908b908ull,0,0}
+};
+inline constexpr uint64_t watercrt_materials[]={0xd8e513ea1c37f4adull,0x8237bf10191e1de0ull};
+inline constexpr Profile profiles[]={{0x10ac03deu,"magic/regen.i3d",60,34,3,32,7,regeneration_objects,regeneration_materials,0x3c1a6c9954839ed7ull,"obj=(regen01,regen02,regen03,regen04,regen05,regen06,regen07,regen08,regen09,regen10,regen11,regen12,regen13,regen14,regen15,regen16,regen17,regen18,regen19,regen20,regen21,regen22,regen23,regen24,regen25,regen26,regen27,regen28,regen29,regen30,regen31,regen32),particle=#particle,pps=50,lifespan=18:18,initialvelocity=2:5,scale=[0:0.5,65:1,100:2],localrotation=[0:(0,0,0),100:(0,360,0)],color=[0:(50,50,50),100:(150,125,120)],friction=0.0",8193,4,2,0,0,-1,-1},
+{0xe0a3bc43u,"magic/swiftstrike.i3d",60,33,2,32,7,swiftstrike_objects,swiftstrike_materials,0x3c1a6c9954839ed7ull,"obj=(regen01,regen02,regen03,regen04,regen05,regen06,regen07,regen08,regen09,regen10,regen11,regen12,regen13,regen14,regen15,regen16,regen17,regen18,regen19,regen20,regen21,regen22,regen23,regen24,regen25,regen26,regen27,regen28,regen29,regen30,regen31,regen32),particle=#particle,pps=50,lifespan=18:18,initialvelocity=2:5,scale=[0:0.5,65:1,100:2],localrotation=[0:(0,0,0),100:(0,360,0)],color=[0:(50,50,50),100:(150,125,120)]",8193,4,2,0,0,-1,-1},
+{0x0c052638u,"misc/fspray.i3d",15,2,2,16,5,fspray_objects,fspray_materials,0x91b7cef666f68607ull,"obj=(spray),particle=#particle,pps=55,initialvelocity=16:19,lifespan=15:35,localrotation=[0:(0,0,0),100:(0,0,0)],friction=0,gravity=0.5,color=[0:(106,126,155),80:(32,85,55),100:(0,0,0)],relvel=0,spread=12,azimuth=12,scale=[0:0.25,20:1,100:0]",8193,4,2,0,0,-1,-1},
+{0xaeaeeb30u,"magic/yenergy.i3d",30,2,2,64,2,yenergy_objects,yenergy_materials,0x470f987cb4d08e27ull,"obj=\"emitter\",particle=\"#particle\",emittertype=\"sphere\",emittersize=0.25,pps=45,initialvelocity=1:3,lifespan=50:60,color=[0:(255,255,255),35:(255,255,255),50:(0,0,0)],azimuth=180,spread=180,rlocalrotation=[0:(0,0,0),30:(0,5,0)],gravity=-0.3,scale=[0:0.5,10:3,40:2.5,60:0.5]",8193,4,2,0,0,1,2},
+{0xaeaeeb33u,"magic/yenergylose.i3d",80,2,2,64,2,yenergylose_objects,yenergylose_materials,0x470f987cb4d08e27ull,"obj=\"emitter\",particle=\"#particle\",emittertype=\"sphere\",emittersize=0.25,pps=[0:45,7:45,10:0],initialvelocity=1:3,lifespan=50:60,color=[0:(255,255,255),35:(255,255,255),50:(0,0,0)],azimuth=180,spread=180,rlocalrotation=[0:(0,0,0),30:(0,5,0)],gravity=-0.3,scale=[0:0.5,10:3,40:2.5,60:0.5]",8192,4,2,0,1,0,2},
+{0xaeaeeb29u,"magic/yabsorb.i3d",120,25,2,64,2,yabsorb_objects,yabsorb_materials,0x754ca8b49706dca3ull,"obj=(\"emitter01\",\"emitter02\",\"emitter03\",\"emitter04\",\"emitter05\",\"emitter06\",\"emitter07\",\"emitter08\",\"emitter09\",\"emitter10\",\"emitter11\",\"emitter12\",\"emitter13\",\"emitter14\",\"emitter15\",\"emitter16\",\"emitter17\",\"emitter18\",\"emitter19\",\"emitter20\",\"emitter21\",\"emitter22\",\"emitter23\",\"emitter24\"),particle=\"#particle\",emittertype=\"sphere\",emittersize=5,scale=[0:0,50:2,60:0],pps=[0:15,30:25,65:0],initialvelocity=2:4,lifespan=40:40,color=[0:(255,255,255)]",8192,4,2,0,1,0,2},
+{0xad92bd38u,"magic/nullifier.i3d",25,17,2,64,2,nullifier_objects,nullifier_materials,0xdff5eac4de952848ull,"obj=(emitter01,emitter02,emitter03,emitter04,emitter05,emitter06,emitter07,emitter08),particle=#particle,pps=[0:75,17:150,25:300],initialvelocity=2:5,lifespan=5:10,friction=[0:0.3],gravity=[0:-2],color=[0:(125,185,20),100:(0,0,0)],scale=[0:0.5,100:0]",8193,372,2,1,0,-1,-1},
+{0x42e0fcd0u,"magic/ogre.i3d",200,5,2,64,19,ogrestrength_objects,ogrestrength_materials,0x225133db1a5157efull,"obj=(#ogre01,#ogre02,#ogre03),particle=#trail,pps=75,lifespan=10:15,initialvelocity=0:0,scale=[0:0.5,100:0],localrotation=[0:(0,0,0),100:(0,15,0)],color=[0:(255,255,255),5:(175,255,50),50:(25,255,1),100:(1,1,1)],spread=1,alpha=[0:1,100:0]",8193,617,8,0,0,-1,-1,1,true},
+{0xad92bd39u,"magic/trollblood.i3d",60,7,1,8,1,trollblood_objects,trollblood_materials,0x08d6ad739a973e46ull,"obj=(#blood1,#blood2,#blood3),particle=#drop,emittersize=0,pps=20,initialvelocity=1:1,lifespan=40:50,localrotation=[0:(0,0,0),100:(0,540,0)],friction=[0:0.05],gravity=[0:0.07],color=[0:(25,150,1),100:(0,0,0)],spread=60,azimuth=60,scale=[0:0.1,50:0.5,80:0.1,100:0],relvel=0.04",8193,100,86,0,0,-1,-1,2,true},
+{0xd0c0f036u,"misc/wfall.i3d",15,7,2,64,5,waterflft_objects,waterflft_materials,0x91b7cef666f68607ull,"obj=(bounce,bounce01,bounce02,bounce03,bounce04,bounce05),particle=#particle01,pps=45,initialvelocity=3:5,lifespan=25:75,localrotation=[0:(0,0,0),100:(0,60,0)],friction=0,gravity=0.5,color=[0:(106,126,155),80:(32,85,55),100:(0,0,0)],relvel=0,spread=30,azimuth=30,scale=[0:0,20:4,100:0],bounce=-10:-10",8193,4,2,0,0,-1,-1},
+{0xd0c0f037u,"misc/wfall2.i3d",15,7,2,64,5,waterfrt_objects,waterfrt_materials,0x91b7cef666f68607ull,"obj=(bounce,bounce01,bounce02,bounce03,bounce04,bounce05),particle=#particle01,pps=45,initialvelocity=3:5,lifespan=25:75,localrotation=[0:(0,0,0),100:(0,60,0)],friction=0,gravity=0.5,color=[0:(106,126,155),80:(32,85,55),100:(0,0,0)],relvel=0,spread=30,azimuth=30,scale=[0:0,20:4,100:0],bounce=-10:-10",8193,4,2,0,0,-1,-1},
+{0xd0c0f038u,"misc/wcap.i3d",15,7,2,64,5,waterclft_objects,waterclft_materials,0x082058acffdeac38ull,"obj=(bounce,bounce01,bounce02,bounce03,bounce04,bounce05),particle=#particle01,pps=25,initialvelocity=7:8,lifespan=25:50,localrotation=[0:(0,0,0),100:(0,0,0)],friction=0,gravity=0,color=[0:(32,85,55),100:(106,126,155)],relvel=0,spread=10,azimuth=0,scale=[0:0,80:1.5,100:0],bounce=-10:-10",8193,4,2,0,0,-1,-1},
+{0xd0c0f039u,"misc/wcap2.i3d",15,7,2,64,5,watercrt_objects,watercrt_materials,0xd1a038cb526eddf9ull,"obj=(bounce,bounce01,bounce02,bounce03,bounce04,bounce05),particle=#particle01,pps=25,initialvelocity=7:8,lifespan=25:50,localrotation=[0:(0,0,0),100:(0,0,0)],friction=0,gravity=0,color=[0:(32,85,55),100:(106,126,155)],relvel=0,spread=10,azimuth=0,scale=[0:0,80:1.5,100:0],bounce=-10:-10",8193,4,2,0,0,-1,-1}};
+inline bool IsType(uint32_t id){for(const auto& p:profiles)if(p.id==id)return true;return false;}
+}

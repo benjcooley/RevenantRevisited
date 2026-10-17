@@ -78,6 +78,11 @@ class TFontTable
     TFont* Bitmap(const char* name);
       // Convenience: returns Font(name)->primary, the normal bitmap face.
 
+    const SFontAtlas* Atlas(const char* name);
+      // The renderer atlas for a named font: a WINFONT's metric-compatible
+      // TrueType face at its FONT.DEF size, a BMFONT's glyph sheet. Null if
+      // the font is unknown or has no glyphs.
+
   private:
     TFont* LoadAtom(const char* resname);
       // Loads a bitmap font resource by name (SYSFONT.DAT, SCRLFONT.DAT, ...)

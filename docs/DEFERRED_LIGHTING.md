@@ -8,6 +8,10 @@ light pass can recover the world position of any fragment.
 Every identity here is an equality, not a fit. If an implementation disagrees
 with these formulas, the implementation is wrong.
 
+What the light pass does with the recovered world position (ambient mapping,
+falloff, light gain, the retail iso distance metric, mesh vs tile models) is
+in [LIGHTING_FIDELITY.md](LIGHTING_FIDELITY.md).
+
 ## 1. Retail conventions
 
 ### 1.1 World → screen projection

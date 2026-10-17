@@ -24,6 +24,9 @@
 #include "graphics.h"
 #include "surface.h"
 
+#include <functional>
+#include <vector>
+
 #define UPDATE_THISFRAME        0x01        // Adds a dirty rectangle update rect for this frame
 #define UPDATE_NEXTFRAME        0x02        // Adds a dirty rectangle update rect for the next frame
 #define UPDATE_SCREENTOBUFFER   0x04        // Immediately copies the screen rect to the background
@@ -88,11 +91,31 @@ class TDisplay : public TSurface
     // swapchain in that order. ImGui is always rendered last.
     bool FlipPage(bool Wait = true);
 
+    // Reads back the next frame FlipPage presents and hands it to `done`
+    // (RGBA8, top row first, display size; null and 0x0 when the readback
+    // fails). False when the display isn't up, in which case `done` is never
+    // called. Used for save thumbnails. With `hudBelowZ`, the capture holds
+    // only the HUD items under that z (the screen's frame is unchanged):
+    // the world and HUD panels without the pane tree, say.
+    using TCaptureDone = std::function<void(const uint8_t* rgba, int32_t width, int32_t height)>;
+    static constexpr float kWholeFrame = 1.0e30f;  // every HUD layer (TRenderer::kAllHudLayers)
+    bool RequestCapture(TCaptureDone done, float hudBelowZ = kWholeFrame);
+    // Reads back the frame last presented, now, from what it was drawn from
+    // (the scene, the overlay and the HUD as they stand); `done` as above.
+    // Between frames only: no pass may be open. False when the display
+    // isn't up.
+    bool CaptureNow(const TCaptureDone& done);
+    // Presents the last frame again without drawing it anew: the scene's
+    // targets, the overlay and the HUD as they stand, and the debug UI. A
+    // playtest host that waits between steps keeps its window live with it.
+    void Represent();
+
     // Headless-capture target: when FrameSnap is active, FlipPage mirrors
     // the swapchain composite into this offscreen sg_image RGBA8 RT so
     // framesnap.cpp can read it via Metal blit (renderer_readback). Lazily
     // allocated on the first FlipPage in snap mode; returns invalid id
     // outside snap mode. Display.IsActive() is the lifetime guard.
+    [[nodiscard]] bool     ImGuiReady() const { return imgui_initialized; }
     [[nodiscard]] sg_image SnapCaptureImage() const { return snap_capture_color; }
     [[nodiscard]] int32_t  SnapCaptureWidth()  const { return snap_capture_w; }
     [[nodiscard]] int32_t  SnapCaptureHeight() const { return snap_capture_h; }
@@ -109,4 +132,12 @@ class TDisplay : public TSurface
     sg_image  snap_capture_color { SG_INVALID_ID };
     int32_t   snap_capture_w = 0;
     int32_t   snap_capture_h = 0;
+    struct SCaptureRequest
+    {
+        TCaptureDone done;
+        float        hudBelowZ = kWholeFrame;
+    };
+    std::vector<SCaptureRequest> capture_requests;
+
+    void MirrorComposite(float hudBelowZ);
 };

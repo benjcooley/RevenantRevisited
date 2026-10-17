@@ -9,6 +9,7 @@
 #include "3dscene.h"
 #include "animation.h"
 #include "command.h"
+#include "dialog.h"
 #include "display.h"
 #include "dls.h"
 #include "file.h"
@@ -28,7 +29,12 @@
 #include <math.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <algorithm>
 #include <atomic>
+#include <cstdlib>
+#include <memory>
+#include <set>
+#include <string>
 #include <vector>
 
 namespace {
@@ -107,7 +113,6 @@ TObjectBuilder* TObjectBuilder::builders[MAXOBJECTTYPES];
 
 // Tables for ConvertToFacing, Move, and other angle/distance related functions
 extern uint8_t AngleTable[256][256];
-extern uint8_t DistTable[256][256];
 extern short DistX[256];
 extern short DistY[256];
 
@@ -124,19 +129,31 @@ uint16_t UniqueTypeID;
 // * Map/Screen Conversion Utils *
 // *******************************
 
+// REVSYNC: WorldToScreen @ 0x0046d7a0 (also inlined in the object's screen
+// position, 0x0046eb40). Retail projects through the float matrix at
+// 0x005d4740: x - y across, x / 2 + y / 2 - 0.867f * z down, truncated once
+// (__ftol). The 1998 form truncated (x + y) / 2 and z * 867 / 1000 apart,
+// which put about half of all points a pixel off. 0.867f is exactly
+// 14545846 / 2^24, so the sum is exact in 64-bit integers, and truncating it
+// gives the x87 result: the same as 0x0046d7a0 over 7200 points in the
+// emulator (an FPU left at single precision, as a D3D device may set it,
+// would round about 1 point in 70 the other way).
+namespace {
+constexpr int64_t kScreenYOne = int64_t(1) << 24;
+constexpr int64_t kScreenYPerZ = 14545846;      // 0.867f * 2^24 (0x005d475c, negated)
+}
+
 void WorldToScreen(const S3DPoint& pos, int32_t &x, int32_t &y)
 {
     // 2:1
     x = pos.x - pos.y;
-    y = ((pos.x + pos.y) / 2) - (int32_t)((pos.z * MYSTERYVAL1) / MYSTERYVAL2);
+    y = (int32_t)(((int64_t(pos.x) + pos.y) * (kScreenYOne / 2) - pos.z * kScreenYPerZ) / kScreenYOne);
         // the screen z is actually pos.z * cos(30), cos(30) = .866
 }
 
 void WorldToScreen(const S3DPoint& pos, S3DPoint& spos)
 {
-    // 2:1
-    spos.x = pos.x - pos.y;
-    spos.y = ((pos.x + pos.y) / 2) - (int32_t)((pos.z * MYSTERYVAL1) / MYSTERYVAL2);
+    WorldToScreen(pos, spos.x, spos.y);
     spos.z = (uint16_t)(WORLDZOFFSET - (int32_t)(pos.z / 2) - (int32_t)((pos.x + pos.y) * MYSTERYVAL1 / MYSTERYVAL2));
     //spos.z = (uint16_t)(WORLDZOFFSET - (int32_t)(pos.z * 2560 / 5120) - (int32_t)((pos.x + pos.y) * 4434 / 5120));
         // Z must be figured out based on the plates being tilted at a 30 degree angle
@@ -166,18 +183,24 @@ void ScreenToWorld(int32_t x, int32_t y, S3DPoint& pos, int32_t zheight)
     pos.z = zheight;
 }
 
+// REVSYNC: ConvertToVector @ 0x0046db20 -- x from the X table at the angle,
+// y from the Y table at |angle - 128|, each times the length over 256
+// (rounding toward zero). Retail doesn't wrap the angle, and its Y table
+// follows its X table (0x00634d44, 0x00634f44): an angle of 256..383 takes
+// x from Y[angle - 256], as the strike spell's circle and X patterns can
+// pass (SPELLS_MISSILES.md). Past that retail reads beyond both tables;
+// the port wraps those angles (MoveStep's shove probes mask theirs first,
+// 0x004c4477, as the port's do).
 void ConvertToVector(int32_t angle, int32_t speed, S3DPoint& vect, int32_t zangle)
 {
-    // Revenant uses an 8-bit facing system: angles are 0..255 wrapping.
-    // Several callers (e.g. TCharacter::Move's ±64 sidestep probes) pass
-    // raw `face + 64` values that exceed 255; without this mask we read
-    // past the 256-element DistX/DistY lookup tables. ASan caught it as
-    // a load2 mid-frame in TMapPane::MoveObjects.
-    angle  &= 255;
     zangle &= 255;
     if (zangle == 0)
     {
-        vect.x = (DistX[angle] * speed) / 256;
+        const bool spill = angle >= 256 && angle < 384;     // into the Y table
+        if (!spill)
+            angle &= 255;
+        const int32_t x = spill ? DistY[angle - 256] : DistX[angle];
+        vect.x = (x * speed) / 256;
         vect.y = (DistY[angle > 128 ? angle - 128 : 128 - angle] * speed) / 256;
         vect.z = 0;
     }
@@ -334,44 +357,47 @@ TObjectBuilder* TObjectBuilder::GetBuilder(const char *name)
 // * TInventoryIterator *
 // **********************
 
-TObjectInstance* TInventoryIterator::NextItem()
+namespace {
+
+// REVSYNC: one step of retail's inventory walk 0x0046dfb0: the item after
+// `item` in `container`. A nested walk first enters `item`'s own inventory,
+// and climbs out of an exhausted bag to the item after the bag, until the
+// walk's `root` is exhausted. Retail also followed a container's linked
+// inventory (vtable 0x170), which only multiplayer sets (INVENTORY.md §5).
+template <class Owner>
+TObjectInstance* NextInventoryItem(Owner* root, Owner*& container, int32_t& index,
+                                   TObjectInstance* item, EInvWalk walk)
 {
-    // Currently this DOES NOT recurse into other object's inventories,
-    // because nothing uses it that way.  Copying some code from TMapIterator
-    // would make it possible to do so if it is ever needed.
-    item = nullptr;
-
-    if (owner)
+    if (walk == EInvWalk::Nested && item && item->NumInventoryItems() > 0)
     {
-        do
-        {
-            if (invindex >= owner->NumInventoryItems())
-                break;
-
-            item = owner->GetInventory(invindex++);
-
-        } while (!item);
+        container = item;
+        index = 0;
     }
 
+    while (container)
+    {
+        while (index < container->NumInventoryItems())
+            if (TObjectInstance* next = container->GetInventory(index++))
+                return next;
+        if (container == root)
+            break;
+        index = container->InvIndex() + 1;
+        container = container->GetOwner();
+    }
+    return nullptr;
+}
+
+} // namespace
+
+TObjectInstance* TInventoryIterator::NextItem()
+{
+    item = NextInventoryItem(owner, container, invindex, item, walk);
     return item;
 }
 
 const TObjectInstance* TConstInventoryIterator::NextItem() const
 {
-    item = nullptr;
-
-    if (owner)
-    {
-        do
-        {
-            if (invindex >= owner->NumInventoryItems())
-                break;
-
-            item = owner->GetInventory(invindex++);
-
-        } while (!item);
-    }
-
+    item = NextInventoryItem(owner, container, invindex, item, walk);
     return item;
 }
 
@@ -595,16 +621,11 @@ TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
   // Set imagery
     imagery = img;
 
-  // Set ANIMATE and PULSE flags
-    if (imagery->NeedsAnimator(this))
-        flags |= OF_ANIMATE;
+  // REVSYNC: TObjectInstance::TObjectInstance(SObjectDef*, ...) @ 0x0046e1f0.
+  // Every object asks to be notified; the flags each class starts with are
+  // part of what a sector or save file records (SAVE_GAME.md §11.2).
+    flags |= OF_NOTIFY;
 
-    if (ObjClass() != OBJCLASS_TILE)
-        flags |= OF_PULSE;
-
-    if (flags & OF_LIGHT)
-        flags = flags | OF_ANIMATE | OF_PULSE;
-    
   // Set Object info pointer
     cl = TObjectClass::GetClass(objclass);
     if (!cl)
@@ -620,7 +641,32 @@ TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
             ResetObjStat(c);
     }
 
-    if (objclass != OBJCLASS_TILE) // No scripts for regular tiles (for efficiency sake)
+    switch (objclass)
+    {
+    case OBJCLASS_ITEM:      case OBJCLASS_WEAPON:  case OBJCLASS_ARMOR:
+    case OBJCLASS_TALISMAN:  case OBJCLASS_FOOD:    case OBJCLASS_LIGHTSOURCE:
+    case OBJCLASS_TOOL:      case OBJCLASS_MONEY:   case OBJCLASS_KEY:
+    case OBJCLASS_INVCONTAINER: case OBJCLASS_POTION: case OBJCLASS_AMMO:
+    case OBJCLASS_SCROLL:    case OBJCLASS_RANGEDWEAPON: case OBJCLASS_MAPSCROLL:
+        flags |= OF_INVENTORY | OF_ANIMATE | OF_PULSE;
+        break;
+    case OBJCLASS_EFFECT:
+        flags |= OF_ANIMATE | OF_PULSE;
+        break;
+    default:
+        break;
+    }
+    if (objclass == OBJCLASS_CHARACTER || objclass == OBJCLASS_PLAYER)
+        flags |= OF_VIRGIN;
+
+    if (imagery->NeedsAnimator(this))
+        flags |= OF_ANIMATE | OF_PULSE;
+
+    if (objclass != OBJCLASS_TILE)
+        flags |= OF_PULSE;
+
+  // An object LoadObject is building gets its script when Load finishes.
+    if (!(flags & OF_LOADING) && CanHaveScript())
         InitScript(ScriptManager.ObjectScript(this));
 }
 
@@ -631,6 +677,11 @@ void TObjectInstance::SetMapIndex(int32_t newindex)
     // clear-to-negative must move the registry entry with the instance.
     if (newindex == mapindex)
         return;
+    // Retail allowed several objects to share an id (sector files hold such
+    // duplicates); the registry needs unique ones. The object that gives up
+    // the id keeps it as its file id, so the files it is saved to still say
+    // what retail wrote.
+    int32_t fileid = -1;
     if (newindex >= 0)
     {
         if (TObjectInstance* existing = LookupMapIndex(newindex))
@@ -641,16 +692,19 @@ void TObjectInstance::SetMapIndex(int32_t newindex)
                 const int32_t incoming_priority = MapIndexPreservePriority(this);
                 if (incoming_priority > existing_priority)
                 {
-                    const int32_t replacement = FreshRuntimeMapIndex();
-                    existing->SetMapIndex(replacement);
+                    const int32_t existingfileid = existing->FileMapIndex();
+                    existing->SetMapIndex(FreshRuntimeMapIndex());
+                    existing->filemapindex = existingfileid;
                 }
                 else
                 {
+                    fileid = newindex;
                     newindex = FreshRuntimeMapIndex();
                 }
             }
         }
     }
+    filemapindex = fileid;
     if (mapindex >= 0)
         MapPane.UnregisterInstance(mapindex);
     mapindex = newindex;
@@ -663,9 +717,24 @@ void TObjectInstance::SetMapIndex(int32_t newindex)
     }
 }
 
+// REVSYNC: ~TObjectInstance @ 0x0046e420
 TObjectInstance::~TObjectInstance()
 {
-    // Drop any registry entry first — even a partially-constructed instance
+    // Retail's destructor starts with the object's detach (0x0046e630): out
+    // of its owner's inventory and out of its sector, while the object is
+    // still whole -- the walkmap extraction needs its imagery and mapindex.
+    // A sector holds a raw pointer to every object in it, so an object is
+    // never freed while still in one, whoever deletes it (a sector freeing
+    // its own objects unlinks them first, as retail's does).
+    if (sector || owner)
+        MapPane.RemoveObject(this);
+
+    // Raw-pointer holders that don't follow N_DELETINGOBJECT: let go of this
+    // object whatever kind it is (also those built without a class, below).
+    if (MapPane.GetCenterOnObj() == this)
+        MapPane.CenterOnObj(nullptr); // Don't center on anything
+
+    // Then drop the registry entry — even a partially-constructed instance
     // that stashed a mapindex must be removed before its memory is freed.
     if (mapindex >= 0) {
         MapPane.UnregisterInstance(mapindex);
@@ -694,11 +763,7 @@ TObjectInstance::~TObjectInstance()
         lightdef.lightindex = -1;
     }
 
-    if (lightdef.lightid != -1)
-    {
-        FreeLightIndex(lightdef.lightid);
-        lightdef.lightid = -1;
-    }
+    ReleaseLightId();
 
     if (objclass == -1)
         return;
@@ -713,23 +778,12 @@ TObjectInstance::~TObjectInstance()
         delete i.Item();
     }
 
-    // take itself out of owner's inventory
-    RemoveFromInventory();
-
-    // If in map, remove from map
-    if (GetSector() != nullptr)
-        MapPane.RemoveObject(this);
-
     // Delete the name
     if (name && name != inf->name)
     {
         free(name);
         name = nullptr;
     }
-
-    // If we're being centered on, cancel that
-    if (MapPane.GetCenterOnObj() == this)
-        MapPane.CenterOnObj(nullptr, false); // Don't center on anything
 
     // Kill the script
     if (script)
@@ -848,12 +902,15 @@ bool TObjectInstance::NeedsAnimator() const
     return false;
 }
 
+// REVSYNC: TObjectInstance::Damage @ 0x0046e970 (vtable +0x48) -- health
+// only: a hit that isn't ice thaws the object, one in four breaks a
+// paralysis (random(0, 3) == 0, drawn while paralysed).
 void TObjectInstance::Damage(int32_t damage, int32_t type)
 {
-// this is probably a serious hack
     if (IsIced() && type != DAMAGE_ICE)
         SetIced(false);
-// end of serious hack
+    if (IsParalized() && random(0, 3) == 0)
+        SetParalize(false);
     if (damage < Health())
         SetHealth(Health() - damage);
     else
@@ -888,54 +945,49 @@ int32_t TObjectInstance::FaceAngleTo(const TObjectInstance* inst) const
     return angle;
 }
 
+// REVSYNC: TObjectInstance::GetScreenPos @ 0x0046eb40 (x, y) and
+// 0x0046ec50 (x, y, z) -- the screen point, kept until the object moves.
+// Both project through the float matrix at 0x005d4740 and truncate each sum
+// once (_ftol): x = px - py, y = 0.5 px + 0.5 py - 0.867 pz, z = 47359 -
+// 0.867 py - 0.867 px - 0.5 pz, to 16 bits. WorldToScreen's integer form
+// truncates the height term on its own, so off the ground its y can be one
+// more. In doubles the sums are exact, as on the x87.
 void TObjectInstance::GetScreenPos(int32_t &x, int32_t &y) const
 {
-    if (oldpos == pos)
-    {
-        x = screenx;
-        y = screeny;
-    }
-    else
-    {
-        WorldToScreen(pos, x, y);
-        WorldToScreenZ(pos, screenz);
-
-        screenx = x;
-        screeny = y;
-
-        oldpos = pos;
-    }
+    if (oldpos != pos)
+        Project();
+    x = screenx;
+    y = screeny;
 }
 
 void TObjectInstance::GetScreenPos(S3DPoint& s) const
 {
-    if (oldpos == pos)
-    {
-        s.x = screenx;
-        s.y = screeny;
-        s.z = screenz;
-    }
-    else
-    {
-        WorldToScreen(pos, screenx, screeny);
-        WorldToScreenZ(pos, screenz);
-
-        s.x = screenx;
-        s.y = screeny;
-        s.z = screenz;
-
-        oldpos = pos;
-    }
+    if (oldpos != pos)
+        Project();
+    s.x = screenx;
+    s.y = screeny;
+    s.z = screenz;
 }
 
-// Sets the current object position
+void TObjectInstance::Project() const
+{
+    constexpr float kHalf = 0.5f, kHeight = 0.867f;     // retail's floats
+    const double px = pos.x, py = pos.y, pz = pos.z;
+    screenx = int32_t(px - py);
+    screeny = int32_t(px * kHalf + py * kHalf - pz * kHeight);
+    screenz = int32_t(47359.0 - pz * kHalf - py * kHeight - px * kHeight) & 0xffff;
+    oldpos = pos;
+}
+
+// Sets the current object position. REVSYNC: 0x0046ed70 -- a level not given
+// is the object's own; in the map only a non-map object (a player) changes
+// level, and the map may clamp the position (TMapPane::CheckPos).
 int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool override)
 {
     int32_t index = GetMapIndex();
 
-  // Note: can't change level of regular map objects, only non map objects
-    if (newlevel < 0 || !(flags & OF_NONMAP))
-        newlevel = MapPane.GetMapLevel();
+    if (newlevel < 0)
+        newlevel = level;
 
   // Didn't move
     if (newpos == pos && newlevel == level)
@@ -966,7 +1018,8 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
     }
 
   // Make sure we're still in currently loaded map after we move
-    index = MapPane.CheckPos(this, newpos, newlevel);
+    S3DPoint to = newpos;
+    index = MapPane.CheckPos(this, to, newlevel);
 
   // Get original screen rectangle
     SRect oldrect;
@@ -975,8 +1028,9 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
     MapPane.ExtractWalkmap(this);
 
   // Sets new position
-    WriteTransformPos(transform_, pos, newpos);
-    level = newlevel;
+    WriteTransformPos(transform_, pos, to);
+    if (flags & OF_NONMAP)
+        level = newlevel;
 
     MapPane.TransferWalkmap(this);
 
@@ -1006,6 +1060,21 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
     }
 
     return index;
+}
+
+// REVSYNC: the move TExit::Activate (0x0050d3a0) and `pos` (0x00423d40)
+// share: a character drops its combat target (0x004d4790 with no target),
+// the camera jumps rather than scrolls if it follows the object (`pos`
+// skips that in the editor), then SetPos. A player whose destination
+// sector isn't loaded leaves the map there until the session brings that
+// level in (TGameSession::EnterLevel).
+void TObjectInstance::Teleport(const S3DPoint& to, int32_t tolevel, bool override)
+{
+    if (objclass == OBJCLASS_CHARACTER || objclass == OBJCLASS_PLAYER)
+        static_cast<TCharacter*>(this)->SetFighting(nullptr);
+    if (!Editor)
+        MapPane.SnapIfFollowing(this);
+    SetPos(to, tolevel, override);
 }
 
 // "Raw poke" path: same single setter as SetPos but skips the
@@ -1069,26 +1138,11 @@ bool TObjectInstance::SetState(int32_t newstate)
         }
     }
 
-    if (newstate == state && imagery)
-    {
-        const int32_t stateflags = IsInInventory()
-            ? imagery->GetInvAniFlags(state)
-            : imagery->GetAniFlags(state);
-        if (stateflags & AF_LOOPING)
-        {
-            // A same-state request is not a transition. Looping animations
-            // must continue advancing through their authored keys; restarting
-            // here truncates the cycle and creates a visible pop.
-            ++anim_state_set_count;
-            ++anim_same_state_set_count;
-            anim_last_state_set_from = state;
-            anim_last_state_set_to = newstate;
-            anim_last_state_set_frame = frame;
-            anim_last_state_set_game_frame = PlayScreen.GameFrame();
-            SetCommandDone(false);
-            return true;
-        }
-    }
+    // REVSYNC: SetState @ 0x0046f250 -- re-setting the current state
+    // restarts it like any other (frame 0, prevstate = state): retail's
+    // action code re-forces a looping root when its cycle ends (frame is 0
+    // then). The pose bridge blends no transition between a looping state
+    // and itself (IsLoopingSameStateTransition), so the restart shows no pop.
 
     RedrawBackground();
     MapPane.ExtractWalkmap(this);
@@ -1120,10 +1174,11 @@ bool TObjectInstance::SetState(int32_t newstate)
         flags |= OF_ANIMATE;            // Cause Animate() function to be called
     else
     {
-        // Permanent-animator types keep their animator across state
-        // changes. For non-permanent types, freeing here matches the
-        // legacy lazy-attach behavior on imagery types whose anim is
-        // state-conditional (e.g. sprites).
+        // REVSYNC-DIVERGENCE: retail frees the animator whenever the
+        // imagery says it needs none (0x0046f344); permanent-animator types
+        // keep theirs here (3D characters always need one, so they never
+        // reach this). For the rest, freeing matches the legacy lazy-attach
+        // behavior on imagery whose anim is state-conditional (sprites).
         if (!IsAnimatorPermanent())
             FreeAnimator();
         flags &= ~(uint32_t)OF_ANIMATE;    // Prevents Animate() function from being called
@@ -1134,25 +1189,122 @@ bool TObjectInstance::SetState(int32_t newstate)
     return true;
 }
 
+namespace {
+
+// REVSYNC: the Pouch AddToInventory routes a player's new item to
+// (0x0046f41c..0x0046f4c5): the first item named "Pouch" in the player's
+// inventory, bags included, whose first item is of the new item's class.
+TObjectInstance* PouchFor(TObjectInstance* player, const TObjectInstance* item)
+{
+    for (TInventoryIterator i(player, EInvWalk::Nested); i; i++)
+    {
+        if (stricmp(i->GetName(), "Pouch") != 0)
+            continue;
+        const TInventoryIterator first(i.Item());
+        if (first.Item() && first->ObjClass() == item->ObjClass())
+            return i.Item();
+    }
+    return nullptr;
+}
+
+} // namespace
+
+// REVSYNC: AddToInventory @ 0x0046f3d0 (vtable 0x58), docs/gameflow/
+// forensics/INVENTORY.md §2. In order:
+//   1. No slot: a player's item goes to a Pouch holding its kind; else the
+//      first free slot, which must be a carried slot. Any slot past the
+//      belt fails.
+//   2. The item already at that slot is the one to make room; the item
+//      being added there already is a success with nothing to do.
+//   3. The item leaves the inventory it was in (an equipped item is
+//      unequipped there). If it was somewhere in this inventory's tree, its
+//      container and slot are where the item making room goes.
+//   4. MergeInto: an item that joins a pile is deleted, and that's a
+//      success.
+//   5. The item making room leaves; the item is placed; the item making
+//      room goes to the added item's old place, or else to a free slot.
+// Not ported (multiplayer only): the linked inventory of vtable 0x170 that
+// retail forwarded to, the Swag Bag link, the network messages and the
+// guard 0x00676e5d that silenced them. Deviations (INVENTORY.md §6): a null
+// item or this object itself fails; SignalAddedToInventory is still called
+// (the port's inventory icons hang on it; retail's AddToInventory didn't).
 bool TObjectInstance::AddToInventory(TObjectInstance* inst, int32_t slot)
 {
-    if (slot < 0)
-        slot = FindFreeInventorySlot();
-
-    if ((uint32_t)slot >= MAXINVITEMS)
+    if (!inst || inst == this)
         return false;
+
+    if (slot < 0)
+    {
+        if (ObjClass() == OBJCLASS_PLAYER)
+            if (TObjectInstance* pouch = PouchFor(this, inst))
+                return pouch->AddToInventory(inst, slot);
+
+        slot = FindFreeInventorySlot();
+        if (slot > kInvSlotLastCarried)
+            return false;
+    }
+    if (slot > kInvSlotLast)
+        return false;
+
+    TObjectInstance* const occupant = GetInventorySlot(slot);
+    if (occupant == inst)
+        return true;
 
     inst->OffScreen();
 
-    int32_t index = inventory.Add(inst);
-    if (index < 0)
-        return false;
+    // The item's old place, when it moves within this inventory's tree
+    TObjectInstance* prevowner = nullptr;
+    int32_t prevslot = -1;
+    if (TObjectInstance* from = inst->GetOwner())
+    {
+        TObjectInstance* const top = GetTopOwner();
+        if ((top ? top : this)->Holds(inst))
+        {
+            prevowner = from;
+            prevslot = inst->InventNum();
+        }
+        inst->RemoveFromInventory();
+    }
+
+    if (inst->MergeInto(this))
+    {
+        delete inst;
+        if (this == Inventory.GetContainer() || (prevowner && prevowner == Inventory.GetContainer()))
+            Inventory.Update();
+        return true;
+    }
+
+    if (occupant)
+        occupant->RemoveFromInventory();
+
+    PlaceInInventory(inst, slot);
+    log_debug("[inv] %s: %s added at slot 0x%x", GetName(), inst->GetName(), slot);
+
+    if (occupant)
+    {
+        if (prevowner)
+            prevowner->AddToInventory(occupant, prevslot);
+        else
+            AddToInventory(occupant);
+    }
+
+    if (this == Inventory.GetContainer() || (prevowner && prevowner == Inventory.GetContainer()))
+        Inventory.Update();
+
+    return true;
+}
+
+// The placement retail's AddToInventory ends with (0x0046f64f..0x0046f69c):
+// the item joins the inventory array, gets an id if it has none
+// (MakeIndex 0x0044ce30), takes the slot and leaves the map.
+void TObjectInstance::PlaceInInventory(TObjectInstance* inst, int32_t slot)
+{
+    inst->invindex = short(inventory.Add(inst));
 
     if (inst->GetMapIndex() <= 0)
         inst->SetMapIndex(MapPane.MakeIndex());
 
-    inst->invindex = index;
-    inst->inventnum = slot;
+    inst->inventnum = short(slot);
     inst->owner = this;
 
     inst->pos.x = inst->pos.y = inst->pos.z = 0;
@@ -1160,30 +1312,24 @@ bool TObjectInstance::AddToInventory(TObjectInstance* inst, int32_t slot)
     inst->sector = nullptr;
 
     inst->SignalAddedToInventory();
-
-    if (this == Inventory.GetContainer())
-        Inventory.Update();
-
-    return true;
 }
 
-bool TObjectInstance::AddToInventory(const char *name, int32_t number, int32_t slot)
+bool TObjectInstance::Holds(const TObjectInstance* item) const
 {
-    TObjectClass* cl;
-    int32_t ot;
-    for (int32_t i = 0; i < MAXOBJECTCLASSES; i++)
-    {
-        cl = TObjectClass::GetClass(i);
-        if (cl && (ot = cl->FindObjType(name)) >= 0)
-            break;
-    }
+    for (const TObjectInstance* o = item ? item->GetOwner() : nullptr; o; o = o->GetOwner())
+        if (o == this)
+            return true;
+    return false;
+}
 
-    if (ot < 0)
-        return false;
+namespace {
 
-    SObjectDef def;
-    memset(&def, 0, sizeof(SObjectDef));
-
+// A new object of class cl's type ot, `number` of them, put in owner's
+// inventory at `slot` by AddToInventory. Deviation: an object that can't be
+// added is deleted (retail kept it, unowned).
+bool AddNewToInventory(TObjectInstance* owner, TObjectClass* cl, int32_t ot, int32_t number, int32_t slot)
+{
+    SObjectDef def = {};
     def.objclass = cl->ClassId();
     def.objtype = ot;
 
@@ -1194,13 +1340,47 @@ bool TObjectInstance::AddToInventory(const char *name, int32_t number, int32_t s
     if (number != 1)
         inst->SetAmount(number);
 
-    return AddToInventory(inst, slot);
+    if (owner->AddToInventory(inst, slot))
+        return true;
+    delete inst;
+    return false;
 }
 
+} // namespace
+
+// REVSYNC: 0x0046f940. Retail found the type in its name-sorted table of
+// every class's types; the port asks each class in turn, which finds the
+// same type while names are unique.
+bool TObjectInstance::AddToInventory(const char *name, int32_t number, int32_t slot)
+{
+    for (int32_t i = 0; i < MAXOBJECTCLASSES; i++)
+        if (TObjectClass* cl = TObjectClass::GetClass(i))
+            if (const int32_t ot = cl->FindObjType(name); ot >= 0)
+                return AddNewToInventory(this, cl, ot, number, slot);
+    return false;
+}
+
+// REVSYNC: 0x0046f7e0. Retail searched its table of every type sorted by
+// unique id; the port asks each class in turn.
+bool TObjectInstance::AddToInventoryByUniqueId(uint32_t uniqueid, int32_t number, int32_t slot)
+{
+    for (int32_t i = 0; i < MAXOBJECTCLASSES; i++)
+        if (TObjectClass* cl = TObjectClass::GetClass(i))
+            if (const int32_t ot = cl->FindObjType(uniqueid); ot >= 0)
+                return AddNewToInventory(this, cl, ot, number, slot);
+    return false;
+}
+
+// REVSYNC: 0x0046faf0. The owner hears of it first: retail unequipped an
+// item leaving a player's equipment slot here (TPlayer::OnInventoryRemove).
+// Retail compacted the inventory array; the port leaves a hole, which its
+// iterators skip.
 void TObjectInstance::RemoveFromInventory()
 {
     if (owner)
     {
+        owner->OnInventoryRemove(this);
+
         if (owner == Inventory.GetContainer())
             Inventory.Update();
 
@@ -1212,6 +1392,14 @@ void TObjectInstance::RemoveFromInventory()
     inventnum = -1;
 }
 
+// REVSYNC: GiveInventoryTo @ 0x0046fd30 (vtable 0x70) over the per-item give
+// 0x0046fc40 (vtable 0x6c); DeleteFromInventory is the same with no
+// recipient (0x00477950 / 0x00477970). Items are found by name in bags too.
+// A whole item moves (and may merge into the recipient's pile); part of a
+// pile stays and a new object of that many goes. Deviations (INVENTORY.md
+// §6): the new object is of the item's type (retail named it after the
+// giver, so a partial give of a pile to someone failed, question 121), and
+// what the recipient refuses stays with the giver (retail lost it).
 int32_t TObjectInstance::GiveInventoryTo(TObjectInstance* to, const char *name, int32_t number)
 {
     int32_t total = 0;
@@ -1225,29 +1413,33 @@ int32_t TObjectInstance::GiveInventoryTo(TObjectInstance* to, const char *name, 
         if (!inst)
             return total;
 
-        int32_t amt = max(inst->Amount(), 1);
+        const int32_t amt = max(inst->Amount(), 1);
 
         if (number >= amt)
         {
+            TObjectInstance* const from = inst->GetOwner();
+            inst->RemoveFromInventory();
+            if (!to)
+                delete inst;
+            else if (!to->AddToInventory(inst))
+            {
+                from->AddToInventory(inst);
+                return total;
+            }
             total += amt;
             number -= amt;
-            inst->RemoveFromInventory();
-            if (to)
-                to->AddToInventory(inst);
-            else
-                delete inst;
         }
         else
         {
             inst->SetAmount(amt - number);
-            if (to)
+            if (to && !to->AddToInventory(inst->GetTypeName(), number))
             {
-                if (!to->AddToInventory(name, number))
-                    return total;
+                inst->SetAmount(amt);
+                return total;
             }
             total += number;
             number = 0;
-            
+
             if (inst->owner == Inventory.GetContainer())
                 Inventory.Update();
         }
@@ -1257,11 +1449,52 @@ int32_t TObjectInstance::GiveInventoryTo(TObjectInstance* to, const char *name, 
     return total;
 }
 
+// REVSYNC: TObjectInstance::GiveWeapons @ 0x00477780 (the `giveweapons`
+// command; forest.s's chief takes Locke's weapons and hands them back).
+// Each weapon, ranged weapon and ammo leaves this inventory (unequipped on
+// the way, RemoveFromInventory) for a free slot in `to`'s; a bag's are given
+// the same way. Deviations: retail found the recipient by name again for
+// each bag, and kept no item it couldn't place (nor checked for a missing
+// recipient); the caller resolves `to` once and a refused item stays here.
+void TObjectInstance::GiveWeapons(TObjectInstance* to)
+{
+    if (!to || to == this)
+        return;
+
+    // Taken back after the walk: an item added during it lands at the end of
+    // the inventory, where the walk would meet it again.
+    std::vector<TObjectInstance*> refused;
+    for (TInventoryIterator i(this); i; i++)
+    {
+        TObjectInstance* item = i.Item();
+        switch (item->ObjClass())
+        {
+          case OBJCLASS_WEAPON:
+          case OBJCLASS_RANGEDWEAPON:
+          case OBJCLASS_AMMO:
+            item->RemoveFromInventory();
+            if (to->AddToInventory(item))
+                log_debug("[inv] %s gives %s to %s", GetName(), item->GetName(), to->GetName());
+            else
+                refused.push_back(item);
+            break;
+          case OBJCLASS_INVCONTAINER:
+            item->GiveWeapons(to);
+            break;
+          default:
+            break;
+        }
+    }
+    for (TObjectInstance* item : refused)
+        AddToInventory(item);
+}
+
+// REVSYNC: 0x0046fde0 (vtable 0x84), bags included.
 int32_t TObjectInstance::GetInventoryAmount(const char *name) const
 {
     int32_t total = 0;
 
-    for (TConstInventoryIterator i(this); i; i++)
+    for (TConstInventoryIterator i(this, EInvWalk::Nested); i; i++)
         if (stricmp(i.Item()->GetName(), name) == 0)
             total += max(i.Item()->Amount(), 1);
 
@@ -1270,12 +1503,7 @@ int32_t TObjectInstance::GetInventoryAmount(const char *name) const
 
 bool TObjectInstance::HasEmptySlot() const
 {
-    uint32_t slot = FindFreeInventorySlot();
-
-    if ((uint32_t)slot >= MAXINVITEMS)
-        return false;
-
-    return true;
+    return FindFreeInventorySlot() <= kInvSlotLastCarried;
 }
 
 void TObjectInstance::SignalAddedToInventory()
@@ -1288,18 +1516,13 @@ bool TObjectInstance::AddToMap()
 
 }
 
+// Through the object's own sector link: a search of the sector window missed
+// objects outside it, which then stayed in their sector while the caller
+// moved them into an inventory.
 void TObjectInstance::RemoveFromMap()
 {
-    TMapIterator i;
-    while (i)
-    {
-        if (i.Item() == this)
-            break;
-        i++;
-    }
-
-    if (i.Item())
-        MapPane.RemoveFromSector(this, i.SectorX(), i.SectorY(), i.SectorIndex());
+    if (sector)
+        MapPane.RemoveFromSector(this);
 }
 
 int32_t TObjectInstance::FindFreeInventorySlot() const
@@ -1333,6 +1556,19 @@ int32_t TObjectInstance::RealNumInventoryItems()
     return num;
 }
 
+// REVSYNC: CompactInventory @ 0x0046ff80. Not ported (multiplayer): the
+// network message. Retail's array closed up on every removal, the port's
+// leaves holes for new items to fill, so after removals the order can differ.
+void TObjectInstance::CompactInventory()
+{
+    int32_t next = 0;
+    for (TInventoryIterator i(this); i && next < kInvSlotEquipFirst; i++)
+        if (i->InventNum() < kInvSlotEquipFirst)
+            i->SetInventNum(short(next++));
+    if (this == Inventory.GetContainer())
+        Inventory.Update();
+}
+
 TObjectInstance* TObjectInstance::GetInventory(int32_t index) const
 {
     return inventory[index];
@@ -1347,38 +1583,95 @@ TObjectInstance* TObjectInstance::GetInventorySlot(int32_t slot) const
     return nullptr;
 }
 
+// REVSYNC: 0x00470280 (vtable 0xa8), bags included.
+// REVSYNC: 0x00473a10 (DEATH_LOOT.md §3). By class: money "gold", ranged
+// weapons "bow", weapons "weapon", talismans one of "talis1".."talis3", food
+// "food", potions "potion", scrolls "scroll", armor "jewel" in slot 1,
+// "jewel2" in slots 5 and 6 and "armor" otherwise, keys "viles" for a vial
+// and "keys" otherwise; anything else is silent. Full volume, unplaced.
+void TObjectInstance::PlayItemSound()
+{
+    static constexpr const char* kTalismanSounds[] = { "talis1", "talis2", "talis3" };   // 0x005d47f0
+
+    const char* sound = nullptr;
+    switch (ObjClass())
+    {
+      case OBJCLASS_MONEY:        sound = "gold";   break;
+      case OBJCLASS_RANGEDWEAPON: sound = "bow";    break;
+      case OBJCLASS_WEAPON:       sound = "weapon"; break;
+      case OBJCLASS_TALISMAN:     sound = kTalismanSounds[random(0, 2)]; break;
+      case OBJCLASS_FOOD:         sound = "food";   break;
+      case OBJCLASS_POTION:       sound = "potion"; break;
+      case OBJCLASS_SCROLL:       sound = "scroll"; break;
+      case OBJCLASS_ARMOR:
+      {
+        const int32_t slot = EqSlot();
+        sound = slot == 1 ? "jewel" : (slot == 5 || slot == 6) ? "jewel2" : "armor";
+        break;
+      }
+      case OBJCLASS_KEY:
+        sound = (GetName() && strstr(GetName(), "Vial")) ? "viles" : "keys";
+        break;
+      default:
+        return;
+    }
+    const int32_t id = SoundPlayer.FindSound(sound);
+    if (id >= 0 && SoundPlayer.Mount(id))
+        SoundPlayer.Play(id);
+}
+
 TObjectInstance* TObjectInstance::FindObjInventory(const char *name) const
 {
-    for (TConstInventoryIterator i(this); i; i++)
+    for (TConstInventoryIterator i(this, EInvWalk::Nested); i; i++)
         if (stricmp(i.Item()->GetName(), name) == 0)
             return i.Item();
 
     return nullptr;
 }
 
+// REVSYNC: 0x004703c0 (vtable 0xa4), bags included.
 TObjectInstance* TObjectInstance::FindObjInventory(int32_t objclass, int32_t type) const
 {
-    for (TConstInventoryIterator i(this); i; i++)
+    for (TConstInventoryIterator i(this, EInvWalk::Nested); i; i++)
         if (i.Item()->ObjClass() == objclass && (type < 0 || i.Item()->GetStat("Type") == type))
             return i.Item();
 
     return nullptr;
 }
 
+// REVSYNC: CanCombine @ 0x004704d0 (vtable 0xb8).
+bool TObjectInstance::CanCombine(const TObjectInstance* with) const
+{
+    if (!with)
+        return false;
+    if ((with->GetFlags() & OF_INVENTORY) && with->GetOwner() == owner && with->ObjClass() == ObjClass() &&
+        GetStat("Combining") && with->GetStat("Combining") && std::abs(ObjType() - with->ObjType()) == 1)
+        return true;
+    const int32_t combineid = GetStat("CombineID");
+    if (!combineid || with->GetStat("CombineID") != combineid)
+        return false;
+    const int32_t target = GetStat("TargetID");
+    const int32_t withtarget = with->GetStat("TargetID");
+    return !(target && withtarget) && withtarget != target;
+}
+
+// REVSYNC: Use @ 0x004705f0. Using an object on this one starts a USE named
+// after the object used; using this one alone starts a USE named after it (or
+// its type), and one on the user's script with this object as its "item".
 bool TObjectInstance::Use(TObjectInstance* user, int32_t with)
 {
-    if (with >= 0)  // With object.. use with name as key
+    TObjectInstance* item = with >= 0 ? MapPane.GetInstance(with) : nullptr;
+    if (item)
     {
-        TObjectInstance* inst = MapPane.GetInstance(with);
         if (GetScript())
-            GetScript()->Trigger(TRIGGER_USE, inst->GetName());
+            GetScript()->Trigger(TRIGGER_USE, item->GetName(), nullptr, user, kAliasUser, item, kAliasItem);
     }
-    else        // No with object.. use 'use' object as key
+    else
     {
         if (GetScript())
-            GetScript()->Trigger(TRIGGER_USE);
+            GetScript()->Trigger(TRIGGER_USE, GetName(), GetTypeName(), user, kAliasUser);
         if (user && user->GetScript())
-            user->GetScript()->Trigger(TRIGGER_USE, this->GetName());
+            user->GetScript()->Trigger(TRIGGER_USE, GetName(), nullptr, this, kAliasItem);
     }
 
     /*
@@ -1445,9 +1738,9 @@ void TObjectInstance::Pulse()
     if (TObjectAnimator* a = GetComponent<TObjectAnimator>())
         a->Pulse();
 
-  // Check if script is done
-    if (CommandDone())
-        ContinueScript();
+  // REVSYNC: Pulse @ 0x004708e0 — the script runs every pulse; it holds
+  // itself while this object is busy or a wait is unsatisfied.
+    ContinueScript(CommandDone());
 }
 
 uint32_t TObjectInstance::Move()
@@ -1644,6 +1937,28 @@ void TObjectInstance::NextFrame()
         anim->SetNewState(false);
 }
 
+// REVSYNC: TObjectInstance::DrawLight @ 0x00471930 (0x004719af..0x004719cf)
+// -- a light drawn without a light-table id gets one from NewLightIndex
+// (0x0041d890): one of the four colours the DLS light byte can name
+// (docs/LIGHTING_FIDELITY.md §2.6). Retail also re-asked on a full redraw
+// (the pane's dirty flag), after RedrawAll had cleared every id's use.
+int32_t TObjectInstance::AcquireLightId()
+{
+    if (lightdef.lightid == -1)
+        lightdef.lightid = NewLightIndex(lightdef.color, lightdef.multiplier);
+    return lightdef.lightid;
+}
+
+// REVSYNC: FreeLightIndex @ 0x0041d9e0, from OffScreen and the destructor.
+void TObjectInstance::ReleaseLightId()
+{
+    if (lightdef.lightid != -1)
+    {
+        FreeLightIndex(lightdef.lightid);
+        lightdef.lightid = -1;
+    }
+}
+
 void TObjectInstance::OnScreen()
 {
     if (NeedsAnimator())
@@ -1675,11 +1990,7 @@ void TObjectInstance::OffScreen()
         Scene3D.DeleteLight(lightdef.lightindex);
         lightdef.lightindex = -1;
     }
-    if (lightdef.lightid != -1)
-    {
-        FreeLightIndex(lightdef.lightid);
-        lightdef.lightid = -1;
-    }
+    ReleaseLightId();
 }
 
 // Retail-faithful inventory-image lookup.
@@ -1690,6 +2001,24 @@ void TObjectInstance::OffScreen()
 // (potions are the prime example; see 3dimagebody.h's invanim slot) were
 // invisible in the port until this fallback landed because the previous
 // pass-through only consulted GetInvImage.
+bool SInvIcon::operator==(const SInvIcon& other) const
+{
+    if (count != other.count)
+        return false;
+    for (int32_t i = 0; i < count; ++i)
+        if (parts[i].image != other.parts[i].image || parts[i].x != other.parts[i].x
+            || parts[i].y != other.parts[i].y)
+            return false;
+    return true;
+}
+
+SInvIcon TObjectInstance::InventoryIcon()
+{
+    SInvIcon icon;
+    icon.Add(InventoryImage(), 0, 0);
+    return icon;
+}
+
 PTBitmap TObjectInstance::InventoryImage()
 {
     if (!imagery)
@@ -1702,11 +2031,14 @@ PTBitmap TObjectInstance::InventoryImage()
     return nullptr;
 }
 
-bool TObjectInstance::IsInventoryItem()
+// REVSYNC: IsInventoryItem @ 0x00477c00 (vtable +0x134) -- the OF_INVENTORY
+// flag the constructor sets for the item classes, not "has an inventory
+// image" (1998). Characters have an icon in every state since the imagery's
+// icon falls back to state 0 (0x0040ce60), so the image test made every NPC
+// an item: the hand cursor, and a click picked them up instead of talking.
+bool TObjectInstance::IsInventoryItem() const
 {
-    // Cheap: reuse InventoryImage()'s eligibility (matches retail's "has a
-    // baked invitem OR an invanim" semantics).
-    return InventoryImage() != nullptr;
+    return (flags & OF_INVENTORY) != 0;
 }
 
 void TObjectInstance::GetFacingBoundBox(int32_t &nx, int32_t &ny, int32_t &nsx, int32_t &nsy)
@@ -1791,31 +2123,62 @@ void TObjectInstance::RedrawBackground(int32_t bgdraw)
 
 // ********** Script Functions ************
 
+// Retail: carried items and tiles that keep their type's name have no
+// scripts (InitScript @ 0x00471150); a renamed tile can have one.
+bool TObjectInstance::CanHaveScript() const
+{
+    if (flags & OF_INVENTORY)
+        return false;
+    return objclass != OBJCLASS_TILE || !inf || name != inf->name;
+}
+
+// REVSYNC: InitScript @ 0x00471150. Replaces the current script. Retail's
+// multiplayer gate (a module flag allows scripts in multiplayer) is not
+// ported: the port plays single player.
 void TObjectInstance::InitScript(PTScript newscr)
 {
-    if (objclass == OBJCLASS_TILE)
-        return; // Tiles can't do scripts!!
+    if (newscr == script)
+        return;
+    if (!CanHaveScript())
+    {
+        delete newscr;              // REVSYNC-DIVERGENCE: retail detached and leaked it
+        return;
+    }
 
+    delete script;
     script = newscr;
     if (script)
     {
         flags |= OF_PULSE;          // Pulse me so script will run
         SetNotify(N_SCRIPTDELETED); // Tell us if script gets hacked
+        TScriptProto* p = script->GetScriptProto();
+        log_info("[script] attached '%s' -> obj %s (class=%d)",
+                 (p && p->name) ? p->name : "?",
+                 GetName() ? GetName() : "<unnamed>",
+                 objclass);
     }
 
     ResetScript();
 }
 
+// Retail InitScript ends with TScript::Reset (0x004924f0): the script waits
+// for a trigger. (Starting it at offset 0 ran the first trigger's header
+// line as a command -- a door's `USE` used the door.)
 void TObjectInstance::ResetScript()
 {
     if (script)
-        script->Start();
+        script->Reset();
 }
 
-void TObjectInstance::ContinueScript()
+void TObjectInstance::ContinueScript(bool commanddone)
 {
     if (script && !(flags & OF_PAUSE))
-        script->Continue(this);
+        script->Continue(this, commanddone);
+}
+
+bool TObjectInstance::IsScriptWaiting() const
+{
+    return script && script->IsWaiting();
 }
 
 void TObjectInstance::ScriptJump(char *label)
@@ -2033,7 +2396,7 @@ void TObjectInstance::Notify(int32_t notify, void *ptr)
     }
     else if (notify == N_SCRIPTADDED)   // Check to see if new script matches us
     {
-        if (!script && objclass != OBJCLASS_TILE) // No scripts for regular tiles
+        if (!script && CanHaveScript())
             InitScript(ScriptManager.ObjectScript(this));
     }
 }
@@ -2050,71 +2413,73 @@ int32_t g_loadObjNullCorruptDrop = 0;
 int32_t g_loadObjNullNonMapDrop  = 0;
 int32_t g_loadObjOk              = 0;
 
-TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, bool ismap)
+namespace {
+
+// Object names in sector and save files carry bit 7 on every byte.
+constexpr uint8_t kNameByteFlag = 0x80;
+constexpr uint8_t kNameByteMask = 0x7f;
+
+// The stats an object untouched since placement keeps through a load
+// (health, fatigue and mana for a character); the rest come from its type.
+constexpr int32_t kFirstKeptStat = 3;
+constexpr int32_t kLastKeptStat  = 5;
+
+}  // namespace
+
+// REVSYNC: TObjectInstance::LoadObject (universal stream decoder) @ 0x00471ce0.
+// docs/gameflow/forensics/SAVE_GAME.md §11.1. `streamflags` carries what
+// retail kept in DAT_0065a254: OSTREAM_MAP discards NONMAP objects (players
+// never come from a sector file), OSTREAM_NOINVENTORY skips inventories.
+//
+// The type comes from the unique id; when the id belongs to another class
+// the object is built as that class and loaded with the base
+// TObjectInstance::Load ("force simple"), as retail. Retail looked the id up
+// in one global table; the port asks the stored class first and then every
+// class, which finds the same type because ids are unique.
+TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, uint32_t streamflags)
 {
-    uint32_t uniqueid;
+    uint32_t uniqueid = 0;
     short objversion = 0;
     short objclass;
-    short objtype;
-    short blocksize;
-    short invblocksize = -1;  // v14+: separate block size for inventory body
-    SObjectDef def;
+    short objtype = -1;
+    short blocksize = -1;
+    short invblocksize = -1;  // v14+: the inventory's share of blocksize
     bool forcesimple = false;
     bool corrupted = false;
 
     // ****** Load object block header ******
 
-    // Get object version
     if (version >= 8)
         is >> objversion;
-
-    if (objversion < 0) // Objversion is the placeholder in map version 8 or above
+    if (objversion < 0) // Placeholder for an empty slot (map version 8 and up)
     {
         ++g_loadObjNullObjVerNeg;
         return nullptr;
     }
 
     is >> objclass;
-    if (objclass < 0)   // Placeholder for empty object slot
+    if (objclass < 0)   // Placeholder for an empty slot
     {
         ++g_loadObjNullClassNeg;
         return nullptr;
     }
 
-    // Check the sector map version before we read the type info
     if (version < 1)
-    {
-        // Version 0 - No Unique ID's, so just read the objtype directly
-        is >> objtype;
-        uint32_t uniqueid = 0;
-        blocksize = -1;     
-    }
-    else if (version < 4)
-    {
-        // Version 1 and above - Unique ID's used instead of objtype, so find
-        //             the objtype given the Unique ID
-
-        objtype = -1;
-        is >> uniqueid;
-        blocksize = -1;
-    }
+        is >> objtype;              // Version 0: no unique ids
     else
     {
-        // Version 4 has block size, so we can just skip over objects
-        //              we don't recognize
-        objtype = -1;
         is >> uniqueid;
-        is >> blocksize;
-
-        // v14+ splits the single blocksize into a body blocksize plus a
-        // separate inventory blocksize, so the inventory body can also be
-        // skipped independently. See retail FUN_00471ce0 gate `param_4 >= 0xe`.
+        if (version >= 4)
+            is >> blocksize;        // Version 4: block size, so unknown objects can be skipped
         if (version >= 14)
             is >> invblocksize;
     }
 
+    const int32_t headerend = is.GetPos();
+    auto skipBlock = [&]() { is.SetPos(headerend + blocksize); };
+
     // ****** Is this object any good? ******
-    
+
     TObjectClass* cl = TObjectClass::GetClass(objclass);
     if (!cl || !cl->ClassName())
     {
@@ -2122,11 +2487,7 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
             FatalError("Object in map file has invalid class - possible file corruption");
         else if (blocksize >= 0)
         {
-            // Retail LAB_00471e57: unsupported class (bags/chests/invcontainer
-            // added post-1998-source, e.g. retail-only class 18). `blocksize`
-            // covers body + inventory together in v14+, so a single MovePos
-            // resyncs to the next object. invblocksize is already included.
-            is.MovePos(blocksize);
+            skipBlock();
             ++g_loadObjNullBadClass;
             return nullptr;
         }
@@ -2138,22 +2499,26 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
         }
     }
 
-    if (objtype < 0)
-    {           
-        objtype = cl->FindObjType(uniqueid);
+    // Retail never loads a map scroll from a file.
+    if (objclass == OBJCLASS_MAPSCROLL && blocksize >= 0)
+    {
+        skipBlock();
+        return nullptr;
+    }
 
+    if (objtype < 0)
+    {
+        objtype = cl->FindObjType(uniqueid);
         if (objtype < 0)
         {
-            // not found in this class, so check all of them
-            int32_t newobjtype, newobjclass;
-            TObjectClass* newcl;
-            for (newobjclass = 0; newobjclass < MAXOBJECTCLASSES; newobjclass++)
+            for (int32_t newobjclass = 0; newobjclass < MAXOBJECTCLASSES; newobjclass++)
             {
-                newcl = TObjectClass::GetClass(newobjclass);
-                if (newcl && (newobjtype = newcl->FindObjType(uniqueid)) >= 0)
+                TObjectClass* newcl = TObjectClass::GetClass(newobjclass);
+                const int32_t newobjtype = newcl ? newcl->FindObjType(uniqueid) : -1;
+                if (newobjtype >= 0)
                 {
-                    objclass = newobjclass;
-                    objtype = newobjtype;
+                    objclass = (short)newobjclass;
+                    objtype = (short)newobjtype;
                     cl = newcl;
                     forcesimple = true;
                     break;
@@ -2165,20 +2530,18 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
         {
             if (Debug)
             {
-                // give a more descriptive error
                 char buf[80];
-                sprintf(buf, "Object unique id 0x%x not found in class.def", uniqueid);
+                snprintf(buf, sizeof(buf), "Object unique id 0x%x not found in class.def", uniqueid);
                 FatalError(buf);
             }
-            else if (blocksize >= 0)    // Just skip over this object
+            else if (blocksize >= 0)
             {
-                is.MovePos(blocksize);
+                skipBlock();
                 ++g_loadObjNullBadType;
                 return nullptr;
             }
-            else      // If attempting to fix, assume type is type 0 - first type in list
-            {   
-                
+            else
+            {
                 objtype = 0;
                 corrupted = true;
             }
@@ -2187,64 +2550,60 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
 
     // ****** Create the object ******
 
+    // Retail builds it LOADING: the constructor leaves the script to Load.
+    SObjectDef def;
     memset(&def, 0, sizeof(SObjectDef));
     def.objclass = objclass;
     def.objtype  = objtype;
+    def.flags    = OF_LOADING;
 
     TObjectInstance* inst = cl->NewObject(&def);
     if (!inst)
     {
-        // Class factory missing — retail added bag/chest/invcontainer-style
-        // classes (e.g. class 25) after this 1998 source was snapshotted, so
-        // NewObject returns null for them. Skip rather than abort; blocksize
-        // covers body+inventory so a single MovePos resyncs the stream.
-        // Retail FUN_00471ce0 would crash here (the "Trouble creating" error
-        // is a warning, followed by an unchecked virtual call on null); our
-        // port is strictly safer.
+        // A type whose class.def builder the port lacks. Retail would have
+        // crashed here ("Trouble creating loaded object", then an unchecked
+        // call); skip the block instead.
         if (blocksize >= 0)
-            is.MovePos(blocksize);
+            skipBlock();
         ++g_loadObjNullNewObjFail;
         return nullptr;
     }
 
     // ****** Load the object ******
 
-  // Retail layout (FUN_00471ce0, v14+): `blocksize` is the TOTAL post-header
-  // byte count covering body + inventory together; `invblocksize` is the
-  // inventory tail carved out of the end of that block. Body-proper size is
-  // `blocksize - invblocksize`. The single final resync at LAB_00471fbc sets
-  // the stream to `bodystart + blocksize`. Earlier pre-retail (v4..v13) source
-  // used a single blocksize covering body+inventory without a separate
-  // invblocksize field.
-    uint32_t bodystart = is.GetPos();
+    // v14+: blocksize covers body and inventory; invblocksize is the
+    // inventory's tail of it. Older versions don't say where the body ends.
+    const int32_t bodystart = is.GetPos();
+    const int32_t bodysize  = (version >= 14 && blocksize >= 0)
+                                  ? blocksize - std::max<int32_t>(invblocksize, 0) : -1;
 
     if (forcesimple)
         inst->TObjectInstance::Load(is, version, objversion);
     else
         inst->Load(is, version, objversion);
 
-  // Snap back to start-of-inventory before calling LoadInventory so it reads
-  // from the correct offset regardless of how many bytes Load() actually
-  // consumed.
-    if (version >= 14 && blocksize >= 0 && invblocksize >= 0)
-        is.SetPos(bodystart + blocksize - invblocksize);
+    if (bodysize >= 0)
+    {
+        const int32_t consumed = is.GetPos() - bodystart;
+        if (consumed < bodysize)
+            inst->KeepUnreadClassData(is, bodystart + consumed, bodystart + bodysize);
+        else if (consumed > bodysize)
+            log_warn("[object] block size error for object %s: body is %d bytes, Load read %d",
+                     inst->GetName() ? inst->GetName() : "?", bodysize, consumed);
+        is.SetPos(bodystart + bodysize);
+    }
 
-  // v14+: retail skips LoadInventory entirely when invblocksize < 1 (no
-  // inventory body present). See FUN_00471ce0 LAB_00471fa3 — the `0xd <
-  // param_4` gate jumps over the vtable dispatch for version > 13.
-    if (version < 14 || invblocksize >= 1)
-        inst->LoadInventory(is, version);
+    // Before v14 the inventory can't be skipped (its size isn't recorded).
+    const bool loadInventory =
+        version < 14 || (!(streamflags & OSTREAM_NOINVENTORY) && invblocksize >= 1);
+    if (loadInventory)
+        inst->LoadInventory(is, version, streamflags);
 
-  // Final resync to end-of-object = bodystart + blocksize (covers body+inv).
     if (blocksize >= 0)
         is.SetPos(bodystart + blocksize);
 
-  // If this object is corrupted in some way, delete it after doing load.
-  // Keep OF_NONMAP drops separate from true corruption so the sector harness
-  // can distinguish "players intentionally discarded from map-owned sectors"
-  // from "loader failed to reconstruct this object."
-    const bool nonmap_drop = ismap && (inst->Flags() & OF_NONMAP);
-    if (corrupted || nonmap_drop)
+    const bool nonmap_drop = (streamflags & OSTREAM_MAP) && (inst->Flags() & OF_NONMAP);
+    if (corrupted || nonmap_drop || inst->ObjClass() == OBJCLASS_MAPSCROLL)
     {
         delete inst;
         if (nonmap_drop)
@@ -2258,139 +2617,144 @@ TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, 
     return inst;
 }
 
-// Mirrors retail FUN_00472110 (v14+). Layout written to disk:
-//   [objversion:int16][objclass:int16][uniqueid:uint32]
-//   [blocksize:int16][invblocksize:int16]     (invblocksize only when v14+)
-//   [body bytes: blocksize - invblocksize]
-//   [inventory bytes: invblocksize]           (present only when invblocksize>0)
-// An empty slot is encoded as just a single int16 = -1.
-void TObjectInstance::SaveObject(TObjectInstance* inst, RTOutputStream os, bool ismap)
+// REVSYNC: TObjectInstance::SaveObject (universal stream encoder) @ 0x00472110.
+// Layout: SAVE_GAME.md §11.1. `streamflags` carries what retail kept in
+// DAT_0065a250: OSTREAM_MAP writes a NONMAP object as the empty placeholder,
+// OSTREAM_NOINVENTORY leaves inventories out.
+void TObjectInstance::SaveObject(TObjectInstance* inst, RTOutputStream os, uint32_t streamflags)
 {
-    os.MakeFreeSpace(1024);
-
-    // Retail gate: when saving a map file, any OF_NONMAP object (players,
-    // script-generated effects, etc.) is emitted as a placeholder. The
-    // `ismap` argument corresponds to retail `DAT_0065a254 & 1`.
-    if (!inst || (ismap && (inst->Flags() & OF_NONMAP)))
+    if (!inst || ((streamflags & OSTREAM_MAP) && (inst->Flags() & OF_NONMAP)))
     {
-        os << (short const)-1;
+        os << (short)-1;
         return;
     }
 
     os << (short)inst->ObjVersion();
     os << (short)inst->ObjClass();
     os << (uint32_t)inst->ObjId();
-    os << (short)0;                           // blocksize placeholder
-    if (MAP_VERSION >= 14)
-        os << (short)0;                       // invblocksize placeholder
+    const int32_t sizes = os.GetPos();
+    os << (short)0;                           // blocksize, patched below
+    os << (short)0;                           // invblocksize, patched below
 
-    uint32_t bodystart = os.GetPos();
+    const int32_t bodystart = os.GetPos();
     inst->Save(os);
-    uint32_t bodyend = os.GetPos();
+    inst->SaveUnreadClassData(os);
+    const int32_t bodyend = os.GetPos();
 
-    // Retail only emits inventory bytes when there is actually something to
-    // save. Skipping the SaveInventory call entirely (rather than letting it
-    // write just a 4-byte count=0) keeps invblocksize==0 on disk, matching
-    // retail byte-for-byte and letting LoadObject's `invblocksize < 1`
-    // fast-path skip LoadInventory.
-    if (inst->RealNumInventoryItems() > 0)
-        inst->SaveInventory(os);
+    // Retail calls SaveInventory only when there is something to save, so
+    // an empty inventory writes no count and invblocksize stays 0.
+    if (!(streamflags & OSTREAM_NOINVENTORY) && inst->RealNumInventoryItems() > 0)
+        inst->SaveInventory(os, streamflags);
 
-    uint32_t end = os.GetPos();
-
-    if (MAP_VERSION >= 14)
-    {
-        // v14+: blocksize = total body+inv bytes, invblocksize = inv tail.
-        os.SetPos(bodystart - 4);
-        os << (short)(end - bodystart);
-        os << (short)(end - bodyend);
-    }
-    else
-    {
-        // Pre-v14: single blocksize covering body+inventory together.
-        os.SetPos(bodystart - 2);
-        os << (short)(end - bodystart);
-    }
+    const int32_t end = os.GetPos();
+    os.SetPos(sizes);
+    os << (short)(end - bodystart);
+    os << (short)(end - bodyend);
     os.SetPos(end);
 }
 
-void TObjectInstance::LoadInventory(RTInputStream is, int32_t version)
+// REVSYNC: TObjectInstance::LoadInventory @ 0x00472310 (vtable slot 0x168).
+// Each item takes the first free slot (retail's array Add) and its invindex
+// is set to that slot, so a loaded inventory is packed whatever invindex the
+// file recorded.
+void TObjectInstance::LoadInventory(RTInputStream is, int32_t version, uint32_t streamflags)
 {
     if (version < 3)
         return;
 
-    int32_t num;
+    int32_t num = 0;
     is >> num;
-
-    if (num > 2048) // Maddness!!  Maddness!!
+    if (num < 1 || num > 2048)
     {
-        fprintf(stderr, "Invalid inventory size for obj %s\n", this->GetName());
+        if (num != 0)
+            log_warn("[object] invalid inventory size %d for %s", num, GetName() ? GetName() : "?");
         return;
     }
 
     for (int32_t i = 0; i < num; i++)
     {
-        TObjectInstance* inst = LoadObject(is, version);
-        if (inst)
-        {
-            inventory.Add(inst);
-            inst->SetOwner(this);
-        }
-        else
-        {
-            fprintf(stderr, "Invalid inventory object for obj %s", this->GetName());
-        }
+        TObjectInstance* inst = LoadObject(is, version, streamflags);
+        if (!inst)
+            continue;
+        inst->invindex = (short)inventory.Add(inst);
+        inst->SetOwner(this);
     }
 }
 
-void TObjectInstance::SaveInventory(RTOutputStream os)
+// REVSYNC: TObjectInstance::SaveInventory @ 0x00472380 (vtable slot 0x16c):
+// int32 count, then each item. REVSYNC-DIVERGENCE: the count is the number
+// of items. Retail wrote the array's high-water mark, which overcounts after
+// an item is removed from the middle, so its next load read the following
+// data as inventory (SAVE_GAME.md §11.1).
+void TObjectInstance::SaveInventory(RTOutputStream os, uint32_t streamflags)
 {
-    int32_t num = RealNumInventoryItems();
-
-    os << num;
-
-    if (num > 0)
-    {
-        // save them out recursively
-        for (TInventoryIterator i(this); i; i++)
-        {
-            TObjectInstance::SaveObject(i.Item(), os);
-        }
-    }
-
+    os << (int32_t)RealNumInventoryItems();
+    for (TInventoryIterator i(this); i; i++)
+        TObjectInstance::SaveObject(i.Item(), os, streamflags);
 }
 
+// Class data a port class doesn't read yet: kept as bytes and written back
+// after the class's own fields, so the object survives a round trip intact.
+// REVSYNC-DIVERGENCE: retail always had the class (SAVE_GAME.md §11.3 lists
+// the layouts these bytes follow).
+void TObjectInstance::KeepUnreadClassData(RTInputStream is, int32_t from, int32_t to)
+{
+    const int32_t count = to - from;
+    if (count <= 0)
+        return;
+    unreadClassData = std::make_unique<std::vector<uint8_t>>(count);
+    is.SetPos(from);
+    is.ReadBytes(unreadClassData->data(), count);
+
+    static std::set<std::string> logged;
+    const char* type = inf && inf->name ? inf->name : "?";
+    if (logged.insert(type).second)
+        log_info("[object] '%s' (class %d): keeping %d bytes of class data the port doesn't read",
+                 type, objclass, count);
+}
+
+void TObjectInstance::SaveUnreadClassData(RTOutputStream os) const
+{
+    if (unreadClassData && !unreadClassData->empty())
+        os.WriteBytes(unreadClassData->data(), (int32_t)unreadClassData->size());
+}
+
+// REVSYNC: TObjectInstance::Load @ 0x00472430 (vtable slot 0x160). Fields:
+// SAVE_GAME.md §11.2 (the older-version branches follow the 1998 source and
+// retail). pos is routed through WriteTransformPos so transform_ and the
+// legacy pos mirror stay in lockstep.
 void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion)
 {
+    // Names are stored with bit 7 set on every byte; length 0 means "the
+    // type's name", which the constructor already set.
     uint8_t len;
     is >> len;
     if (len > 0)
     {
         name = (char *)malloc(len + 1);
-        int32_t i = 0;
-        while (i < len)
+        for (int32_t i = 0; i < len; i++)
         {
-            is >> name[i];
-            ++i;
+            uint8_t encoded;
+            is >> encoded;
+            name[i] = (char)(encoded & kNameByteMask);
         }
-        name[i] = 0;
+        name[len] = 0;
     }
 
     uint32_t newflags;
-
     {
         S3DPoint loaded;
         is >> newflags >> loaded.x >> loaded.y >> loaded.z;
         WriteTransformPos(transform_, pos, loaded);
     }
 
-  // Make sure fixed flags remain the way they were set in the constructor
-    flags = flags & OF_FIXEDFLAGS | (newflags & ~(OF_FIXEDFLAGS));
+  // The constructor's fixed flags stay; everything else comes from the file
+    flags = (flags & OF_FIXEDFLAGS) | (newflags & ~OF_FIXEDFLAGS);
 
   // Don't load velocity vectors if not mobile
     if (version < 6 || !(flags & OF_IMMOBILE))
         is >> vel.x >> vel.y >> vel.z;
-        
+
     if (version < 9)
     {
         uint8_t statebyte;
@@ -2398,11 +2762,10 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
         state = statebyte;
     }
     else
-        is >> state; // uint16_t
+        is >> state;
 
-  // Non map objects (i.e. players) store their level
-  // Players are stored in the save game file, and not in the map, so we need to know what
-  // level to put them in when we load them
+  // Non map objects (i.e. players) store their level: they come from the
+  // save, not a sector, so the level says where to put them.
     if (version >= 6 && (flags & OF_NONMAP))
     {
         if (version < 9)
@@ -2412,42 +2775,38 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
             level = levelbyte;
         }
         else
-            is >> level; // uint16_t
+            is >> level;
     }
     else
         level = 0;
-        
-    uint8_t health;
+
+    uint8_t health = 0;
     if (version < 5)
-        is >> health; // This is now an objstat
-    
+        is >> health; // Now an object stat
+
     if (version < 3)
     {
         uint8_t dummy8;
         short dummy16;
         is >> facing >> dummy16 >> inventnum >> dummy16 >> shadow >> dummy8;
 
-        // ignore inventories in old version
-        inventnum = -1;
-
-        // sector will set old-style indexes after object is loaded
-        mapindex = -1;
+        inventnum = -1;     // ignore inventories in old versions
+        mapindex = -1;      // the sector sets old-style indexes after the load
     }
     else
     {
         int32_t loaded_mapindex = -1;
         is >> inventnum >> invindex >> shadow >> rotatex >> rotatey >> rotatez >> loaded_mapindex;
-        // Route through SetMapIndex so the MapPane mapindex→instance registry
-        // picks up every streamed-in instance; TSafeRef<T>::Get() relies on it.
+        // Through SetMapIndex so the mapindex registry sees every streamed-in
+        // instance; TSafeRef<T>::Get() relies on it.
         SetMapIndex(loaded_mapindex);
     }
-    // Streamed-in rotatex / rotatey / rotatez (or facing for v<3) bypass
-    // the SetRotate* setter paths, so re-sync transform_'s rotation from
-    // the freshly-loaded triple here.
+    // The rotation fields bypass the SetRotate* setters, so re-sync
+    // transform_'s rotation from them.
     SyncTransformRot();
-    moveangle = rotatez;    // Set movement angle
+    moveangle = rotatez;
 
-    if (version < 5)  // Set up empty stat array and stick health in it
+    if (version < 5)  // Empty stat array with health stuck in it
     {
         frame = 0;
         framerate = 1;
@@ -2464,49 +2823,53 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
     }
     else
     {
-        if (version >= 6)
-        {
-            if (flags & OF_ANIMATE)
-                is >> frame >> framerate;   // Save framerate and frame if animating
-        }
-        else
-            is >> frame >> framerate;       // Version 5, always save
+        if (version < 6 || (flags & OF_ANIMATE))
+            is >> frame >> framerate;
 
         is >> group;
 
-      // Sure stat storage is inefficient, but it's only for a few objects in the game
         if (cl->NumObjStats() > 0)
             stats.SetNumItems(cl->NumObjStats());
 
+        // Each saved stat is matched to the class's stats by unique id (the
+        // saved id carries bit 7 in every byte); the slow path searches every
+        // class stat, so stats survive a reordered class.def.
+        constexpr uint32_t kStatIdMask = 0x7f7f7f7f;
         uint8_t numstats;
         is >> numstats;
-        if (numstats > 0)   // Note: oridnary tiles can't have stats..
+        int32_t statid = 0;
+        for (int32_t st = 0; st < numstats && statid < stats.NumItems(); st++)
         {
-            int32_t statid = 0;
-            for (int32_t st = 0; st < numstats && statid < stats.NumItems(); st++)
-            {
-                int32_t stat;
-                uint32_t uniqueid;
-                is >> stat >> uniqueid;
+            int32_t stat;
+            uint32_t uniqueid;
+            is >> stat >> uniqueid;
+            uniqueid &= kStatIdMask;
 
-              // Note: to allow us to change the stats for characters,
-              // we check the unique id of the stat and match it to our object stat array
-                if (uniqueid == cl->ObjStatUniqueId(statid))
+            if (uniqueid == cl->ObjStatUniqueId(statid))
+            {
+                stats[statid] = stat;
+                statid++;
+            }
+            else
+            {
+                for (int32_t c = 0; c < cl->NumObjStats(); c++)
                 {
-                    stats[statid] = stat;   // Quick case, id's all match
-                    statid++;
-                }
-                else                
-                {                           // Slow case.. search for id for stat
-                    for (int32_t c = 0; c < cl->NumObjStats(); c++)
-                    {
-                        if (uniqueid == cl->ObjStatUniqueId(statid))
-                            stats[c] = stat;
-                    }
+                    if (uniqueid == cl->ObjStatUniqueId(c))
+                        stats[c] = stat;
                 }
             }
         }
 
+        // An object untouched since it was placed takes its type's current
+        // stats; only its health, fatigue and mana (stats 3-5) are its own.
+        if (flags & OF_VIRGIN)
+        {
+            for (int32_t c = 0; c < cl->NumObjStats(); c++)
+            {
+                if (c < kFirstKeptStat || c > kLastKeptStat)
+                    ResetObjStat(c);
+            }
+        }
     }
 
     if (flags & OF_LIGHT)
@@ -2523,56 +2886,68 @@ void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion
         FatalError("Bad object class!"); // This should never happen!!
     inf = cl->GetObjType(objtype);
 
-  // Initialize the script (no tiles for efficiency)
-    if (objclass != OBJCLASS_TILE)
-        InitScript(ScriptManager.ObjectScript(this));
+  // Any script the object had goes; the right one is attached below
+    delete script;
+    script = nullptr;
 
   // Reset inventory
     if (this == Inventory.GetContainer())
         Inventory.Update();
+
+  // Flags retail settles once the object is loaded
+    if (version < 12)
+        flags &= ~(OF_DRAWFLIP | OF_VIRGIN | OF_LOADING | OF_INVULNERABLE | OF_BACKGROUND |
+                   OF_INVENTORY | OF_CALLEDPREDEL);
+    flags &= ~OF_LOADING;
+    if (objclass == OBJCLASS_TILE && (flags & OF_LIGHT))
+        flags &= ~OF_PULSE;
+    if (flags & OF_INVENTORY)
+        flags |= OF_ANIMATE | OF_PULSE;
+
+  // The script, now that the name and flags are final
+    if (CanHaveScript())
+        InitScript(ScriptManager.ObjectScript(this));
 }
 
+// REVSYNC: TObjectInstance::Save @ 0x00472980 (vtable slot 0x164).
+// Byte-symmetric with Load above (SAVE_GAME.md §11.2).
 void TObjectInstance::Save(RTOutputStream os)
 {
     if (flags & OF_LIGHT)
         flags |= OF_PULSE | OF_ANIMATE;
 
-    uint8_t len = strlen(name);
+    // Only a renamed instance stores its name, each byte with bit 7 set.
+    const bool renamed = name && inf && inf->name && strcmp(name, inf->name) != 0;
+    const uint8_t len = renamed ? (uint8_t)std::min<size_t>(strlen(name), 255) : 0;
     os << len;
     for (int32_t i = 0; i < len; i++)
-        os << name[i];
-  
-  // Save general object data
+        os << (uint8_t)(name[i] | kNameByteFlag);
+
     os << flags << pos.x << pos.y << pos.z;
-    
+
     if (!(flags & OF_IMMOBILE))
         os << vel.x << vel.y << vel.z;
-    
+
     os << state;
 
-  // Non map objects (i.e. players) store their level
-  // Players are stored in the save game file, and not in the map, so we need to know what
-  // level to put them in when we load them
     if (flags & OF_NONMAP)
         os << level;
-        
-    os << inventnum << invindex << shadow << 
-        rotatex << rotatey << rotatez << mapindex;
-        
+
+    os << inventnum << invindex << shadow <<
+        rotatex << rotatey << rotatez << FileMapIndex();
+
     if (flags & OF_ANIMATE)
         os << frame << framerate;
-        
+
     os << group;
 
-  // Save object specific stats (unique id is <=4 char code like "AMT", "TYPE", "AC")
-  // Now I've got to say that the unique id thing is just pretty damn cool.  That's one
-  // super tricky bit of coding there boy... wow.. what an idea.  Super groovy and all
-  // that.  
+    // Object stats with their unique ids (<=4 char codes like "AMT",
+    // "TYPE", "AC"), each id byte with bit 7 set.
+    constexpr uint32_t kStatIdFlag = 0x80808080;
     os << (uint8_t)(cl->NumObjStats());
     for (int32_t c = 0; c < cl->NumObjStats(); c++)
-        os << stats[c] << cl->ObjStatUniqueId(c);
+        os << stats[c] << (uint32_t)(cl->ObjStatUniqueId(c) | kStatIdFlag);
 
-  // Save light data
     if (flags & OF_LIGHT)
         os << lightdef.flags << lightdef.pos.x << lightdef.pos.y << lightdef.pos.z <<
             lightdef.color.red << lightdef.color.green << lightdef.color.blue <<
@@ -2611,9 +2986,9 @@ void TObjectInstance::SetFlag(const char *flagname, bool on)
         return;
 
     if (on)
-        ResetFlags(flags | (1 << flagnum));
+        ResetFlags(flags | (1u << flagnum));
     else
-        ResetFlags(flags & (~(1 << flagnum)));
+        ResetFlags(flags & ~(1u << flagnum));
 }
 
 bool TObjectInstance::IsFlagSet(const char *flagname) const
@@ -2622,7 +2997,7 @@ bool TObjectInstance::IsFlagSet(const char *flagname) const
     if (flagnum < 0)
         return false;
 
-    return (flags & (1 << flagnum)) != 0;
+    return (flags & (1u << flagnum)) != 0;
 }
 
 void TObjectInstance::ResetFlags(uint32_t newflags)
@@ -2648,23 +3023,34 @@ void TObjectInstance::ResetFlags(uint32_t newflags)
 
 // ----------------- Object Instance Statistic Functions --------------
 
+// REVSYNC: 0x00473600 -- an object stat through GetObjStat (a player's
+// modified copy), a class stat directly.
 int32_t TObjectInstance::GetStat(const char *statname) const
 {
     int32_t statid = cl->FindObjStat(statname);
     if (statid >= 0)
-        return stats[statid];
+        return GetObjStat(statid);
     statid = cl->FindStat(statname);
     if (statid >= 0)
         return cl->GetStat(objtype, statid);
     return 0;
 }
 
+// REVSYNC: 0x00473900 -- the lookup GetStat(name) makes, answering whether it
+// would find anything.
+bool TObjectInstance::HasStat(const char *statname) const
+{
+    return cl->FindObjStat(statname) >= 0 || cl->FindStat(statname) >= 0;
+}
+
+// REVSYNC: 0x004736f0 -- an object stat through SetObjStat. Not ported:
+// the stat-changed notification (vtable +0xd0) retail sends on a change.
 void TObjectInstance::SetStat(const char *statname, int32_t value)
 {
     int32_t statid = cl->FindObjStat(statname);
     if (statid >= 0)
     {
-        stats[statid] = value;
+        SetObjStat(statid, value);
         return;
     }
     statid = cl->FindStat(statname);
@@ -2689,6 +3075,62 @@ int32_t TObjectInstance::GetStat(const char *statname, char *str, int32_t id) co
     return GetStat(statname);
 }
 
+// A name as the stat sheet shows it: the dialog line tagged with the
+// prefix plus the name's letters and digits, else the name itself.
+static void LocalizedName(const char *prefix, const char *name, char *buf, int32_t buflen)
+{
+    char tag[MAXNAMELEN + 8];
+    int32_t len = snprintf(tag, sizeof(tag), "%s", prefix);
+    for (const char *c = name; c && *c && len < int32_t(sizeof(tag)) - 1; ++c)
+        if (isalnum((unsigned char)*c))
+            tag[len++] = *c;
+    tag[len] = '\0';
+    // Retail (0x00472f80) takes a "[TAG]" answer as a miss.
+    const char *line = DialogList.GetLine(tag);
+    snprintf(buf, buflen, "%s", line[0] != '[' ? line : (name ? name : ""));
+}
+
+// REVSYNC: TObjectInstance::GetFieldText = retail vtable +0xc8, 0x00472f80.
+// Not ported: "statmod" (the equipped-modifier list through the player's
+// +0xec iterator); it answers "no such field", as retail does for any name
+// it doesn't know.
+bool TObjectInstance::GetFieldText(const char *field, char *buf, int32_t buflen)
+{
+    if (!field || !buf || buflen <= 0)
+        return false;
+    buf[0] = '\0';
+
+    if (stricmp(field, "name") == 0 || stricmp(field, "objtype") == 0)
+    {
+        LocalizedName("", GetTypeName(), buf, buflen);
+        return true;
+    }
+    if (stricmp(field, "objclass") == 0)
+    {
+        LocalizedName("CLASS", GetClassName(), buf, buflen);
+        if (buf[0])
+            for (char *c = buf + 1; *c; ++c)        // retail _strlwr(buf + 1)
+                *c = char(tolower((unsigned char)*c));
+        return true;
+    }
+    if (stricmp(field, "statmod") == 0)
+        return false;
+    if (stricmp(field, "experience") == 0)
+    {
+        // What overcoming this character is worth to the main player (0x0051a5b0).
+        const int32_t value = (ObjClass() == OBJCLASS_CHARACTER && Player)
+            ? Player->KillExp(GetStat("Value")) : 0;
+        snprintf(buf, buflen, "%d", value);
+        return true;
+    }
+
+    // Any other field is the object or class stat of that name.
+    if (cl->FindObjStat(field) < 0 && cl->FindStat(field) < 0)
+        return false;
+    snprintf(buf, buflen, "%d", GetStat(field));
+    return true;
+}
+
 // Plays a sound at the given object position
 bool TObjectInstance::PlayWave(char *soundname, int32_t nr, int32_t volume, int32_t freq)
 {
@@ -2699,7 +3141,12 @@ bool TObjectInstance::PlayWave(char *soundname, int32_t nr, int32_t volume, int3
 
     int32_t id = SoundPlayer.FindSound(soundname, nr);
     if (id < 0)
+    {
+        log_trace("[sound] %s: no sound '%s'", GetName(), soundname);
         return false;
+    }
+    log_trace("[sound] %s plays %s (%d ms)", GetName(), SoundPlayer.GetRef(id)->file.c_str(),
+              SoundPlayer.SampleLengthMs(id));
     if (!SoundPlayer.Mount(id))
         return false;
     SoundPlayer.Play(id, volume, freq, &p);
@@ -2890,7 +3337,7 @@ bool TObjectClass::RemoveType(int32_t objtype)
     return true;
 }
 
-TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef)
+TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef, int32_t imageryid)
 {
     if (objectdef->pos.x < 0)
         objectdef->pos.x = 0;
@@ -2905,13 +3352,16 @@ TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef)
     if (!objinfo[objectdef->objtype].objbuilder)
         return nullptr;
 
-    objinfo[objectdef->objtype].imagery = TObjectImagery::LoadImagery(objinfo[objectdef->objtype].imageryid);
-
-    if (!objinfo[objectdef->objtype].imagery)
+    SObjectInfo& info = objinfo[objectdef->objtype];
+    TObjectImagery* imagery = nullptr;
+    if (imageryid < 0)
+        imagery = info.imagery = TObjectImagery::LoadImagery(info.imageryid);
+    else
+        imagery = TObjectImagery::LoadImagery(imageryid);
+    if (!imagery)
         return nullptr;
 
-    TObjectInstance* inst = objinfo[objectdef->objtype].objbuilder->Build(objectdef,
-        objinfo[objectdef->objtype].imagery);
+    TObjectInstance* inst = info.objbuilder->Build(objectdef, imagery);
 
     if (objectdef->objclass == OBJCLASS_TILE || objectdef->objclass == OBJCLASS_EXIT)
         inst->SetFlags(OF_IMMOBILE);
@@ -3263,13 +3713,18 @@ void TObjectClass::CopyStats(const TObjectClass* from)
 
 // -------------------- Statistic Functions ----------------------
 
+// REVSYNC: LoadClasses @ 0x00476140 — class.def from ImageryPath when it has
+// one (imagery.rvi does), else ClassDefPath. The editor's lock mode opens the
+// ClassDefPath copy for writing, as before.
 bool TObjectClass::LoadClasses(bool lock, bool reload)
 {
-    char fname[MAXPATHLEN];
     FILE *classfp;
     struct stat st;
 
-    sprintf(fname, "%sclass.def", ClassDefPath);
+    const std::string fname_str =
+        lock ? std::string(ClassDefPath) + "class.def"
+             : rev_first_existing(ImageryPath, ClassDefPath, "class.def");
+    const char *fname = fname_str.c_str();
 
     classfp = TryOpen(fname, lock ? "w+" : "r");
     if (classfp == nullptr)
@@ -3341,6 +3796,9 @@ bool TObjectClass::LoadClasses(bool lock, bool reload)
         fclose(classfp);
 
     classesdirty = false;
+
+  // The rules' CHARACTERs take their object types by name (retail 0x0047654f).
+    Rules.BindTypes();
 
     return true;
 }
@@ -3818,7 +4276,7 @@ uint32_t GenerateUniqueID()
 {
     uint32_t UniqueID;
     uint32_t r = (uint32_t)random(0, 255);
-    uint32_t t = tickcount() & 255;
+    uint32_t t = GameTickCount() & 255;
 
     UniqueID = (r << 24) | (t << 16) | UniqueTypeID;
 

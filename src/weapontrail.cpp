@@ -4,16 +4,14 @@
 // *           weapontrail.cpp - parked weapon-swipe code                 *
 // *************************************************************************
 //
-// TODO(weapontrail): re-implement as TWeaponTrailComponent picked up by
-// the renderer's submit pass. The legacy code below is the 1998-era
-// strip renderer (TWeaponSwipe + TCharAnimator weapon-extents helpers)
-// pulled out of charanimator.{h,cpp} when TCharAnimator stopped owning
-// rendering. It is gated under `#if 0` so this file builds as nothing,
-// and the migration target is local: lift the math identified below
-// into a TObjectComponent that the character/player attaches, with the
-// renderer emitting a strip drawable from its ring buffer.
+// The shipped swipe is ported from the retail executable: weaponswipe.{h,cpp}
+// and TCharAnimator's SetupWeaponSwipe / UpdateWeaponSwipe / SubmitFx
+// (docs/gameplay/forensics/COMBAT_EFFECTS.md §6). It differs from this
+// 1998 snapshot (no colour normalisation, alpha 0.7, shrinking samples, a
+// reset at the attack's swipe window, the strip from the second sample).
+// The snapshot is kept below, gated under `#if 0`, for reference.
 //
-// What carries over to the new TWeaponTrailComponent:
+// The plan this file was parked with (superseded by the retail port):
 //   * GetWeaponImagery / GetWeaponNum -- find the equipped weapon's
 //     mesh + objnum on the character.
 //   * GetWeaponVertices / GetWeaponNumVerts -- pull the vertex array

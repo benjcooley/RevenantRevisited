@@ -11,19 +11,25 @@
 #include <cinttypes>
 #include <cstddef>
 #include <cstdlib>
+#include <type_traits>
 
-#ifdef min
-#undef min
-#undef max
-#endif
+// The 1998 code calls min/max unqualified on mixed operand types (int with
+// long, float with int). These keep that, and the old macros' exact
+// comparisons (ties, NaN and signed zero pick the same operand): the operands
+// meet in their common type, as the macros' ?: did. Functions, not macros, so
+// they leave alone the min/max members of standard headers that libstdc++
+// and the MSVC STL (unlike libc++) don't shield from macros.
+template <typename A, typename B>
+constexpr std::common_type_t<A, B> min(A a, B b)
+{
+    return a < b ? a : b;
+}
 
-#define max(a,b)    (((a) > (b)) ? (a) : (b))
-#define min(a,b)    (((a) < (b)) ? (a) : (b))
-
-#ifndef _SIZE_T
-#define _SIZE_T
-typedef unsigned size_t;
-#endif
+template <typename A, typename B>
+constexpr std::common_type_t<A, B> max(A a, B b)
+{
+    return a > b ? a : b;
+}
 
 /*
  * Virtual Keys, Standard Set
@@ -172,6 +178,8 @@ class OFFSET
       { if (p) offset = ((ptrdiff_t)p - (ptrdiff_t)this); else offset = 0; }
     void *ptr()
       { return offset ? (void *)((ptrdiff_t)this + offset) : nullptr; }
+    const void *ptr() const
+      { return offset ? (const void *)((ptrdiff_t)this + offset) : nullptr; }
     OFFSET &operator = (uint32_t l)
       { offset = l; return *this; }
     OFFSET &operator = (OFFSET &o)
@@ -1154,7 +1162,6 @@ _CLASSDEF(TFont)
 _CLASSDEF(TGenericFont)
 _CLASSDEF(TFontTable)
 _CLASSDEF(TGameState)
-_CLASSDEF(THealthBar)
 _CLASSDEF(TImageryBuilder)
 _CLASSDEF(TInputStream)
 _CLASSDEF(TInventory)
@@ -1196,7 +1203,6 @@ _CLASSDEF(TSoundPlayer)
 _CLASSDEF(TSprite)
 _CLASSDEF(TSpriteList)
 _CLASSDEF(TStatPane)
-_CLASSDEF(TStaminaBar)
 _CLASSDEF(TStream)
 _CLASSDEF(TSurface)
 _CLASSDEF(TChunkCache)

@@ -1,5 +1,21 @@
 # VFX Restoration
 
+**Current validation workflow (2026-10-11):** all new VFX validation uses the
+in-process retail emulator. Keep original software-device failures explicit;
+use private, hash-pinned modified retail builds or qualified device fixtures
+when a demonstrated renderer/resource defect prevents a useful reference.
+Use [the active A/B guide](../RETAIL_AB_TESTING.md)
+and [private named builds/parallel sessions](../../tools/retail_runtime/README-parallel.md).
+Prioritize fast, repeatable tests; record known software-renderer limits
+separately from effect behavior. Historical capture evidence below is retained.
+
+**Current acceptance ledger (2026-10-04):** start with
+[EFFECT_BURNDOWN.md](EFFECT_BURNDOWN.md) and its
+[machine-readable ledger](EFFECT_BURNDOWN.json). They preserve all 176 shipped
+EFFECT type rows and separate source/preview progress from retail fidelity and
+real runtime integration. The phase plan and May bring-up state below are
+historical; their standalone scope and counts do not define current completion.
+
 Operational plan for restoring all of Revenant's visual effects — spell
 effects, combat slashes & hit flashes, blood, fire/flame, teleport, environment
 — in the modern renderer, validated through a dedicated `--test=vfx` harness.

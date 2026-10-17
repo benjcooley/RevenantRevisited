@@ -9,6 +9,7 @@
 #include "revenant.h"
 #include "textbar.h"
 #include "complexobj.h"
+#include "playscreen.h"
 
 //#define SHOWSTATES
 
@@ -54,6 +55,7 @@ void TActionBlock::ClearBlock()
     data = nullptr;
     flags = 0;
     damage = 0;
+    tohit = roll = 0;
     firsttime = true;
     attack = nullptr;
     impact = nullptr;
@@ -176,7 +178,7 @@ bool TActionBlock::IsPartOf(const char *prefix, const char *state) const
     if (state)
         sprintf(stnamebuf, "%s%s*", prefix, state);
     else
-        sprintf(stnamebuf, "%s*", prefix, state);
+        sprintf(stnamebuf, "%s*", prefix);
     return Is(stnamebuf);
 }
 
@@ -206,43 +208,48 @@ void TComplexObject::ClearComplexObj()
     state = FindState(root->name);
 }
 
+// REVSYNC: TComplexObject::Pulse @ 0x004db190 -- a state set without its
+// transition (forced) drops that mark and the transition mark once its
+// animation reaches frame 5; then UpdateAction with the last Move's bits.
 void TComplexObject::Pulse()
 {
     if (UpdatingBoundingRect)
         return;
 
+    if (doing->forced && frame >= 5)
+    {
+        doing->forced = false;
+        doing->transition = false;
+    }
     UpdateAction(GetMoveBits());        // Update current state given current movement flags
 }
 
+// REVSYNC: TComplexObject::UpdateAction @ 0x004db1d0 -- the doing block's
+// resolver, else done when the animation is; a done block loses priority.
+// Then the desired block is tried; done or impossible (or no desired block,
+// or the root), it is let go and the root tried. (Retail frees the desired
+// block here and again in SetDesired; SetDesired alone frees it here.)
 void TComplexObject::UpdateAction(int32_t bits)
 {
     int32_t comstate = ResolveAction(bits);
-
-    if (comstate == 0)
-        comstate = commanddone ? COM_COMPLETED : COM_EXECUTING;
+    if (comstate == COM_DONE)
+        comstate = commanddone ? COM_DONE : COM_EXECUTING;
 
     if (doing)
     {
-        // check firsttime (first frame) and priority (on completion)
-        if (doing->firsttime)
-            doing->firsttime = false;
-
-        if (comstate == COM_COMPLETED && doing->priority)
+        doing->firsttime = false;
+        if (comstate == COM_DONE)
             doing->priority = false;
     }
 
-    if (desired)
+    if (desired && desired != root)
+        comstate = TryCommand(desired, bits, 0);
+    else if (desired)
+        comstate = COM_DONE;
+    if (comstate == COM_DONE || comstate == COM_IMPOSSIBLE)
     {
-        if (desired == root)
-            comstate = COM_COMPLETED;
-        else
-            comstate = TryCommand(desired, bits);
-    }
-
-    if (comstate == COM_COMPLETED || comstate == COM_IMPOSSIBLE)
-    {
-        SetDesired(nullptr);
-        TryCommand(root);
+        SetDesired(nullptr, 0);
+        TryCommand(root, 0, 0);
     }
 }
 
@@ -254,6 +261,9 @@ int32_t TComplexObject::ResolveAction(int32_t bits)
     return 0;
 }
 
+// REVSYNC: SetRoot @ 0x004db2d0 -- not a `noroot` block (+0x60 & 0x400); the
+// old root freed unless doing or desired holds it; the root can always be
+// interrupted out of (nowaitdone) and interrupts nothing.
 void TComplexObject::SetRoot(PTActionBlock ab)
 {
     if (ab->noroot)
@@ -270,6 +280,8 @@ void TComplexObject::SetRoot(PTActionBlock ab)
     root->interrupt = false;    // We don't ever interrupt another state
 }
 
+// REVSYNC: SetDoing @ 0x004db340 -- the old doing block freed unless the root
+// or desired holds it; the root's interrupt mark cleared.
 void TComplexObject::SetDoing(PTActionBlock ab)
 {
     if (ab != doing)
@@ -277,18 +289,47 @@ void TComplexObject::SetDoing(PTActionBlock ab)
         if (doing && doing != root && doing != desired && doing != ab)
             delete doing;
         doing = ab;
+        doingsince = PlayScreen.GameFrame();
     }
     root->interrupt = false;    // Now that we're doing, don't interrupt
 }
 
-void TComplexObject::SetDesired(PTActionBlock ab)
+// REVSYNC: 0x004111a0 (the script's `try`, the bosses' wants) -- an ANIMATE
+// block of `state` facing the facing, desired; refused, it is dropped.
+void TComplexObject::Try(const char *state)
+{
+    auto* ab = new TActionBlock(state, ACTION_ANIMATE);
+    ab->angle = GetFace();
+    if (!SetDesired(ab, 0))
+        DropUnheld(ab);
+}
+
+// REVSYNC: 0x00429990 (the script's `force`, the bosses) -- nothing while the
+// doing block has priority over a desired one waiting (COM_EXECUTING); else
+// an ANIMATE block of `state` facing the facing, forced. A refused block is
+// dropped, where retail leaks it.
+int32_t TComplexObject::Force(const char *state)
+{
+    if (doing && doing->priority && desired != doing)
+        return COM_EXECUTING;
+    auto* ab = new TActionBlock(state, ACTION_ANIMATE);
+    ab->angle = GetFace();
+    const int32_t result = ForceCommand(ab, 0, 0);
+    DropUnheld(ab);
+    return result;
+}
+
+// REVSYNC: SetDesired @ 0x004db3a0 -- a block already waiting stays while
+// the one being done has priority (retail tests doing's priority; the 1998
+// code tested the waiting block's); false then, and the caller keeps `ab`.
+// An interrupting block is forced at once (ForceCommand with `flags`).
+bool TComplexObject::SetDesired(PTActionBlock ab, uint32_t flags)
 {
     if (ab == nullptr)             // nullptr indicates we want to go back to root
         ab = root;
 
-    if (desired && desired != doing &&  // If we have a priority action, and we aren't already
-        desired->priority)              // playing it, don't replace it.
-            return;
+    if (desired && desired != doing && doing && doing->priority)
+        return false;
 
     if (ab != desired)                  // Set the desired command
     {
@@ -306,13 +347,18 @@ void TComplexObject::SetDesired(PTActionBlock ab)
 
     if (ab->interrupt && doing != ab && !doing->priority) // Interrupt flag means DO IT RIGHT NOW
     {
-        ForceCommand(ab);
+        ForceCommand(ab, 0, flags);
         ab->interrupt = false;
     }
+    return true;
 }
 
-// Have object attempt to move into a new state
-int32_t TComplexObject::TryCommand(PTActionBlock ab, int32_t bits)
+// REVSYNC: TryCommand @ 0x004db450 -- `ab` (the root when null) is started
+// through ForceCommand (vtable +0x218) unless doing has priority and isn't
+// the desired block, and only when the command is done, doing may be cut
+// short (nowaitdone) for another block, or the desired block interrupts;
+// else it waits (COM_EXECUTING).
+int32_t TComplexObject::TryCommand(PTActionBlock ab, int32_t bits, uint32_t flags)
 {
   // Use root if desired is nullptr
     if (ab == nullptr)
@@ -323,14 +369,35 @@ int32_t TComplexObject::TryCommand(PTActionBlock ab, int32_t bits)
         (commanddone || !doing ||                       // Okay, command done, or not doing anything
         (doing && ab != doing && doing->nowaitdone) ||  // Or doing action is nowait action
         (desired && ab != desired && desired->interrupt))) // Or desired action is interrupt
-        return ForceCommand(ab, bits); // Do new state when old one is done (or interrupted)
+        return ForceCommand(ab, bits, flags); // Do new state when old one is done (or interrupted)
     else
         return COM_EXECUTING;   // Otherwise tell program we're still waiting
 }
 
-// Force the object into the given state
-int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits)
+// Force the object into the given state. REVSYNC: retail 0x004db4d0 takes a
+// third argument whose bit 0 (kCommandNoIncidentals) looks every state up
+// with pcnt 100 instead of a random roll: the 100% variant, never an "NN:"
+// incidental. The rest of this body is still the pre-release one.
+// REVSYNC: ForceCommand @ 0x004db4d0 -- start `ab` now (root when null):
+// refused while doing has priority and a block waits; the state is the
+// transition from doing (the root itself for a root-to-root animation going
+// home), else, unless dontforce, forced (flag `forced`): the state, a
+// transition from or to the root, the root's own. With no incidentals
+// (flags & kCommandNoIncidentals) each lookup tries percent 100 first, then
+// a random percent. Then the frame, synchronised frames, the root, and what
+// comes next (itself if it loops or is a root, else the root).
+int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits, uint32_t flags)
 {
+    const bool exact = (flags & kCommandNoIncidentals) != 0;
+    auto state = [&](const char* name) {
+        int32_t s = exact ? FindState(name, 100) : -1;
+        return s >= 0 ? s : FindState(name, -1);
+    };
+    auto transition = [&](const char* from, const char* to) {
+        int32_t s = exact ? FindTransitionState(from, to, 100) : -1;
+        return s >= 0 ? s : FindTransitionState(from, to, -1);
+    };
+
     if (doing && doing->priority && desired != doing)
         return COM_EXECUTING;
 
@@ -343,44 +410,40 @@ int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits)
             desname1, desname2, desname3, desname4);
 #endif
 
-    ab->interrupt = false;  // Now that we've interrupted... set this to false.
+    ab->interrupt = false;
+    ab->transition = false;
+    ab->forced = false;
 
-    int32_t newstate = -1;
-
+    int32_t newstate;
     if (doing == nullptr)
-        newstate = FindState(ab->name);
+        newstate = exact ? FindState(ab->name, 100) : FindState(ab->name, -1);
     else
     {
-      // ROOT2ROOT means don't do a transition back to the root state because the 
-      // transition TO animation (i.e. "walk to say") has the transition BACK animation
-      // in it already (has "say to walk" in it).  If current animation is root2root, and user
-      // actually wants to go back to the root, don't bother looking for a transition ani,
-      // just set directly back to root..
+      // ROOT2ROOT: the transition into this animation already brings it home,
+      // so going back to the root needs no transition of its own.
         if ((GetAniFlags() & AF_ROOT2ROOT) && desired && desired == root)
         {
-            ab = root; // Return back too root right now
-            newstate = FindState(ab->name);
+            ab = root;
+            newstate = exact ? FindState(ab->name, 100) : FindState(ab->name, -1);
         }
         else
+            newstate = exact ? FindTransitionState(doing->name, ab->name, 100)
+                             : FindTransitionState(doing->name, ab->name, -1);
+
+        ab->transition = stricmp(doing->name, ab->name) != 0;
+        if (newstate < 0)
         {
-      // Try to find a transition from the current action to the new action.  If we can't
-      // find one, we will just force it (see below).
-            newstate = FindTransitionState(doing->name, ab->name);
+            if (ab->dontforce)
+                return COM_IMPOSSIBLE;
+            ab->forced = ab->transition;
+            newstate = state(ab->name);
+            if (newstate < 0)
+                newstate = transition(root->name, ab->name);
+            if (newstate < 0)
+                newstate = transition(ab->name, root->name);
+            if (newstate < 0)
+                newstate = transition(root->name, root->name);
         }
-
-      // Can't find a transition, well then we go ahead and force it... 
-        if (newstate < 0 && !ab->dontforce)
-        {   
-          // One of these things is bound to work!!
-          newstate = FindState(ab->name);   // Use end state name
-          if (newstate < 0)
-            newstate = FindTransitionState(root->name, ab->name);  // Try transition from root
-          if (newstate < 0)
-            newstate = FindTransitionState(ab->name, root->name);  // Try transition to root
-        }
-
-        // flag transition if the two states aren't the same
-        ab->transition = (stricmp(doing->name, ab->name) != 0);
     }
 
     if (newstate < 0)
@@ -396,15 +459,12 @@ int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits)
         ab->frame = -1;
     }
 
-
-  // If the sychronize flag is set, synchronize frames with 'obj'.
-  // Use for block/impact animations which must match the frame number of an associated
-  // opponents attack animation.  Useful for any other synchronized animations as well.
+  // Synchronise with the opponent's animation (block / impact to an attack).
     if (ab->obj && GetAniFlags() & AF_SYNCHRONIZE)
         SetFrame(ab->obj->GetFrame() + 1);
 
   // Make this block the root block if current or next animation is a root animation
-    uint32_t nextaniflags = imagery ? imagery->GetAniFlags(FindState(ab->name)) : 0;
+    uint32_t nextaniflags = imagery ? imagery->GetAniFlags(exact ? FindState(ab->name, 100) : FindState(ab->name, -1)) : 0;
     if ((GetAniFlags() & AF_ROOT || nextaniflags & AF_ROOT) && !ab->noroot)
         SetRoot(ab);
 
@@ -420,13 +480,13 @@ int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits)
     return COM_EXECUTING;
 }
 
-// Loads object data from the sector
+// REVSYNC: TComplexObject::Load @ 0x004db930 (SAVE_GAME.md §11.3).
 void TComplexObject::Load(RTInputStream is, int32_t version, int32_t objversion)
 {
+    uint8_t basever = 0;
     if (objversion >= 1)
-        LOAD_BASE(TObjectInstance)
-    else
-        TObjectInstance::Load(is, version, 0);
+        is >> basever;
+    TObjectInstance::Load(is, version, basever);
 
   // Load root state
     PTActionBlock ab;
@@ -437,34 +497,53 @@ void TComplexObject::Load(RTInputStream is, int32_t version, int32_t objversion)
     else
     {
         uint8_t action;
-        char name[RESNAMELEN];
         is >> action;
-        is >> name;
-        ab = new TActionBlock(name, (ACTION)action);
+        const std::string rootname = is.ReadString();
+        ab = new TActionBlock(rootname.substr(0, RESNAMELEN - 1).c_str(), (ACTION)action);
+    }
+
+  // REVSYNC-DIVERGENCE: a root that names no state of the model can never be
+  // entered. Every ForceCommand back to it is impossible, so a speaker who
+  // finishes a line stays in "say" and the script's speech wait never ends.
+  // The shipped level-46 map saves Shegra and the slaves with a "combat" root
+  // their walk-and-say models lack (docs/gameflow/forensics/DIALOG.md §2.5).
+  // Such a root becomes the default one, else "walk", as a plain animation
+  // block like the one Clear builds.
+    if (imagery && !imagery->HasState(ab->name))
+    {
+        const char* fallback = imagery->HasState(DefaultRootState()) ? DefaultRootState() : "walk";
+        if (imagery->HasState(fallback))
+        {
+            delete ab;
+            ab = new TActionBlock(fallback);
+        }
     }
 
     SetRoot(ab);
     SetDoing(ab);
     SetDesired(ab);
+
+  // Keep the saved state when it is the root's own (an animation state is
+  // named "<group>:<name>"); otherwise start the root.
+    if (const char* statename = imagery ? imagery->GetAniName(state) : nullptr)
+    {
+        if (const char* colon = strchr(statename, ':'))
+            statename = colon + 1;
+        if (stricmp(ab->name, statename) == 0)
+            return;
+    }
     state = FindState(ab->name);
 }
 
-// Saves object data to the sector
+// REVSYNC: TComplexObject::Save @ 0x004dbb80.
 void TComplexObject::Save(RTOutputStream os)
 {
-    SAVE_BASE(TObjectInstance)
+    os << (uint8_t)TObjectInstance::ObjVersion();
+    TObjectInstance::Save(os);
 
   // Save root state
     os << (uint8_t)root->action;
-    uint8_t len = (uint8_t)strlen(root->name);
-    os << len;
-    char *p = root->name;
-    while (len)
-    {
-        os << (*p);
-        p++;
-        len--;
-    }
+    os << root->name;
 }
 
 void TComplexObject::Notify(int32_t notify, void *ptr)

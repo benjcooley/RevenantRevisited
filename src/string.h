@@ -14,7 +14,7 @@
 #include <functional> // For hash
 #include <algorithm>  // For std::tolower
 
-constexpr size_t FLAG_DELETABLE = 1UL << (sizeof(size_t) * 8 - 1);
+constexpr size_t FLAG_DELETABLE = size_t{1} << (sizeof(size_t) * 8 - 1);
 constexpr size_t MAX_SIZE = ~FLAG_DELETABLE;
 
 class TString

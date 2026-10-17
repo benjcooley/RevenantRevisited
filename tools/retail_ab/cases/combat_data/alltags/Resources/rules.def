@@ -1,0 +1,64 @@
+// Combat dojo kata D1 edge case: every rules.def tag and value form the
+// shipped rules.def doesn't reach (tools/retail_ab/targets_data.py).
+
+#define WM_HAND		0x0001
+#define WM_BLUDGEON	0x0008
+#define WM_BOW		0x0040
+#define WM_CROSSBOW	0x0080
+
+DAYLENGTH 72000
+TWILIGHT 45, 6
+STEALTH 90, 40, 5
+HEALTHDATA 20, 2, 3000
+FATIGUEDATA 4, 12, 80
+MANADATA 22, 3, 5000
+AMMODATA 18, 5, 3, 2		// four values; the fifth keeps its default
+POISONDATA 7, 90
+TOHITCENTER 55
+TOHITRANGECHAR 11
+TOHITRANGEPLYR 9
+TOHITBLOCK 20
+TOHITFACE 30
+
+TOHITDAMAGE
+BEGIN
+	// MinValue DamagePercent
+	ENTRY	45	55
+	ENTRY	5	5
+	ENTRY	-10	-40
+	ENTRY	-35	-70
+	ENTRY	-55	-95
+END
+
+#define LATEDEFINE 7
+
+// A class with a weapon restriction (an expression of #defines)
+CLASS "Hunter"
+BEGIN
+	STATREQS 10, -5, 0, 12, 0, -8
+	SKILLMODS 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, -11
+	HEALTHMOD LATEDEFINE
+	FATIGUEMOD -3
+	MANAMOD 4
+	WEAPONS WM_BLUDGEON | WM_BOW | WM_CROSSBOW
+END
+
+// A class without WEAPONS (0xffff)
+CLASS "Wanderer"
+BEGIN
+	HEALTHMOD 1
+END
+
+STATLEVEL "Strength"
+BEGIN
+	ENTRY 0 -30
+	ENTRY 1 -25
+	ENTRY 15 0
+	ENTRY 30 40
+	ENTRY 31 99
+END
+
+STATLEVEL "Luck"
+BEGIN
+	ENTRY 2 3
+END

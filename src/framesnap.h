@@ -19,6 +19,9 @@
 //                                 batch starts (<prefix>filmstrip-002.png,
 //                                 <prefix>filmstrip-003.png, ...). Auto
 //                                 mode (DURATION>0) exits after one batch.
+//   --snapcompression=<5..9>    PNG encoding effort; default8 preserves existing
+//                                 captures. Lower levels trade larger files for
+//                                 faster lossless output; decoded pixels match.
 //   --snapprefix=<PREFIX>         prefix for filmstrip output files; lets
 //                                 parallel agents not stomp output, AND
 //                                 subfolder under filmstrips/ so the
@@ -56,6 +59,10 @@ struct SConfig {
     std::string out_path;                // --snap path or filmstrip basename
     std::string prefix;                  // --snapprefix value
     int32_t     warmup_frames = 6;       // discard frames before first capture
+    double      fixed_step_sec = 0.0;   // --snapstep; 0 keeps the live clock
+    bool        seed_set = false;      // --snapseed; repeatable port captures
+    uint32_t    seed = 0;
+    int32_t     png_compression = 8; // stb default; optional faster lossless encoding
 
     // --snaprect=x,y,w,h — capture only this subrect of the display.
     // (-1, -1, -1, -1) means "whole display".
@@ -95,7 +102,12 @@ void TickAfterRender();
 // Returns true if a capture happened this call, false otherwise.
 bool TriggerSnapshot(const char* label = nullptr);
 
-// Internal: write a single RGBA8 image to disk via stb_image_write.
-bool WritePngRGBA(const char* path, int32_t w, int32_t h, const uint8_t* pixels);
+// Write a single RGBA8 image to disk. `compression` is zlib's level, the
+// config's png_compression (--snapcompression) when left out: 8,
+// stb_image_write's default, makes small files; 1 or less writes about ten
+// times faster through miniz (a frame every tick).
+constexpr int32_t kConfiguredCompression = -1;
+bool WritePngRGBA(const char* path, int32_t w, int32_t h, const uint8_t* pixels,
+                  int32_t compression = kConfiguredCompression);
 
 } // namespace FrameSnap

@@ -8,7 +8,7 @@
 // *  callers still say `MainWindow.Close()` etc. -- but the body no       *
 // *  longer tracks an HWND. Sokol owns the window; we just reflect        *
 // *  lifecycle state the engine cares about. The pre-port Win32 version   *
-// *  is in attic/src/mainwnd_win32.h/.cpp.                                *
+// *  is in git: attic-final:attic/src/mainwnd_win32.h/.cpp.               *
 // *************************************************************************
 
 #pragma once

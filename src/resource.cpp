@@ -15,7 +15,7 @@
 #include <string.h>
 #include <ctype.h>
 
-static inline void strupr(char *s)
+static inline void to_upper_in_place(char *s)
 {
     for (; *s; ++s) *s = (char)toupper((unsigned char)*s);
 }
@@ -65,7 +65,7 @@ void *LoadResource(const char *name, int32_t id, uint32_t *ressize)
             strcat(filename, ".DAT");
     }
 
-    strupr(filename);
+    to_upper_in_place(filename);
 
     FILE *fl = rev_fopen(filename, "rb");
 
@@ -171,7 +171,7 @@ void *LoadResourceHeader(const char *name, int32_t id, uint32_t *ressize)
             strcat(filename, ".DAT");
     }
 
-    strupr(filename);
+    to_upper_in_place(filename);
 
     FILE *fl = rev_fopen(filename, "rb");
 
@@ -317,7 +317,7 @@ bool SaveResourceHeader(const char *name, void *header, int32_t hdrsize, int32_t
             strcat(filename, ".DAT");
     }
 
-    strupr(filename);
+    to_upper_in_place(filename);
 
     FILE *fl = rev_fopen(filename, "rb+");
 

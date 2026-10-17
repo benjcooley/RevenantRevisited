@@ -32,7 +32,7 @@ Read [README.md](README.md) for context. These are the project-wide conventions 
 - **Don't bypass `TRenderer` to draw directly.** UI panes hold data; the renderer owns submission. (Memory: `feedback-centralized-rendering`, `project-renderer-layering`.)
 - **Don't spawn raw `std::thread`** for UI background work. Use the worker abstractions (memory: `feedback-threading`).
 - **Don't bodge.** No "make it work for now." Land code where it belongs (memory: `feedback-no-bodges`).
-- **Don't delete legacy UI code we plan to revive.** Move to `attic/` per [../PORT_PLAN.md §2](../PORT_PLAN.md#2-style-conventions-enforce-for-newtouched-code) or wrap in `#ifdef UNUSED` (memory: `feedback-preserve-old-code`).
+- **Don't delete legacy UI code we plan to revive.** Wrap it in `#ifdef UNUSED` (memory: `feedback-preserve-old-code`). Code that is only retired is deleted; git history keeps it ([../PORT_PLAN.md §2](../PORT_PLAN.md#2-style-conventions-enforce-for-newtouched-code)).
 - **Don't trust the `TScreen` Ghidra labels.** They fail sanity checks (memory: `project-tscreen-unconfirmed`). Verify via decomp source-path fingerprints (memory: `reference-revsync-convention`).
 - **Don't refactor on a sweep.** Cleanup bundles into work in flight only. (memory: `feedback-code-style`.)
 - **Don't introduce removed macros.** `_CLASSDEF`/`_STRUCTDEF`/`_PTRDEF`/`min`/`max` are flagged for retirement; leave alone unless already in the file (PORT_PLAN).

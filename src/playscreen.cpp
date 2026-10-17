@@ -12,7 +12,7 @@
 // they don't fit the new architecture: BITMAP.100 backdrop, DrawOverhangs,
 // the postanim/posttext arrays, and the Pulse/Animate -> Display.Put/ZPut/
 // PutDim/WriteText draw chain. The legacy code is preserved at
-// attic/src/playscreen.cpp for reference.
+// attic-final:attic/src/playscreen.cpp for reference.
 //
 // What survived (often as stubs or shims):
 //  - Game-time tracking (gameframes, gametime, time-of-day curve).
@@ -24,12 +24,25 @@
 //
 // *************************************************************************
 
+#include "combattrace.h"
+#include "testconfig.h"
 #include "playscreen.h"
+#include "shadow/shadowrun.h"
+#include "playerbot.h"
+
+#include "audio_backend.h"
+#include "dialog.h"
 
 #include <cstring>
 
 #include "3dimage.h"
 #include "area.h"
+#include "automap.h"
+#include "bottombar.h"
+#include "buysell.h"
+#include "inventory.h"
+#include "spellpane.h"
+#include "consoleexec.h"
 #include "cursor.h"
 #include "debugui.h"
 #include "display.h"
@@ -38,25 +51,32 @@
 #include "editorstub.h"
 #include "imagery.h"
 #include "imgui.h"
+#include "ingamemenu.h"
 #include "logging.h"
 #include "ctrlmap.h"
 #include "gamemap.h"
+#include "gameoptions.h"
+#include "gameflow.h"
 #include "hudstate.h"
 #include "mapmanager.h"
 #include "mappane.h"
 #include "maprenderer.h"
+#include "risingnumbers.h"
 #include "player.h"
+#include "savegame.h"
 #include "revisited_settings.h"
 #include "runtimemode.h"
-#include "savegame.h"
 #include "sector.h"
+#include "spell.h"
+#include "statusbar.h"
+#include "textbar.h"
 #include "time.h"
 #include "uidragstate.h"
 #include "uiequiptest.h"
 #include "uihudtest.h"
-#include "uiquickspelltest.h"
 #include "uisidebartest.h"
-#include "uispellbooktest.h"
+#include "spellbook.h"
+#include "statpane.h"
 
 #include <vector>
 
@@ -74,179 +94,166 @@ static void GetReconstructedPlayfieldRect(int32_t& x, int32_t& y,
     const int32_t dw = Display.Width()  > 0 ? Display.Width()  : WIDTH;
     const int32_t dh = Display.Height() > 0 ? Display.Height() : HEIGHT;
     constexpr int32_t kSidebarW = 188;
-    constexpr int32_t kBottomBarH = 60;
     x = 0;
     y = 0;
     w = dw - (s.sidebarState == HUD_SIDEBAR_OPEN ? kSidebarW : 0);
-    h = dh - (s.bottomBarOpen ? kBottomBarH : 0);
+    h = dh - PlayScreen.DrawerHeight();
     if (w < 1) w = 1;
     if (h < 1) h = 1;
 }
 
-static bool IsReconstructedHudPoint(int32_t x, int32_t y)
+// Whether (x, y) is off the map pane: over the side panel or the bottom
+// drawer beside it. Retail's map pane is the play field (Pulse 0x0047b4d0
+// sizes it to the display less both), and is offered a press only inside it
+// (TScreen::MouseClick 0x004904dd) and picks its hover cursor only there
+// (TMapPane::Animate 0x004544f6..0x00454527). The panes over the play field
+// (the side tabs, the status bar, the text bar) are inside it.
+static bool IsOffMapPane(int32_t x, int32_t y)
 {
-    const SHudState& s = GetHudState();
-    const int32_t dw = Display.Width()  > 0 ? Display.Width()  : WIDTH;
-    const int32_t dh = Display.Height() > 0 ? Display.Height() : HEIGHT;
-    constexpr int32_t kSidebarW = 188;
-    constexpr int32_t kBottomBarH = 60;
-    constexpr int32_t kTabW = 64;
-    constexpr int32_t kTabH = 240;
-
-    if (s.sidebarState == HUD_SIDEBAR_OPEN && x >= dw - kSidebarW)
-        return true;
-    if (s.bottomBarOpen && y >= dh - kBottomBarH)
-        return true;
-
-    int32_t playfieldX = 0, playfieldY = 0, playfieldW = 0, playfieldH = 0;
-    GetReconstructedPlayfieldRect(playfieldX, playfieldY, playfieldW, playfieldH);
-    const int32_t playfieldRight = playfieldX + playfieldW;
-    const int32_t playfieldBottom = playfieldY + playfieldH;
-    return x >= playfieldRight - kTabW && x < playfieldRight &&
-           y >= playfieldBottom - kTabH && y < playfieldBottom;
+    int32_t px = 0, py = 0, pw = 0, ph = 0;
+    GetReconstructedPlayfieldRect(px, py, pw, ph);
+    return x < px || y < py || x >= px + pw || y >= py + ph;
 }
 
-// Default game controls. Mirrors the retail table from
-// attic/src/playscreen.cpp. Mode flags differ per binding: directional
-// keys are ALLMODES (work in walk / combat / bow / sneak), combat
-// strikes only fire in CTRL_COMBATMODE, etc. Mode bits live in the
-// ControlMap and gate which command a key generates -- the retail
-// values matter once the mode-switching is wired through ControlMap.
+// The control modes a binding works in (retail's mode bits).
 static constexpr uint32_t CTRL_NORMALMODE    = 1;
 static constexpr uint32_t CTRL_COMBATMODE    = 2;
 static constexpr uint32_t CTRL_BOWMODE       = 4;
 static constexpr uint32_t CTRL_SNEAKMODE     = 8;
-static constexpr uint32_t CTRL_INVENTORYMODE = 16;
 
+// REVSYNC: retail's control table 0x005d5500 (69 entries of 0x4c, count at
+// 0x005d697c): the order, names, INI ids ([Controls]), modes and default
+// keys as the release builds them -- what the Options pane lists and the
+// shipped Revenant.ini binds. Each control's command is the port's of the
+// same meaning (retail's numbers in GAMECOMMAND); the ones Command doesn't
+// handle yet do nothing. (The port's table used to be the 1998 build's:
+// another order, ids such as SidePanel, and controls retail dropped.)
 static SControlEntry g_defaultGameControls[] =
 {
-    // -- spell invocation slots --
     {"Invoke 1", "Invoke1", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F1}}, GAMECMD_INVOKE1, 0, 0, false},
     {"Invoke 2", "Invoke2", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F2}}, GAMECMD_INVOKE2, 0, 0, false},
     {"Invoke 3", "Invoke3", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F3}}, GAMECMD_INVOKE3, 0, 0, false},
     {"Invoke 4", "Invoke4", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F4}}, GAMECMD_INVOKE4, 0, 0, false},
-
-    // -- mode switches --
-    {"Combat Mode", "CombatMode", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_RETURN}}, GAMECMD_COMBAT,     0, 0, false},
-    {"Bow Mode",    "BowMode",    CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{'M'}},       GAMECMD_BOW,        0, 0, false},
-    {"Full Screen", "FullScreen", ALLMODES,                                          {{VK_SPACE}},  GAMECMD_FULLSCREEN, 0, 0, false},
-    {"Side Panel",  "SidePanel",  ALLMODES,                                          {{'V'}},       GAMECMD_SIDEPANEL, 0, 0, false},
-    {"Lower Panel", "LowerPanel", ALLMODES,                                          {{'B'}},       GAMECMD_BOTTOMPANEL, 0, 0, false},
-
-    // -- movement modifiers (state flags, repeat-down/up) --
-    {"Sneak", "Sneak", CTRL_NORMALMODE | CTRL_SNEAKMODE, {{'S'}}, GAMECMD_MOVEDOWN, GAMECMD_MOVEUP, CMDFLAG_SNEAK, false},
-    {"Run",   "Run",   CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{'R'}}, GAMECMD_MOVEDOWN, GAMECMD_MOVEUP, CMDFLAG_RUN, false},
-
-    // -- world interaction --
-    {"Use",  "Use",  CTRL_NORMALMODE, {{'U'}, {'T'}}, GAMECMD_USE,  0, 0, false},
-    {"Get",  "Get",  CTRL_NORMALMODE, {{'G'}},         GAMECMD_GET,  0, 0, false},
-    {"Jump", "Jump", CTRL_NORMALMODE, {{'J'}},         GAMECMD_JUMP, 0, 0, false},
-
-    // -- walk-mode action slots (unmapped by default; scripted hooks bind these) --
-    {"Walk Action 1", "WalkAction1", CTRL_NORMALMODE, {{0}}, GAMECMD_WALKACTION1, 0, 0, false},
-    {"Walk Action 2", "WalkAction2", CTRL_NORMALMODE, {{0}}, GAMECMD_WALKACTION2, 0, 0, false},
-    {"Walk Action 3", "WalkAction3", CTRL_NORMALMODE, {{0}}, GAMECMD_WALKACTION3, 0, 0, false},
-
-    // -- inventory --
-    {"Inventory",       "Inventory", CTRL_NORMALMODE,    {{'I'}},       GAMECMD_INVENTORY, 0, 0, false},
-    {"Inventory Use",   "InvUse",    CTRL_INVENTORYMODE, {{'U'}},       GAMECMD_INVUSE,    0, 0, false},
-    {"Inventory Move",  "InvMove",   CTRL_INVENTORYMODE, {{'M'}},       GAMECMD_INVMOVE,   0, 0, false},
-    {"Inventory Drop",  "InvDrop",   CTRL_INVENTORYMODE, {{'D'}},       GAMECMD_INVDROP,   0, 0, false},
-    {"Inventory Exit",  "InvExit",   CTRL_INVENTORYMODE, {{VK_ESCAPE}}, GAMECMD_INVEXIT,   0, 0, false},
-
-    // -- combat combos (Ctrl + key, Shift + key) --
-    {"Combat Combo 1",  "CombatCombo1",  CTRL_COMBATMODE, {{VK_CONTROL, 'A'}}, GAMECMD_COMBO1,  0, 0, false},
-    {"Combat Combo 2",  "CombatCombo2",  CTRL_COMBATMODE, {{VK_CONTROL, 'S'}}, GAMECMD_COMBO2,  0, 0, false},
-    {"Combat Combo 3",  "CombatCombo3",  CTRL_COMBATMODE, {{VK_CONTROL, 'D'}}, GAMECMD_COMBO3,  0, 0, false},
-    {"Combat Combo 4",  "CombatCombo4",  CTRL_COMBATMODE, {{VK_CONTROL, 'F'}}, GAMECMD_COMBO4,  0, 0, false},
-    {"Combat Combo 5",  "CombatCombo5",  CTRL_COMBATMODE, {{VK_CONTROL, 'G'}}, GAMECMD_COMBO5,  0, 0, false},
-    {"Combat Combo 6",  "CombatCombo6",  CTRL_COMBATMODE, {{VK_CONTROL, 'H'}}, GAMECMD_COMBO6,  0, 0, false},
-    {"Combat Combo 7",  "CombatCombo7",  CTRL_COMBATMODE, {{VK_SHIFT,   'A'}}, GAMECMD_COMBO7,  0, 0, false},
-    {"Combat Combo 8",  "CombatCombo8",  CTRL_COMBATMODE, {{VK_SHIFT,   'S'}}, GAMECMD_COMBO8,  0, 0, false},
-    {"Combat Combo 9",  "CombatCombo9",  CTRL_COMBATMODE, {{VK_SHIFT,   'D'}}, GAMECMD_COMBO9,  0, 0, false},
-    {"Combat Combo 10", "CombatCombo10", CTRL_COMBATMODE, {{VK_SHIFT,   'F'}}, GAMECMD_COMBO10, 0, 0, false},
-    {"Combat Combo 11", "CombatCombo11", CTRL_COMBATMODE, {{VK_SHIFT,   'G'}}, GAMECMD_COMBO11, 0, 0, false},
-    {"Combat Combo 12", "CombatCombo12", CTRL_COMBATMODE, {{VK_SHIFT,   'H'}}, GAMECMD_COMBO12, 0, 0, false},
-
-    // -- combat strikes / blocks / dodge / leap --
-    {"Combat Block",  "CombatBlock",  CTRL_COMBATMODE, {{'Q'}}, GAMECMD_BLOCKDOWN, GAMECMD_BLOCKUP, CMDFLAG_BLOCK, false},
-    {"Combat Dodge",  "CombatDodge",  CTRL_COMBATMODE, {{'W'}}, GAMECMD_DODGE,     0,                0,            false},
-    {"Combat Leap",   "CombatLeap",   CTRL_COMBATMODE, {{'F'}}, GAMECMD_LEAPDOWN,  GAMECMD_LEAPUP,   CMDFLAG_LEAP,  false},
-    {"Combat Swing",  "CombatSwing",  CTRL_COMBATMODE, {{'A'}}, GAMECMD_SWING,     0,                0,            false},
-    {"Combat Thrust", "CombatThrust", CTRL_COMBATMODE, {{'S'}}, GAMECMD_THRUST,    0,                0,            false},
-    {"Combat Chop",   "CombatChop",   CTRL_COMBATMODE, {{'D'}}, GAMECMD_CHOP,      0,                0,            false},
-
-    // -- combat action slots (scripted) --
-    {"Combat Action 1", "CombatAction1", CTRL_COMBATMODE, {{0}}, GAMECMD_COMBATACTION1, 0, 0, false},
-    {"Combat Action 2", "CombatAction2", CTRL_COMBATMODE, {{0}}, GAMECMD_COMBATACTION2, 0, 0, false},
-    {"Combat Action 3", "CombatAction3", CTRL_COMBATMODE, {{0}}, GAMECMD_COMBATACTION3, 0, 0, false},
-
-    // -- bow mode --
-    {"Bow Shoot",    "BowShoot",    CTRL_BOWMODE, {{'Z'}}, GAMECMD_BOWAIM,    GAMECMD_BOWSHOOT, 0, false},
-    {"Bow Action 1", "BowAction1",  CTRL_BOWMODE, {{0}},   GAMECMD_BOWACTION1, 0, 0, false},
-    {"Bow Action 2", "BowAction2",  CTRL_BOWMODE, {{0}},   GAMECMD_BOWACTION2, 0, 0, false},
-    {"Bow Action 3", "BowAction3",  CTRL_BOWMODE, {{0}},   GAMECMD_BOWACTION3, 0, 0, false},
-
-    // -- sneak attacks / actions (scripted) --
-    {"Sneak Attack 1", "SneakAttack1", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKATTACK1, 0, 0, false},
-    {"Sneak Attack 2", "SneakAttack2", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKATTACK2, 0, 0, false},
-    {"Sneak Attack 3", "SneakAttack3", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKATTACK3, 0, 0, false},
-    {"Sneak Action 1", "SneakAction1", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKACTION1, 0, 0, false},
-    {"Sneak Action 2", "SneakAction2", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKACTION2, 0, 0, false},
-    {"Sneak Action 3", "SneakAction3", CTRL_SNEAKMODE, {{0}}, GAMECMD_SNEAKACTION3, 0, 0, false},
-
-    // -- 8-way movement (cardinal + diagonals) --
-    {"Left",       "Left",      ALLMODES, {{VK_LEFT},  {VK_JOYLEFT}},      GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_LEFT,      false},
-    {"Right",      "Right",     ALLMODES, {{VK_RIGHT}, {VK_JOYRIGHT}},     GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_RIGHT,     false},
-    {"Up",         "Up",        ALLMODES, {{VK_UP},    {VK_JOYUP}},        GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UP,        false},
-    {"Down",       "Down",      ALLMODES, {{VK_DOWN},  {VK_JOYDOWN}},      GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWN,      false},
-    {"Up Left",    "UpLeft",    ALLMODES, {{VK_HOME},  {VK_JOYUPLEFT}},    GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UPLEFT,    false},
-    {"Up Right",   "UpRight",   ALLMODES, {{VK_PRIOR}, {VK_JOYUPRIGHT}},   GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UPRIGHT,   false},
-    {"Down Left",  "DownLeft",  ALLMODES, {{VK_END},   {VK_JOYDOWNLEFT}},  GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWNLEFT,  false},
-    {"Down Right", "DownRight", ALLMODES, {{VK_NEXT},  {VK_JOYDOWNRIGHT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWNRIGHT, false},
+    {"Combat Combo 1", "CombatCombo1", CTRL_COMBATMODE, {{VK_CONTROL, 'A'}}, GAMECMD_COMBO1, 0, 0, false},
+    {"Combat Combo 2", "CombatCombo2", CTRL_COMBATMODE, {{VK_CONTROL, 'S'}}, GAMECMD_COMBO2, 0, 0, false},
+    {"Combat Combo 3", "CombatCombo3", CTRL_COMBATMODE, {{VK_CONTROL, 'D'}}, GAMECMD_COMBO3, 0, 0, false},
+    {"Combat Combo 4", "CombatCombo4", CTRL_COMBATMODE, {{VK_CONTROL, 'Q'}}, GAMECMD_COMBO4, 0, 0, false},
+    {"Combat Combo 5", "CombatCombo5", CTRL_COMBATMODE, {{VK_CONTROL, 'W'}}, GAMECMD_COMBO5, 0, 0, false},
+    {"Combat Combo 6", "CombatCombo6", CTRL_COMBATMODE, {{VK_CONTROL, 'E'}}, GAMECMD_COMBO6, 0, 0, false},
+    {"Combat Combo 7", "CombatCombo7", CTRL_COMBATMODE, {{'Q'}}, GAMECMD_COMBO7, 0, 0, false},
+    {"Combat Combo 8", "CombatCombo8", CTRL_COMBATMODE, {{'W'}}, GAMECMD_COMBO8, 0, 0, false},
+    {"Combat Combo 9", "CombatCombo9", CTRL_COMBATMODE, {{'E'}}, GAMECMD_COMBO9, 0, 0, false},
+    {"Combat Combo 10", "CombatCombo10", CTRL_COMBATMODE, {{VK_MENU, 'Q'}}, GAMECMD_COMBO10, 0, 0, false},
+    {"Combat Combo 11", "CombatCombo11", CTRL_COMBATMODE, {{VK_MENU, 'W'}}, GAMECMD_COMBO11, 0, 0, false},
+    {"Combat Combo 12", "CombatCombo12", CTRL_COMBATMODE, {{VK_MENU, 'E'}}, GAMECMD_COMBO12, 0, 0, false},
+    {"Belt Use 1", "BeltUse1", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F5}}, GAMECMD_BELTUSE1, 0, 0, false},
+    {"Belt Use 2", "BeltUse2", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F6}}, GAMECMD_BELTUSE2, 0, 0, false},
+    {"Belt Use 3", "BeltUse3", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F7}}, GAMECMD_BELTUSE3, 0, 0, false},
+    {"Belt Use 4", "BeltUse4", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F8}}, GAMECMD_BELTUSE4, 0, 0, false},
+    {"Belt Use 5", "BeltUse5", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{VK_F9}}, GAMECMD_BELTUSE5, 0, 0, false},
+    {"Combat Mode", "CombatMode", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{'C'}}, GAMECMD_COMBAT, 0, 0, false},
+    {"Bow Mode", "BowMode", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{'B'}}, GAMECMD_BOW, 0, 0, false},
+    {"Full Screen", "FullScreen", ALLMODES, {{VK_SPACE}}, GAMECMD_FULLSCREEN, 0, 0, false},
+    {"Bottom Pane", "BottomPane", ALLMODES, {{VK_TAB}}, GAMECMD_BOTTOMPANEL, 0, 0, false},
+    {"Side Pane", "SidePane", ALLMODES, {{VK_RWIN}}, GAMECMD_SIDEPANEL, 0, 0, false},
+    {"Show Spells", "Spells", ALLMODES, {{'1'}}, GAMECMD_SHOWSPELLS, 0, 0, false},
+    {"Show Stats", "Stats", ALLMODES, {{'2'}}, GAMECMD_SHOWSTATS, 0, 0, false},
+    {"Equip Character", "Equip", ALLMODES, {{'3'}}, GAMECMD_SHOWEQUIP, 0, 0, false},
+    {"Build Spells", "BuildSpell", ALLMODES, {{'4'}}, GAMECMD_BUILDSPELLS, 0, 0, false},
+    {"Show Inventory", "Invent", ALLMODES, {{'5'}}, GAMECMD_INVENTORY, 0, 0, false},
+    {"Show Map", "Map", ALLMODES, {{'6'}}, GAMECMD_SHOWMAP, 0, 0, false},
+    {"Run", "Run", CTRL_NORMALMODE | CTRL_COMBATMODE | CTRL_BOWMODE, {{'R'}}, GAMECMD_MOVEDOWN, GAMECMD_MOVEUP, CMDFLAG_RUN, false},
+    {"Use", "Use", CTRL_NORMALMODE, {{'U'}, {'T'}}, GAMECMD_USE, 0, 0, false},
+    {"Get", "Get", CTRL_NORMALMODE, {{'G'}}, GAMECMD_GET, 0, 0, false},
+    {"Combat Get", "CombatGet", CTRL_COMBATMODE | CTRL_BOWMODE, {{'G'}}, GAMECMD_GET, 0, 0, false},
+    {"Combat Block", "CombatBlock", CTRL_COMBATMODE, {{'F'}}, GAMECMD_BLOCKDOWN, GAMECMD_BLOCKUP, CMDFLAG_BLOCK, false},
+    {"Combat Dodge Left", "DodgeLeft", CTRL_COMBATMODE, {{VK_CONTROL, VK_LEFT}, {VK_JOYLEFT | VK_DBLTAP}}, GAMECMD_DODGELEFT, 0, 0, false},
+    {"Combat Dodge Right", "DodgeRight", CTRL_COMBATMODE, {{VK_CONTROL, VK_RIGHT}, {VK_JOYRIGHT | VK_DBLTAP}}, GAMECMD_DODGERIGHT, 0, 0, false},
+    {"Combat Dodge Up", "DodgeUp", CTRL_COMBATMODE, {{VK_CONTROL, VK_UP}, {VK_JOYUP | VK_DBLTAP}}, GAMECMD_DODGEUP, 0, 0, false},
+    {"Combat Dodge Down", "DodgeDown", CTRL_COMBATMODE, {{VK_CONTROL, VK_DOWN}, {VK_JOYDOWN | VK_DBLTAP}}, GAMECMD_DODGEDOWN, 0, 0, false},
+    {"Combat Dodge UpLeft", "DodgeUpLeft", CTRL_COMBATMODE, {{VK_CONTROL, VK_HOME}, {VK_JOYUPLEFT | VK_DBLTAP}}, GAMECMD_DODGEUPLEFT, 0, 0, false},
+    {"Combat Dodge UpRight", "DodgeUpRight", CTRL_COMBATMODE, {{VK_CONTROL, VK_PRIOR}, {VK_JOYUPRIGHT | VK_DBLTAP}}, GAMECMD_DODGEUPRIGHT, 0, 0, false},
+    {"Combat Dodge DownLeft", "DodgeDownLeft", CTRL_COMBATMODE, {{VK_CONTROL, VK_END}, {VK_JOYDOWNLEFT | VK_DBLTAP}}, GAMECMD_DODGEDOWNLEFT, 0, 0, false},
+    {"Combat Dodge DownRight", "DodgeDownRight", CTRL_COMBATMODE, {{VK_CONTROL, VK_NEXT}, {VK_JOYDOWNRIGHT | VK_DBLTAP}}, GAMECMD_DODGEDOWNRIGHT, 0, 0, false},
+    {"Combat Swing", "CombatSwing", CTRL_COMBATMODE, {{'A'}}, GAMECMD_SWING, 0, 0, false},
+    {"Combat Thrust", "CombatThrust", CTRL_COMBATMODE, {{'S'}}, GAMECMD_THRUST, 0, 0, false},
+    {"Combat Chop", "CombatChop", CTRL_COMBATMODE, {{'D'}}, GAMECMD_CHOP, 0, 0, false},
+    {"Bow Shoot", "BowShoot", CTRL_BOWMODE, {{'Z'}}, GAMECMD_BOWAIM, GAMECMD_BOWSHOOT, 0, false},
+    {"Zoom In", "ZoomIn", ALLMODES, {{'I'}}, GAMECMD_CAMERADOWN, GAMECMD_CAMERAUP, CMDFLAG_ZOOMIN, false},
+    {"Zoom Out", "ZoomOut", ALLMODES, {{'K'}}, GAMECMD_CAMERADOWN, GAMECMD_CAMERAUP, CMDFLAG_ZOOMOUT, false},
+    {"Pan Left", "PanLeft", ALLMODES, {{'J'}}, GAMECMD_CAMERADOWN, GAMECMD_CAMERAUP, CMDFLAG_PANLEFT, false},
+    {"Pan Right", "PanRight", ALLMODES, {{'L'}}, GAMECMD_CAMERADOWN, GAMECMD_CAMERAUP, CMDFLAG_PANRIGHT, false},
+    {"Pan Up", "PanUp", ALLMODES, {{'Y'}}, GAMECMD_CAMERADOWN, GAMECMD_CAMERAUP, CMDFLAG_PANUP, false},
+    {"Pan Down", "PanDown", ALLMODES, {{'H'}}, GAMECMD_CAMERADOWN, GAMECMD_CAMERAUP, CMDFLAG_PANDOWN, false},
+    {"Left", "Left", ALLMODES, {{VK_LEFT}, {VK_JOYLEFT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_LEFT, false},
+    {"Right", "Right", ALLMODES, {{VK_RIGHT}, {VK_JOYRIGHT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_RIGHT, false},
+    {"Up", "Up", ALLMODES, {{VK_UP}, {VK_JOYUP}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UP, false},
+    {"Down", "Down", ALLMODES, {{VK_DOWN}, {VK_JOYDOWN}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWN, false},
+    {"Up Left", "UpLeft", ALLMODES, {{VK_HOME}, {VK_JOYUPLEFT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UPLEFT, false},
+    {"Up Right", "UpRight", ALLMODES, {{VK_PRIOR}, {VK_JOYUPRIGHT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_UPRIGHT, false},
+    {"Down Left", "DownLeft", ALLMODES, {{VK_END}, {VK_JOYDOWNLEFT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWNLEFT, false},
+    {"Down Right", "DownRight", ALLMODES, {{VK_NEXT}, {VK_JOYDOWNRIGHT}}, GAMECMD_DIRDOWN, GAMECMD_DIRUP, CMDFLAG_DOWNRIGHT, false},
+    {"Multiplayer", "Multiplayer", ALLMODES, {{'M'}}, GAMECMD_MULTIPLAYER, 0, 0, false},
+    {"Edit Char", "EditChar", ALLMODES, {{'X'}}, GAMECMD_EDITCHAR, 0, 0, false},
+    {"Game Options", "GameOpts", ALLMODES, {{'O'}}, GAMECMD_GAMEOPTIONS, 0, 0, false},
+    {"Load Game", "LoadGame", ALLMODES, {{VK_CONTROL, VK_LWIN}}, GAMECMD_LOADGAME, 0, 0, false},
+    {"Save Game", "SaveGame", ALLMODES, {{VK_CONTROL, VK_APPS}}, GAMECMD_SAVEGAME, 0, 0, false},
+    {"Quick Save", "QuickSave", ALLMODES, {{VK_CONTROL, VK_BACK}}, GAMECMD_QUICKSAVE, 0, 0, false},
 };
 
+// REVSYNC: 0x00486177 / 0x00486186 -- retail initialized the control map
+// from its table at boot and then read the player's bindings from
+// [Controls] (each key written back); the Options pane's OK saves them
+// (0x00439dc0). A binding the INI lacks keeps the table's.
 void InitDefaultControlMap()
 {
     if (ControlMap.NumControls() > 0)
         return;   // already populated (e.g. TPlayScreen ran first)
     ControlMap.Initialize(int32_t(sizearray(g_defaultGameControls)),
                           g_defaultGameControls);
+    ControlMap.Load(const_cast<char*>("Controls"));
 }
 
-// Game runs at this many internal ticks per real-time second. Used by
-// time-of-day + the frame-to-minutes helpers.
-static constexpr int32_t kGameFrameRate = 30;
-
-// One in-game day = 24 game-minutes of game time. The legacy clamp says
-// "morning starts at 6", "noon at 12", etc.; reuse the same buckets so
-// scripted lighting checks keep working.
-static int32_t TimeOfDayMinutes(int32_t gametime_centi_secs)
+// REVSYNC: TPlayScreen::Animate @ 0x0047c2c0 (0x0047c3a5..0x0047c3de) --
+// the minute of the day: game time (hundredths of a second) times 1440 over
+// rules.def's DAYLENGTH, modulo 1440, in 64 bits. DAYLENGTH 80000 makes a
+// day 800 seconds of play.
+static int32_t TimeOfDayMinutes(int32_t gametime)
 {
-    // gametime is in 1/100s of a second; convert to in-game minutes.
-    // Retail used a 60x scale (1 real second = 60 in-game seconds = 1
-    // in-game minute). Match that so saved games stay aligned.
-    const int32_t in_game_seconds = gametime_centi_secs / 100;
-    return in_game_seconds / 60;
+  // REVSYNC-DIVERGENCE: retail divides by zero before rules.def is loaded.
+    if (Rules.daylength <= 0)
+        return 0;
+    return int32_t(int64_t(gametime) * 1440 / Rules.daylength % 1440);
 }
 
+// The day clock: rules.def's DAYLENGTH units make one day of 1440 game
+// minutes. Both truncate toward zero; the products wrap at 32 bits as
+// retail's imul does.
+// REVSYNC: ConvertFramesToMinutes @ 0x0047eb30 -- frames * 1440 / daylength
 int32_t ConvertFramesToMinutes(int32_t frames)
 {
-    if (frames <= 0) return 0;
-    return frames / kGameFrameRate / 60;
+    const auto day = static_cast<int32_t>(static_cast<uint32_t>(frames) * 1440u);
+  // REVSYNC-DIVERGENCE: retail divides by zero before rules.def is loaded.
+    return Rules.daylength ? day / Rules.daylength : 0;
 }
 
+// REVSYNC: ConvertMinutesToFrames @ 0x0047eb50 -- minutes * daylength / 1440
 int32_t ConvertMinutesToFrames(int32_t minutes)
 {
-    if (minutes <= 0) return 0;
-    return minutes * 60 * kGameFrameRate;
+    const auto product = static_cast<int32_t>(static_cast<uint32_t>(minutes) * static_cast<uint32_t>(Rules.daylength));
+    return product / 1440;
 }
 
 // *************************************************************************
 // * Construction / lifetime                                               *
 // *************************************************************************
 
-TPlayScreen::TPlayScreen() = default;
+TPlayScreen::TPlayScreen()
+    : ingamemenu(std::make_unique<TInGameMenu>(*this))
+    , statusbar(std::make_unique<TPlyrStatusBar>())
+    , bottombar(std::make_unique<TBottomBarPane>())
+{
+}
 TPlayScreen::~TPlayScreen() = default;
 
 bool TPlayScreen::Initialize()
@@ -255,34 +262,16 @@ bool TPlayScreen::Initialize()
     // TScreen's base Initialize() returns false (it's a "must override"
     // hook); skip it and do our own setup.
 
-    // Load the play-screen multi-resource (cursors, gameplay bitmaps,
-    // fonts referenced by HUD widgets). Retail did this at the top of
-    // TPlayScreen::Initialize (legacy/playscreen.cpp:179). Anything
-    // touching GameData->Bitmap("cursor") / Font(...) / Animation(...)
-    // before this load would see a null pointer.
-    if (!GameData)
-    {
-        GameData = TMulti::LoadMulti((char*)"playscrn.dat");
-        if (!GameData)
-            log_warn("[playscreen] failed to load playscrn.dat -- GameData stays null");
-        else
-            log_info("[playscreen] playscrn.dat loaded");
-    }
-
-    log_info("[playscreen] booting map renderer");
-    // Spin up the map renderer. InitializeFromStartupArgs reads --level
-    // and --sector to pick the starting world; with neither set, we fall
-    // back to its defaults (Misthaven-area). The post-load hook injects
-    // Locke into the anchor sector before the renderer scans for
-    // drawables, so the player ends up in the initial draw list.
+    // Present the session's world: the renderer draws MapManager's current
+    // map and follows it when a load or level change replaces it.
     mapRenderer = std::make_unique<TMapRenderer>();
-    if (!mapRenderer->InitializeFromStartupArgs(
-            [this](int32_t lvl, int32_t sx, int32_t sy) { SpawnDefaultPlayer(lvl, sx, sy); }))
-    {
-        log_warn("[playscreen] map renderer failed to initialize from startup args");
-        // Keep going -- we still want to land on PlayScreen with empty
-        // world rather than abort the whole boot.
-    }
+    mapRenderer->Initialize();
+    MapPane.SetMapView(mapRenderer.get());
+    risingNumbers = std::make_unique<TRisingNumberLayer>();
+    if (Renderer)
+        Renderer->AddHud(risingNumbers.get(), TRisingNumberLayer::kHudZ);
+    BindWorld();
+    mapListener = MapManager.AddListener([this](EMapManagerEvent, TMapManager*) { BindWorld(); });
     // Push global Revisited point-light multipliers now that MapRenderer
     // is live. Per-area POINTLIGHTINT / POINTLIGHTRANGE will compose on
     // top of these each time TArea::Enter fires.
@@ -307,13 +296,11 @@ bool TPlayScreen::Initialize()
 
     EditorLoadState();
 
-    // Load the active module's area.def (forest / Misthaven / House
-    // Interior / etc.). Until this runs, area->Enter() never fires and
-    // MapPane stays at its default ambient. The Ahkuilon module ZIP is
-    // already mounted by InitGlobals so AreaManager.Initialize finds
-    // area.def via rev_fopen + VFS.
-    if (!AreaManager.Initialize())
-        log_warn("[playscreen] AreaManager.Initialize failed; ambient will fall back to MapPane defaults");
+    // Retail TPlayScreen::Initialize adds the dialog pane right after the
+    // map pane; the screen's pane pass pulses it after the world each tick.
+    if (!DialogPane.Initialize())
+        log_error("[playscreen] Trouble initializing dialog pane");
+    AddPane(&DialogPane);
 
     // Runtime mode owns mode-specific UI state (cursor, overlay
     // visibility, etc.). At static init g_currentMode defaults to game
@@ -324,20 +311,139 @@ bool TPlayScreen::Initialize()
     if (CurrentMode())
         CurrentMode()->OnEnter();
 
+    // spell.def, reloaded for each game as retail's Initialize does
+    // (0x0047add4: clear, then load); the spell panes and casting read it.
+    SpellList.Close();
+    if (!SpellList.Initialize())
+        log_warn("[playscreen] spell.def failed to load; no spells");
+
+    // REVSYNC: 0x0047ae4c..0x0047ae7a, 0x0047ebc0(1) -- every entry into play
+    // (a new game, or a load from the title or death screen) shows the side
+    // panel open on Equip and Inventory, and the bottom bar. A save's HUD
+    // words never come back (TPlayer::Load keeps them at +0x304, unread), and
+    // an in-game load, which runs in the pulse (0x0047bf01..0x0047bfd9), leaves
+    // the HUD as it was.
+    SHudState& hud = GetHudState();
+    hud.topSlot       = HUD_TOP_EQUIP;
+    hud.bottomSlot    = HUD_BOT_INV;
+    hud.sidebarState  = HUD_SIDEBAR_OPEN;
+    hud.bottomBarOpen = 1;
+
     SetUIHudCursorOverlayEnabled(false);
-    SetUIQuickSpellSyntheticStateEnabled(false);
     SetUISidebarSyntheticStateEnabled(false);
     g_playHudInitialized = InitializeUIHudMode();
     log_info("[playscreen] reconstructed HUD init = %s",
              g_playHudInitialized ? "OK" : "FAIL");
 
+    // REVSYNC: 0x0047abf8 / 0x0047adab -- the text bar, added after the side
+    // tabs, so it draws over the dialog entries, then the player status bar.
+    // After the HUD, so they anchor to the HUD's map view.
+    if (!TextBar.Initialize())
+        log_error("[playscreen] Trouble initializing text bar");
+    AddPane(&TextBar);
+    if (!statusbar->Initialize())
+        log_error("[playscreen] Trouble initializing the status bar");
+    AddPane(statusbar.get());
+
+    // REVSYNC: 0x0047ac72 -- the bottom bar, which opens with the HUD's
+    // lower panel along the bottom of the map view (UpdateBottomBar).
+    if (bottombar->Initialize())
+    {
+        AddPane(bottombar.get());
+        bottombar->Hide();
+        UpdateBottomBar();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the bottom bar");
+
+    // REVSYNC: 0x0047ab8f -- the inventory, in the side panel's lower slot
+    // while the side panel shows it (UpdateSidePanes). Its container is the
+    // main player's (BindMainPlayerToScreen, below).
+    if (Inventory.Initialize())
+    {
+        AddPane(&Inventory);
+        Inventory.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the inventory");
+
+    // REVSYNC: 0x0047a660 ("Trouble initializing spell pane") -- the spell
+    // pane, in the same slot while the side panel shows the spell tab.
+    if (SpellPane.Initialize())
+    {
+        AddPane(&SpellPane);
+        SpellPane.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the spell pane");
+
+    // The stats (0x00546b50, after the spell pane), in the side panel's upper
+    // slot while the side panel shows the stats tab: the main player's, or an
+    // examined object's.
+    if (StatPane.Initialize())
+    {
+        AddPane(&StatPane);
+        StatPane.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the stat pane");
+
+    // The spell book (0x005449e0, after the stats), in the side panel's
+    // upper slot while the side panel shows the book tab. Its rows are the
+    // main player's known spells.
+    if (SpellBook.Initialize())
+    {
+        AddPane(&SpellBook);
+        SpellBook.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the spell book");
+
+    // REVSYNC: 0x0047a660 -- the automap, in the same slot while the side
+    // panel shows the map tab. It loads AutoMap.dat from resources.rvr,
+    // mounted by now. The main player's explored area comes with
+    // BindMainPlayerToScreen.
+    if (AutoMap.Initialize())
+    {
+        AddPane(&AutoMap);
+        AutoMap.Hide();
+        UpdateSidePanes();
+    }
+    else
+        log_error("[playscreen] Trouble initializing the automap");
+
+    // The session made the main player under the loading screen: the panes
+    // show it now that they exist.
+    PlayerManager.BindMainPlayerToScreen();
+
+    // REVSYNC: 0x0047b10c -- the fader, starting black, outside the
+    // editor. TScreen fades it in once Initialize returns.
+    screenfade.Setup(TScreenFade::kDefaultSteps);
+    fade = Editor ? nullptr : &screenfade;
+
     log_info("[playscreen] initialize done");
     return true;
 }
 
-// Hand-rolled starter loadout for Demo 1. Stand-in until newgame.sav
-// loading (see [docs/gameplay/BURNDOWN.md](../docs/gameplay/BURNDOWN.md)
-// phase E) supersedes this. Each entry: (item name as known to
+void TPlayScreen::BindWorld()
+{
+    if (!mapRenderer)
+        return;
+
+    // The renderer anchors on the player when it is on the map's level;
+    // the camera's sector is the fallback.
+    S3DPoint center;
+    MapPane.GetMapPos(center);
+    mapRenderer->SetMap(MapManager.CurrentMap(), /*use_level_origin=*/false,
+                        center.x >> SECTORWSHIFT, center.y >> SECTORHSHIFT);
+}
+
+// Hand-rolled starter loadout for the editor's default Locke (games start
+// from newgame.sav, which brings its own). Each entry: (item name as known to
 // class.def, target equipment slot). Name lookup scans every
 // TObjectClass so we don't have to hand-pick OBJCLASS_WEAPON vs
 // OBJCLASS_ARMOR per row. Order matters: PRIMEHAND first so the
@@ -526,7 +632,7 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
     sec->AddObject(oi);
 
     // SetMainPlayer fires UI side effects (CenterOnObj / RefreshEquip /
-    // Inventory / HealthBar / StaminaBar) when CurrentScreen == &PlayScreen.
+    // Inventory) when CurrentScreen == &PlayScreen.
     // We are inside TPlayScreen::Initialize -- CurrentScreen is already
     // set, but the UI panes those calls touch are not yet initialized,
     // and one of them hangs. Clear CurrentScreen for the duration of
@@ -603,6 +709,32 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
 
 void TPlayScreen::Close()
 {
+    ingamemenu->Close();
+    menuPending = false;
+    ThawFrame();
+    if (drawer == EDrawer::BuySell)
+        CloseBuySellDrawer();
+    BuySellPane.Close();
+    buysellrequest = false;
+    drawerclose    = false;
+    RemovePane(&SpellBook);
+    SpellBook.Close();
+    RemovePane(&StatPane);
+    StatPane.Close();
+    RemovePane(&SpellPane);
+    SpellPane.Close();
+    RemovePane(&Inventory);
+    Inventory.Close();
+    RemovePane(bottombar.get());
+    bottombar->Close();
+    RemovePane(statusbar.get());
+    statusbar->Close();
+    RemovePane(&TextBar);
+    TextBar.Close();                        // REVSYNC: 0x0047b30c
+    RemovePane(&DialogPane);
+    DialogPane.Close();
+    RemovePane(&AutoMap);
+    AutoMap.Close();
     if (g_playHudInitialized)
     {
         CloseUIHudMode();
@@ -612,9 +744,20 @@ void TPlayScreen::Close()
         mapRenderer->SetOutputViewport(0, 0);
     if (Renderer)
         Renderer->ResetPresentNDCRect();
-    AreaManager.Close();
+    if (mapListener)
+    {
+        MapManager.RemoveListener(mapListener);
+        mapListener = 0;
+    }
+    if (risingNumbers)
+    {
+        if (Renderer)
+            Renderer->RemoveHud(risingNumbers.get());
+        risingNumbers.reset();
+    }
     if (mapRenderer)
     {
+        MapPane.SetMapView(nullptr);
         mapRenderer->Shutdown();
         mapRenderer.reset();
     }
@@ -625,8 +768,64 @@ void TPlayScreen::Close()
 // * Per-frame                                                             *
 // *************************************************************************
 
+// Headless save-cycle smoke test (--savecycle-test[=<frames>]). After
+// <frames> frames, saves to slot "savecycle", loads it back on the next
+// frame and logs the player's key fields before and after, through the same
+// session requests the in-game save/load paths use. Identical lines = round
+// trip OK. Runs before this frame's requests and tick, so with 0 frames the
+// slot holds the game exactly as it was loaded.
+static void PulseSaveCycleTest()
+{
+    enum class EStage { Settle, Save, Load, Report, Done };
+    static EStage  stage  = EStage::Settle;
+    static int32_t settle = StartupSaveCycleSettle;
+
+    auto snapshot = [](const char* tag) {
+        const S3DPoint p = Player->Pos();
+        log_info("[savecycle] %s: pos=(%d,%d,%d) level=%d flags=0x%x "
+                 "mapindex=%d sector=%s inv=%d",
+                 tag, p.x, p.y, p.z, Player->GetLevel(),
+                 Player->Flags(), Player->GetMapIndex(),
+                 Player->GetSector() ? "live" : "null",
+                 Player->RealNumInventoryItems());
+    };
+
+    if (!Player || stage == EStage::Done)
+        return;
+
+    switch (stage)
+    {
+    case EStage::Settle:
+        if (settle-- > 0)
+            break;
+        stage = EStage::Save;
+        [[fallthrough]];
+    case EStage::Save:
+        snapshot("pre-save ");
+        GameFlow.Session().RequestSave("savecycle");
+        stage = EStage::Load;
+        break;
+    case EStage::Load:
+        GameFlow.Session().RequestLoad("savecycle");
+        stage = EStage::Report;
+        break;
+    case EStage::Report:
+        snapshot("post-load");
+        stage = EStage::Done;
+        StartupSaveCycle = false;
+        break;
+    case EStage::Done:
+        break;
+    }
+}
+
 void TPlayScreen::Update()
 {
+    // Shadow Smoke (--shadow): its audit of the last tick and its next step,
+    // before anything else of this one -- a movie or a load included, which
+    // it waits out or skips as a player would.
+    Shadow.Pulse();
+
     // Apply any deferred pane add scheduled by SetNextPane().
     if (nextpane)
     {
@@ -634,25 +833,48 @@ void TPlayScreen::Update()
         nextpane = nullptr;
     }
 
-    // Honor save / load requests staged from the input layer or scripts.
-    if (loadgame)
+    // Retail's movie player blocked the game: nothing ticks while one plays.
+    if (movieplaying)
+        return;
+
+    // Nor while a new level loads (retail loaded it synchronously): the
+    // session brings in a slice a frame under the loading line.
+    if (GameFlow.Session().LevelLoading())
     {
-        loadgame = false;
-        if (loadgamepath[0])
-        {
-            log_info("[playscreen] loading save '%s'", loadgamepath);
-            ::SaveGame.ReadGame(loadgamepath);
-            loadgamepath[0] = '\0';
-        }
-        else
-        {
-            ::SaveGame.ReadGame(gamenum);
-        }
+        GameFlow.Session().EnterLevel();
+        return;
     }
-    if (savegame)
+
+    // Nor while a save loads (ProcessRequests below started it): it runs a
+    // step a tick behind a still of the world.
+    if (GameFlow.Session().Loading())
     {
-        savegame = false;
-        ::SaveGame.WriteGame(gamenum);
+        StepGameLoad();
+        return;
+    }
+
+    if (StartupSaveCycle)
+        PulseSaveCycleTest();
+
+    // Save / load requests made during play (input, console, scripts, the
+    // in-game dialogs). Retail ran them ahead of the pane pulse, so a paused
+    // world doesn't hold them (0x0047bd20).
+    GameFlow.Session().ProcessRequests();
+
+    // The bottom drawer follows its requests (the shop opening or closing),
+    // the bottom bar the HUD's lower panel, the side panes the side panel.
+    UpdateDrawer();
+    UpdateBottomBar();
+    UpdateSidePanes();
+
+    // REVSYNC: 0x0048fda0 / 0x0052b9f0 / 0x0047c2c0 -- under a MODAL_PAUSE
+    // modal (the single-player in-game menu and its dialogs) only the modal
+    // pulses: the world, the areas and the game clock stand still. The
+    // --exec console queue keeps running.
+    if (ModalHas(MODAL_PAUSE))
+    {
+        PulseStartupExec();
+        return;
     }
 
     // Per-frame work that differs between game and editor: input ->
@@ -661,18 +883,316 @@ void TPlayScreen::Update()
     // + pulse itself).
     CurrentMode()->Tick();
 
+    // A teleport to another level moved the camera there this tick: bring
+    // the level in and put the player back into the map (retail did both in
+    // the map pane's sector update).
+    const bool levelready = GameFlow.Session().EnterLevel();
+
+    // --playerai: the player fights on his own (testconfig.h).
+    if (StartupPlayerAI && Player)
+        Player->SetRunsAI(true);
+    // --playerbot: Locke played by code, once he's in the world.
+    if (StartupPlayerBot && Player && !PlayerBot.Enabled())
+        PlayerBot.Enable(true);
+
+    // --exec console queue (no-op unless the flag was given).
+    PulseStartupExec();
+
     // Tick the area system: detects player Enter/Exit of each TArea's
     // RECTs, runs day/night ambient interpolation, fires CDPLAYLIST /
     // AUDIOENV transitions. Must run after CurrentMode()->Tick() so
-    // MapPane.GetMapPos reflects this frame's player position.
-    AreaManager.Pulse();
+    // MapPane.GetMapPos reflects this frame's player position, and only
+    // once the camera's level is in: retail entered the new area after the
+    // sector update had loaded it.
+    if (levelready)
+        AreaManager.Pulse();
 
     // Advance fixed-tick counters. CurrentMode()->Tick() owns gameplay frame
     // advancement; the renderer only samples/interpolates the current pose.
-    ++gameframes;
-    gametime = lastsessionframes
-             + (gameframes - sessionstart) * 100 / kGameFrameRate;
-    timeofday = TimeOfDayMinutes(gametime);
+    AdvanceGameFrame();
+
+    // REVSYNC: screen slot 0x24 (0x004902c0) -> NextFrameObjects 0x00457ef0:
+    // animation frames advance last in the tick, after Pulse and Move and
+    // the frame count, so the next tick's input sees the advanced frame.
+    MapPane.NextFrameObjects();
+
+    // --combattrace: the tick's fighters (no-op otherwise).
+    CombatTrace::Tick(gameframes);
+}
+
+namespace {
+
+// The still behind a load: over the HUD panels (z 0..10), under the pane
+// tree (TScreen::kPaneLayerZ).
+constexpr float kFrozenFrameZ = 50.0f;
+
+class TFrozenFrameLayer final : public THudDrawable
+{
+  public:
+    explicit TFrozenFrameLayer(const TTextureHandle& texture) : texture(texture) {}
+    void Draw() override
+    {
+        if (texture != kInvalidTexture)
+            Renderer->DrawTextureFit(texture);
+        else
+            Renderer->FillScreen(0.0f, 0.0f, 0.0f, 1.0f);
+    }
+
+  private:
+    const TTextureHandle& texture;
+};
+
+}  // namespace
+
+// REVSYNC: the load dialog's in-game load (0x00539590) and the frame's
+// request load (0x0047bfab) ran LoadGame and the sector load synchronously,
+// so the screen stood still on the last frame (the popup's bar drawn straight
+// to the display, 0x0053c3d0). Here: the first tick keeps the world and the
+// HUD panels of the frame on screen (the capture leaves out the pane tree,
+// which keeps drawing live over it); then each tick runs a load step behind
+// that still, its progress going to the load dialog's popup, until the game
+// is in (or the load failed: back to the title).
+void TPlayScreen::StepGameLoad()
+{
+    TGameSession& session = GameFlow.Session();
+    switch (freeze)
+    {
+    case EFreeze::None:
+        freeze = EFreeze::Capturing;
+        if (!Display.RequestCapture(
+                [this](const uint8_t* rgba, int32_t width, int32_t height) {
+                    FreezeFrame(rgba, width, height);
+                },
+                kPaneLayerZ))
+            FreezeFrame(nullptr, 0, 0);
+        return;
+    case EFreeze::Capturing:
+        return;                     // the capture comes with this frame's flip
+    case EFreeze::Frozen:
+        break;
+    }
+
+    session.Step();
+    ingamemenu->LoadProgress(session.Progress());
+    if (session.Loading())
+        return;
+
+    ThawFrame();
+    const bool loaded = session.Ready();
+    log_info("[playscreen] game load %s", loaded ? "done" : "failed");
+    ingamemenu->LoadFinished(loaded);
+    if (!loaded)
+        GameFlow.ReturnToTitle();
+}
+
+// The capture's frame has been drawn by now; the still goes up with the
+// next one (ShowStill).
+void TPlayScreen::FreezeFrame(const uint8_t* rgba, int32_t width, int32_t height)
+{
+    freeze = EFreeze::Frozen;
+    if (rgba && width > 0 && height > 0)
+    {
+        // The swapchain's alpha isn't the picture's: the still is opaque.
+        frozenPixels.assign(rgba, rgba + size_t(width) * size_t(height) * 4);
+        for (size_t i = 3; i < frozenPixels.size(); i += 4)
+            frozenPixels[i] = 255;
+        frozenWidth  = width;
+        frozenHeight = height;
+    }
+    else
+    {
+        log_warn("[playscreen] no still of the frame for the load; it shows black");
+    }
+    log_info("[playscreen] the load runs behind a still of the frame (%dx%d)", width, height);
+}
+
+// From Animate, outside any pass: the still's texture, and its layer.
+void TPlayScreen::ShowStill()
+{
+    if (stillShown || !Renderer)
+        return;
+    if (!frozenPixels.empty())
+    {
+        frozenTexture = Renderer->CreateDynamicTexture(frozenWidth, frozenHeight,
+                                                       ERendererTextureFilter::Nearest);
+        if (frozenTexture != kInvalidTexture)
+            Renderer->UpdateDynamicTexture(frozenTexture, frozenPixels.data(), frozenPixels.size());
+        frozenPixels.clear();
+    }
+    if (!frozenLayer)
+        frozenLayer = std::make_unique<TFrozenFrameLayer>(frozenTexture);
+    Renderer->AddHud(frozenLayer.get(), kFrozenFrameZ);
+    stillShown = true;
+}
+
+void TPlayScreen::ThawFrame()
+{
+    if (freeze == EFreeze::None)
+        return;
+    freeze     = EFreeze::None;
+    stillShown = false;
+    frozenPixels.clear();
+    if (Renderer)
+    {
+        if (frozenLayer)
+            Renderer->RemoveHud(frozenLayer.get());
+        if (frozenTexture != kInvalidTexture)
+            Renderer->DestroyDynamicTexture(frozenTexture);
+    }
+    frozenTexture = kInvalidTexture;
+}
+
+int32_t TPlayScreen::DrawerHeight() const
+{
+    constexpr int32_t kBottomBarH = 60;           // BottomBarPane_SPEC §3 (0x3c)
+    if (drawer == EDrawer::BuySell)
+        return TBuySellPane::kHeight;
+    return GetHudState().bottomBarOpen ? kBottomBarH : 0;
+}
+
+// REVSYNC: 0x0047ecc0 / 0x0047ece0 -- a close request reaches whatever the
+// drawer holds: the shop, or the HUD's bottom bar (mode 2, the HUD's Lower
+// Panel, SHudState::bottomBarOpen), which stays closed until that command
+// opens it again. An in-game load closes the bar so (LoadGame's reset;
+// seen in the emulator, AUTHOR_QUESTIONS.md 81), as would `hideresponse`,
+// which no shipped script uses; entering play opens it (Initialize). The
+// camera and fadescreenout ask only in mode 3, for the shop.
+void TPlayScreen::CloseDrawer()
+{
+    if (drawer == EDrawer::BuySell)
+        drawerclose = true;
+    else if (drawer == EDrawer::Hud)
+        GetHudState().bottomBarOpen = 0;
+}
+
+// REVSYNC: the drawer half of Pulse 0x0047b4d0, mode 3. A shop request opens
+// the drawer once the shop has re-initialized (0x0052f390); the request's end
+// (the shop's Exit) or a close request closes it.
+void TPlayScreen::UpdateDrawer()
+{
+    if (drawer == EDrawer::BuySell)
+    {
+        if (!buysellrequest || drawerclose)
+            CloseBuySellDrawer();
+    }
+    else if (buysellrequest)
+    {
+        if (BuySellPane.Initialize())
+            OpenBuySellDrawer();
+        else
+        {
+            // Retail retried every pulse and the script's `wait buysell`
+            // never ended; the port lets the script go.
+            buysellrequest = false;
+            BuySellPane.Reset();
+        }
+    }
+    drawerclose = false;
+}
+
+// REVSYNC: 0x0047b8c2..0x0047b966 -- the HUD's drawer content goes (bottom
+// bar, belt, quick spells), the side panel opens (+0x6a4), the text bar hides
+// (TTextBar::Hide 0x0054c9c0), and the shop is added and shown at the bottom
+// left. The dialog pane and the side tabs lay themselves out against the map
+// view, which the drawer shortens.
+void TPlayScreen::OpenBuySellDrawer()
+{
+    SHudState& hud = GetHudState();
+    hud.bottomBarOpen = 0;
+    hud.sidebarState  = HUD_SIDEBAR_OPEN;
+    TextBar.Hide();
+    AddPane(&BuySellPane);
+    BuySellPane.Show();
+    drawer = EDrawer::BuySell;
+    log_info("[buysell] the shop opens: %d rows", static_cast<int32_t>(BuySellPane.Items().size()));
+}
+
+// REVSYNC: 0x0047b7d5..0x0047b81c -- Reset the shop (0x00530600), take it
+// out, show the text bar again; the drawer is closed in mode 2, so the
+// bottom bar stays closed until the Lower Panel command opens it.
+void TPlayScreen::CloseBuySellDrawer()
+{
+    BuySellPane.Reset();
+    RemovePane(&BuySellPane);
+    TextBar.Show();
+    drawer         = EDrawer::Hud;
+    buysellrequest = false;
+    log_info("[buysell] the shop closes");
+}
+
+// REVSYNC: the drawer half of Pulse 0x0047b4d0, mode 2 -- the bottom bar
+// shows while the HUD's lower panel is open and the shop doesn't hold the
+// drawer, along the bottom of the map view and as wide as it: the display
+// less the side panel (retail's drawer pane hands its rect on in mode 2,
+// 0x0052da60 -> TBottomBarPane::SetRect 0x0052c930).
+void TPlayScreen::UpdateBottomBar()
+{
+    if (!bottombar->IsOpen())
+        return;
+    const bool open = drawer == EDrawer::Hud && GetHudState().bottomBarOpen;
+    if (open)
+    {
+        int32_t x = 0, y = 0, w = 0, h = 0;
+        GetMapViewRect(x, y, w, h);
+        bottombar->Place(x, y + h, w);
+    }
+    if (open == bottombar->IsHidden())
+        open ? bottombar->Show() : bottombar->Hide();
+}
+
+// A pane of the side panel, at the display's right edge: the upper slot at
+// the top, the lower slot under its 306 px. Placed and shown while the slot
+// is its, else hidden.
+enum class ESideSlot : int32_t { Upper = 0, Lower = 306 };
+static void PlaceSidePane(TPane& pane, ESideSlot slot, bool shown)
+{
+    if (!pane.IsOpen())
+        return;
+    if (shown)
+    {
+        const int32_t dw = Display.Width() > 0 ? Display.Width() : WIDTH;
+        pane.Resize(dw - pane.GetWidth(), static_cast<int32_t>(slot), pane.GetWidth(), pane.GetHeight());
+        if (pane.WasResized())
+            pane.PaneResized();
+    }
+    if (shown == pane.IsHidden())
+        shown ? pane.Show() : pane.Hide();
+}
+
+// The side panel's rebuilt panes while the side panel is open on theirs:
+// the stats and the spell book in the upper slot; the inventory, the spell
+// pane and the automap in the lower. (The equipment is still the HUD
+// harness's.)
+void TPlayScreen::UpdateSidePanes()
+{
+    const SHudState& hud = GetHudState();
+    const bool open = hud.sidebarState == HUD_SIDEBAR_OPEN;
+    PlaceSidePane(StatPane, ESideSlot::Upper, open && hud.topSlot == HUD_TOP_STATS);
+    PlaceSidePane(SpellBook, ESideSlot::Upper, open && hud.topSlot == HUD_TOP_BOOK);
+    PlaceSidePane(Inventory, ESideSlot::Lower, open && hud.bottomSlot == HUD_BOT_INV);
+    PlaceSidePane(SpellPane, ESideSlot::Lower, open && hud.bottomSlot == HUD_BOT_SPELL);
+    PlaceSidePane(AutoMap, ESideSlot::Lower, open && hud.bottomSlot == HUD_BOT_MAP);
+}
+
+// The shop's rect while the drawer holds it: its clicks and moves are its
+// own, not the world's.
+static bool InBuySellDrawer(int32_t x, int32_t y)
+{
+    return PlayScreen.Drawer() == TPlayScreen::EDrawer::BuySell &&
+           x >= BuySellPane.GetPosX() && x < BuySellPane.GetPosX() + BuySellPane.GetWidth() &&
+           y >= BuySellPane.GetPosY() && y < BuySellPane.GetPosY() + BuySellPane.GetHeight();
+}
+
+void TPlayScreen::GetMapViewRect(int32_t& x, int32_t& y, int32_t& w, int32_t& h) const
+{
+    if (g_playHudInitialized)
+    {
+        GetReconstructedPlayfieldRect(x, y, w, h);
+        return;
+    }
+    x = y = 0;
+    w = Display.Width()  > 0 ? Display.Width()  : WIDTH;
+    h = Display.Height() > 0 ? Display.Height() : HEIGHT;
 }
 
 void TPlayScreen::RenderFrame()
@@ -681,7 +1201,7 @@ void TPlayScreen::RenderFrame()
     if (g_playHudInitialized)
     {
         int32_t px = 0, py = 0, pw = 0, ph = 0;
-        GetReconstructedPlayfieldRect(px, py, pw, ph);
+        GetMapViewRect(px, py, pw, ph);
         mapRenderer->SetOutputViewport(pw, ph);
         if (Renderer)
         {
@@ -698,15 +1218,17 @@ void TPlayScreen::RenderFrame()
             Renderer->ResetPresentNDCRect();
     }
 
-    // Late camera update: gameplay has already moved the player for this
-    // fixed tick, so follow from the final transform immediately before
-    // rendering. The renderer compensates the camera origin by the followed
-    // height so Locke stays centered while walking up/down terrain.
+    // The view is the map pane's center, which TMapPane::UpdateMapPos moves
+    // toward the centeron target each tick, as retail drew every frame from
+    // it (the scroll origin is WorldToScreen(center) less half the pane,
+    // 0x004539d0), a tick behind (TMapPane::CameraPos). Following the player
+    // it moves on the tick as he does, so he doesn't shake against it; a pan
+    // elsewhere glides between ticks.
     if (CurrentMode() == GameMode() && Player)
     {
-        S3DPoint p;
-        Player->GetPos(p);
-        mapRenderer->SetCameraWorld(Player->GetLevel(), p.x, p.y, p.z);
+        const double glide = MapPane.IsFollowingPlayer() ? 0.0 : TTime::LegacyFrameFraction();
+        const S3DPoint p = MapPane.CameraPos(glide);
+        mapRenderer->SetCameraWorld(MapPane.GetMapLevel(), p.x, p.y, p.z);
     }
 
     // While the editor is paused and nothing is dirty, skip the world
@@ -714,6 +1236,8 @@ void TPlayScreen::RenderFrame()
     // View panel keeps displaying the previously rendered frame.
     if (!EditorShouldRenderWorld()) return;
     mapRenderer->RenderFrame();
+    if (risingNumbers)
+        risingNumbers->Compose(*mapRenderer);
 }
 
 // Diagnostic overlay: prints Locke's world position, walkmap height
@@ -734,13 +1258,13 @@ static void DrawPlayerStatusOverlay()
     const int32_t sx_world = p.x >> SECTORWSHIFT;
     const int32_t sy_world = p.y >> SECTORHSHIFT;
     const int32_t radius = ((TCharacter*)Player)->Radius();
-    int32_t r_min = 0, r_max = 0, r_h = 0;
-    MapPane.GetWalkHeightRadius(p, radius, r_min, r_max, r_h);
+    int32_t r_maxdelta = 0, r_h = 0;
+    bool r_hole = false;
+    MapPane.GetWalkHeightRadius(p, radius, r_maxdelta, r_h, r_hole);
     const TCharacter* blocker = ((TCharacter*)Player)->CharBlocking();
     const bool z_blocks    = std::abs(z_delta) > 32;
     const bool no_floor    = (walk == 0);
-    const bool slope_min   = std::abs(r_min) > 32;
-    const bool slope_max   = std::abs(r_max) > 32;
+    const bool step_blocks = r_maxdelta > 32;
     const bool char_blocks = (blocker != nullptr);
 
     TObjectInstance* pinst = static_cast<TObjectInstance*>(Player);
@@ -783,16 +1307,16 @@ static void DrawPlayerStatusOverlay()
                 ImGui::Text("pos     : (%d, %d, %d)  level=%d", p.x, p.y, p.z, lvl);
                 ImGui::Text("sector  : %d_%d", sx_world, sy_world);
                 ImGui::Text("walkmap : %d  (z-walk = %d)", walk, z_delta);
-                ImGui::Text("radius  : %d   r_h=%d  min=%d  max=%d",
-                            radius, r_h, r_min, r_max);
-                ImGui::Text("would block: %s%s%s%s%s%s",
+                ImGui::Text("radius  : %d   r_h=%d  maxdelta=%d  hole=%d",
+                            radius, r_h, r_maxdelta, (int)r_hole);
+                ImGui::Text("would block: %s%s%s%s%s",
                             z_blocks    ? "Z>32 "       : "",
                             no_floor    ? "no-floor "   : "",
-                            slope_min   ? "min>32 "     : "",
-                            slope_max   ? "max>32 "     : "",
+                            r_hole      ? "hole "       : "",
+                            step_blocks ? "step>32 "    : "",
                             char_blocks ? "char-blk "   : "",
-                            (!z_blocks && !no_floor && !slope_min &&
-                             !slope_max && !char_blocks) ? "no" : "");
+                            (!z_blocks && !no_floor && !r_hole &&
+                             !step_blocks && !char_blocks) ? "no" : "");
                 ImGui::Text("moving  : %s   moveangle=%d   anim=%s",
                             Player->IsMoving() ? "yes" : "no",
                             Player->GetMoveAngle(),
@@ -1084,11 +1608,27 @@ static void DrawClosestMonsterOverlay()
 
 // Legacy entry points still referenced by drivers / pane code. Pulse
 // pumps the per-frame state update; Animate fires the world render
-// (matching what TTestScreen does for TestModes::Render). DrawBackground
-// is dead -- no BITMAP.100 backdrop on the new path.
-void TPlayScreen::Pulse()                  { Update(); }
+// (matching what TTestScreen does for TestModes::Render); DrawBackground
+// only consumes the redraw flag -- no BITMAP.100 backdrop on the new path.
+// REVSYNC: Pulse @ 0x0047b4d0 -- the world, then the screen's panes
+// (0x0048fda0 at its end), then what the player explored for the automap
+// (0x0047c224: not while a modal pauses the world).
+void TPlayScreen::Pulse()
+{
+    Update();
+    TScreen::Pulse();
+    if (!ModalHas(MODAL_PAUSE))
+        AutoMap.RecordTravels();
+}
 void TPlayScreen::Animate(bool /*draw*/)
 {
+    // While a load runs behind the still, neither the world being replaced
+    // nor the HUD reading its player is drawn.
+    if (freeze == EFreeze::Frozen)
+    {
+        ShowStill();
+        return;
+    }
     // Refresh reconstructed HUD surfaces before the world render. The
     // EquipmentPane paperdoll temporarily uses the renderer's lit target;
     // rendering the world afterward overwrites that temporary target before
@@ -1096,6 +1636,7 @@ void TPlayScreen::Animate(bool /*draw*/)
     if (g_playHudInitialized)
         RenderUIHudModeEmbedded();
     RenderFrame();
+    CurrentMode()->Animate();
     EditorDrawChrome();
     if (DebugUI::IsVisible())
     {
@@ -1103,7 +1644,14 @@ void TPlayScreen::Animate(bool /*draw*/)
         DrawClosestMonsterOverlay();
     }
 }
-void TPlayScreen::DrawBackground()         { /* no backdrop blit on the new path */ }
+// No backdrop to blit on the new path, but this is where a screen consumes
+// its redraw flag (TScreen::DrawBackground): DrawFrame has already passed it
+// to the panes. Left set, every pane would recompose every frame after the
+// first Redraw (a focus change, the editor closing).
+void TPlayScreen::DrawBackground()
+{
+    dirty = false;
+}
 
 // *************************************************************************
 // * Input                                                                 *
@@ -1111,6 +1659,20 @@ void TPlayScreen::DrawBackground()         { /* no backdrop blit on the new path
 
 void TPlayScreen::KeyPress(int32_t key, bool down)
 {
+    // REVSYNC: 0x0047c63e -- while the text bar's prompt is open the play
+    // screen takes no keys at all, its panes', Escape and the editor's
+    // included: the typing arrives as characters (TTextBar::CharPress).
+    if (TextBar.IsPrompting())
+        return;
+
+    // A load is under way: the panes get the key (the progress popup holds
+    // it, when up), the world and the editor nothing.
+    if (GameFlow.Session().Loading())
+    {
+        TScreen::KeyPress(key, down);
+        return;
+    }
+
     // Editor toggle. F12 is the retail-era hotkey -- always handled at
     // the screen level so the user can flip modes regardless of who
     // currently owns input.
@@ -1128,80 +1690,331 @@ void TPlayScreen::KeyPress(int32_t key, bool down)
         return;
     }
 
-    // Give the active mode first crack at the key (game-mode movement
-    // bindings, etc.). If it consumes the event we stop here.
-    if (CurrentMode()->HandleKey(key, down)) return;
-
+    // REVSYNC: KeyPress @ 0x0047c630 -- the panes first (the dialog pane's
+    // choice keys, a modal's keys), then the play screen's own keys, which
+    // any flagged modal holds back: ESC opens the in-game menu (in demo
+    // mode it asks to quit); then the control map's commands, unless the
+    // modal keeps the keys (MODAL_KEYS).
     TScreen::KeyPress(key, down);
+    if (down && key == VK_ESCAPE && TopModalFlags() == 0 && !Editor)
+    {
+        if (demomode)
+            ingamemenu->AskExit();
+        else
+            OpenInGameMenu();
+        return;
+    }
+    if (ModalHas(MODAL_KEYS))
+        return;
+    CurrentMode()->HandleKey(key, down);
+}
+
+void TPlayScreen::OpenInGameMenu()
+{
+    if (InGameMenuOpen())
+        return;
+    menuPending = true;
+    ::SaveGame.CaptureThumbnail({}, [this] {
+        menuPending = false;
+        if (CurrentScreen == this && !IsDone())
+            ingamemenu->Open();
+    });
+}
+
+bool TPlayScreen::InGameMenuOpen() const
+{
+    return menuPending || ingamemenu->IsOpen();
+}
+
+bool TPlayScreen::MapHasPointer(int32_t x, int32_t y) const
+{
+    if (ModalHas(MODAL_MOUSE) || GameFlow.Session().Loading() || InBuySellDrawer(x, y))
+        return false;
+    // The side tabs over the play field don't take it: retail's hover
+    // cursor looks only at the map pane's rect (0x004544f6..0x00454527).
+    return !(g_playHudInitialized && (IsOffMapPane(x, y) || UIDragState::IsActive()));
+}
+
+uint32_t TPlayScreen::ControlModeMask() const
+{
+    // ControlMap.GetCommand returns the first binding whose modes meet the
+    // mask, so exactly one mode goes in ('S' is sneak in walk mode and
+    // thrust in combat mode).
+    if (Player)
+    {
+        if (Player->IsCombat())     return CTRL_COMBATMODE;
+        if (Player->IsBowMode())    return CTRL_BOWMODE;
+        if (Player->IsSneakMode())  return CTRL_SNEAKMODE;
+    }
+    return CTRL_NORMALMODE;
+}
+
+TPlayScreen::EClickRoute TPlayScreen::ClickRoute(int32_t x, int32_t y)
+{
+    // REVSYNC: TScreen::MouseClick 0x004903b0 -- a modal holding the mouse
+    // (MODAL_MOUSE) gets every click (0x004903f0); the HUD and the world get
+    // none.
+    if (ModalHas(MODAL_MOUSE))
+        return EClickRoute::Modal;
+    // A load is under way: the world takes no clicks.
+    if (GameFlow.Session().Loading())
+        return EClickRoute::Ignored;
+    if (InBuySellDrawer(x, y))
+        return EClickRoute::BuySell;
+    // The HUD: a pane beside the map, a drag in flight, or one of the side
+    // tabs' buttons over the play field. TMapPane::MouseClick leaves a press
+    // to the tabs only when a button holds it (0x004364d0, 0x0044f146..
+    // 0x0044f182); around and between the buttons it is the map's.
+    if (g_playHudInitialized &&
+        (IsOffMapPane(x, y) || UIDragState::IsActive() || UISideTabButtonAt(x, y) >= 0))
+        return EClickRoute::Hud;
+    return EClickRoute::World;
+}
+
+static bool IsButtonRelease(int32_t button)
+{
+    return button == MB_LEFTUP || button == MB_RIGHTUP || button == MB_MIDDLEUP;
 }
 
 void TPlayScreen::MouseClick(int32_t button, int32_t x, int32_t y)
 {
-    if (g_playHudInitialized &&
-        (IsReconstructedHudPoint(x, y) || UIDragState::IsActive()))
+    // REVSYNC: TScreen::MouseClick 0x004904ef..0x004904fc -- a release goes
+    // to every pane wherever it lands, the map's too, which leaves one on a
+    // side tab's button alone (0x0044f17b) and off its rect only forgets its
+    // press or ends the right-button walk (0x0044f917, 0x0044fbad). The HUD's
+    // item drag takes its own release (the drop).
+    const bool releaseToWorld = IsButtonRelease(button) && !UIDragState::IsActive() &&
+                                !(g_playHudInitialized && UISideTabButtonAt(x, y) >= 0);
+    switch (ClickRoute(x, y))
     {
-        const SHudState& s = GetHudState();
-        if (HandleMouseClickUISidebarModeConsumed(button, x, y))
-            return;
-        if (s.bottomBarOpen ||
-            (UIDragState::IsActive() &&
-             UIDragState::Get().source == EDragSource::SpellPane))
+      case EClickRoute::Modal:
+        TScreen::MouseClick(button, x, y);
+        return;
+      case EClickRoute::Ignored:
+        return;
+      case EClickRoute::BuySell:
+        TScreen::MouseClick(button, x, y);
+        break;
+      case EClickRoute::Hud:
+        // An item held from the HUD let go over the map: the map pane, the
+        // first pane a release reaches (TPlayScreen::Initialize 0x0047ad65),
+        // uses it on what is under it or drops it there; then the item panes
+        // end the grab.
+        if (button == MB_LEFTUP && UIDragState::HeldItem() && !IsOffMapPane(x, y) && UISideTabButtonAt(x, y) < 0)
+            CurrentMode()->HandleMouseClick(button, x, y);
+        if (!HandleMouseClickUISidebarModeConsumed(button, x, y))
         {
-            HandleMouseClickUIQuickSpellMode(button, x, y);
+            const SHudState& s = GetHudState();
+            TScreen::MouseClick(button, x, y);  // the screen's panes: the bars, the side panes
+            if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+                HandleMouseClickUIEquipMode(button, x, y);
+            if (button == MB_LEFTUP)
+                UIDragState::ReleaseUnclaimed();    // a drag no pane took ends here
         }
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseClickUISpellbookMode(button, x, y);
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
-            HandleMouseClickUIEquipMode(button, x, y);
+        break;
+      case EClickRoute::World:
+        TScreen::MouseClick(button, x, y);
+        // Route to the active runtime mode; editor mode forwards to the
+        // renderer's gizmo / drag picker, game mode forwards to MapPane's
+        // gameplay click handler (movement / interact / combat).
+        CurrentMode()->HandleMouseClick(button, x, y);
         return;
     }
-
-    TScreen::MouseClick(button, x, y);
-    // Route to the active runtime mode; editor mode forwards to the
-    // renderer's gizmo / drag picker, game mode forwards to MapPane's
-    // gameplay click handler (movement / interact / combat).
-    CurrentMode()->HandleMouseClick(button, x, y);
+    if (releaseToWorld)
+        CurrentMode()->HandleMouseClick(button, x, y);
 }
 
 void TPlayScreen::MouseMove(int32_t button, int32_t x, int32_t y)
 {
-    if (g_playHudInitialized)
+    if (ModalHas(MODAL_MOUSE))
     {
-        const SHudState& s = GetHudState();
-        if (HandleMouseMoveUISidebarModeConsumed(button, x, y))
-            return;
-        if (UIDragState::IsActive() &&
-            UIDragState::Get().source == EDragSource::SpellPane)
-        {
-            HandleMouseMoveUIQuickSpellMode(button, x, y);
-            return;
-        }
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_BOOK)
-            HandleMouseMoveUISpellbookMode(button, x, y);
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
-            HandleMouseMoveUIEquipMode(button, x, y);
-        if (IsReconstructedHudPoint(x, y) || UIDragState::IsActive())
-            return;
+        TScreen::MouseMove(button, x, y);
+        return;
     }
+    if (GameFlow.Session().Loading())
+        return;
 
-    TScreen::MouseMove(button, x, y);
-    // Game mode -> MapPane.MouseMove (drives wedge cursor while walking,
-    // bow aim, etc.). Editor mode default no-op until we wire its
-    // hover/drag overlays.
+    if (g_playHudInitialized && !InBuySellDrawer(x, y))
+    {
+        // A HUD item drag follows the pointer; the paper doll and the
+        // screen's panes (the bars, the side panes) see the move.
+        if (UIDragState::IsActive())
+            UIDragState::UpdateDrag(x, y);
+        if (!HandleMouseMoveUISidebarModeConsumed(button, x, y))
+        {
+            const SHudState& s = GetHudState();
+            if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+                HandleMouseMoveUIEquipMode(button, x, y);
+            TScreen::MouseMove(button, x, y);
+        }
+    }
+    else
+        TScreen::MouseMove(button, x, y);
+
+    // REVSYNC: TScreen::MouseMove 0x00490530 -- every pane gets every move,
+    // with no rect test (0x004905b9..0x0049063d), so the map's comes wherever
+    // the pointer is: a right-button walk steers, and a drawn bow aims, over
+    // the HUD as over the play field (TMapPane::MouseMove 0x004504d0). Game
+    // mode -> MapPane.MouseMove; editor mode has no move handling yet.
     CurrentMode()->HandleMouseMove(button, x, y);
 }
 
-void TPlayScreen::Joystick(int32_t /*key*/, bool /*down*/)
+// REVSYNC: Joystick @ 0x0047ce80 -> TScreen 0x00490860: the panes. (Nothing
+// sends joystick events yet under sokol_app.)
+void TPlayScreen::Joystick(int32_t key, bool down)
 {
-    // TODO(port): wire sokol_app gamepad events. Stubbed for now.
+    TScreen::Joystick(key, down);
 }
 
-void TPlayScreen::Command(GAMECOMMAND /*command*/)
+// REVSYNC: Command @ 0x0047cf40, the control map's commands (a key's down
+// command, or its up command on release). Every command is held back while
+// control is off (the global control-off flag DAT_00666924, 0x0047d009), so
+// none of these work in a cutscene or a conversation. The port's command
+// numbers are the 1998 table's (playscreen.h), not retail's; each case names
+// retail's. Block and leap are held controls UpdateMove polls (retail
+// 0x0047de30), so their commands do nothing here, as in 1998.
+// TODO(port): the inventory, spell (INVOKE*), use / get and bow commands.
+void TPlayScreen::Command(GAMECOMMAND command)
 {
-    // TODO(port): full GAMECOMMAND dispatch (combat / inventory / spells
-    // / dodge / leap / etc.). Tracked alongside the player-input revival.
+    if (!controlon)
+        return;
+    switch (command)
+    {
+    // REVSYNC: 0x0047d066 (case 1) -- in the combat root the key ends the
+    // fight and turns the player's auto-combat off (until it next finds no
+    // one); anywhere else, the bow root too, it starts one on whoever is
+    // ahead and turns auto-combat on. Whether the fight starts or ends or
+    // not, the switch follows the key.
+    case GAMECMD_COMBAT:
+        if (Player)
+        {
+            if (Player->IsCombat())
+            {
+                Player->EndFighting();
+                Player->SetAutoCombat(false);
+            }
+            else
+            {
+                TextBar.CommitInput();      // 0x0047d0d5
+                Player->BeginFighting(nullptr, ACTION_COMBAT);
+                Player->SetAutoCombat(true);
+            }
+        }
+        break;
+    case GAMECMD_SIDEPANEL:
+        ToggleUISidebarPanel();
+        break;
+    case GAMECMD_BOTTOMPANEL:
+        // Command 5 toggles the bottom drawer: with the shop in it, that
+        // closes the shop.
+        if (Drawer() == EDrawer::BuySell)
+            CloseDrawer();
+        else
+            ToggleUIBottomPanel();
+        break;
+    case GAMECMD_MOVEDOWN:          // 0x4a / 0x4b: the run key's down and up
+    case GAMECMD_MOVEUP:
+        // The mode follows the held flags: run, else sneak, else walk.
+        // Retail's sneak is a toggle of its own (case 3, 0x004cf2e0); the
+        // port's control table is 1998's, where sneak is held like run.
+        if (Player)
+        {
+            uint32_t state, changed;
+            ControlMap.GetCommandFlags(state, changed);
+            if (state & CMDFLAG_RUN)        Player->SetRunMode();
+            else if (state & CMDFLAG_SNEAK) Player->SetSneakMode();
+            else                            Player->SetWalkMode();
+        }
+        break;
+    case GAMECMD_SWING:             // 0x21-0x23: ButtonAttack(1..3) 0x004d2480
+    case GAMECMD_THRUST:
+    case GAMECMD_CHOP:
+        if (Player)
+        {
+            const int32_t button = command - GAMECMD_SWING + 1;
+            const bool ok = Player->ButtonAttack(button);
+            log_info("[input] attack button %d -> %s", button, ok ? "started" : "refused");
+        }
+        break;
+    case GAMECMD_COMBO1:  case GAMECMD_COMBO2:  case GAMECMD_COMBO3:
+    case GAMECMD_COMBO4:  case GAMECMD_COMBO5:  case GAMECMD_COMBO6:
+    case GAMECMD_COMBO7:  case GAMECMD_COMBO8:  case GAMECMD_COMBO9:
+    case GAMECMD_COMBO10: case GAMECMD_COMBO11: case GAMECMD_COMBO12:
+        if (Player)         // 0x24-0x2f: ButtonAttack(4..15)
+            Player->Combo(command - GAMECMD_COMBO1 + 1);
+        break;
+    case GAMECMD_DODGELEFT:     case GAMECMD_DODGERIGHT:
+    case GAMECMD_DODGEUP:       case GAMECMD_DODGEDOWN:
+    case GAMECMD_DODGEUPLEFT:   case GAMECMD_DODGEUPRIGHT:
+    case GAMECMD_DODGEDOWNLEFT: case GAMECMD_DODGEDOWNRIGHT:
+        if (Player)         // 0x30-0x37 (0x0047d900): Dodge(0..7)
+            Player->Dodge(command - GAMECMD_DODGELEFT);
+        break;
+    case GAMECMD_BELTUSE1: case GAMECMD_BELTUSE2: case GAMECMD_BELTUSE3:
+    case GAMECMD_BELTUSE4: case GAMECMD_BELTUSE5:
+        if (Player)         // 0x18-0x1c (0x0047d882): UseBelt(0..4) 0x0051e420
+            Player->UseBelt(command - GAMECMD_BELTUSE1);
+        break;
+    case GAMECMD_USE:               // 0xe: Use 0x004d01e0
+        if (Player)
+            Player->TryUse();
+        break;
+    case GAMECMD_GET:               // 0xf: Get 0x004d0430
+        if (Player)
+            Player->TryGet();
+        break;
+    case GAMECMD_JUMP:
+        if (Player)
+            Player->Jump();
+        break;
+    case GAMECMD_GAMEOPTIONS:       // 0x52: 0x0047e700
+        ingamemenu->OpenOptions();
+        break;
+    case GAMECMD_LOADGAME:          // 0x53: = 0x0047e660
+        ingamemenu->OpenLoad();
+        break;
+    case GAMECMD_SAVEGAME:          // 0x54: the thumbnail (0x0047dc05), then the dialog
+        if (InGameMenuOpen())
+            break;
+        menuPending = true;
+        ::SaveGame.CaptureThumbnail({}, [this] {
+            menuPending = false;
+            if (CurrentScreen == this && !IsDone())
+                ingamemenu->OpenSave();
+        });
+        break;
+    case GAMECMD_QUICKSAVE:         // 0x55: the thumbnail (0x0047dd08), QuickSave 0x0047e850
+        GameFlow.Session().RequestQuickSave();
+        break;
+    default:
+        break;
+    }
 }
 
+void TPlayScreen::PlayMovie(const char* path)
+{
+    if (movieplaying)
+        return;
+
+    audio::MusicStop();
+    movieplaying = true;
+    movie.Initialize();
+    movie.SetOnFinished([this] { movie.EndModal(0); });
+    // Retail's player blocked the frame loop: the movie alone takes input,
+    // pulses and draws.
+    PushModal(&movie, MODAL_GAME | MODAL_ANIMATE, [this](int32_t) {
+        movie.Close();
+        movieplaying = false;
+    });
+    movie.Open(path);           // one that can't play ends at once
+}
+
+// REVSYNC: UpdateMove = retail 0x0047de30. Each tick it reads the held
+// command flags: direction (Go / Leap), block, and, with no direction held,
+// a Stop. The movement mode is not here: run and sneak change on their
+// keys' commands (Command, GAMECMD_MOVEDOWN / MOVEUP). `changed` is not a
+// per-tick edge mask: the control map only ever ORs bits into it (retail
+// 0x0065a9c8 too), so it reads "a held control changed at some point".
 void TPlayScreen::UpdateMove()
 {
     if (!Player) return;
@@ -1209,26 +2022,8 @@ void TPlayScreen::UpdateMove()
     uint32_t state, changed;
     ControlMap.GetCommandFlags(state, changed);
 
-    // Run / sneak mode toggles. The 'R' and 'S' (in sneak-mode binding)
-    // keys carry a CMDFLAG_RUN / CMDFLAG_SNEAK bit alongside their
-    // GAMECMD_MOVEDOWN dispatch -- ControlMap maintains the bit while
-    // held, and `changed` flags the bits that flipped this poll. Press
-    // edge -> swap the player's root animation to run/sneak; release
-    // edge -> swap back to walk. Both keyboard direction keys AND the
-    // mouse walk-to path then naturally pick up the new root, so
-    // hold-R + right-click runs toward the cursor, etc.
-    if (changed & CMDFLAG_RUN)
-    {
-        if (state & CMDFLAG_RUN) Player->SetRunMode();
-        else                     Player->SetWalkMode();
-    }
-    if (changed & CMDFLAG_SNEAK)
-    {
-        if (state & CMDFLAG_SNEAK) Player->SetSneakMode();
-        else                       Player->SetWalkMode();
-    }
-
-    // Synthesize diagonal flags from adjacent cardinals so keyboards
+    // REVSYNC-DIVERGENCE: retail takes the lowest held direction bit (two
+    // arrow keys walk along one of them). Synthesize diagonal flags from adjacent cardinals so keyboards
     // without a Home / PgUp / End / PgDn cluster can still walk
     // diagonally with two arrow keys. The retail bit-scan picks the
     // lowest set CMDFLAG bit, so without this UP+RIGHT would yield
@@ -1258,12 +2053,19 @@ void TPlayScreen::UpdateMove()
     for (c = 1; c < (1 << 8) && !(c & state); c <<= 1, angle += 32);
     if (angle > 255) angle = -1;  // no direction held
 
+    // REVSYNC: UpdateMove @ 0x0047de30 -- leap in a combat or bow root;
+    // else Go, unless a move already heads that way (the doing block's move
+    // angle: holding a direction calls Go once, not every tick). (The debug
+    // camera, 0x006671f0 set by the dev 'X' key, turns the direction and
+    // has a mode of its own; not ported.)
     if (angle >= 0)
     {
+        const TActionBlock* doing = Player->DoingBlock();
+        const bool moving = doing && (doing->action == ACTION_MOVE || doing->action == ACTION_COMBATMOVE ||
+                                      doing->action == ACTION_BOWMOVE);
         if (Player->IsFighting() && (state & CMDFLAG_LEAP))
             Player->Leap(angle);
-        else if (Player->GetMoveAngle() != angle ||
-                 !(Player->IsDoing(ACTION_MOVE) || Player->IsDoing(ACTION_COMBATMOVE)))
+        else if (!moving || doing->moveangle != angle)
             Player->Go(angle);
     }
     else if (changed && Player->IsMoving() && !Player->IsGoto())
@@ -1289,14 +2091,38 @@ void TPlayScreen::SetFullScreen(bool on)
     interfacedirty = true;
 }
 
+// REVSYNC: 0x0047c550 -- demo mode: the main player plays itself (its AI
+// flag, set by name in retail: 0x00472db0 "AI"); leaving it gives the player
+// control back.
 void TPlayScreen::SetDemoMode(bool on)
 {
     demomode = on;
+    if (!on)
+        SetControlOn(true);
+    if (Player)
+        Player->SetFlag(OF_AI, on);
 }
 
+// REVSYNC: 0x0047c580 -- control on also ends demo mode. Control off lets go
+// of the right button (walking) and the movement keys through the screen's
+// own handlers, so nothing held keeps the player moving into a cutscene.
 void TPlayScreen::SetControlOn(bool on)
 {
+    if (controlSeam)
+    {
+        controlSeam(on);
+        return;
+    }
     controlon = on;
+    if (on)
+    {
+        demomode = false;
+        return;
+    }
+    MouseClick(MB_RIGHTUP, 1, 1);
+    for (const int32_t key : { VK_UP, VK_LEFT, VK_RIGHT, VK_DOWN, int32_t('R'),
+                               VK_NEXT, VK_PRIOR, VK_HOME, VK_END })
+        KeyPress(key, false);
 }
 
 void TPlayScreen::HideLowerPanes()
@@ -1310,49 +2136,47 @@ void TPlayScreen::ShowLowerPanes()
     // TODO(port): symmetric reveal.
 }
 
-// *************************************************************************
-// * Save / load                                                           *
-// *************************************************************************
-
-void TPlayScreen::LoadGame(int32_t game)
+void TPlayScreen::ShowStatPane()
 {
-    loadgame = true;
-    gamenum  = game;
-    loadgamepath[0] = '\0';
-}
-
-void TPlayScreen::LoadGameFile(const char* path)
-{
-    if (!path) return;
-    loadgame = true;
-    strncpyz(loadgamepath, path, MAXPATHLEN);
-}
-
-void TPlayScreen::SaveGame(int32_t game)
-{
-    savegame = true;
-    gamenum  = game;
-}
-
-void TPlayScreen::SaveMap()
-{
-    savemap = true;
+    SHudState& hud = GetHudState();
+    hud.topSlot = HUD_TOP_STATS;
+    hud.sidebarState = HUD_SIDEBAR_OPEN;
+    StatPane.SetDirty(true);
 }
 
 // *************************************************************************
 // * Game time                                                             *
 // *************************************************************************
 
+// REVSYNC: the frame count retail's callers read inline (`[+0x688] -
+// [+0x684] + [+0x680]`): a loaded game's frames go on from its saved time.
 int32_t TPlayScreen::GameFrame() const
 {
-    return gameframes;
+    return lastsessionframes - sessionstart + gameframes;
 }
 
+// REVSYNC: TPlayScreen::Animate @ 0x0047c2c0 -- the frame count, then game
+// time in hundredths of a second at 24 frames a second from the game's
+// whole frame count (GameFrame() * 100 / 24, 0x0047c36b..0x0047c3af; the
+// regen, poison and recovery timers read it), then the time of day.
+void TPlayScreen::AdvanceGameFrame()
+{
+    ++gameframes;
+    gametime = (int32_t)((int64_t)GameFrame() * 100 / 24);
+    timeofday = TimeOfDayMinutes(gametime);
+}
+
+// REVSYNC: TPlayScreen::SetGameTime @ 0x0047e950 -- the saved game time
+// becomes the frames before this session (t * 24 / 100), which GameFrame
+// goes on from, and the minute of the day is set at once, so the area
+// entered on load sees the saved time. The port also sets gametime at once;
+// retail left it to the next Animate.
 void TPlayScreen::SetGameTime(int32_t t)
 {
-    gametime = t;
     sessionstart = gameframes;
-    lastsessionframes = t;
+    lastsessionframes = int32_t(int64_t(t) * 24 / 100);
+    gametime = int32_t(int64_t(lastsessionframes) * 100 / 24);
+    timeofday = TimeOfDayMinutes(gametime);
 }
 
 int32_t TPlayScreen::TimeOfDay() const
@@ -1360,35 +2184,72 @@ int32_t TPlayScreen::TimeOfDay() const
     return timeofday;
 }
 
+// The bounds of the twilight ramps, TWILIGHT minutes centred on 06:00 and
+// 18:00 (retail Daylight and DayTimeFlag both compute them inline).
+namespace {
+struct STwilight
+{
+    int32_t morningbeg, morningend, eveningbeg, eveningend;
+};
+
+STwilight Twilight()
+{
+    const int32_t half = Rules.twilight >> 1;
+    STwilight t;
+    t.morningbeg = 6 * 60 - half;
+    t.morningend = t.morningbeg + Rules.twilight - 1;
+    t.eveningbeg = 18 * 60 - half;
+    t.eveningend = t.eveningbeg + Rules.twilight - 1;
+    return t;
+}
+}  // namespace
+
+// REVSYNC: TPlayScreen::Daylight @ 0x0047ea00 -- the daylight, 0 (night) to
+// 255 (day): 0 outside the twilights, 255 between them, a ramp across each.
+// With RealTimeLight on (0x0047ea46) the ramp is smooth; off, it moves in
+// TWILIGHT's step count (rules.def: 8 steps over 60 minutes).
 int32_t TPlayScreen::Daylight() const
 {
-    // Smooth 0..255 ambient curve as a function of in-game minutes.
-    // Mirrors the retail dawn/dusk fade without bothering with the
-    // legacy table-of-deltas. Tweakable in lighting/script systems.
-    const int32_t day_minutes = 24 * 60;
-    int32_t t = timeofday % day_minutes;
-    if (t < 0) t += day_minutes;
-    // Centered cosine on noon: 0 at midnight, 255 at noon.
-    const float frac  = float(t) / float(day_minutes);
-    const float angle = (frac - 0.5f) * 2.0f * 3.14159265f;
-    const float cosv  = std::cos(angle);
-    const float v     = (cosv * 0.5f + 0.5f) * 255.0f;
-    if (v < 0.0f)   return 0;
-    if (v > 255.0f) return 255;
-    return int32_t(v);
+    const STwilight tw = Twilight();
+    const int32_t time = timeofday;
+    if (time > tw.eveningend || time < tw.morningbeg)
+        return 0;
+    if (time > tw.morningend && time < tw.eveningbeg)
+        return 255;
+
+    // Minutes into the morning ramp, or left of the evening one.
+    const int32_t into = (time <= tw.morningend) ? time - tw.morningbeg
+                                                 : Rules.twilight - (time - tw.eveningbeg);
+    if (RealTimeLight)
+        return into * 255 / Rules.twilight;
+    const int32_t step = into * Rules.twilightsteps / Rules.twilight;
+    return step * 255 / Rules.twilightsteps;
 }
 
+// REVSYNC: TPlayScreen::DayTimeFlag @ 0x0047eab0 -- DAY_MIDNIGHT at minute 0,
+// DAY_NOON at 720, else night, day, morning or evening by the twilights.
 int32_t TPlayScreen::DayTimeFlag() const
 {
-    const int32_t mins = timeofday % (24 * 60);
-    const int32_t h = (mins < 0 ? mins + 24 * 60 : mins) / 60;
-    if (h < 5)  return DAY_MIDNIGHT;
-    if (h < 8)  return DAY_MORNING;
-    if (h < 12) return DAY_DAYTIME;
-    if (h < 14) return DAY_NOON;
-    if (h < 19) return DAY_DAYTIME;
-    if (h < 21) return DAY_EVENING;
-    return DAY_NIGHT;
+    const STwilight tw = Twilight();
+    const int32_t time = timeofday;
+    if (time == 0)
+        return DAY_MIDNIGHT;
+    if (time == 12 * 60)
+        return DAY_NOON;
+    if (time > tw.eveningend || time < tw.morningbeg)
+        return DAY_NIGHT;
+    if (time > tw.morningend && time < tw.eveningbeg)
+        return DAY_DAYTIME;
+    return (time <= tw.morningend) ? DAY_MORNING : DAY_EVENING;
+}
+
+// Debug: the same day's game time at `minutes` past midnight.
+void TPlayScreen::SetTimeOfDay(int32_t minutes)
+{
+    if (Rules.daylength <= 0)
+        return;
+    const int64_t day = int64_t(gametime) / Rules.daylength;
+    SetGameTime(int32_t(day * Rules.daylength + int64_t(minutes) * Rules.daylength / 1440));
 }
 
 // *************************************************************************

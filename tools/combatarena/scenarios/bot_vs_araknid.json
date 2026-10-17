@@ -1,0 +1,12 @@
+{
+  "name": "bot_vs_araknid",
+  "about": "Locke played by the player bot (--playerbot, docs/gameplay/PLAYER_BOT.md) against an Araknid spawned beside him in the forest: stand off, strike, back off, step out of its bites.",
+  "slot": "Port Resave",
+  "seed": 1,
+  "ticks": 1440,
+  "exec": [
+    "sleep 24",
+    "addat 5900 24815 Araknid"
+  ],
+  "playerbot": true
+}

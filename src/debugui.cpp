@@ -187,7 +187,7 @@ void TMapRenderer::DrawDebugTab()
             ImGui::SameLine(); if (ImGui::RadioButton("ao",      s.view_mode == 7)) s.view_mode = 7;
 
             ImGui::TextUnformatted("lighting mode:");
-            ImGui::SameLine(); if (ImGui::RadioButton("retail 1998", s.lighting_mode == 0)) s.lighting_mode = 0;
+            ImGui::SameLine(); if (ImGui::RadioButton("classic (retail)", s.lighting_mode == 0)) s.lighting_mode = 0;
             ImGui::SameLine(); if (ImGui::RadioButton("modern",      s.lighting_mode == 1)) s.lighting_mode = 1;
 
             ImGui::Separator();
@@ -354,7 +354,14 @@ void TMapRenderer::DrawDebugTab()
                 rs.sun_color_g          = (uint8_t)std::clamp(int(s.color[1] * 255.0f + 0.5f), 0, 255);
                 rs.sun_color_b          = (uint8_t)std::clamp(int(s.color[2] * 255.0f + 0.5f), 0, 255);
                 rs.sun_intensity        = s.intensity;
-                rs.light_ceiling        = s.light_ceiling;
+                rs.ambient_scale        = s.ambient_scale;
+                rs.sun_share            = s.sun_share;
+                rs.tile_baked_level     = s.tile_baked_level;
+                rs.tone_shoulder        = s.tone_shoulder;
+                rs.character_key_light  = s.character_key_light;
+                rs.character_light_boost= s.character_light_boost;
+                rs.character_light_saturation = s.character_light_saturation;
+                rs.character_retail_light = s.character_retail_light;
                 rs.sun_shadow_enable    = s.sun_shadow;
                 rs.sun_shadow_step_wu   = s.sun_shadow_step;
                 rs.sun_shadow_soft_px   = s.sun_shadow_soft;
@@ -400,7 +407,14 @@ void TMapRenderer::DrawDebugTab()
                 rs.sun_color_g          = (uint8_t)std::clamp(int(s.color[1] * 255.0f + 0.5f), 0, 255);
                 rs.sun_color_b          = (uint8_t)std::clamp(int(s.color[2] * 255.0f + 0.5f), 0, 255);
                 rs.sun_intensity        = s.intensity;
-                rs.light_ceiling        = s.light_ceiling;
+                rs.ambient_scale        = s.ambient_scale;
+                rs.sun_share            = s.sun_share;
+                rs.tile_baked_level     = s.tile_baked_level;
+                rs.tone_shoulder        = s.tone_shoulder;
+                rs.character_key_light  = s.character_key_light;
+                rs.character_light_boost= s.character_light_boost;
+                rs.character_light_saturation = s.character_light_saturation;
+                rs.character_retail_light = s.character_retail_light;
                 rs.sun_shadow_enable    = s.sun_shadow;
                 rs.sun_shadow_step_wu   = s.sun_shadow_step;
                 rs.sun_shadow_soft_px   = s.sun_shadow_soft;
@@ -464,46 +478,40 @@ void TMapRenderer::DrawDebugTab()
 
             // Ambient color + the live ambient term get overwritten each
             // frame from the active TArea (AMBLIGHT/AMBCOLOR via MapPane).
-            // Show them read-only, and expose the tunable divisor that
-            // controls the scaling from AMBLIGHT's arbitrary units to
-            // the 0..1 shader value. See maprenderer.cpp ambient bridge.
+            // Show them read-only. Classic maps AMBLIGHT exactly as retail
+            // (classiclighting.cpp); the divisor below only shapes the
+            // modern mode. See maprenderer.cpp ambient bridge.
             ImGui::BeginDisabled(true);
-            ImGui::ColorEdit3("ambient color (from area.def)", s.ambient_color);
+            ImGui::ColorEdit3("ambient color (live)", s.ambient_color);
             ImGui::SliderFloat("ambient (live)", &s.ambient, 0.0f, 1.0f);
             ImGui::EndDisabled();
-            ImGui::SliderFloat("ambient divisor", &s.ambient_divisor,
-                               10.0f, 100.0f, "%.1f");
+            ImGui::BeginDisabled(s.lighting_mode == 0);
+            ImGui::SliderFloat("ambient scale", &s.ambient_scale,
+                               0.25f, 4.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+            ImGui::SliderFloat("sun share", &s.sun_share, 0.0f, 1.0f, "%.2f");
+            ImGui::SliderFloat("tile baked level", &s.tile_baked_level, 0.25f, 1.0f, "%.2f");
+            ImGui::SliderFloat("tone shoulder", &s.tone_shoulder, 0.5f, 1.0f, "%.2f");
+            ImGui::SliderFloat("character key light", &s.character_key_light, 0.0f, 1.0f, "%.2f");
+            ImGui::SliderFloat("character light boost", &s.character_light_boost, 0.5f, 2.0f, "%.2f");
+            ImGui::SliderFloat("character light colour", &s.character_light_saturation, 0.0f, 1.0f, "%.2f");
+            ImGui::SliderFloat("character retail light", &s.character_retail_light, 0.0f, 1.0f, "%.2f");
+            ImGui::EndDisabled();
             ImGui::SameLine();
             ImGui::TextDisabled("(?)");
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip(
-                    "ambient = AMBLIGHT * Ambient3D / (divisor * 100)\n"
-                    "Lower = brighter ambient. AMBLIGHT is authored in\n"
-                    "arbitrary units. At divisor=100 with AMBLIGHT=30\n"
-                    "and Ambient3D=100, s.ambient = 0.30. Drop the\n"
-                    "divisor to push ambient overbright (paired with\n"
-                    "light_ceiling > 1.0 below).");
-
-            ImGui::SliderFloat("light ceiling", &s.light_ceiling,
-                               0.25f, 8.0f, "%.2f",
-                               ImGuiSliderFlags_Logarithmic);
-            ImGui::SameLine();
-            ImGui::TextDisabled("(?)");
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip(
-                    "Per-channel clamp on summed light (ambient +\n"
-                    "point lights) before albedo multiply. Caps\n"
-                    "burn-out from stacked point lights. > 1.0 allows\n"
-                    "overbright; the linear-space GPU path needs this\n"
-                    "to match retail's non-linear palette boost.");
+                    "Modern mode only ([Revisited] AmbientScale):\n"
+                    "ambient = retail's tile ambient gain, 10 * AMBLIGHT / 255\n"
+                    "with the colour scaled to a max channel of 1, times\n"
+                    "this. Classic uses retail's light table exactly\n"
+                    "(docs/LIGHTING_FIDELITY.md).");
 
             // ---- Time of day --------------------------------------------
             // Drives the day/night ambient blend in TArea::Pulse. The
-            // current minute, daylight scalar (0..255 sun curve), and
-            // coarse DayTimeFlag bucket are all derived from
-            // PlayScreen.gametime; SetGameTime jumps that clock forward
-            // or backward, after which the next TArea::Pulse picks up
-            // the new value and FadeAmbient interpolates accordingly.
+            // current minute, daylight (0..255) and DayTimeFlag bucket are
+            // all derived from PlayScreen.gametime; SetTimeOfDay moves that
+            // clock within the day, after which the next TArea::Pulse picks
+            // up the new value and FadeAmbient interpolates accordingly.
             ImGui::Separator();
             const int32_t day_minutes = 24 * 60;
             int32_t tod_min = PlayScreen.TimeOfDay() % day_minutes;
@@ -523,14 +531,9 @@ void TMapRenderer::DrawDebugTab()
             int set_min = tod_min;
             if (ImGui::SliderInt("time-of-day (minutes)", &set_min,
                                  0, day_minutes - 1, "%d min"))
-            {
-                // gametime is centi-seconds; 1 minute = 6000.
-                PlayScreen.SetGameTime(set_min * 6000);
-            }
+                PlayScreen.SetTimeOfDay(set_min);
 
-            auto set_minute = [](int32_t m) {
-                PlayScreen.SetGameTime(m * 6000);
-            };
+            auto set_minute = [](int32_t m) { PlayScreen.SetTimeOfDay(m); };
             if (ImGui::Button("Midnight (00:00)")) set_minute(0);
             ImGui::SameLine();
             if (ImGui::Button("Sunrise (06:00)")) set_minute(6 * 60);

@@ -7,6 +7,7 @@
 #include "revenant.h"
 #include "audio_backend.h"
 #include "logging.h"
+#include "module.h"
 #include "parse.h"
 #include "sound.h"
 #include "mappane.h"
@@ -376,12 +377,18 @@ void TArea::CloseCDMusic()
 // Advances the playlist. Called from the area's per-tick update. The
 // caller-visible behavior matches 1998: pick the next track when the
 // previous one finishes, with `cdplaypause` seconds of silence between.
+//
+// A deterministic run (DeterministicRun) plays the list as a NOSOUND retail
+// would: no track is ever playing or starts, and the retry waits on game
+// time, so the list's random picks fall on the same ticks in every run
+// (docs/playtest/PLAN.md §6.3).
 void TArea::PlayCDMusic()
 {
     if (cdplaylistsize <= 0) return;
-    if (audio::MusicPlaying()) return;
+    const bool sounding = !DeterministicRun();
+    if (sounding && audio::MusicPlaying()) return;
 
-    const int32_t now = static_cast<int32_t>(tickcount());
+    const int32_t now = static_cast<int32_t>(GameTickCount());
 
     // Hold the silence gap after a track ends.
     if (cdplaystart != 0 && (now - cdplaystart) < cdplaywait) {
@@ -400,7 +407,7 @@ void TArea::PlayCDMusic()
     }
 
     char path[MAXPATHLEN];
-    if (!BuildMusicTrackPath(cdplaylist[cdplaynum], path, sizeof(path)) ||
+    if (!sounding || !BuildMusicTrackPath(cdplaylist[cdplaynum], path, sizeof(path)) ||
         !audio::MusicPlayFile(path, /*looping*/ false)) {
         // Failed to start — back off so we don't hammer disk on missing files.
         cdplaystart  = now;
@@ -537,6 +544,7 @@ void TArea::Enter()
         const float int_mul   = float(RevisitedSettings.point_light_int_mul   * point_light_int_mul);
         const float range_mul = float(RevisitedSettings.point_light_range_mul * point_light_range_mul);
         mr->SetPointLightMultipliers(int_mul, range_mul);
+        mr->SetDaylightCycle((flags & AREA_DONIGHT) != 0);
     }
 
   // Load local scripts
@@ -547,7 +555,9 @@ void TArea::Enter()
     if (Player)
         TextBar.Print("%s entered %s", Player->GetName(), name);
 
-    log_info("[area] entered '%s' (level=%d, audioenv=%d%s%s%s)", name, this->level,
+    const SColor& ambcolor_now = MapPane.GetAmbientColor();
+    log_info("[area] entered '%s' (level=%d, ambient=%d (%d,%d,%d), audioenv=%d%s%s%s)", name, this->level,
+             MapPane.GetAmbientLight(), ambcolor_now.red, ambcolor_now.green, ambcolor_now.blue,
              audioenv,
              ambsound[0] ? ", ambsound=" : "", ambsound[0] ? ambsound : "",
              bgeffect[0] ? ", bgeffect set" : "");
@@ -600,17 +610,20 @@ bool TAreaManager::Initialize()
     return true;
 }
 
-// Closes the area manager
+// Closes the area manager. The next Initialize reloads area.def (each game
+// starts with its module's areas).
 void TAreaManager::Close()
 {
     areas.DeleteAll();
+    initialized = false;
 }
 
 // Loads all areas from the "AREA.DEF" file
+// REVSYNC: Load @ 0x0041c000 — the active module's area.def, else the shared one.
 bool TAreaManager::Load()
 {
-    char fname[MAXPATHLEN];
-    sprintf(fname, "%s%s", ClassDefPath, "area.def");
+    const std::string fname_str = ModuleManager.DataFilePath("area.def");
+    const char *fname = fname_str.c_str();
 
     FILE *fp = rev_fopen(fname, "rb");
     if (!fp)
@@ -696,6 +709,12 @@ void TAreaManager::Pulse()
   // can decide between snap and FadeAmbient.
     lastpos = pos;
     lastlevel = level;
+}
+
+void TAreaManager::ExitAll()
+{
+    for (int32_t c = 0; c < areas.NumItems(); c++)
+        areas[c]->Exit();
 }
 
 PTArea TAreaManager::CurrentArea()

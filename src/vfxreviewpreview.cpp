@@ -1,0 +1,163 @@
+#include "vfxreviewpreview.h"
+#include "time.h"
+#include <algorithm>
+#include <cstring>
+
+namespace {
+struct Mapping { uint32_t type_id; const char* preview_id; bool partial; const char* description; };
+constexpr Mapping mappings[] = {
+#include "vfxreviewpreviewmap.inc"
+};
+
+bool NeedsEndpoints(uint32_t id)
+{
+    switch (id) {
+        case 0x63fd382au: case 0x63fd3827u: case 0x113803f4u:
+        case 0xb1c4c90fu: case 0x10da54d0u: case 0xad92bd1eu:
+        case 0xad92bd1fu: case 0xd000f005u: case 0xba09feadu: return true;
+        default: return false;
+    }
+}
+
+bool IsDeclaredSelfMoving(uint32_t id,const VfxTest::SEffect& effect)
+{
+    // These exact audited routes implement their declared movement/collision
+    // internally: Head's trap plane and Dragon's Fighting target/ground0.
+    // Other aliases still require endpoints; arbitrary directions are not certified.
+    const bool exact=(id==0xd000f005u && effect.id=="HeadFireBall_ORIGINAL") ||
+        (id==0xba09feadu && effect.id=="Dragonattack_ORIGINAL");
+    return exact &&
+        effect.preview_style==VfxTest::EVfxPreviewStyle::Static &&
+        bool(effect.is_alive) && bool(effect.submit_world);
+}
+
+const VfxTest::SEffect* Find(uint32_t id, VfxReviewPreviewInfo* unavailable = nullptr)
+{
+    // Lazy snapshot occurs after static registration, when review requests it.
+    // SEffect copies retain their callbacks independently of browser selection.
+    static const auto catalogue = VfxTest::ReviewCatalogue();
+    for (const auto& mapping : mappings) {
+        if (mapping.type_id != id) continue;
+        const auto it = std::find_if(catalogue.begin(), catalogue.end(), [&](const auto& e) {
+            return e.id == mapping.preview_id;
+        });
+        if (it == catalogue.end() || !it->factory || !it->destroy) continue;
+        if (id==0x119f01e3u && (it->id!="Fire_INSTALLED_FACE0" ||
+            it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
+            !it->is_alive || !it->submit_world)) continue;
+        if (id==0xad92bd27u && (it->id!="CFire_INSTALLED_NO_PRESETS" ||
+            it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
+            !it->is_alive || !it->submit_world)) continue;
+        // Exact genuine-actor Burn control needs full finite/world callbacks.
+        if (id==0x55471bffu && (it->id!="Burn_AUTHENTIC_ACOLYTE_INTEGER" ||
+            it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
+            !it->is_alive || !it->submit_world)) continue;
+        if (id==0xad92bd30u && (it->id!="SGeyser_LOADED_INLINE" ||
+            it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
+            !it->is_alive || !it->submit_world)) continue;
+        if (id==0xad92bd32u && (it->id!="StrikeEffect_METEOR_CONFIGURED" ||
+            it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
+            !it->is_alive || !it->submit_world)) continue;
+        // Exact public-parameter Halo controller; old procedural alias is not a fallback.
+        if (id==0xdedbdbedu && (it->id!="Halo_AUTHORED_PUBLIC60" ||
+            it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
+            !it->is_alive || !it->submit_world)) continue;
+        // Blood must retain its complete finite controller and world submission.
+        if (id==0xddc4042eu && (it->id!="Blood_AUTHORED" ||
+            it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
+            !it->is_alive || !it->submit_world)) continue;
+        // Exact continuous Drip proof requires its real owner liveness and
+        // world submission. Never fall back to an unrelated/default alias.
+        if (id==0x5975abdeu && (it->id!="TDripEffect_LINKED_NO_SPLASH" ||
+            it->preview_style!=VfxTest::EVfxPreviewStyle::Static ||
+            !it->is_alive || !it->submit_world)) continue;
+        if (NeedsEndpoints(id) && !it->factory_endpoints && !IsDeclaredSelfMoving(id,*it)) continue;
+        if (!it->submit) {
+            if (it->submit_attached && unavailable)
+                *unavailable={false,it->id.c_str(),"Preview attachment API unavailable; label only",false,true};
+            continue;
+        }
+        using Style = VfxTest::EVfxPreviewStyle;
+        // Character-style entries with a standalone submit callback already
+        // accept this exact origin; only attachment-only hooks need a rig.
+        // An explicitly audited partial may draw its stationary origin-only
+        // preview. This does not create endpoints or claim projectile motion.
+        if (it->preview_style == Style::Projectile && !mapping.partial && !it->factory_endpoints) {
+            if (unavailable) *unavailable={false,it->id.c_str(),"Preview endpoint API unavailable; label only",true};
+            continue;
+        }
+        if (unavailable)
+            *unavailable={true,it->id.c_str(),mapping.description,bool(it->factory_endpoints) || it->preview_style==Style::Projectile,false,bool(it->is_alive),mapping.partial};
+        return &*it;
+    }
+    return nullptr;
+}
+}
+
+VfxReviewPreviewInfo DescribeVfxReviewPreview(uint32_t type_id)
+{
+    VfxReviewPreviewInfo result;
+    if (NeedsEndpoints(type_id)) result={false,"","Preview endpoint API unavailable; label only",true};
+    Find(type_id,&result);
+    return result;
+}
+
+VfxReviewPreview::VfxReviewPreview(const VfxTest::SEffect& effect, void* context, const S3DPoint& origin,
+                                 const S3DPoint* destination)
+    : effect_(effect), context_(context), origin_(origin), restart_remaining_(RestartInterval()) {
+    if(destination) { destination_=*destination; endpoints_=true; }
+}
+void* VfxReviewPreview::Recreate() {
+    return endpoints_ ? effect_.factory_endpoints(origin_,destination_) : effect_.factory(origin_);
+}
+VfxReviewPreview::~VfxReviewPreview() { if (context_) effect_.destroy(context_); }
+float VfxReviewPreview::RestartInterval() const { return VfxTest::ReviewRestartInterval(effect_.preview_style); }
+void VfxReviewPreview::Submit()
+{
+    // Use the existing browser cadence explicitly; this is not a claim about
+    // natural lifetime. Live Static controllers and internal repeats stay as-is.
+    // A Static preview may still be a finite source-owned effect. Recreate
+    // only after its real owner reports completion; unknown liveness remains
+    // governed solely by the existing browser cadence below.
+    if (context_ && effect_.is_alive && !effect_.is_alive(context_)) {
+        effect_.destroy(context_);
+        context_=Recreate();
+        restart_remaining_=RestartInterval();
+    }
+    const float interval=RestartInterval();
+    if (interval>0 && !endpoints_) {
+        restart_remaining_-=float(TTime::DeltaTime());
+        if (restart_remaining_<=0) {
+            if (context_) effect_.destroy(context_);
+            context_=Recreate();
+            restart_remaining_=interval;
+        }
+    }
+    if (context_ && effect_.submit) effect_.submit(context_,EFxDebugMode::Normal);
+}
+void VfxReviewPreview::SubmitWorld() { if (context_ && effect_.submit_world) effect_.submit_world(context_,EFxDebugMode::Normal); }
+std::optional<bool> VfxReviewPreview::Alive() const
+{
+    if (!context_) return false;
+    if (!effect_.is_alive) return std::nullopt;
+    return effect_.is_alive(context_);
+}
+
+std::unique_ptr<VfxReviewPreview> CreateVfxReviewPreview(uint32_t type_id, const S3DPoint& origin)
+{
+    const auto* effect = Find(type_id);
+    if (!effect || (NeedsEndpoints(type_id) && !IsDeclaredSelfMoving(type_id,*effect))) return {};
+    void* context = effect->factory(origin);
+    if (!context) return {};
+    return std::make_unique<VfxReviewPreview>(*effect,context,origin);
+}
+
+std::unique_ptr<VfxReviewPreview> CreateVfxReviewPreview(uint32_t type_id,
+    const S3DPoint& source,const S3DPoint& destination)
+{
+    const auto* effect=Find(type_id);
+    if(!effect || !effect->factory_endpoints)return {};
+    void* context=effect->factory_endpoints(source,destination);
+    if(!context)return {};
+    return std::make_unique<VfxReviewPreview>(*effect,context,source,&destination);
+}

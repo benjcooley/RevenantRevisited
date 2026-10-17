@@ -1,85 +1,92 @@
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                    Copyright (C) 1998 Cinematix                       *
-// *                    death.cpp - TDeathPane module                      *
+// *           death.cpp - TDeathScreen and TDeathPane (game over)         *
 // *************************************************************************
 
-#include "revenant.h"
 #include "death.h"
-#include "display.h"
+
+#include "gameflow.h"
+#include "logging.h"
 #include "multi.h"
-#include "playscreen.h"
-#include "savegame.h"
+#include "renderer.h"
+#include "revenant.h"
+#include "revutils.h"   // random()
+#include "sound.h"
 
-static bool saveisfullscreen;
+#include <cstring>
 
-TDeathPane DeathPane;
+TDeathScreen DeathScreen;
 
-void DeathBtnRestart()
+namespace {
+
+// Death voices, in retail order (strings 0x005e3ef0..0x005e3f10). Retail picks
+// RandomRange(0,4) over this run of five pointers. The shipped voice is
+// go1sar00, so retail's "gosar00" lookup finds nothing - kept as retail has it.
+const char* const kDeathVoices[] = { "goluc01", "goand01", "gojha01", "gooli01", "gosar00" };
+
+constexpr float kCursorHudZ = 1000.0f;
+
+}  // namespace
+
+bool TDeathPane::OpenDeath(int32_t x, int32_t y)
 {
-    SaveGame.ReadGame();
-    DeathPane.Close();
+    if (!OpenChrome(x, y, WIDTH, HEIGHT, "death.dat", "background"))
+        return false;
+
+    // REVSYNC: 0x0049b990(id, 0x7f, 1, NULL, 0x50, 700) — once, at full
+    // volume, not positioned (the last two are the 3D path's distances,
+    // unused without a position). The port's Play(id) is the same call.
+    char* voice = const_cast<char*>(kDeathVoices[random(0, 4)]);
+    const int32_t id = SoundPlayer.FindSound(voice);
+    if (id >= 0 && SoundPlayer.Mount(id))
+        SoundPlayer.Play(id);
+    else
+        log_info("[death] voice '%s' not available", voice);
+
+    // Buttons from death.dat sprites, placed by their registration points
+    // (TButton(multi, name) 0x0042c400, as on the title screen).
+    AddSpriteButton("restart", "Restart");
+    AddSpriteButton("load", "Load");
+    AddSpriteButton("exit", "Exit");
+    return true;
 }
 
-void DeathBtnLoad()
+// REVSYNC: TDeathScreen::Initialize @ 0x005338a0
+bool TDeathScreen::Initialize()
 {
-    SaveGame.ReadGame();
-    DeathPane.Close();
-}
-
-void DeathBtnExit()
-{
-    SaveGame.ReadGame();
-    DeathPane.Close();
-}
-
-bool TDeathPane::Initialize()
-{
-    TButtonPane::Initialize();
-
-    deathdata = TMulti::LoadMulti("death.dat");
-
-    if (deathdata)
+    log_info("[death] initialize");
+    int32_t ox = 0, oy = 0;
+    ClassicCanvasOrigin(ox, oy);
+    if (!pane.OpenDeath(ox, oy))
     {
-        saveisfullscreen = PlayScreen.IsFullScreen();
-        PlayScreen.SetFullScreen(false);
-
-        NewButton("restart", 76, 144, 148, 80, VK_TAB, DeathBtnRestart, deathdata->Bitmap("restartdown"), deathdata->Bitmap("restartup"));
-        NewButton("load", 240, 146, 112, 72, VK_RETURN, DeathBtnLoad, deathdata->Bitmap("loaddown"), deathdata->Bitmap("loadup"));
-        NewButton("exit", 384, 152, 96, 64, VK_ESCAPE, DeathBtnExit, deathdata->Bitmap("exitdown"), deathdata->Bitmap("exitup"));
-
-        PlayScreen.AddPane(this);
-        PlayScreen.SetExclusivePane(this, true);
-        return true;
+        log_error("[death] Trouble initializing Death pane");
+        return false;
     }
 
-    return false;
+    // REVSYNC: button callbacks @ 0x00533950 (Restart -> PlayScreen),
+    // 0x00533970 (Load -> load-game screen), 0x00533990 (Exit -> title).
+    pane.SetOnActivate([](TDefPane&, const SDefWidget& widget, int32_t) {
+        if (widget.name == "restart")
+            GameFlow.RestartAfterDeath();
+        else if (widget.name == "load")
+            GameFlow.ShowLoadGameScreen();
+        else if (widget.name == "exit")
+            GameFlow.ReturnToTitle();
+    });
+    AddPane(&pane);
+
+    if (PTBitmap cursor = GameData ? GameData->Bitmap(const_cast<char*>("cursor")) : nullptr)
+        SetMouseBitmap(cursor);
+    if (Renderer)
+        Renderer->AddHud(&cursorHud, kCursorHudZ);
+    return true;
 }
 
-void TDeathPane::Close()
+void TDeathScreen::Close()
 {
-    TButtonPane::Close();
-
-    if (deathdata)
-        delete deathdata;
-
-    PlayScreen.ReleaseExclusivePane(this);
-    PlayScreen.RemovePane(this);
-    PlayScreen.Redraw();
-
-    PlayScreen.SetFullScreen(saveisfullscreen);
+    if (Renderer)
+        Renderer->RemoveHud(&cursorHud);
+    RemovePane(&pane);
+    pane.Close();
 }
-
-void TDeathPane::DrawBackground()
-{
-    if (IsDirty())
-    {
-        Display.Put(0, 0, deathdata->Bitmap("background"), DM_BACKGROUND);
-        PlayScreen.DrawOverhangs();
-        SetClipRect();      // drawing overhangs screws them up
-        SetDirty(false);
-    }
-
-    TButtonPane::DrawBackground();
-}
-

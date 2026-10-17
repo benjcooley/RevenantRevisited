@@ -436,6 +436,24 @@ void TTransform::RefreshHierarchy()
 
 // ---- Recompute paths ---------------------------------------------------
 
+hmm_mat4 TTransform::ComposeLocal(const hmm_vec3& pos, const SAnimQuat& rot, const hmm_vec3& scl)
+{
+    // Identity parts are skipped as the flags skip them below.
+    hmm_mat4 m;
+    MtxClear(&m);
+    if (!VecIsOne(scl))
+        MtxScale(&m, &scl);
+    if (!QuatIsIdentity(NormalizeQuat(rot)))
+    {
+        hmm_mat4 r;
+        QuatToMat4(rot, &r);
+        MtxMultiply(&m, &m, &r);
+    }
+    if (!VecIsZero(pos))
+        MtxTranslate(&m, &pos);
+    return m;
+}
+
 void TTransform::RecomputeLocalMatrix() const
 {
     MtxClear(&local_matrix_);

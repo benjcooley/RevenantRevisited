@@ -32,6 +32,7 @@ layout(std140) uniform params {
 in vec2 v_uv;
 uniform sampler2D albedo_tex;
 uniform sampler2D depth_tex;
+uniform sampler2D id_tex;
 layout(location = 0) out float out_shadow;
 vec3 reconstruct_world(vec2 uv, float d, float fbw, float fbh) {
     float scene_z = d * vp.w + vp.z;
@@ -79,6 +80,13 @@ float sample_scene_depth(vec2 uv) {
     ivec2 p = clamp(ivec2(uv * vec2(ts)), ivec2(0), ts - ivec2(1));
     return texelFetch(depth_tex, p, 0).r;
 }
+// The id target's flag bits (renderer.h kObjFlag*, in the alpha byte):
+// 0x10 is kObjFlagNoShadow.
+bool casts_no_shadow(vec2 uv) {
+    ivec2 ts = textureSize(id_tex, 0);
+    ivec2 q = ivec2(clamp(uv * vec2(ts), vec2(0.0), vec2(ts) - 1.0));
+    return (uint(texelFetch(id_tex, q, 0).a * 255.0 + 0.5) & 0x10u) != 0u;
+}
 void main() {
     vec4 alb = texture(albedo_tex, v_uv);
     if (alb.a < 0.01 || shadow.w <= 0.5) { out_shadow = 1.0; return; }
@@ -113,6 +121,7 @@ void main() {
         if (suv.x < 0.0 || suv.x > 1.0 || suv.y < 0.0 || suv.y > 1.0) break;
         float drs = sample_scene_depth(suv);
         if (drs >= 0.9999) continue;
+        if (casts_no_shadow(suv)) continue;      // kObjFlagNoShadow: effects
         float scene_z_wu = drs * vp.w + vp.z;
         float ray_z_wu = interpolate_ray_depth(ray_z0_wu, ray_z1_wu, a);
         float depth_delta_wu = scene_z_wu - ray_z_wu;

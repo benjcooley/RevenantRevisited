@@ -8,6 +8,7 @@
 
 #include "ctrlmap.h"
 #include "cursor.h"
+#include "gameflow.h"
 #include "platform/cursor.h"
 #include "imgui.h"
 #include "logging.h"
@@ -17,6 +18,7 @@
 #include "object.h"
 #include "player.h"
 #include "playscreen.h"
+#include "playerbot.h"
 #include "renderer.h"
 #include "revenant.h"
 #include "revtypes.h"
@@ -109,262 +111,79 @@ class TGameModeImpl final : public IRuntimeMode
         // Mouse-click walk-to is the primary input path; keyboard
         // arrows are the secondary fallback. UpdateMove translates
         // CMDFLAG bits into Player->Go / Stop.
+        // --playerbot presses the player's keys first, as a player's
+        // hands would before the held controls are read.
+        PlayerBot.Tick();
         if (PlayScreen.IsControlOn() && !PlayScreen.IsDemoMode())
             PlayScreen.UpdateMove();
 
-        // Game-logic tick over the active 3x3 window centered on the
-        // player. UpdateActiveWindow re-fills MapPane.sectors[][];
-        // NextFrameObjects owns the authoritative 24 Hz animation frame
-        // advance; PulseObjects runs per-instance AI/state; MoveObjects
-        // applies movement from movebits set during Pulse.
-        MapPane.UpdateActiveWindow();
-        MapPane.NextFrameObjects();
-        MapPane.PulseObjects();
-        MapPane.MoveObjects();
+        // The map pane's tick (retail's pane pass pulses it before the
+        // dialog pane): ambient fades, animation frames, object AI and
+        // movement, the camera following its centeron target, then the
+        // sector window around the camera's center.
+        MapPane.Pulse();
     }
 
     bool HandleKey(int32_t key, bool down) override
     {
-      // Pump the global ControlMap so cmdflagstate reflects what's
-      // currently held. UpdateMove polls that state every tick to drive
-      // directional movement (forward/back/strafe). For edge-triggered
-      // commands (attacks, combos, mode toggles, dodge, jump, block) we
-      // dispatch the returned GAMECMD_* into the player here.
+      // Shift+F9: developer reload of the last slot saved or loaded; retail
+      // had no quick load. (Quick Save is retail's control, Ctrl+Backspace,
+      // and F9 alone is its Belt Use 5, both through the control map below.)
+      // Fires on key-down only and consumes the key so it doesn't fall
+      // through to the gameplay command path.
+        if (down && key == VK_F9 && ShiftDown) {
+            GameFlow.Session().RequestReloadLastSlot();
+            return true;
+        }
+
+      // Pump the global ControlMap: it keeps the held command flags
+      // UpdateMove polls each tick (direction, block, leap) and returns the
+      // key's command -- its down command on a press, its up command on a
+      // release -- which goes to TPlayScreen::Command, as retail's key
+      // handler (0x0047c630) passes it to Command (0x0047cf40).
       //
       // Same-key bindings disambiguate by the current control mode:
-      // 'S' is "sneak-back" in normal/sneak mode and "thrust" in combat
+      // 'S' is "sneak" in normal/sneak mode and "thrust" in combat
       // mode; 'D' is "inventory-drop" in inventory mode and "chop" in
       // combat mode. ControlMap.GetCommand returns the *first* binding
-      // whose mode mask intersects modemask, so we have to pass exactly
-      // the active mode — ALLMODES would always pick the earlier entry.
-        const uint32_t modemask = CurrentModeMask();
-        int32_t cmd = ControlMap.GetCommand(key, down, modemask);
+      // whose mode mask meets the one passed, so ControlModeMask passes
+      // exactly the active mode — ALLMODES would always pick the earlier entry.
+        const int32_t cmd = ControlMap.GetCommand(key, down, PlayScreen.ControlModeMask());
 
         if (Player && PlayScreen.IsControlOn() && !PlayScreen.IsDemoMode() &&
             cmd != GAMECMD_NONE)
-        {
-            if (down)
-            {
-                switch (cmd)
-                {
-                  // Combat mode toggle — required before swings register
-                  // (IsValidAttack rejects unless IsCombat()).
-                    case GAMECMD_COMBAT:
-                        if (Player->IsCombat()) Player->EndCombat();
-                        else                    Player->BeginCombat();
-                        break;
-
-                    case GAMECMD_SIDEPANEL:
-                        ToggleUISidebarPanel();
-                        break;
-
-                    case GAMECMD_BOTTOMPANEL:
-                        ToggleUIBottomPanel();
-                        break;
-
-                  // Three primary attack buttons.
-                    case GAMECMD_SWING:  {
-                        bool r = Player->Swing();
-                        log_info("[input] SWING -> ButtonAttack(1) returned %d", r ? 1 : 0);
-                        break;
-                    }
-                    case GAMECMD_THRUST: {
-                        bool r = Player->Thrust();
-                        log_info("[input] THRUST -> ButtonAttack(2) returned %d", r ? 1 : 0);
-                        break;
-                    }
-                    case GAMECMD_CHOP:   {
-                        bool r = Player->Chop();
-                        log_info("[input] CHOP -> ButtonAttack(3) returned %d", r ? 1 : 0);
-                        break;
-                    }
-
-                  // 12 combo slots (Ctrl+A-H, Shift+A-H).
-                    case GAMECMD_COMBO1: case GAMECMD_COMBO2: case GAMECMD_COMBO3:
-                    case GAMECMD_COMBO4: case GAMECMD_COMBO5: case GAMECMD_COMBO6:
-                    case GAMECMD_COMBO7: case GAMECMD_COMBO8: case GAMECMD_COMBO9:
-                    case GAMECMD_COMBO10: case GAMECMD_COMBO11: case GAMECMD_COMBO12:
-                        Player->Combo((cmd - GAMECMD_COMBO1) + 1);
-                        break;
-
-                    case GAMECMD_DODGE:    Player->Dodge();   break;
-                    case GAMECMD_JUMP:     Player->Jump();    break;
-                    case GAMECMD_BLOCKDOWN: Player->Block();   break;
-
-                    default: break;
-                }
-            }
-            else
-            {
-                switch (cmd)
-                {
-                    case GAMECMD_BLOCKUP: Player->StopBlock(); break;
-                    default: break;
-                }
-            }
-        }
+            PlayScreen.Command(static_cast<GAMECOMMAND>(cmd));
 
       // Returning false lets the rest of the pane stack also see the
       // key (for non-game accelerators like F-keys, dev overlays).
         return false;
     }
 
+    // The play field's mouse belongs to the map pane, as retail's PlayScreen
+    // handed it to MapPane (docs/gameflow/forensics/MAP_INPUT.md): the left
+    // button uses, picks up, walks to or attacks; the right walks. The play
+    // screen sends only what the HUD and modals don't take.
     bool HandleMouseClick(int32_t button, int32_t x, int32_t y) override
     {
-        if (!Player) return false;
-        switch (button)
-        {
-          case MB_RIGHTDOWN:
-            // Begin walk-to. ApplyWalkCursor computes the world point
-            // under the cursor, picks an angle, swaps in the matching
-            // wedge bitmap, and asks the Player to walk that way.
-            ApplyWalkCursor(x, y);
-            walking = true;
-            return true;
-
-          case MB_RIGHTUP:
-            // Stop walking: release the synthesized joystick direction so
-            // UpdateMove sees no direction next tick and stops the player.
-            // Revert to the default cursor.
-            if (walking)
-            {
-                ReleaseMouseWalkKey();
-                walking = false;
-                if (GameData)
-                    if (PTBitmap cursor = GameData->Bitmap("cursor"))
-                        SetMouseBitmap(cursor);
-            }
-            return true;
-
-          case MB_LEFTDOWN:
-            // Combat mode: random swing. Other modes (bow, hover-to-
-            // interact, inventory drag) are Phase 2 of mouse-loop work
-            // -- they need object pick via the OBJID buffer and an
-            // inventory pane to drop into. The combat-only path is
-            // enough to verify the dispatch chain end-to-end now.
-            if (Player->IsCombat())
-                Player->ButtonAttack(random(1, 3));
-            return true;
-        }
-        return false;
+        MapPane.MouseClick(button, x, y);
+        return true;
     }
 
     bool HandleMouseMove(int32_t button, int32_t x, int32_t y) override
     {
-        // While the right button is held, follow the cursor with a
-        // fresh angle each move. cursorx/cursory are also updated by
-        // the sokol MOUSE_MOVE handler, but the click handler stores
-        // the right-down state here so we know not to chase the cursor
-        // when the player wasn't asking to walk.
-        if (walking && Player)
-            ApplyWalkCursor(x, y);
-        (void)button;
+        MapPane.MouseMove(button, x, y);
         return false;
     }
 
-  private:
-    // Control-mode mask for ControlMap lookups (mirrors the keybind
-    // table's CTRL_* in playscreen.cpp). Same value HandleKey and the
-    // mouse-walk joystick synthesis both need.
-    static uint32_t CurrentModeMask()
+    // The cursor for what is under the pointer, after the world is drawn:
+    // the map's, or the item panes'.
+    void Animate() override
     {
-        constexpr uint32_t CTRL_NORMALMODE = 1, CTRL_COMBATMODE = 2,
-                           CTRL_BOWMODE = 4, CTRL_SNEAKMODE = 8;
-        uint32_t m = CTRL_NORMALMODE;
-        if (Player)
-        {
-            if (Player->IsCombat())         m = CTRL_COMBATMODE;
-            else if (Player->IsBowMode())   m = CTRL_BOWMODE;
-            else if (Player->IsSneakMode()) m = CTRL_SNEAKMODE;
-        }
-        return m;
+        if (PlayScreen.MapHasPointer(cursorx, cursory))
+            MapPane.Animate(true);
+        else
+            AnimateUISidebarItemCursor(cursorx, cursory);
     }
-
-    // Release the currently-synthesized mouse-walk joystick direction (if
-    // any) through ControlMap, clearing its CMDFLAG so UpdateMove stops
-    // driving that direction.
-    void ReleaseMouseWalkKey()
-    {
-        if (mouse_walk_key >= 0)
-        {
-            ControlMap.GetCommand(mouse_walk_key, false, CurrentModeMask());
-            mouse_walk_key = -1;
-        }
-    }
-
-    // Drive walk-to by synthesizing the matching joystick direction key,
-    // exactly as retail's TMapPane::UpdateMouseMovement did. This feeds
-    // the SAME ControlMap → cmdflag → UpdateMove path the keyboard uses,
-    // so run (R / CMDFLAG_RUN), sneak, block, etc. compose for free and
-    // there's a single movement driver. (The previous direct Player->Go
-    // bypassed UpdateMove, so R-while-mouse-walking didn't run and the
-    // two drivers fought.) Called on right-down and right-button drag.
-    void ApplyWalkCursor(int32_t screen_x, int32_t screen_y)
-    {
-        S3DPoint curpos;
-        Player->GetPos(curpos);
-
-        TMapRenderer *mr = PlayScreen.MapRenderer();
-        if (!mr) return;
-
-        // Project the cursor pixel onto the player's z-plane so we get
-        // a world point at walkable height. zoffset=50 matches the
-        // pre-port GetMouseMapPos default.
-        S3DPoint target;
-        mr->ScreenToWorld(screen_x, screen_y, curpos.z + 50, target);
-
-        // Dead-zone: cursor inside the player's own footprint releases the
-        // walk key (stop) and shows the normal cursor.
-        if (absval(target.x - curpos.x) < 16 && absval(target.y - curpos.y) < 16)
-        {
-            ReleaseMouseWalkKey();
-            if (GameData)
-                if (PTBitmap cursor = GameData->Bitmap("cursor"))
-                    SetMouseBitmap(cursor);
-            return;
-        }
-
-        const int32_t angle = ConvertToFacing(curpos, target);
-
-        // Snap to the nearest 45deg slot (Revenant angle space is 0..255;
-        // +0x10 rounds before the mask). dir_idx maps to both the wedge
-        // bitmap suffix and the joystick key. Index order matches the
-        // legacy Directions[] = { ne, e, se, s, sw, w, nw, n }.
-        static const char *kDirections[] =
-            { "ne", "e", "se", "s", "sw", "w", "nw", "n" };
-        static const int32_t kJoyKeys[] =
-            { VK_JOYUPRIGHT, VK_JOYRIGHT, VK_JOYDOWNRIGHT, VK_JOYDOWN,
-              VK_JOYDOWNLEFT, VK_JOYLEFT, VK_JOYUPLEFT, VK_JOYUP };
-        const int32_t dir_idx = ((angle + 0x10) & 0xe0) >> 5;
-
-        if (GameData)
-        {
-            char buf[32];
-            std::snprintf(buf, sizeof(buf), "wedge-%s", kDirections[dir_idx]);
-            if (PTBitmap wedge = GameData->Bitmap(buf))
-                SetMouseBitmap(wedge);
-
-            std::snprintf(buf, sizeof(buf), "wedge-%sshadow", kDirections[dir_idx]);
-            if (PTBitmap shadow = GameData->Bitmap(buf))
-                SetMouseShadow(shadow, 0, 43);
-        }
-
-        // Swap the synthesized joystick direction if it changed. UpdateMove
-        // reads the resulting CMDFLAG every tick and issues Player->Go with
-        // whatever mode (walk/run/sneak) is active.
-        const int32_t joykey = kJoyKeys[dir_idx];
-        if (joykey != mouse_walk_key)
-        {
-            const uint32_t mode = CurrentModeMask();
-            if (mouse_walk_key >= 0)
-                ControlMap.GetCommand(mouse_walk_key, false, mode);
-            ControlMap.GetCommand(joykey, true, mode);
-            mouse_walk_key = joykey;
-        }
-    }
-
-    bool    walking = false;
-    int32_t mouse_walk_key = -1;   // synthesized joystick dir key, -1 = none
 };
 
 class TEditorModeImpl final : public IRuntimeMode

@@ -1,0 +1,13 @@
+{
+  "name": "original-software-render-state",
+  "executable_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+  "setup": [{"op": "allocate", "name": "result", "size": 4}],
+  "operations": [
+    {"op": "call", "address": "0x56d400", "args": [20, 6]},
+    {"op": "call", "address": "0x56d4b0", "args": [20, "$result"]},
+    {"op": "read_u32", "address": "$result", "expect": 6},
+    {"op": "call", "address": "0x56d400", "args": [20, 2]},
+    {"op": "call", "address": "0x56d4b0", "args": [20, "$result"]},
+    {"op": "read_u32", "address": "$result", "expect": 2}
+  ]
+}

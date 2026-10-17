@@ -15,11 +15,12 @@
 #include "object.h"
 #endif
 
-// States of completion for actions
-#define COM_PENDING         0           // Can't start command yet
-#define COM_EXECUTING       1           // Command is being executed
-#define COM_COMPLETED       2           // Command is complete
-#define COM_IMPOSSIBLE      3           // Can't get to this state from here
+// Command states, as retail's resolvers, TryCommand and ForceCommand return
+// them and UpdateAction reads them (0x004c3260, 0x004db1d0). The 1998 set
+// (pending 0, executing 1, completed 2) is gone: retail's 2 is executing.
+constexpr int32_t COM_DONE = 0;         // Done, or no opinion: UpdateAction decides
+constexpr int32_t COM_EXECUTING = 2;    // Being executed, or waiting its turn
+constexpr int32_t COM_IMPOSSIBLE = 3;   // Can't get to this state from here
 
 // Animate action (the default)
 typedef enum {
@@ -70,7 +71,11 @@ class TActionBlock
     TActionBlock(const char *n, const char *str, ACTION a = ACTION_ANIMATE);    // Animation+string/action
     TActionBlock(TActionBlock &ab, const char *str = nullptr, ACTION = ACTION_NONE); // Copies another action block
     
-    ~TActionBlock() { if (data) free(data); }
+    ~TActionBlock() { if (destroyedSeam) destroyedSeam(this); if (data) free(data); }
+    using DestroyedSeam = void (*)(const TActionBlock* ab);
+    static inline DestroyedSeam destroyedSeam = nullptr;
+      // Retail A/B fixtures only: told as a block goes (a case's dumps name
+      // the blocks it began with by address, which a new block may reuse)
 
     bool Is(const char *s) const;           // Multipurpose match (?=any one char, *=0 or more chars, #=any num, [xx]=any one char in braces)
     bool Is(ACTION a) const { return action == a; } // Is an action
@@ -94,6 +99,8 @@ class TActionBlock
     PSCharAttackData attack;              // Attack info (if is attack/impact/death/stun/knockdown action)
     PSCharAttackImpact impact;            // Impact info (if is attack/impact/death/stun/knockdown action)
     int32_t damage;                       // Damage attack will do (if hits)
+    int32_t tohit = 0;                    // Attack's to-hit, fixed when chosen (retail +0x54, DoAttack 0x004d2120)
+    int32_t roll = 0;                     // Attack's 1..100 roll, fixed when chosen (retail +0x58)
     void *data;                           // Data field (such as text for say)
     union
     {
@@ -102,7 +109,7 @@ class TActionBlock
       {
         uint32_t firsttime : 1;     // If this is the first time through
         uint32_t transition : 1;    // If currently transitioning to this state
-        uint32_t terminating : 1;   // Action block is shutting down
+        uint32_t forced : 1;        // Set without its transition animation (retail 0x4, ForceCommand)
         uint32_t priority : 1;      // Action can't be changed by calling SetDesired() until played
         uint32_t interrupt : 1;     // Interrupts current doing animation unless doing has priority
         uint32_t nowaitdone : 1;    // Allows desired to interrupt this action
@@ -111,6 +118,7 @@ class TActionBlock
         uint32_t waitpivot : 1;     // For movenent actions, wait until pivot done before moving
         uint32_t noroot : 1;        // Don't use this as a root state (even if playing a root animation)
         uint32_t loop : 1;          // Loop this command
+        uint32_t walkto : 1;        // A Goto's walk: its arrival picks up the Goto's item (retail +0x60 bit 0x1000)
       };
     };
 };
@@ -137,14 +145,17 @@ class TComplexObject : public TObjectInstance
       // Main pulse (done before frame is drawn)
 
     bool IsInRoot() { return (doing == root); }
+    bool IsIdleInRoot() const { return doing && doing == root && desired == root && !doing->transition; }
+        // REVSYNC: the speech wait (0x00492d70 type 8) -- back in the root state, nothing
+        // else desired, not transitioning
         // Returns whether the object is in their root state or not
 
-    void Try(const char *state)
-        { PTActionBlock ab = new TActionBlock(state); ab->angle = GetFace(); SetDesired(ab); }
-        // Trys to change to the given state
-    int32_t Force(const char *state)
-        { PTActionBlock ab = new TActionBlock(state); ab->angle = GetFace(); return ForceCommand(ab); }
-        // Forces the given state
+    void Try(const char *state);
+        // REVSYNC: 0x004111a0 -- wants the given state (an ANIMATE block facing
+        // the facing); a refused one is dropped
+    int32_t Force(const char *state);
+        // REVSYNC: 0x00429990 -- forces the given state, unless the doing block
+        // holds priority over a desired one (COM_EXECUTING then)
     // this is a hack               ---v
     bool IsDoing(const char *state) const { return doing ? doing->Is(state) : false; }
         // Returns true if currently doing the given state
@@ -169,6 +180,12 @@ class TComplexObject : public TObjectInstance
         // true, the action is garanteed to have an animation to play.
     const char* GetState() { return (const char*) doing->name; }
         // return the state name that the object is doing
+    const TActionBlock* RootBlock() const { return root; }
+    const TActionBlock* DoingBlock() const { return doing; }
+    const TActionBlock* DesiredBlock() const { return desired; }
+        // Read-only views of the three action blocks (traces, debug panes)
+    int32_t DoingSince() const { return doingsince; }
+        // The game frame (TPlayScreen::GameFrame) the doing block started in
     virtual void Notify(int32_t notify, void *ptr);
         // Notify Action (check root,desired, and doing for deleted target obj)
 
@@ -184,9 +201,12 @@ class TComplexObject : public TObjectInstance
   protected:
     virtual void UpdateAction(int32_t bits = 0);
       // Called by pulse() to update the current action block
-    virtual int32_t TryCommand(PTActionBlock ab, int32_t bits = 0);
+    static constexpr uint32_t kCommandNoIncidentals = 0x1;
+      // TryCommand/ForceCommand flag (retail's third argument): use each state's
+      // 100% variant, never a random "NN:" one (an incidental animation)
+    virtual int32_t TryCommand(PTActionBlock ab, int32_t bits = 0, uint32_t flags = 0);
       // Main command function - attempt to go to desired state
-    virtual int32_t ForceCommand(PTActionBlock ab, int32_t bits = 0);
+    virtual int32_t ForceCommand(PTActionBlock ab, int32_t bits = 0, uint32_t flags = 0);
       // Called in some special cases to force a new state - be careful with this one
     virtual PTActionBlock GetRoot() { return root; }
       // Gets the current root action block
@@ -198,8 +218,14 @@ class TComplexObject : public TObjectInstance
       // Set doing to ab and update pointers
     virtual PTActionBlock GetDesired() { return desired; }
       // Gets the current desired action block
-    virtual void SetDesired(PTActionBlock ab);
+    virtual bool SetDesired(PTActionBlock ab, uint32_t flags = 0);
+        // False when refused (a block still waits while doing has priority);
+        // the caller then still owns `ab`
       // Set desired pointer and update pointers
+    void DropUnheld(PTActionBlock ab)
+        { if (ab && ab != root && ab != doing && ab != desired) delete ab; }
+      // Frees a block that isn't the root, doing or desired one: what a
+      // refused SetDesired or ForceCommand leaves with its caller
     virtual bool IsFinalState() { return false; }
       // Returns whether character is in their last days
 
@@ -214,6 +240,7 @@ class TComplexObject : public TObjectInstance
     PTActionBlock doing;        // Pointer to what they are currently doing
     PTActionBlock desired;      // Pointer to what they *want* to be doing
     PTActionBlock root;         // Root state (return here by default)
+    int32_t doingsince = 0;     // GameFrame() when doing became the block it is
 };
 
 #endif

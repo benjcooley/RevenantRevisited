@@ -384,7 +384,7 @@ The retail HUD is described as: two combined health/mana/character panels (upper
 - **Render hooks:** New frame pipeline via `TMapRenderer` for world rendering; panes composite via `TScreen::DrawFrame()`. Legacy `DrawBackground()` is now a no-op (no BITMAP.100 backdrop).
 - **Global instances:** `extern TPlayScreen PlayScreen;` (revenant.h:212). Managed via TScreen::ShowScreen() / EndCurrentScreen().
 - **State of Initialize:** Calls `mapRenderer->InitializeFromStartupArgs()`, `AreaManager.Initialize()`, `ControlMap.Initialize()`. Heavily coupled to GameData, sectors, Player, time system. **Requires loaded world.**
-- **Retail correspondence:** **Likely to very likely.** The 1998 retail TPlayScreen exists (see attic/src/playscreen.* for legacy impl); current version is a port-refactor. Feature set is authentic; frame pipeline is port-specific.
+- **Retail correspondence:** **Likely to very likely.** The 1998 retail TPlayScreen exists (see attic-final:attic/src/playscreen.* for legacy impl); current version is a port-refactor. Feature set is authentic; frame pipeline is port-specific.
 - **Size comparison:** src/playscreen.cpp 1175 lines vs. recon cls_0x5a7b98_likely_TPlayScreen.cpp 16332 lines. **Large divergence suggests retail had more elaborate initialization / pane setup code; current port is simplified. Forensic opportunity: check recon for missing gameplay hooks (command dispatch, save/load flow, pane lifecycle).**
 
 ---

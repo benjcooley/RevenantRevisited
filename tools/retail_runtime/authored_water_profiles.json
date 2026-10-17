@@ -1,0 +1,81 @@
+{
+  "scope": "Four exact shipped generic six-emitter state0 water configurations; primary review and full scene acceptance separate.",
+  "profiles": [
+    {
+      "name": "WaterFlft",
+      "id": "0xd0c0f036",
+      "asset": "misc/wfall.i3d",
+      "sha256": "306a42c1c57a89a568ee67173ffa0de8f1cc6c51c450a10b36e13074e5abfd5a",
+      "prototype": 0,
+      "width": 1024,
+      "height": 768,
+      "samples": [
+        5,
+        10,
+        20,
+        35,
+        50,
+        65,
+        80,
+        95
+      ]
+    },
+    {
+      "name": "WaterFrt",
+      "id": "0xd0c0f037",
+      "asset": "misc/wfall2.i3d",
+      "sha256": "e88b8439f16438a23c67642f0f30e38ad8e1a847226e00b167e52c6ca450e9d8",
+      "prototype": 0,
+      "width": 1024,
+      "height": 768,
+      "samples": [
+        5,
+        10,
+        20,
+        35,
+        50,
+        65,
+        80,
+        95
+      ]
+    },
+    {
+      "name": "WaterClft",
+      "id": "0xd0c0f038",
+      "asset": "misc/wcap.i3d",
+      "sha256": "583416fb590936cc4f1e9b4d0e04ad13c177ea2d1d4ad5f57d5e73353507ca2e",
+      "prototype": 0,
+      "width": 1024,
+      "height": 768,
+      "samples": [
+        5,
+        10,
+        20,
+        35,
+        50,
+        65,
+        80,
+        95
+      ]
+    },
+    {
+      "name": "WaterCrt",
+      "id": "0xd0c0f039",
+      "asset": "misc/wcap2.i3d",
+      "sha256": "e5893cb78c8baa7a8dfffdda8509755bce9a0757e711154d3ad9cbda5e87d87e",
+      "prototype": 0,
+      "width": 1024,
+      "height": 768,
+      "samples": [
+        5,
+        10,
+        20,
+        35,
+        50,
+        65,
+        80,
+        95
+      ]
+    }
+  ]
+}

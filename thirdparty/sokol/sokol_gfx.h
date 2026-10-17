@@ -2623,6 +2623,11 @@ SOKOL_GFX_API_DECL sg_image_info sg_query_image_info(sg_image img);
    Metal backend, or NULL on other backends / invalid handles. Used by the
    editor's OBJID pixel readback. */
 SOKOL_GFX_API_DECL const void* sg_mtl_query_image_handle(sg_image img);
+/* RevenantRevisited: borrowed Metal render queue for ordered readback.
+   NULL on other backends. Current frames are enqueued at creation so later
+   copies on this queue cannot overtake a frame awaiting sg_commit(). */
+SOKOL_GFX_API_DECL const void* sg_mtl_query_command_queue(void);
+SOKOL_GFX_API_DECL bool sg_mtl_has_pending_commands(void);
 SOKOL_GFX_API_DECL sg_shader_info sg_query_shader_info(sg_shader shd);
 SOKOL_GFX_API_DECL sg_pipeline_info sg_query_pipeline_info(sg_pipeline pip);
 SOKOL_GFX_API_DECL sg_pass_info sg_query_pass_info(sg_pass pass);
@@ -11187,6 +11192,7 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
         /* block until the oldest frame in flight has finished */
         dispatch_semaphore_wait(_sg.mtl.sem, DISPATCH_TIME_FOREVER);
         _sg.mtl.cmd_buffer = [_sg.mtl.cmd_queue commandBufferWithUnretainedReferences];
+        [_sg.mtl.cmd_buffer enqueue];
         [_sg.mtl.cmd_buffer addCompletedHandler:^(id<MTLCommandBuffer> cmd_buffer) {
             // NOTE: this code is called on a different thread!
             _SOKOL_UNUSED(cmd_buffer);
@@ -11278,10 +11284,13 @@ _SOKOL_PRIVATE void _sg_mtl_begin_pass(_sg_pass_t* pass, const sg_pass_action* a
             SOKOL_ASSERT(ds_att_img->mtl.depth_tex != _SG_MTL_INVALID_SLOT_INDEX);
             pass_desc.depthAttachment.texture = _sg_mtl_id(ds_att_img->mtl.depth_tex);
             pass_desc.depthAttachment.loadAction = _sg_mtl_load_action(action->depth.action);
+            /* Later offscreen passes may LOAD this same depth attachment. */
+            pass_desc.depthAttachment.storeAction = MTLStoreActionStore;
             pass_desc.depthAttachment.clearDepth = action->depth.value;
             if (_sg_is_depth_stencil_format(ds_att_img->cmn.pixel_format)) {
                 pass_desc.stencilAttachment.texture = _sg_mtl_id(ds_att_img->mtl.depth_tex);
                 pass_desc.stencilAttachment.loadAction = _sg_mtl_load_action(action->stencil.action);
+                pass_desc.stencilAttachment.storeAction = MTLStoreActionStore;
                 pass_desc.stencilAttachment.clearStencil = action->stencil.value;
             }
         }
@@ -16328,6 +16337,22 @@ SOKOL_API_IMPL const void* sg_mtl_query_image_handle(sg_image img_id) {
 #else
     (void)img_id;
     return 0;
+#endif
+}
+
+SOKOL_API_IMPL const void* sg_mtl_query_command_queue(void) {
+#if defined(SOKOL_METAL)
+    return _sg.valid ? (__bridge const void*) _sg.mtl.cmd_queue : 0;
+#else
+    return 0;
+#endif
+}
+
+SOKOL_API_IMPL bool sg_mtl_has_pending_commands(void) {
+#if defined(SOKOL_METAL)
+    return _sg.valid && _sg.mtl.cmd_buffer != nil;
+#else
+    return false;
 #endif
 }
 

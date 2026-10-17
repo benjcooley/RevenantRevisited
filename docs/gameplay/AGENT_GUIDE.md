@@ -17,7 +17,7 @@ Read, in order:
 2. The design docs for the system you're touching: [../COMBAT.md](../COMBAT.md), [../COMBAT_ATTACKS.md](../COMBAT_ATTACKS.md), [../COMBAT_RULES.md](../COMBAT_RULES.md), [../MOVEMENT.md](../MOVEMENT.md), [../ANIMATION.md](../ANIMATION.md), [../ANIMATION_SYSTEM.md](../ANIMATION_SYSTEM.md), [../OBJECT_SYSTEM.md](../OBJECT_SYSTEM.md), [../OBJECT_STATS.md](../OBJECT_STATS.md).
 3. [../ui/AGENT_PROTOCOL.md](../ui/AGENT_PROTOCOL.md) — **the shared Ghidra recon rigor** (mislabel cost asymmetry, golden-path string anchors, the "a decomp class may = multiple src classes" caveat, single-writer Ghidra lock). It's written for UI but the rules are subsystem-agnostic; any time you touch the retail binary you follow it. Don't duplicate it here — read it there.
 
-Standing project rules these all touch (memories): no bodges; modern C++ at touch sites; preserve retired code in `attic/` or `#ifdef UNUSED`; retail-first when recon exists; minimal includes; no raw threads; logging facade not `fprintf`. The combat code especially is full of `PT*` typedefs and macros — clean at touch sites, don't sweep.
+Standing project rules these all touch (memories): no bodges; modern C++ at touch sites; keep code we'll revive under `#ifdef UNUSED` (retired code is deleted; git history keeps it); retail-first when recon exists; minimal includes; no raw threads; logging facade not `fprintf`. The combat code especially is full of `PT*` typedefs and macros — clean at touch sites, don't sweep.
 
 ## 2. Source-of-truth order
 

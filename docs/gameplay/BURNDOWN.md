@@ -8,19 +8,19 @@ Live status. Update as work progresses. Goal: bring Demo 1 (Locke wakes up at Mi
 
 **Legend:** `[ ]` pending · `[~]` in progress · `[x]` done · `[!]` blocked · `[-]` cancelled / handed off
 
-Last updated: 2026-05-19 (added AGENT_GUIDE forensics protocol)
+Last updated: 2026-10-14 (G.3 eating and drinking, the belt keys; [forensics/CONSUMABLES.md](forensics/CONSUMABLES.md))
 
 ---
 
 ## Phase A — Player input dispatch (the blocker)
 
-`TPlayScreen::Command` at [src/playscreen.cpp:969](../../src/playscreen.cpp#L969) is a full stub. All non-movement input (attack, dodge, inventory, spells, mode switch, pause) routes to nothing. Until this dispatcher is real, no combat happens.
+Retail's shape: the key handler passes the control map's command to `TPlayScreen::Command` (`0x0047cf40`); `UpdateMove` (`0x0047de30`) polls the held controls each tick. See [forensics/PLAYER_INPUT.md](forensics/PLAYER_INPUT.md). **2026-10-06:** the combat commands moved from the game mode's `HandleKey` into `Command`; the movement mode (run/sneak/walk) switches on its keys' commands, no longer every tick from `UpdateMove` (the cause of the unwinnable Rahul fight: unarmed Locke's root was re-forced every tick, so no attack reached its impact frame).
 
-- `[ ]` **A.1 `Command()` dispatcher skeleton** — switch on `GAMECOMMAND`, log unhandled cases. Drop the `TODO(port)` marker. *Tiny, but unblocks everything below.*
-- `[ ]` **A.2 `GAMECMD_SWING / THRUST / CHOP` → `Player->ButtonAttack(buttonid)`** — call the working attack pipeline at [character.cpp:4239](../../src/character.cpp#L4239). Map button ids per the design in [../COMBAT.md](../COMBAT.md). Hold-to-charge gating from [../COMBAT_RULES.md](../COMBAT_RULES.md) tracked separately.
-- `[ ]` **A.3 `GAMECMD_BLOCK`** — already wired in [playscreen.cpp:1025](../../src/playscreen.cpp#L1025) via `UpdateMove`. Verify it still fires after the dispatcher refactor; move the call inside `Command()` if cleaner.
+- `[x]` **A.1 `Command()` dispatcher skeleton** — 2026-10-06: `TPlayScreen::Command` holds the gameplay commands (retail case numbers in the comments). — switch on `GAMECOMMAND`, log unhandled cases. Drop the `TODO(port)` marker. *Tiny, but unblocks everything below.*
+- `[x]` **A.2 `GAMECMD_SWING / THRUST / CHOP` → `Player->ButtonAttack(buttonid)`** — 2026-10-06, with COMBO1..12 (retail 0x21–0x2f). Verified on Rahul. — call the working attack pipeline at [character.cpp:4239](../../src/character.cpp#L4239). Map button ids per the design in [../COMBAT.md](../COMBAT.md). Hold-to-charge gating from [../COMBAT_RULES.md](../COMBAT_RULES.md) tracked separately.
+- `[x]` **A.3 `GAMECMD_BLOCK`** — 2026-10-06: `UpdateMove` only (retail `0x0047de30`, `Block(10000)` / `StopBlock`); the key-path `Block()` call is gone. — already wired in [playscreen.cpp:1025](../../src/playscreen.cpp#L1025) via `UpdateMove`. Verify it still fires after the dispatcher refactor; move the call inside `Command()` if cleaner.
 - `[ ]` **A.4 `GAMECMD_DODGE`** — define semantics (animation + i-frames? brief speed boost?) per [../COMBAT.md](../COMBAT.md), then call into `Player->Dodge(...)` (new). Currently no implementation on either side.
-- `[ ]` **A.5 `GAMECMD_COMBAT` / `GAMECMD_BOW`** — combat-mode toggle + bow-mode toggle. Drives `CTRL_COMBATMODE` / `CTRL_BOWMODE` bits in ControlMap so the per-mode bindings (Swing/Block/Dodge live in `CTRL_COMBATMODE`) actually take effect. Verify mode transitions don't strand input state.
+- `[~]` **A.5 `GAMECMD_COMBAT` / `GAMECMD_BOW`** — combat done (retail case 1); bow (case 2) and retail's sneak toggle (case 3) not dispatched. Run/walk on `GAMECMD_MOVEDOWN/UP` (retail 0x4a/0x4b). — combat-mode toggle + bow-mode toggle. Drives `CTRL_COMBATMODE` / `CTRL_BOWMODE` bits in ControlMap so the per-mode bindings (Swing/Block/Dodge live in `CTRL_COMBATMODE`) actually take effect. Verify mode transitions don't strand input state.
 - `[ ]` **A.6 `GAMECMD_INVENTORY`** — toggles the inventory pane. Stub-fires a log for now; full UI lives in [../ui/BURNDOWN.md](../ui/BURNDOWN.md) B.6 — coordinate so the dispatch side lands before the pane code so wiring is just-in-time.
 - `[ ]` **A.7 `GAMECMD_INVOKE1..4`** — spell quick-cast. Calls `Player->Cast(spellname, target)`; spell list comes from the QuickSpellPane state (UI worktree B.4).
 - `[ ]` **A.8 `--test=gameplay-input`** — synthesizes a `Player`, fires each `GAMECOMMAND` once, asserts the right method was called. Cheap regression net once the dispatcher is real.
@@ -40,9 +40,9 @@ Without a properly-equipped Player, attacks miss for "no weapon," fatigue is wro
 
 Once A + B land, walk the full attack→hit→damage→death cycle against a real enemy.
 
-- `[ ]` **C.1 First-blood test** — spawn Locke + one Araknid via `--test=combat`; player swings; verify `[character] hit / damage / impact` log lines. Catches all the gaps that don't fail loudly.
+- `[~]` **C.1 First-blood test** — 2026-10-06: the Keep's Rahul fight from a post-opening save (headless, [forensics/PLAYER_INPUT.md](forensics/PLAYER_INPUT.md) §7): hits land, Rahul dies (`combat to dead`), TendrickR's scene runs. The `--test=combat` rig is still open. — spawn Locke + one Araknid via `--test=combat`; player swings; verify `[character] hit / damage / impact` log lines. Catches all the gaps that don't fail loudly.
 - `[ ]` **C.2 Hit-reaction + stagger** — [character.cpp:1033-1080](../../src/character.cpp#L1033) plays the impact anim; verify the looptime in [../COMBAT.md](../COMBAT.md) maps correctly to frames and stuns the attacker as intended.
-- `[ ]` **C.3 Death + corpse persistence** — Araknid dies, corpse stays in sector. Verify it doesn't despawn on next sector load (currently `RemoveObject` only fires explicitly, so this should work — confirm with a sector cross).
+- `[x]` **C.3 Death, loot and the corpse** — 2026-10-11: retail doesn't keep corpses. A dead monster drops what it carries to the floor on its first dead pulse (`DropInventory` `0x004d6570`), and the corpse fades out from its 240th dead pulse and is deleted at its 341st, about 14 s after death (`TCharacter::Pulse` `0x004c1bb0`, [../playtest/GRIND.md](../playtest/GRIND.md) §3.1, §4.1). A character saved dead is removed on load (`TCharacter::Load` `0x004d4eb0`). The port does the same, checked against the retail emulator ([../playtest/FINDINGS.md](../playtest/FINDINGS.md) F8, F9). Open: a character killed by setting its health (a script's or the console's `stat health 0`) plays no death in the port; retail's dead branch builds `<root> to cdead` / `cdead`, the port's forces the 1998 "blood" block.
 - `[ ]` **C.4 Player death** — Locke HP → 0. *Death+restart flow is gameflow T7; this entry tracks only the combat-side death trigger (impact → HP=0 → `IsDead()` flag set → death anim plays).*
 - `[ ]` **C.5 XP on kill** — no caller awards XP ([player.h](../../src/player.h) `Exp()` accessor exists, no writer in combat death path). Add `Player->AddExp(amount)` call in the attacker's death handler. Amount from rules.def per [../COMBAT_RULES.md](../COMBAT_RULES.md).
 - `[ ]` **C.6 Level up** — when `Exp >= NextLevelExp`, bump `Level`, restore HP/MP, log to text bar. Skill / stat advancement model per [../OBJECT_STATS.md](../OBJECT_STATS.md).
@@ -70,7 +70,7 @@ Original E.1-E.4 items (quicksave bindings, save indicator toast, persistence mo
 
 Gameflow owns the scripting engine bring-up. Combat-side cross-cuts:
 
-- `[ ]` **F-cross.1 Script-callable combat actions** — `Player->BeginFighting / Cast / Go / Stop / Say` are C++ entry points the script VM dispatches into. Verify the function signatures the gameflow VM needs match what we expose. *Audit only — no work unless gameflow flags a mismatch.*
+- `[ ]` **F-cross.1 Script-callable combat actions** — `Player->BeginFighting / Cast / Go / Stop / Say` are C++ entry points the script VM dispatches into. Verify the function signatures the gameflow VM needs match what we expose. *Audit only — no work unless gameflow flags a mismatch.* **Flagged 2026-10-05 (gameflow):** the script commands `beginfighting` / `specificattack` / `endfighting` are ported (COMMAND_SYSTEM.md, fighting commands); they call `TCharacter::BeginFighting` and `SpecificAttack`, which are still the 1998 bodies, not retail's `0x004d3b90` / `0x004d2a60` (decomps in `recon/discovered/`). In forest.s's training, `JONG1.specificattack 25` beside `MUDOKON1` answers "Invalid Attack", so the trainer demonstrates nothing.
 
 Original F.1-F.5 items (opcode inventory, missing-opcode port, trigger fire-through, Cast/Say/Wait, GameState read/write) are owned by gameflow.
 
@@ -80,20 +80,21 @@ UI side is in [../ui/BURNDOWN.md](../ui/BURNDOWN.md) B.6/B.7. Game-state side li
 
 - `[ ]` **G.1 Pick up item from world** — Locke walks over a dropped item, presses Use. Adds to inventory via `TObjectInstance::AddToInventory`.
 - `[ ]` **G.2 Drop item to world** — `GAMECMD_INVDROP` ([playscreen.cpp:104](../../src/playscreen.cpp#L104)). Spawns the object in the sector at Player's feet, removes from inventory.
-- `[ ]` **G.3 Use consumable** — `GAMECMD_INVUSE` ([playscreen.cpp:102](../../src/playscreen.cpp#L102)). Potion → restore HP, scroll → cast spell, etc. Per-object `Use()` virtual in [src/object.h](../../src/object.h).
+- `[x]` **G.3 Use consumable** — done 2026-10-14, [forensics/CONSUMABLES.md](forensics/CONSUMABLES.md). Retail's `TFood::Use` (`0x0050e780`, food and potions alike): health and mana up by the item's, held to the maxima (fatigue never), a Poison stat cures poison (and ends poison spells on the user within 128), the main player hears "food" or "potion" (by the item's inventory picture) and reads FOODGOOD1, one unit is used up. Triggers: a click on a pack or belt cell (`UIDragState::CompleteClick`; the drag now starts at retail's 2 px), the belt keys F5–F9 (`GAMECMD_BELTUSE1..5` → `TPlayer::UseBelt` `0x0051e420`; the dev reload moved to Shift+F9), scripts' `use`. A/B against retail: `retail_ab.py item-food-use`, 49/49. Retail had no `GAMECMD_INVUSE`-style key.
 - `[ ]` **G.4 Move equipped item between slots** — `GAMECMD_INVMOVE` ([playscreen.cpp:103](../../src/playscreen.cpp#L103)). Swap-on-conflict semantics from retail.
 - `[ ]` **G.5 Container interaction** — chest → contents listed in inventory pane. `TContainer` exists. Verify pickup loop.
+- `[x]` **G.6 Equipment drawn on the character** — done 2026-10-11. Equipped weapons and clothes ride the character's objects (TCharAnimator::ProcessEquipment `0x004d7f20`), the character's own sword/weapon is hidden, and object parents follow the animation state (T3DAnimator::Render `0x0040e8d0`). Checked against the shipped game in the DOSBox lab. [forensics/EQUIPMENT_RENDER.md](forensics/EQUIPMENT_RENDER.md); its §7 lists what's left (the hit flash pass, the paperdoll's own matcher).
 
 ## Phase H — Boss AI (post-Demo 1)
 
 Demo 1 only has Araknids. Boss work is for the full game.
 
-- `[ ]` **H.1 Solifuge AI** — TODO stub at [character.cpp:2435](../../src/character.cpp#L2435).
-- `[ ]` **H.2 Jhaga AI** — same stub.
-- `[ ]` **H.3 Baez AI** — same stub.
-- `[ ]` **H.4 Yhagoro AI** — same stub.
+- `[x]` **H.1 Solifuge AI** — 2026-10-11: the stun, the sky walk, the brood, the landing slam ([src/bossai.cpp](../../src/bossai.cpp), forensics [forensics/BOSS_AI.md](forensics/BOSS_AI.md) §3).
+- `[x]` **H.2 Jhaga AI** — 2026-10-11: the teleports round four waypoints, the fireballs and the fire wind (§4).
+- `[x]` **H.3 Baez AI** — 2026-10-11: the crowd, the stuns, the fake death, the walk to the table and the throw (§2).
+- `[x]` **H.4 Yhagoro AI** — 2026-10-11: walking or fighting by his health (§5).
 
-Each needs reading the retail behavior out of recon/. Defer until after Demo 1 is playable end-to-end.
+All four are retail's AI_PerMonster (`0x004c9b70`), held to it by kata C3c (`melee-boss`, [COMBAT_DOJO.md](COMBAT_DOJO.md)). Left: retail's EndFighting (`0x004d3fd0`; Baez's fall calls it on the player, the port's is 1998's, a seam in the kata), the blue tint's look in the renderer (TintMaterials sets the materials; the VFX track checks them drawn).
 
 ## Risks / unknowns
 

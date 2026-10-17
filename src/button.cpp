@@ -5,51 +5,23 @@
 // *************************************************************************
 
 #include <ctype.h>
+#include <cstdio>
 
 #include "revenant.h"
-#include "display.h"
 #include "button.h"
-#include "font.h"
+#include "renderer.h"
+#include "sound.h"
+#include "surface.h"
 
 // ***********
 // * TButton *
 // ***********
 
-void DrawFrame(TSurface* surface, int32_t x, int32_t y, int32_t w, int32_t h, bool down)
-{
-    int32_t topcolor = 216, bottomcolor = 40, leftcolor = 196, rightcolor = 70;
-    int32_t centercolor = 128;
-    SColor color;
-
-    if (down)
-    {
-        int32_t tmp;
-        tmp = topcolor; topcolor = bottomcolor; bottomcolor = tmp;
-        tmp = leftcolor; leftcolor = rightcolor; rightcolor = tmp;
-    }
-
-    // center
-    color.red = color.green = color.blue = centercolor;
-    surface->Box(x + 1, y + 1, w - 2, h - 2, TranslateColor(color), 0, 0, DM_BACKGROUND);
-    // top
-    color.red = color.green = color.blue = topcolor;
-    surface->Box(x, y, w, 1, TranslateColor(color), 0, 0, DM_BACKGROUND);
-    // left
-    color.red = color.green = color.blue = leftcolor;
-    surface->Box(x, y + 1, 1, h - 1, TranslateColor(color), 0, 0, DM_BACKGROUND);
-    // right
-    color.red = color.green = color.blue = rightcolor;
-    surface->Box(x + w - 1, y + 1, 1, h - 2, TranslateColor(color), 0, 0, DM_BACKGROUND);
-    // bottom
-    color.red = color.green = color.blue = bottomcolor;
-    surface->Box(x + 1, y + h - 1, w - 1, 1, TranslateColor(color), 0, 0, DM_BACKGROUND);
-}
-
-TButton::TButton(char *bname, int32_t bx, int32_t by, int32_t bw, int32_t bh, uint16_t keypr,
+TButton::TButton(const char *bname, int32_t bx, int32_t by, int32_t bw, int32_t bh, uint16_t keypr,
                  void (*bfunc)(), PTBitmap dbm, PTBitmap ubm, bool rad,
                  bool tog, bool notsquare, int32_t group, int32_t repeat)
 {
-    strcpy(name, bname);
+    std::snprintf(name, sizeof(name), "%s", bname ? bname : "");   // retail keeps 31 chars
     x = bx;
     y = by;
     w = bw;
@@ -79,39 +51,33 @@ TButton::TButton(char *bname, int32_t bx, int32_t by, int32_t bw, int32_t bh, ui
     upbitmap = ubm;
     if (upbitmap && rad)
     {
-        downbitmap->flags |= BM_REGPOINT;
+        upbitmap->flags |= BM_REGPOINT;
         upbitmap->regx = w + 1;
         upbitmap->regy = w;
     }
 }
 
-void TButton::Draw()
+// REVSYNC: 0x0042cc30 -- the down bitmap while pressed, the grey one while
+// disabled, else the up one, at the button's place. The draw mode is the
+// button's own; the default takes the bitmap's, less DM_BACKGROUND and
+// DM_USEREG, with DM_NORESTORE, and DM_USEDEFAULT with other flags adds the
+// bitmap's to them. It is keyed only with DM_TRANSPARENT (a bitmap with an
+// alpha track blends through it); with DM_USEREG it sits at its
+// registration point (the radial buttons centre theirs).
+void TButton::Compose(int32_t target_w, int32_t target_h)
 {
-    if (hidden)
-        return;
-
-    if (downbitmap)
-    {
-        if (pixelcheck)
-            //Display.PutSV(x, y, down ? downbitmap : upbitmap, DM_USEREG | DM_BACKGROUND | DM_TRANSPARENT, level * 2, level);
-            Display.Put(x, y, down ? downbitmap : upbitmap, DM_USEREG | DM_BACKGROUND | DM_TRANSPARENT);
-        else
-            Display.Put(x, y, down ? downbitmap : upbitmap, DM_USEREG | DM_BACKGROUND);
-    }
-    else
-    {
-        // generate a generic button
-        int32_t add = down ? 1 : 0;
-        int32_t nx = x + (w / 2) - ((strlen(name) * SystemFont->GetChar(SystemFont->FirstChar())->width) / 2);
-        int32_t ny = y + (h / 2) - (SystemFont->height / 2) - 3;
-        DrawFrame(&Display, x, y, w, h, down);
-        SColor color;
-        color.red = color.blue = color.green = 40;
-        Display.WriteText(name, nx + add, ny + add, 1, SystemFont, &color, DM_TRANSPARENT | DM_ALIAS | DM_BACKGROUND);
-        Display.AddUpdateRect(x, y, w, h, UPDATE_RESTORE);
-    }
-
     dirty = false;
+    TBitmap* bitmap = down && downbitmap ? downbitmap : disabled && greybitmap ? greybitmap : upbitmap;
+    if (hidden || !bitmap || !Renderer)
+        return;
+    uint32_t mode = drawmode == DM_USEDEFAULT ? (bitmap->drawmode & ~(DM_BACKGROUND | DM_USEREG)) | DM_NORESTORE
+                                               : drawmode;
+    if (mode & DM_USEDEFAULT)
+        mode |= bitmap->drawmode;
+    const bool registered = (mode & DM_USEREG) && (bitmap->flags & BM_REGPOINT);
+    Renderer->DrawBitmapToTarget(bitmap, x - (registered ? bitmap->regx : 0), y - (registered ? bitmap->regy : 0),
+                                 target_w, target_h,
+                                 (mode & DM_TRANSPARENT) ? EBitmapDecode::Pixels : EBitmapDecode::Unkeyed);
 }
 
 #define REPEATWAIT      7
@@ -126,16 +92,19 @@ void TButton::Animate(bool draw)
             ButtonFunc();
 }
 
+// REVSYNC: 0x0042d0d0 (rectangular: x <= bx < x + w)
+// A disabled button takes no press: retail's hit test doesn't look at flag
+// 4, its pane's press path does.
 bool TButton::OnButton(int32_t bx, int32_t by)
 {
-    if (hidden || (radiogroup >= 0 && down))
+    if (hidden || disabled || (radiogroup >= 0 && down))
         return false;
 
     if (radial)
         return ((sqr(absval(x - bx)) + sqr(absval(y - by))) <= sqr(w));
     else
     {
-        bool insquare = (bx >= x && by >= y && bx <= (x + w) && by <= (y + h));
+        bool insquare = (bx >= x && by >= y && bx < (x + w) && by < (y + h));
         if (!pixelcheck || !insquare)
             return insquare;
 
@@ -158,6 +127,8 @@ inline bool TButton::IsKey(int32_t keypr, bool keydown)
 // * TButtonPane *
 // ***************
 
+TButtonPane::~TButtonPane() = default;
+
 bool TButtonPane::Initialize()
 {
     TPane::Initialize();
@@ -165,13 +136,22 @@ bool TButtonPane::Initialize()
     Buttons.Clear();
     SetDirty(true);
     clicked = -1;
+    hover = nullptr;
     return true;
 }
 
 void TButtonPane::Close()
 {
+    ClearButtons();
+    layer.reset();
+    TPane::Close();
+}
+
+// REVSYNC: 0x00436890
+void TButtonPane::ClearButtons()
+{
     TPointerIterator<TButton> i(&Buttons);
-    
+
     while (i)
     {
         if (i.Item() == nullptr)
@@ -182,13 +162,92 @@ void TButtonPane::Close()
             Buttons.Remove(i);
         }
     }
+    clicked = -1;
+    hover = nullptr;
+    SetDirty(true);
 }
 
-void TButtonPane::DrawBackground()
+// REVSYNC: 0x004369f0. Retail plays "frontend_move" whenever the hover is
+// asked to move to another button, before checking that the button took it.
+void TButtonPane::SetHover(TButton *b)
+{
+    if (!b)
+    {
+        if (hover)
+            hover->SetHover(false);
+        hover = nullptr;
+        return;
+    }
+    if (b == hover)
+        return;
+    PLAY("frontend_move");
+    b->SetHover(true);
+    if (!b->IsHover())
+        return;
+    if (hover)
+        hover->SetHover(false);
+    hover = b;
+}
+
+// The pressed button reports: retail TButton plays "click1" and sends its
+// pane CONTROL_CLICKED (0x0042d4b0 release, 0x0042d390 key press).
+void TButtonPane::Activate(TButton *b)
+{
+    PLAY("click1");
+    b->ButtonFunc();
+    OnControl(b, CONTROL_CLICKED);
+}
+
+// REVSYNC: 0x004367d0
+bool TButtonPane::DeleteButton(TButton *b)
 {
     for (TPointerIterator<TButton> i(&Buttons); i; i++)
+    {
+        if (i.Item() != b)
+            continue;
+        if (hover == b)
+            hover = nullptr;
+        if (clicked == i.ItemNum())
+            clicked = -1;
+        Buttons.Delete(i);
+        return true;
+    }
+    return false;
+}
+
+bool TButtonPane::NeedsCompose()
+{
+    if (IsDirty() || !layer)
+        return true;
+    for (TPointerIterator<TButton> i(&Buttons); i; i++)
         if (i.Item() && i.Item()->IsDirty())
-            i.Item()->Draw();
+            return true;
+    return false;
+}
+
+// REVSYNC: retail's draw loop (0x00435de0) draws each dirty button onto the
+// pane's surface, the button restoring the background under it first. The
+// port recomposes the pane's whole layer -- its art, then every button --
+// when anything in it changed.
+void TButtonPane::Compose()
+{
+    if (!NeedsCompose() || GetWidth() <= 0 || GetHeight() <= 0 || !Renderer)
+        return;
+    SetDirty(false);
+    if (!layer || layer->Width() != GetWidth() || layer->Height() != GetHeight())
+        layer = std::make_unique<TSurface>(GetWidth(), GetHeight(), SG_PIXELFORMAT_RGBA8);
+    layer->StartPass(0.0f, 0.0f, 0.0f, 0.0f);
+    ComposeBackground(GetWidth(), GetHeight());
+    for (TPointerIterator<TButton> i(&Buttons); i; i++)
+        if (i.Item())
+            i.Item()->Compose(GetWidth(), GetHeight());
+    layer->EndPass();
+}
+
+void TButtonPane::Draw()
+{
+    if (layer && Renderer)
+        Renderer->DrawSurface(layer.get(), GetPosX(), GetPosY());
 }
 
 void TButtonPane::Animate(bool draw)
@@ -205,8 +264,38 @@ void TButtonPane::RedrawButtons()
             i.Item()->SetDirty();
 }
 
+// REVSYNC: 0x004361f0. With BPF_KEYFOCUS the arrows move the hover through
+// the buttons (wrapping) and Enter presses the hovered button -- or the last
+// one, when none is hovered -- on key down.
 void TButtonPane::KeyPress(int32_t key, bool down)
 {
+    const int32_t count = Buttons.NumItems();
+    if ((paneflags & BPF_KEYFOCUS) && count > 0)
+    {
+        int32_t at = count - 1;
+        for (int32_t n = 0; n < count; ++n)
+            if (hover && Buttons[n] == hover)
+                at = n;
+        if (TButton *focus = Buttons[at])
+        {
+            const bool back = key == VK_UP || key == VK_LEFT;
+            if (down && (back || key == VK_DOWN || key == VK_RIGHT))
+            {
+                const int32_t step = back ? count - 1 : 1;
+                for (int32_t n = (at + step) % count; n != at; n = (n + step) % count)
+                {
+                    if (!Buttons[n])
+                        continue;
+                    SetHover(Buttons[n]);
+                    if (hover == Buttons[n])
+                        break;
+                }
+            }
+            else if (down && key == VK_RETURN)
+                Activate(focus);
+        }
+    }
+
     if (down)
     {
         for (TPointerIterator<TButton> i(&Buttons); i; i++)
@@ -238,11 +327,13 @@ void TButtonPane::KeyPress(int32_t key, bool down)
                     i.Item()->SetState(false);
 
                 if (!i.Item()->Repeats())
-                    i.Item()->ButtonFunc();
+                    Activate(i.Item());
             }
     }
 }
 
+// REVSYNC: 0x00436530 (pane) / 0x0042d4b0 (button). A press on a button
+// gives it the hover; the release over the same button activates it.
 void TButtonPane::MouseClick(int32_t button, int32_t x, int32_t y)
 {
     if (button == MB_LEFTDOWN)
@@ -252,6 +343,7 @@ void TButtonPane::MouseClick(int32_t button, int32_t x, int32_t y)
                 (i.Item()->GetState() == false || i.Item()->IsToggle()) &&
                 (i.Item()->RadioGroup() < 0 || i.Item()->GetState() == false))
             {
+                SetHover(i.Item());
                 if (i.Item()->IsToggle())
                 {
                     ClearGroup(i.Item()->RadioGroup());
@@ -271,45 +363,60 @@ void TButtonPane::MouseClick(int32_t button, int32_t x, int32_t y)
     }
     else if (button == MB_LEFTUP)
     {
-        if (clicked >= 0 && Buttons[clicked]->OnButton(x, y) &&
-            !Buttons[clicked]->IsToggle())
-        {
-            if (!Buttons[clicked]->IsToggle())
-                Buttons[clicked]->SetState(false);
-            if (!Buttons[clicked]->Repeats())
-                Buttons[clicked]->ButtonFunc();
-        }
+        TButton *pressed = clicked >= 0 ? Buttons[clicked] : nullptr;
         clicked = -1;
+        if (pressed && pressed->OnButton(x, y) && !pressed->IsToggle())
+        {
+            pressed->SetState(false);
+            if (!pressed->Repeats())
+                Activate(pressed);
+        }
     }
 }
 
+// REVSYNC: 0x00436660. With BPF_HOVER the button under the pointer takes the
+// hover; off every button the hover clears unless BPF_KEEPHOVER is set.
 void TButtonPane::MouseMove(int32_t button, int32_t x, int32_t y)
 {
-    if (button == MB_LEFTDOWN && clicked >= 0)
+    TButton *pressed = clicked >= 0 ? Buttons[clicked] : nullptr;
+    if (pressed)
     {
-        if (Buttons[clicked]->OnButton(x, y))
+        if (button == MB_LEFTDOWN)
         {
-            if (Buttons[clicked]->GetState() == false &&
-                !Buttons[clicked]->IsToggle())
-                Buttons[clicked]->SetState(true);
+            if (pressed->OnButton(x, y))
+            {
+                if (pressed->GetState() == false && !pressed->IsToggle())
+                    pressed->SetState(true);
+            }
+            else
+            {
+                if (pressed->GetState() == true || !pressed->IsToggle())
+                    pressed->SetState(false);
+            }
         }
-        else
-        {
-            if (Buttons[clicked]->GetState() == true ||
-                !Buttons[clicked]->IsToggle())
-                Buttons[clicked]->SetState(false);
-        }
+        return;
     }
+
+    if (!(paneflags & BPF_HOVER))
+        return;
+    TButton *under = nullptr;
+    for (TPointerIterator<TButton> i(&Buttons); i; i++)
+        if (i.Item() && i.Item()->IsHoverable() && i.Item()->OnButton(x, y))
+            under = i.Item();
+    if (under)
+        SetHover(under);
+    else if (!(paneflags & BPF_KEEPHOVER))
+        SetHover(nullptr);
 }
 
+// A radio group's first button starts down.
 bool TButtonPane::NewButton(PTButton b)
 {
-    if (b)
-        return (Buttons.Add(b) >= 0);
-
+    if (!b || Buttons.Add(b) < 0)
+        return false;
     CheckGroup(b->RadioGroup());
-
-    return false;
+    SetDirty(true);
+    return true;
 }
 
 void TButtonPane::ClearGroup(int32_t group)

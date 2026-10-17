@@ -193,6 +193,7 @@ layout(location = 3) in vec2 uv;
 layout(location = 4) in vec4 color;
 layout(location = 5) in float debug_mode;
 layout(location = 6) in float light_mode;
+layout(location = 7) in vec3 retail_metadata;
 layout(std140) uniform fx_params {
     vec4 vp;
     vec4 camz;
@@ -206,6 +207,7 @@ out vec2  v_uv;
 out vec4  v_color;
 out vec3  v_lit;
 out float v_debug;
+out float v_retail_texture;
 void main() {
     vec3 vd = normalize(world_pos - cam_pos.xyz);
     vec3 t = world_tan;
@@ -222,11 +224,26 @@ void main() {
     float S   = wx - wy;
     float T   = 0.5 * sum - wz * 0.867;
     float scene_z_wu = camz.z - 0.867 * sum - 0.5 * wz;
-    float scene_z_n  = (scene_z_wu - camz.x) / max(camz.y, 1e-6);
+    bool native_projection = retail_metadata.y > 0.5;
+    if (native_projection) {
+        float native_z = wz - retail_metadata.z;
+        S = 1.0101525783538818 * (wx - wy);
+        T = 0.5050762891769409 * sum - 1.237179160118103 * native_z;
+        scene_z_wu = 2750.0 - 0.8748177289962769 * sum - 0.7142857909202576 * native_z;
+    }
+    bool prelit_rgba5 = retail_metadata.x > 4.5;
+    float scene_z_n  = ((prelit_rgba5 ? uv.x : scene_z_wu) - camz.x) / max(camz.y, 1e-6);
     float zoom = max(camw.z, 0.0001);
-    float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
+    float persp_scale = ((!native_projection && camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
     float spy = vp.y + T * persp_scale;
+    // Native software RGB565 packets truncate XYZ before rasterization.
+    // +0.5 maps their integer sample lattice to GPU half-integer centers.
+    if ((prelit_rgba5 && native_projection) || retail_metadata.y > 1.5) {
+        spx = trunc(spx) + 0.5; spy = trunc(spy) + 0.5;
+    }
+    if (retail_metadata.y > 1.5)
+        scene_z_n = (trunc(scene_z_wu) - camz.x) / max(camz.y, 1e-6);
     gl_Position.x = 2.0 * spx / max(vp.z, 1.0) - 1.0;
     gl_Position.y = 1.0 - 2.0 * spy / max(vp.w, 1.0);
     gl_Position.z = scene_z_n;
@@ -240,6 +257,7 @@ void main() {
     v_color = color;
     v_lit   = lit;
     v_debug = debug_mode;
+    v_retail_texture = retail_metadata.x;
 }
 )GLSL";
 
@@ -249,16 +267,47 @@ in vec2  v_uv;
 in vec4  v_color;
 in vec3  v_lit;
 in float v_debug;
+in float v_retail_texture;
 uniform sampler2D atlas;
 out vec4 o_color;
 void main() {
     int mode = int(v_debug + 0.5);
+    if (v_retail_texture > 4.5) {
+        // Original dynamic untextured RGBA5: interpolate, truncate, lookup.
+        float a5 = floor(clamp(v_color.a, 0.0, 31.0) + 0.00001);
+        float alpha = (a5 + 1.0) / 32.0;
+        vec3 channels = floor(clamp(v_color.rgb, 0.0, 31.0) + 0.00001) * vec3(1.0, 2.0, 1.0);
+        vec3 source = floor(channels * alpha) / (alpha * vec3(31.0, 63.0, 31.0));
+        o_color = vec4(source, alpha); return;
+    }
+    vec4 texel = texture(atlas, v_uv);
+    if (v_retail_texture > 0.5) {
+        ivec2 size = textureSize(atlas, 0);
+        ivec2 xy = min(ivec2(floor(fract(v_uv) * vec2(size))), size - ivec2(1));
+        texel = texelFetch(atlas, xy, 0);
+    }
+    if (v_retail_texture > 2.5 && v_retail_texture < 3.5) {
+        vec4 nibble = floor(texel * 15.0 + 0.5);
+        texel = vec4(nibble.rgb * vec3(2.0/31.0, 4.0/63.0, 2.0/31.0),
+                       (nibble.a + 1.0) / 16.0);
+    }
     vec4 c;
     if      (mode == 1) c = v_color;
-    else if (mode == 2) c = texture(atlas, v_uv);
-    else if (mode == 3) { c = texture(atlas, v_uv); c = vec4(1.0, 1.0, 1.0, c.a); }
-    else                c = texture(atlas, v_uv) * v_color;
-    c.rgb *= v_lit;
+    else if (mode == 2) c = texel;
+    else if (mode == 3) { c = texel; c = vec4(1.0, 1.0, 1.0, c.a); }
+    else if (v_retail_texture > 3.5) {
+        // Original RGB565 litadd: RGB5 lookup, then additive source LSB mask.
+        vec3 source5 = floor(texel.rgb * vec3(31.0, 63.0, 31.0) + 0.5);
+        source5.g = floor(source5.g * 0.5);
+        vec3 light5 = floor(clamp(v_color.rgb, 0.0, 1.0) * 31.0 + 0.5);
+        vec3 modulated = floor(source5 * light5 / 31.0);
+        modulated.rb = floor(modulated.rb * 0.5) * 2.0;
+        modulated.g *= 2.0;
+        c = vec4(modulated / vec3(31.0, 63.0, 31.0), texel.a * v_color.a);
+    } else {
+        c = v_retail_texture > 2.5 ? texel : texel * v_color;
+    }
+    if (v_retail_texture < 2.5) c.rgb *= v_lit;
     if (c.a < 0.002) discard;
     o_color = c;
 }

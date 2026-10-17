@@ -220,8 +220,15 @@ class TParticleManager
 
 TParticleManager& ParticleManager();
 
+// Elapsed seconds snapped to an authored atlas clock, then looped. This
+// preserves discrete cel holds without counting display frames or losing
+// advancement when an update crosses several authored ticks.
+[[nodiscard]] float ParticleAtlasTime(double elapsed_seconds, int32_t cycle_frames,
+                                      double frames_per_second);
+
 struct SParticleEvalContext
 {
+    // Seconds; Frame(t, rate) evaluates floor(t * rate).
     float time_frame = 0.0f;
     float age = 0.0f;
     float age01 = 0.0f;

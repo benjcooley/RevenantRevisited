@@ -79,6 +79,25 @@ char *keywords[NUMKEYWORDS] =
     "#include"
 };
 
+// REVSYNC: 0x00478a10 reads every character this way: carriage returns are
+// skipped wherever they are, and a line feed counts a line as it is read.
+// So the character a token holds after it is never a CR: after an identifier
+// that ends a CRLF line the stream has passed the line feed, and the line is
+// already counted. (The 1998 tokenizer skipped a CR only at a token's start
+// and counted a line when it returned the line break.) Script stepping
+// depends on it: where Jump resumes, what a token held across a SetPos reads
+// next (Continue's `ELSE IF`), the line numbers of script errors.
+int32_t TToken::ReadChar()
+{
+    int32_t ch;
+    do
+        ch = stream->GetChar();
+    while (ch == '\r');
+    if (ch == '\n')
+        linenum++;
+    return ch;
+}
+
 void TToken::Get()
 {
     char ch;
@@ -90,21 +109,15 @@ void TToken::Get()
         ch = lastch;
         lastch = 0;
     }
-    else ch = stream->GetChar();
-
-    while (ch == 0xD)               // skip CR altogether, \n will be line terminator
-        ch = stream->GetChar();
+    else ch = ReadChar();
 
   // Line continuation char
     if (ch == '\\')
     {
         while (ch != '\n' && ch != EOF)
-            ch = stream->GetChar();
+            ch = ReadChar();
         if (ch == '\n')
-        {
-            linenum++;
-            ch = stream->GetChar();
-        }
+            ch = ReadChar();
     }
 
   // End of file
@@ -118,28 +131,27 @@ void TToken::Get()
   // Remark
     else if (ch == '/')
     {
-        lastch = stream->GetChar();
+        lastch = ReadChar();
         if (lastch == '/')
         {
             while (lastch != '\n' && lastch != EOF)
-                lastch = stream->GetChar();
+                lastch = ReadChar();
             lastch = 0;
             type = TKN_RETURN;
             text[0] = '\n';
             text[1] = 0;
-            linenum++;
             return;
         }
         else if (lastch == '*')
         {
-            lastch = stream->GetChar();
+            lastch = ReadChar();
             do
             {
               while (lastch != '*' && lastch != EOF)
-                lastch = stream->GetChar();
-              lastch = stream->GetChar();
+                lastch = ReadChar();
+              lastch = ReadChar();
             } while (lastch != '/' && lastch != EOF);
-            lastch = stream->GetChar();
+            lastch = ReadChar();
         }
         else
         {
@@ -165,7 +177,7 @@ void TToken::Get()
         text[pos++] = ch;
         do
         {
-            ch = stream->GetChar();
+            ch = ReadChar();
             if (pos < MAXTOKENTEXT - 1)
                 text[pos++] = ch;
         }
@@ -181,7 +193,6 @@ void TToken::Get()
         type = TKN_RETURN;
         text[0] = '\n';
         text[1] = 0;
-        linenum++;
         return;
     }
 
@@ -191,40 +202,61 @@ void TToken::Get()
     {
         pos = 0;
 moretext:
-        ch = stream->GetChar();
+        ch = ReadChar();
         while (ch != EOF && ch != '\"' && ch != '\n')
         {
             if (pos >= MAXTOKENTEXT - 1)
-                Error("String too int32_t");
-            if (ch == '\\')
+                Error("String too long");
+            if (ch == '\\' && !literalbackslash)
             {
-                ch = stream->GetChar();
-                if (ch == 'n')
+                // REVSYNC: 0x00478c9c -- \n, \r, \t, \\ and \xXX (two hex
+                // digits, either case); after any other character the
+                // backslash stays and the character is read as itself.
+                ch = ReadChar();
+                switch (ch)
                 {
-                    text[pos++] = '\n';
-                    ch = stream->GetChar();
+                  case 'n':  text[pos++] = '\n'; ch = ReadChar(); break;
+                  case 'r':  text[pos++] = '\r'; ch = ReadChar(); break;
+                  case 't':  text[pos++] = '\t'; ch = ReadChar(); break;
+                  case '\\': text[pos++] = '\\'; ch = ReadChar(); break;
+                  case 'x':
+                  {
+                    int32_t value = 0;
+                    for (int32_t digit = 0; digit < 2; digit++)
+                    {
+                        const int32_t c = toupper(ReadChar());
+                        if (c >= '0' && c <= '9')
+                            value = value * 16 + (c - '0');
+                        else if (c >= 'A' && c <= 'F')
+                            value = value * 16 + (c - 'A' + 10);
+                        else
+                            Error("Illegal \\xXX character in string");
+                    }
+                    text[pos++] = char(value);
+                    ch = ReadChar();
+                    break;
+                  }
+                  default:   text[pos++] = '\\'; break;
                 }
-                else
-                    text[pos++] = '\\';
             }
             else
             {
                 text[pos++] = ch;
-                ch = stream->GetChar();
+                ch = ReadChar();
             }
         }
         /*
         if (ch != '\"')
             Error("ERROR: Unterminated string");
         */
-        lastch = stream->GetChar();
+        lastch = ReadChar();
         if (lastch == '\\')
         {
             while (lastch != '\n' && lastch != EOF)
-                lastch = stream->GetChar();
+                lastch = ReadChar();
             do
             {
-                ch = stream->GetChar();  // Skip whitespace (note, will not return a whitespace token)
+                ch = ReadChar();  // Skip whitespace (note, will not return a whitespace token)
             }
             while ((ch == ' ') || (ch == '\t'));
             lastch = ch;
@@ -245,7 +277,7 @@ moretext:
         if (ch == '#')
         {
             text[pos++] = ch;
-            ch = stream->GetChar();
+            ch = ReadChar();
             if (toupper(ch) < 'A' || toupper(ch) > 'Z')
             {
                 type = TKN_SYMBOL;
@@ -258,7 +290,7 @@ moretext:
         do
         {
             text[pos++] = ch;
-            ch = stream->GetChar();
+            ch = ReadChar();
             upch = toupper(ch);
         } while ((upch >= 'A' && upch <= 'Z') ||
           (ch >= '0' && ch <= '9') ||
@@ -308,12 +340,12 @@ moretext:
         if (ch == '0')
         {
             text[pos++] = ch;
-            ch = stream->GetChar();
+            ch = ReadChar();
             if (ch == 'x')
             {
                 ishex = true;
                 text[pos++] = ch;
-                ch = stream->GetChar();
+                ch = ReadChar();
                 number = 0;
                 while ((ch >= '0' && ch <= '9') ||
                     (ch >= 'A' && ch <= 'F') ||
@@ -323,7 +355,7 @@ moretext:
                     if (ch <=  '9') number = number * 16 + ch - '0';
                       else number = number * 16 + 10 + ch - 'A';
                     text[pos++] = ch;
-                    ch = stream->GetChar();
+                    ch = ReadChar();
                 }
                 if (pos <= 2)
                     Error("Invalid HEX constant"); 
@@ -337,7 +369,7 @@ moretext:
             if (ch == '-')
             {
                 text[pos++] = ch;
-                ch = stream->GetChar();
+                ch = ReadChar();
                 if (!(ch >= '0' && ch <= '9'))
                 {
                     lastch = ch;
@@ -349,7 +381,7 @@ moretext:
             while ((ch >= '0' && ch <= '9') || (ch == '.' && numdec <= 1))
             {
                 text[pos++] = ch;
-                ch = stream->GetChar();
+                ch = ReadChar();
                 if (ch == '.') numdec++;
             }
             text[pos] = 0;
@@ -497,7 +529,7 @@ int32_t abbrevcmp(const char *abbrev, const char *string)
     return i;
 }
 
-bool TToken::Is(char *istext, int32_t abbrevlen) const
+bool TToken::Is(const char *istext, int32_t abbrevlen) const
 {
     if (abbrevlen)
         return (abbrevcmp(text, istext) >= abbrevlen);
@@ -523,6 +555,41 @@ void TToken::DoEnd()
     if (Type() != TKN_RETURN)
         Error("RETURN Expected!");
     LineGet();
+}
+
+// REVSYNC: TToken::GetRestOfLine @ 0x004799b0 -- the current token's text and
+// the rest of its line into buf (len bytes, always terminated): words,
+// strings and symbols as written, numbers as their integer value, each run
+// of blanks as one space; the return is consumed. False when len < 0.
+bool TToken::GetRestOfLine(char *buf, int32_t len)
+{
+    if (len < 0)
+        return false;
+    strcpy(buf, text);
+    Get();
+    while (type != TKN_RETURN && type != TKN_EOF)
+    {
+        const char *piece = nullptr;
+        char number[16];
+        if (type == TKN_IDENT || type == TKN_TEXT || type == TKN_SYMBOL)
+            piece = text;
+        else if (type == TKN_NUMBER)
+        {
+            snprintf(number, sizeof(number), "%d", index);
+            piece = number;
+        }
+        else if (type == TKN_WHITESPACE)
+            piece = " ";
+        if (piece)
+        {
+            const size_t used = strlen(buf);
+            strncpy(buf + used, piece, len - used - 1);
+            buf[len - 1] = 0;
+        }
+        Get();
+    }
+    Get();
+    return true;
 }
 
 void TToken::Error(const char *err, const char *extra)
@@ -620,8 +687,10 @@ bool ParseAnything(bool stack, TToken &t, const char *format, va_list ap)
                             switch (*f)
                             {
                               case 'b':
+                                // REVSYNC: 0x00479ca5 -- an absent field's
+                                // byte is skipped, not written (as the others)
                                 if (stack)
-                                    *va_arg(ap,unsigned char *) = (uint8_t)t.Index();
+                                    va_arg(ap, unsigned char *);
                                 else
                                     *(unsigned char **)from += 1;
                                 break;
@@ -711,6 +780,16 @@ bool ParseAnything(bool stack, TToken &t, const char *format, va_list ap)
           case '%':
           {
             f++;
+            // REVSYNC: 0x00479d89 -- `%\` before the conversion: the tokens
+            // read while the field is taken (the one after it) keep their
+            // backslashes as written; the token's setting comes back after.
+            const bool literal = (*f == '\\');
+            const bool wasliteral = t.literalbackslash;
+            if (literal)
+            {
+                f++;
+                t.literalbackslash = true;
+            }
             if (isdigit(*f))
             {
                 len = 0;
@@ -883,6 +962,8 @@ bool ParseAnything(bool stack, TToken &t, const char *format, va_list ap)
                 break;
 
             } // End of '%' value parse
+            if (literal)
+                t.literalbackslash = wasliteral;
             break;
           }
 

@@ -2,9 +2,12 @@
 
 #include "module.h"
 
+#include "dialog.h"
+
 #include "logging.h"
 #include "parse.h"
 #include "revutils.h"
+#include "sound.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -197,9 +200,11 @@ bool TModuleManager::Initialize()
     // ships MainModule = "Ahkuilon"; the dev tree mostly contains
     // Ahkuilon_unzipped instead, so the fallback path is the hot path
     // today and the log line tells you which entry was picked.
+    // REVSYNC: GetINISettings @ 0x00484500 reads MainModule with the same
+    // quoted-text getter as the paths (the retail INI writes it quoted).
     char mainname[kModNameMax] = {0};
     INISetSection("Modules");
-    INIGetStr("MainModule", (char *)"Ahkuilon", mainname, sizeof(mainname));
+    INIGetText("MainModule", (char *)"Ahkuilon", mainname, sizeof(mainname));
     main_idx = Find(mainname);
 
     if (main_idx < 0)
@@ -217,8 +222,12 @@ bool TModuleManager::Initialize()
     return true;
 }
 
+// The module close (retail 0x00460c10, from TPlayScreen::Close) drops the
+// module's sounds (0x0049b400) with the module.
 void TModuleManager::Close()
 {
+    if (active_idx >= 0)
+        SoundPlayer.UnloadModuleSounds();
     UnmountModule();
     modules.clear();
     active_idx  = -1;
@@ -226,17 +235,30 @@ void TModuleManager::Close()
     initialized = false;
 }
 
+// REVSYNC: 0x00460d60 — case-insensitive, as retail (save headers store the
+// dirname in whatever case the save was written with, e.g. "ahkuilon").
 int TModuleManager::Find(const char *dirname) const
 {
     if (!dirname || !*dirname) return -1;
     for (int i = 0; i < (int)modules.size(); ++i)
-        if (modules[i]->dirname == dirname) return i;
+        if (stricmp(modules[i]->dirname.c_str(), dirname) == 0) return i;
     return -1;
 }
 
+// REVSYNC: 0x004609f0 — selecting the active module again is a no-op.
 bool TModuleManager::SetCurModule(int idx)
 {
     if (idx < 0 || idx >= (int)modules.size()) return false;
+    if (idx == active_idx) return true;
+
+  // Leaving the current module: its sounds go (0x0049b400) before the next
+  // module mounts.
+    if (active_idx >= 0)
+    {
+        SoundPlayer.UnloadModuleSounds();
+        active_idx = -1;
+    }
+
     TModule *m = modules[idx].get();
     if (!MountModule(m->dirname.c_str()))
     {
@@ -245,7 +267,35 @@ bool TModuleManager::SetCurModule(int idx)
     }
     active_idx = idx;
     log_info("[module] active = '%s' (%s)", m->dirname.c_str(), m->name.c_str());
+
+  // Retail loads the module's dialog list, then its sounds, right after the
+  // mount.
+    DialogList.LoadModule();
+    SoundPlayer.LoadModuleSounds(m->dirname.c_str());   // 0x0049b220
     return true;
+}
+
+// The "%s%s\%s" (ModulesPath, module dirname, file) composition retail's
+// loaders use for module data.
+std::string TModuleManager::ModuleFilePath(const char *file) const
+{
+    const TModule *m = Active();
+    if (!m)
+        return {};
+    return std::string(ModulesPath) + m->dirname + "\\" + file;
+}
+
+// REVSYNC: the module-or-shared lookup inlined in TAreaManager::Load
+// @ 0x0041c000, TExit::ReadExitList @ 0x0050c8f0, ReadMapLocationList
+// @ 0x00424e10, TGameState::Load @ 0x00495cf0 and TScriptManager::Load
+// @ 0x00496490.
+std::string TModuleManager::DataFilePath(const char *file) const
+{
+    const TModule *m = Active();
+    if (!m)
+        return std::string(ClassDefPath) + file;
+    const std::string module_dir = std::string(ModulesPath) + m->dirname + "\\";
+    return rev_first_existing(module_dir.c_str(), ClassDefPath, file);
 }
 
 bool TModuleManager::SetCurModule(const char *dirname)

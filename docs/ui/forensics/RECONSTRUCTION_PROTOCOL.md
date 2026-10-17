@@ -11,7 +11,7 @@ not need to open the recon at all.
    means a clean file. Create a new `src/ui<panel>test.{cpp,h}` (and register a
    new `--test=` mode) written entirely from the spec. If a prior hand-iterated
    shell for this panel exists, do NOT edit it — once your new file is verified,
-   retire the old one (delete, or move to `attic/`). Editing the old file lets
+   delete the old one (git history keeps it). Editing the old file lets
    its bugs and stale assumptions hide inside your "reconstruction"; a fresh file
    makes the clean-room build verifiably independent. (Proof: the side-tabs panel
    was a brand-new file and was correct first pass; the stat bar was edited
@@ -88,12 +88,14 @@ straight to the HUD swapchain (cursor, overlays) — not the usual panel path.
 | compose chip RT → HUD | `DrawSurface(surf, x,y)` / `DrawSurfaceTinted` | — |
 | 9-slice stretch panel | `DrawNineSliceToTarget(bm, l,t,r,b, dx,dy,dw,dh, tw,th)` | `DrawNineSlice(bm, l,t,r,b, dx,dy,dw,dh)` |
 | solid rect | `DrawSolidRectToTarget(x,y,w,h, tw,th, r,g,b,a)` | `DrawSolidRect(x,y,w,h, r,g,b,a)` |
-| build a TTF atlas | `BuildTTFAtlas(path, px)` → `SFontAtlas` | same |
+| build a TTF atlas | `BuildTTFAtlas(TTFFilePath(file).c_str(), px)` → `SFontAtlas` | same |
 | build a bitmap-font atlas | `BuildFontAtlas(TFont*)` | same |
 
-Text face: the bundled redistributable is **Liberation Sans**
-(`thirdparty/fonts/LiberationSans-Regular.ttf` / `-Bold.ttf`), Arial-metric
-compatible. Build the px size the spec's §8 gives. `DrawTextShadowedToTarget`
+Text face: the bundled redistributable is **Arimo** (`assets/fonts/Arimo-Regular.ttf`;
+no bold file ships), Arial-metric compatible. Name it by file through
+`TTFFilePath("Arimo-Regular.ttf")`, never a path of your own: the resolver finds
+the engine assets from any working directory. Build the px size the spec's §8
+gives. `DrawTextShadowedToTarget`
 already does the retail 3-pass black shadow (base / +1x / +1y) + colored top —
 you never write that loop yourself. `ETextAlign::{Left,Center,Right}` handles
 in-cell alignment from `TextWidth`; the baseline is top-aligned at

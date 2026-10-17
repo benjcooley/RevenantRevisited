@@ -25,10 +25,6 @@ class TMoney : public TObjectInstance
     static void Close();
         // Clear static vars
 
-    static void AllocInvItem(PTBitmap inv, int32_t type, int32_t count);
-        // Allocate a new inventory item for the given count and return it
-    static void FreeInvItem(int32_t type, int32_t count);
-        // Free up use of an instance of this count
     static void AllocGroundItem(PTBitmap ground, int32_t type, int32_t count);
         // Allocate a new ground item for the given count and return it
     static void FreeGroundItem(int32_t type, int32_t count);
@@ -36,7 +32,7 @@ class TMoney : public TObjectInstance
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Combine money
-    virtual int32_t CursorType(TObjectInstance* with = nullptr);
+    int32_t CursorType(TObjectInstance* with = nullptr) override;
         // Returns type of cursor that should appear when mouse arrow is over the object
 
     virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
@@ -44,15 +40,12 @@ class TMoney : public TObjectInstance
     virtual void Save(RTOutputStream os);
         // Saves data to the sector
 
-    virtual void SignalAddedToInventory();
-        // Called to signal object that it was added to a new inventory
-    virtual void RemoveFromInventory();
-        // Remove this object from whatever inventory it is in
-
-    virtual void DrawInvItem(int32_t x, int32_t y);
-        // Returns bitmap for the inventory image
-    virtual PTBitmap InventoryImage();
-        // Returns bitmap for the inventory image
+    bool AddToMap() override;
+        // REVSYNC: 0x00516660 (vtable 0x8c). The pile's size in its state first
+    bool MergeInto(TObjectInstance* newowner) override;
+        // REVSYNC: 0x00515b50. Joins newowner's gold pile
+    SInvIcon InventoryIcon() override;
+        // REVSYNC: 0x00516370. A pile of copies of the inventory image
 
     virtual void GetScreenRect(SRect &r);
         // Get screen bounding rectangle for object (in world coordinates)
@@ -65,7 +58,8 @@ class TMoney : public TObjectInstance
     STATFUNC(Value)
     OBJSTAT(Amount)
     virtual int32_t Amount() { return GetObjStat(se_Amount.id); }
-    virtual void SetAmount(int32_t amt);  // We redefine this in Money.cpp
+    virtual void SetAmount(int32_t amt);
+        // REVSYNC: 0x00515c90. Also shows the pile's size in its state
 
 };
 

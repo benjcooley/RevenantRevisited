@@ -6,8 +6,8 @@
 // *  Ported (2026): sokol_app replaces the Win32 message pump. Input      *
 // *  event translation lives in revmain.cpp's sokol event_cb. This file   *
 // *  now just owns the TMainWindow lifecycle flag. The pre-port Win32     *
-// *  implementation (RegisterClass, CreateWindowEx, WNDPROC) is in        *
-// *  attic/src/mainwnd_win32.cpp for reference.                           *
+// *  implementation (RegisterClass, CreateWindowEx, WNDPROC) is in git    *
+// *  for reference: attic-final:attic/src/mainwnd_win32.cpp.              *
 // *************************************************************************
 
 #include "mainwnd.h"

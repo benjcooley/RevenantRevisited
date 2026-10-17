@@ -1,5 +1,15 @@
 # B01 TBloodEffect — Original-Effect Forensics
 
+> **Superseded for the shipped behaviour (2026-10-11).** The retail
+> TBloodAnimator was found (vtable `0x005acd18`; Initialize `0x004f18d0`,
+> Pulse `0x004f1c60`, Render `0x004f1de0`) and differs from the snapshot
+> TBloodSystem below: the count comes from the violence level, every droplet
+> has a trailing partner, the vertical speed is halved, the splat size is
+> random and big droplets land as the splat sprite. It is ported and verified
+> against the original in the emulator; see
+> [COMBAT_EFFECTS.md](../../gameplay/forensics/COMBAT_EFFECTS.md) §2. This
+> document remains the record of the 1998 design.
+
 | field | value |
 |-------|-------|
 | **Effect ID** | B01 (covers B01 `TBloodEffect`, B02 `TBloodAnimator`, B03 `TBloodSystem`) |

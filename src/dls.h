@@ -87,4 +87,6 @@ void TransferAndLight32to16(TSurface* dest, TSurface* source, RSRect r);
 
 void  MakeColorTables();
     // Sets up the DLS color table entries
+extern uint8_t DistTable[256][256];
+    // Distance by |dx|, |dy| (each < 256), built by MakeColorTables
 

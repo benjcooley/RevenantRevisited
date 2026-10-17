@@ -15,7 +15,18 @@
 #include "parse.h"
 #endif
 
-#define COMMAND(x)  int32_t (x)(TObjectInstance* context, TToken &t)
+class TScript;
+
+// Command handler signature (retail: handler(target, token, scriptcontext, script)
+// as called from CommandInterpreter @ 0x0041e8e0):
+//   context       - object the command applies to (the "<obj>." prefix if
+//                   present, else the caller's context; may be nullptr)
+//   t             - token stream positioned on the first parameter
+//   scriptcontext - object whose script/console issued the command ("me");
+//                   differs from `context` for "<obj>.<command>" forms
+//   script        - running script, or nullptr for console/editor commands
+#define COMMAND(x)  int32_t (x)(TObjectInstance* context, TToken &t, \
+                                TObjectInstance* scriptcontext, TScript* script)
 
 #define CMD_WAIT        (1 << 0)        // wait for command completion
 #define CMD_BADCOMMAND  (1 << 1)        // bad command
@@ -31,25 +42,26 @@
 #define CMD_BEGIN       (1 << 11)       // begin new block
 #define CMD_END         (1 << 12)       // end block
 #define CMD_JUMP        (1 << 13)       // indicate a code jump occured
+#define CMD_WAITSAY     (1 << 14)       // wait for the target to stop talking (retail 0x4000)
 
 #define CMD_ERROR       (CMD_BADCOMMAND | CMD_BADPARAMS | CMD_OUTOFMEM)
 
 _STRUCTDEF(SCommand);
 struct SCommand
 {
-    char *name;                         // command identifier
+    const char *name;                   // command identifier
     COMMAND(*cmdfunc);                  // function to call
     int32_t classcontext;                   // 0 for all, -1 for none, else objclass
     int32_t classcontext2;                  // A secondary class
     bool requiresparams;                // if the command requires parameters
     bool editoronly;                    // only for use in the editor
-    char *usage;                        // help text
+    const char *usage;                  // help text
 };
 
-int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen = 0);
-void Output(char *fmt, ...);
+int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen = 0,
+                           TScript* script = nullptr);
+void Output(const char *fmt, ...);
 
-int32_t StringVal(char *string);
 
 // *******************
 // * Alias Functions *

@@ -53,7 +53,9 @@ Spec: TSideTabsPane_SPEC.md   Status: done (Classic path; visually verified --te
       pane_x/pane_y use BSS layout constants (DAT_0066614c / 0065be5c / 00667c60 /
       0065be60) not in any body — harness right-anchors with a fixed inset. The
       strip's intrinsic 52×232 size + per-button layout ARE exact; only the
-      on-screen offset is approximated. (spec §3 / §14)
+      on-screen offset is approximated. (spec §3 / §14) Resolved 2026-10-11:
+      flush in the play field's corner, (400, 188); the in-game sidebar
+      (uisidebartest.cpp TabStripOrigin) places it so.
 - [x] Button-index → command-id wiring (UNCONFIRMED-D) not needed for the visual
       reconstruction (no live click dispatch in the isolated harness); region/mode
       mapping in §4 was sufficient to drive synthetic pressed state.

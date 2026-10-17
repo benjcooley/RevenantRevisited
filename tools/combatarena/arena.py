@@ -1,0 +1,330 @@
+#!/usr/bin/env python3
+"""Deterministic auto-battles in the port (docs/gameplay/COMBAT_DOJO.md §9).
+
+    arena.py run SCENARIO [--out DIR] [--repeat N] [--watch] [--port BIN]
+    arena.py show TRACE
+
+A scenario (tools/combatarena/scenarios/*.json) starts the game from a save
+slot, sets up a fight with console commands (spawn monsters, point them at
+each other, take the player out of it) and lets the AI fight it out for a
+number of game ticks. The run is deterministic: --seed fixes the random
+number generator, --fixedstep advances exactly one 24 Hz tick per frame,
+and nothing reads the wall clock. --combattrace records every fighter every
+tick (combattrace.h); the run stops at the scenario's last tick.
+
+`--repeat N` runs the scenario N times (in parallel, each from its own
+directory) and checks the traces are identical: the proof of determinism.
+`--watch` runs one game in a window instead of headless.
+
+Scenario keys:
+  name      label
+  slot      save slot name, extracted from `slotzip` (default the gameflow
+            interop slots, docs/gameflow/SAVE_INTEROP_SLOTS.zip)
+  seed      random seed
+  ticks     game ticks to run after the play screen starts
+  slotdir   a slot directory (relative to the repo) in place of `slot`: an
+            arena slot from make_arena_slot.py, the same one retail loads
+  arena     {} or {"origin": [sx, sy], "size": n, "lights": n}: the flat test
+            arena (make_arena.py) written into the slot; `pos` and `addat`
+            in `exec` put Locke and the monsters on it
+  exec      console commands in order; `sleep N` waits N ticks
+  ini       optional Revenant.ini overrides {"Section": {"Key": "Value"}}
+  playerai  true: Locke runs the character AI and fights on his own
+            (--playerai; retail's charflags 0x100000)
+  playerbot true: Locke is played by the player bot, through the player's
+            keys (--playerbot; docs/gameplay/PLAYER_BOT.md)
+  until_deaths  n: the fight is over, and the run ends a second later, once
+            Locke has died or n others have (a sweep of fights then costs
+            the fights, not the scenario's ticks)
+
+Environment: REVENANT_DATA_PATH (the install; default the retail lab's).
+"""
+from __future__ import annotations
+
+import argparse
+import concurrent.futures
+import hashlib
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import time
+import zipfile
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parents[1]
+DATA = Path(os.environ.get('REVENANT_DATA_PATH', Path.home() / 'RevenantRetailLab' / 'retail-cd' / 'REVENANT'))
+DEFAULT_ZIP = REPO / 'docs' / 'gameflow' / 'SAVE_INTEROP_SLOTS.zip'
+sys.path.insert(0, str(HERE))
+from make_arena import add_arena  # noqa: E402
+
+# The INI a run starts from: the shipped game's options and paths. The
+# rules files come from the install's archives even where loose copies sit
+# beside them (the retail lab's Resources/), the archive being looked in
+# first, as retail's open does (COMBAT_DATA.md D0); and the game's messages
+# (the combat results' "Hit vs. ...") come from resources.rvr's english.def.
+BASE_INI = {
+    'Paths': {'ClassDefPath': '".\\Resources"', 'ExileRCPath': '"."', 'ResourcePath': '".\\Resources"', 'CurMapPath': '"."',
+              'BaseMapPath': '"."', 'MoviePath': '".\\Disk2"', 'SaveGamePath': '".\\Save"',
+              'ImageryPath': '".\\Imagery"', 'ModulesPath': '".\\Modules"'},
+    'Options': {'CombatFace': 'Yes', 'AutoCombat': 'Yes', 'ShowDialog': 'Yes', 'PlaySpeech': 'No',
+                'Violence': '4', 'NoCombatResults': 'No'},
+    'Modules': {'MainModule': '"Ahkuilon"'},
+}
+
+
+def write_ini(path: Path, overrides: dict) -> None:
+    ini = {s: dict(v) for s, v in BASE_INI.items()}
+    for section, keys in (overrides or {}).items():
+        ini.setdefault(section, {}).update(keys)
+    path.write_text(''.join(f'[{s}]\n' + ''.join(f'{k} = {v}\n' for k, v in keys.items()) + '\n'
+                            for s, keys in ini.items()))
+
+
+def extract_slot(zip_path: Path, slot: str, dest: Path) -> None:
+    with zipfile.ZipFile(zip_path) as z:
+        names = [n for n in z.namelist() if n.startswith(slot + '/') and not n.endswith('/')]
+        if not names:
+            raise SystemExit(f'no slot {slot!r} in {zip_path}')
+        for n in names:
+            out = dest / n
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_bytes(z.read(n))
+
+
+def exec_line(commands: list[str]) -> str:
+    return '; '.join(commands)
+
+
+def last_tick(trace: Path) -> int:
+    if not trace.exists():
+        return -1
+    with open(trace, 'rb') as f:
+        f.seek(0, os.SEEK_END)
+        size = f.tell()
+        f.seek(max(0, size - 4096))
+        tail = f.read().split(b'\n')
+    for line in reversed(tail):
+        parts = line.split(b'\t')
+        if len(parts) >= 2 and parts[1] == b'tick':
+            return int(parts[0])
+    return -1
+
+
+class DeathWatch:
+    """Reads a growing trace for deaths: the tick the fight ended, once Locke
+    has died or `others` other characters have."""
+
+    def __init__(self, trace: Path, others: int):
+        self.trace, self.others = trace, others
+        self.offset, self.partial, self.dead = 0, b'', 0
+        self.ended = -1
+
+    def poll(self) -> int:
+        if self.ended >= 0 or not self.trace.exists():
+            return self.ended
+        with open(self.trace, 'rb') as f:
+            f.seek(self.offset)
+            chunk = f.read()
+        self.offset += len(chunk)
+        lines = (self.partial + chunk).split(b'\n')
+        self.partial = lines.pop()
+        for line in lines:
+            if b'\twhat=death\t' not in line:
+                continue
+            locke = b'\tname=Locke\t' in line
+            self.dead += not locke
+            if locke or self.dead >= self.others:
+                self.ended = int(line.split(b'\t', 1)[0])
+                break
+        return self.ended
+
+
+def run_once(scn: dict, port: Path, out: Path, watch: bool = False, extra: list[str] = ()) -> dict:
+    if out.exists():
+        shutil.rmtree(out)
+    save = out / 'save'
+    (save / 'Save' / 'Single').mkdir(parents=True)
+    write_ini(save / 'Revenant.ini', scn.get('ini'))
+    if 'slotdir' in scn:            # a ready slot (make_arena_slot.py): the one retail loads too
+        source = (REPO / scn['slotdir']).resolve()
+        scn = dict(scn, slot=source.name)
+        shutil.copytree(source, save / 'Save' / 'Single' / source.name)
+    else:
+        extract_slot(Path(scn.get('slotzip', DEFAULT_ZIP)), scn['slot'], save / 'Save' / 'Single')
+    if 'arena' in scn:              # the flat test arena, in the slot's CurMap (make_arena.py)
+        add_arena(save / 'Save' / 'Single' / scn['slot'], module=DATA / 'Modules' / 'Ahkuilon.rvm',
+                  **{k: tuple(v) if k == 'origin' else v for k, v in scn['arena'].items()})
+    # The engine finds its own assets beside the binary: run a copy from there.
+    exe = port.parent / f'{port.name}.arena_{out.name}_{os.getpid()}'
+    shutil.copy2(port, exe)
+    trace = out / 'trace.tsv'
+    ticks = int(scn['ticks'])
+    deaths = DeathWatch(trace, int(scn['until_deaths'])) if scn.get('until_deaths') else None
+    args = [str(exe), f'--quickstart={scn["slot"]}', f'--seed={scn["seed"]}', '--fixedstep',
+            f'--combattrace={trace}', f'--exec={exec_line(scn["exec"])}',
+            f'--max-runtime={scn.get("max_runtime", 600)}']
+    if not watch:
+        args.insert(1, '--headless')
+    if scn.get('playerai'):
+        args.append('--playerai')
+    if scn.get('playerbot'):
+        args.append('--playerbot')          # Locke played by code (docs/gameplay/PLAYER_BOT.md)
+    args += list(extra)
+    env = dict(os.environ, REVENANT_SAVE_PATH=str(save), REVENANT_DATA_PATH=str(DATA))
+    (out / 'cmd.txt').write_text(' '.join(repr(a) for a in args) + '\n')
+    begin = time.time()
+    stop = 'exited'
+    with open(out / 'stdout.txt', 'wb') as so:
+        proc = subprocess.Popen(args, cwd=out, env=env, stdout=so, stderr=subprocess.STDOUT)
+        wall_limit = scn.get('wall_limit_s', 600)
+        # Play stops ticking when Locke dies (the death screen takes over
+        # after its hold, as retail's does): no new tick this long ends it.
+        stall_limit = scn.get('stall_s', 8)
+        seen, seen_at = -1, begin
+        while proc.poll() is None:
+            time.sleep(0.25)
+            now = last_tick(trace)
+            if now != seen:
+                seen, seen_at = now, time.time()
+            if deaths and deaths.poll() >= 0:
+                ticks = min(ticks, deaths.ended + 24)
+            done = now >= ticks
+            stalled = now >= 0 and time.time() - seen_at > stall_limit
+            if done or stalled or time.time() - begin > wall_limit:
+                ended = deaths.ended if deaths else -1
+                stop = (f'fight over at tick {ended}' if done and ended >= 0 else 'ticks reached' if done
+                        else f'play stopped at tick {now} (death screen?)' if stalled
+                        else f'wall limit {wall_limit} s')
+                proc.send_signal(signal.SIGTERM)
+                try:
+                    proc.wait(10)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+    exe.unlink(missing_ok=True)
+    # Keep exactly the scenario's ticks: the tail past it depends on when
+    # the signal landed.
+    lines = trace.read_bytes().split(b'\n') if trace.exists() else []
+    kept = [l for l in lines if l and int(l.split(b'\t', 1)[0]) <= ticks]
+    trace.write_bytes(b'\n'.join(kept) + b'\n')
+    digest = hashlib.sha256(trace.read_bytes()).hexdigest()
+    result = dict(out=str(out), rc=proc.returncode, stop=stop, wall_s=round(time.time() - begin, 1),
+                  last_tick=last_tick(trace), trace_sha256=digest, summary=summarize(trace))
+    (out / 'result.json').write_text(json.dumps(result, indent=1) + '\n')
+    return result
+
+
+def parse(trace: Path):
+    for raw in trace.read_text(encoding='cp1252').splitlines():
+        parts = raw.split('\t')
+        if len(parts) < 2:
+            continue
+        rec = dict(tick=int(parts[0]), kind=parts[1])
+        for kv in parts[2:]:
+            k, _, v = kv.partition('=')
+            rec[k] = v
+        yield rec
+
+
+def summarize(trace: Path) -> dict:
+    """Who fought, the events by kind, health at the end, deaths."""
+    if not trace.exists():
+        return {}
+    fighters, events, deaths = {}, {}, []
+    for r in parse(trace):
+        if r['kind'] == 'char':
+            fighters[f"{r['name']}#{r['id']}"] = dict(first=fighters.get(f"{r['name']}#{r['id']}", {}).get('first', r['tick']),
+                                                       last=r['tick'], hp=int(r['hp']), state=r['state'])
+        elif r['kind'] == 'event':
+            events[r['what']] = events.get(r['what'], 0) + 1
+            if r['what'] == 'death':
+                deaths.append(f"{r['name']}#{r['id']}@{r['tick']}")
+    return dict(fighters=fighters, events=events, deaths=deaths)
+
+
+def first_difference(a: Path, b: Path) -> str | None:
+    la, lb = a.read_bytes().split(b'\n'), b.read_bytes().split(b'\n')
+    for i, (x, y) in enumerate(zip(la, lb)):
+        if x != y:
+            return f'line {i + 1}:\n  {x.decode("cp1252")}\n  {y.decode("cp1252")}'
+    if len(la) != len(lb):
+        return f'length {len(la)} vs {len(lb)}'
+    return None
+
+
+def cmd_run(a) -> int:
+    scn = json.loads(Path(a.scenario).read_text())
+    if a.seed is not None:
+        scn['seed'] = a.seed
+    port = Path(a.port).resolve()
+    base = Path(a.out).resolve() / scn['name']
+    if a.seeds:
+        # A sweep: one run a seed, for measures over the random stream
+        # (cadence, damage, outcome rates) rather than one trace.
+        lo, hi = (int(v) for v in a.seeds.split('-'))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=a.jobs) as pool:
+            results = list(pool.map(lambda n: run_once(dict(scn, seed=n), port, base / f'seed{n}', extra=a.extra),
+                                    range(lo, hi + 1)))
+        for n, r in zip(range(lo, hi + 1), results):
+            s = r['summary']
+            print(f"seed {n}: {r['stop']}, tick {r['last_tick']}, deaths {s.get('deaths', [])}, "
+                  f"events {s.get('events', {})}")
+        return 0
+    if a.watch:
+        r = run_once(scn, port, base / 'watch', watch=True, extra=a.extra)
+        print(json.dumps(r, indent=1))
+        return 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=a.repeat) as pool:
+        results = list(pool.map(lambda i: run_once(scn, port, base / f'run{i + 1}', extra=a.extra), range(a.repeat)))
+    for r in results:
+        print(f"{Path(r['out']).name}: {r['stop']}, tick {r['last_tick']}, {r['wall_s']} s, "
+              f"trace {r['trace_sha256'][:16]}")
+    s = results[0]['summary']
+    print(f"fighters: {', '.join(f'{k} hp {v['hp']} ({v['state']})' for k, v in s.get('fighters', {}).items()) or 'none'}")
+    print(f"events: {s.get('events')}  deaths: {s.get('deaths')}")
+    shas = {r['trace_sha256'] for r in results}
+    if len(results) > 1:
+        if len(shas) == 1:
+            print(f'DETERMINISTIC: {len(results)} runs, identical traces')
+        else:
+            print('NOT DETERMINISTIC:')
+            print(first_difference(Path(results[0]['out']) / 'trace.tsv', next(
+                Path(r['out']) / 'trace.tsv' for r in results if r['trace_sha256'] != results[0]['trace_sha256'])))
+            return 1
+    return 0
+
+
+def cmd_show(a) -> int:
+    for r in parse(Path(a.trace)):
+        if r['kind'] == 'event' or (r['kind'] == 'char' and r['tick'] % a.every == 0):
+            print('\t'.join(f'{k}={v}' for k, v in r.items()))
+    return 0
+
+
+def main() -> int:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = p.add_subparsers(dest='cmd', required=True)
+    r = sub.add_parser('run')
+    r.add_argument('scenario')
+    r.add_argument('--out', default=str(REPO / 'build' / 'arena'))
+    r.add_argument('--repeat', type=int, default=2)
+    r.add_argument('--watch', action='store_true')
+    r.add_argument('--seed', type=int, help="the random seed, over the scenario's")
+    r.add_argument('--seeds', help='a sweep, one run a seed: A-B')
+    r.add_argument('--jobs', type=int, default=4, help='runs at once in a sweep')
+    r.add_argument('--port', default=str(REPO / 'build' / 'Revenant'))
+    r.add_argument('--extra', action='append', default=[], help='an extra port argument (repeatable), '
+                   'e.g. --extra=--combattrace-rng=89:90')
+    s = sub.add_parser('show')
+    s.add_argument('trace')
+    s.add_argument('--every', type=int, default=24)
+    a = p.parse_args()
+    return cmd_run(a) if a.cmd == 'run' else cmd_show(a)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

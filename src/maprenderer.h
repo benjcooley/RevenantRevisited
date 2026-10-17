@@ -14,7 +14,16 @@
 #include "debugui.h"
 
 struct S3DPoint;
+struct SRevisitedSettings;
 class TGameMap;
+
+// How a pick reads the frame's ids (TMapRenderer::Pick). Exact: at the point,
+// waiting on the GPU when the last copy was taken elsewhere (a click).
+// Latest: the last copy wherever it was taken -- the pointer a frame or two
+// ago -- never waiting (the hover cursor). Drawn: the last drawn frame, read
+// at once, never a copy: which frame a copy holds depends on when the GPU
+// finished it, which a deterministic run can't depend on.
+enum class EPickRead : uint8_t { Exact, Latest, Drawn };
 
 class TMapRenderer
     : public IDebugTabContributor
@@ -32,6 +41,10 @@ class TMapRenderer
     bool InitializeFromStartupArgs(std::function<void(int32_t level,
                                                        int32_t sector_x,
                                                        int32_t sector_y)> post_load_hook = {});
+
+    // One-time setup for a renderer whose map is supplied with SetMap
+    // (the PlayScreen, which presents the game session's world).
+    void Initialize();
 
     // Bind the renderer to a TGameMap (owned by TMapManager).
     // Subscribes to the map's Loaded/Updated/Unloaded events:
@@ -62,6 +75,11 @@ class TMapRenderer
 
     void Shutdown();
     void RenderFrame();
+    // Opt-in gallery providers. Tick/FX runs after camera/light setup, before
+    // BeginTilePass; mesh submission runs inside that pass before EndTilePass.
+    // Ordinary renderers leave both callbacks empty. Shutdown clears them.
+    void SetReviewSubmissionCallbacks(std::function<void()> before_world,
+                                      std::function<void()> inside_world);
     void HandleMouseClick(int32_t button, int32_t x, int32_t y);
     void HandleMouseMove(int32_t button, int32_t x, int32_t y);
     void HandleKeyPress(int32_t key, bool down);
@@ -96,6 +114,25 @@ class TMapRenderer
     // Caves typically want 1.5-2.0 on intensity to read; open forest can
     // drop range to keep the scene crisper.
     void SetPointLightMultipliers(float intensity_mul, float range_mul);
+
+    // Lighting model pushed to the renderer every frame: 0 = Classic
+    // (retail), 1 = modern. Seeded from [Revisited] LightingMode.
+    void SetLightingMode(int32_t mode);
+
+    // The modern model's settings ([Revisited]: sun, ambient scale, ceiling,
+    // AO, sun shadows, normals). This renderer re-sends its lighting state
+    // to TRenderer every frame, so they are kept here.
+    void ApplyLightingSettings(const SRevisitedSettings& settings);
+
+    // Whether the current area has a day/night cycle (AREA_DONIGHT: the area
+    // defines night ambient values). The modern model's sun only exists in
+    // such areas; retail had no sun at all, so Classic never uses one.
+    void SetDaylightCycle(bool has_cycle);
+    // Keep tile walkmaps/collision resident while hiding ground visuals.
+    // EFFECT sprites and meshes continue to render (VFX review backdrop).
+    void SetGroundTilesVisible(bool visible);
+    // Explicit reviewer exceptions; regular maps retain every tile.
+    void SetReviewVisibleTileTypes(const std::vector<uint32_t>& types);
 
     // Last-frame draw counts, exposed so the editor status bar can show
     // exactly what's hitting the GPU. All-zero before the first frame.
@@ -183,6 +220,47 @@ class TMapRenderer
     void ScreenToWorld(int32_t screen_x, int32_t screen_y,
                        int32_t z_floor, S3DPoint &out) const;
 
+    // ---- The map pane's pick (docs/gameflow/forensics/MAP_INPUT.md §7) --
+    // What the last drawn frame showed at a viewport pixel (the map view's
+    // pixels: the pointer's, the view sitting at 0,0). TMapPane::OnObject
+    // applies retail's rules on top; the renderer only reports.
+    struct SPick
+    {
+        // The object whose pixel won the depth test at the point (opaque
+        // tiles and meshes; translucent tiles don't write ids). Retail's
+        // GetZ (a z-find in the frame's z-buffer) asks the same question.
+        class TObjectInstance* frontmost = nullptr;
+        // A 3D mesh visible at retail's 9 probe pixels around the point
+        // (T3DScene::DrawScene 0x00412db0): the point's own pixel first,
+        // then the probe pixels in retail's order. Effects aren't picked.
+        class TObjectInstance* mesh = nullptr;
+    };
+    // The point the map pane will pick at (the pointer), or (-1, -1): each
+    // RenderFrame copies the ids around it back without waiting.
+    void SetPickPoint(int32_t x, int32_t y);
+    // The pick at (x, y): that copy when it was taken at (x, y) under the
+    // current draw list, else a direct read of the last drawn frame. With
+    // EPickRead::Latest, the copy wherever it was taken, and false with none;
+    // with EPickRead::Drawn, always the direct read.
+    [[nodiscard]] bool Pick(int32_t x, int32_t y, SPick& out, EPickRead read = EPickRead::Exact) const;
+    // The map-screen point (WorldToScreen's space, TObjectInstance::
+    // GetScreenPos's) under a viewport pixel, as the last frame drew it:
+    // retail's (x + posx, y + posy), which holds past the viewport's edge
+    // too (the pointer over the HUD). False outside the viewport. Exact for
+    // the orthographic camera at any zoom; the perspective camera is not
+    // linear and only approximates.
+    [[nodiscard]] bool ScreenToMapScreen(int32_t screen_x, int32_t screen_y,
+                                         int32_t& map_x, int32_t& map_y) const;
+    // Its inverse: the viewport pixel a map-screen point lands on in the last
+    // drawn frame (it may lie outside the viewport). False with no view.
+    [[nodiscard]] bool MapScreenToScreen(float map_x, float map_y, float& screen_x, float& screen_y) const;
+    // The same to the nearest whole pixel, false as well when that falls
+    // outside the viewport.
+    [[nodiscard]] bool MapScreenToScreen(int32_t map_x, int32_t map_y,
+                                         int32_t& screen_x, int32_t& screen_y) const;
+    // The map view's size in viewport pixels (the last frame's).
+    void GetViewportSize(int32_t& w, int32_t& h) const;
+
     // Find the loaded TSector covering (level, sector_x, sector_y).
     // Editor commands that create/remove instances need this because
     // MapPane's standard add/remove path scans MapPane.sectors[][]
@@ -193,6 +271,8 @@ class TMapRenderer
                                                   int32_t sector_y) const;
 
   private:
+    std::function<void()> review_before_world_;
+    std::function<void()> review_inside_world_;
     struct Impl;
     std::unique_ptr<Impl> impl;
 };

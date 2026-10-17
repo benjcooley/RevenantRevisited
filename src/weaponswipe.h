@@ -1,136 +1,132 @@
 // *************************************************************************
-// *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
-// *           weaponswipe.h - S09 TWeaponSwipe (sword slash trail)        *
+// *        weaponswipe.h - retail weapon swipe (no engine types)          *
 // *************************************************************************
 //
-// The actual sword/weapon slash visual. Distinct from S01 TStripEffect
-// (lightning bolt): both ride the SR pipeline but TWeaponSwipe is owned
-// by a character's animator and traces a per-frame ring buffer of
-// (hilt, tip) world-space anchor pairs sampled from the equipped
-// weapon's matrix. The strip then Catmull-Rom-splines through the ring
-// to produce a smooth ribbon.
+// The ribbon a weapon leaves through an attack: retail TWeaponSwipe,
+// embedded in TCharAnimator at +0x1a8 (vtable 0x005a7e98). Each drawn
+// frame, while the attack is between its swipeframeon and swipeframeoff
+// (char.def ATTACK fields 23/24), the weapon's hilt and tip are sampled in
+// the character's model space into an eight-sample history; between
+// samples every pair closes in on its midpoint; the strip is a Catmull-Rom
+// spline through the history, a constant colour fading in alpha, drawn in
+// blend mode 2 (alpha) after the character (TCharAnimator::Render
+// 0x004d7c23..0x004d7cc3).
 //
-// Phase B port (this file): a bespoke per-weapon state machine that
-// owns the (hilt, tip) ring and emits SStripSegment[] via
-// Renderer->SubmitFxStrip. The pre-release D3D body lives at
-// src/weapontrail.cpp under `#if 0` (preserved verbatim) and provided
-// every retail constant + the Catmull-Rom math shape; see Phase A
-// forensics for the full mapping (docs/vfx/INVENTORY.md S09 row).
+// Kept free of engine types so the retail A/B probe
+// (tools/retail_runtime/weapon_swipe_probe.py) can compile it next to the
+// original code in the emulator. TCharAnimator (charanimator.cpp) feeds it
+// the weapon matrix and the attack, and draws it. Forensics:
+// docs/gameplay/forensics/COMBAT_EFFECTS.md §6.
 //
-// **Bespoke per AGENT_GUIDE §3.2.1** — per-vertex custom geometry
-// (weapon-extents-driven width) + character-attached behaviour
-// disqualify this from the data-driven engine path. The SR pipeline
-// (engine) owns the actual strip submission; the *math* (ring fill +
-// spline + colour curve) is bespoke.
-//
-// Wiring into live gameplay (TCharAnimator::Animate / ::Render) is
-// out of scope for this row (see S09 §6.6 / S09b carve-out). This
-// header is consumed by the --test=vfx harness today; the live
-// integration is a separate pass that calls the same `Tick` /
-// `Submit` entry points from TCharAnimator with the live weapon
-// matrix.
+// What shipped differs from the 1998 snapshot (weapontrail.cpp): the
+// colour is SWIPECOLOR/255 as is (the snapshot's normalisation has no
+// caller), the alpha starts at 0.7 with no brightened hilt, samples shrink
+// toward their midpoint, the history resets when the window opens, the
+// strip starts at the second sample, and a weapon modelled along y sweeps
+// its low end (a retail slip kept as shipped).
 //
 // *************************************************************************
 
 #pragma once
 
+#include <array>
 #include <cstdint>
-#include <vector>
-
-#include "renderer.h"     // EFxDebugMode + SStripSegment for the submit path
+#include <string>
 
 class TWeaponSwipe
 {
   public:
-    TWeaponSwipe()  = default;
-    ~TWeaponSwipe() = default;
+    // SetupWeaponSwipe passes 8 and 40 (0x004d9092 / 0x004d909a).
+    static constexpr int32_t kSmooth = 8;      // spline steps between samples (+0x3b0)
+    static constexpr int32_t kMaxSegs = 40;    // +0x3ac
+    static constexpr int32_t kPoints = kMaxSegs / kSmooth + 3;   // 8 samples (+0x354, 0x004d9199)
+    // BuildStrip writes (kPoints - 3) segments of kSmooth vertex pairs.
+    static constexpr int32_t kStripVertices = (kPoints - 3) * kSmooth * 2;   // 80
 
-    // No copy: owns vector buffers + per-character state.
-    TWeaponSwipe(const TWeaponSwipe&)            = delete;
-    TWeaponSwipe& operator=(const TWeaponSwipe&) = delete;
+    using SVec3 = std::array<float, 3>;
+    // A D3DMATRIX: row vectors, the translation in elements 12..14.
+    using SMatrix = std::array<float, 16>;
 
-    // Set the per-character swipe colour. Mirrors retail
-    // `SCharData::swipecolor` (RGB 0..1) — the trail is tinted with the
-    // normalized colour and the hilt end gets a +0.4 brightness boost.
-    // Pre-release default of (0,0,0) skips initialization entirely;
-    // here we treat a zero colour as "don't draw" via `colour_zero_`.
-    void SetColour(float r, float g, float b);
-
-    // Re-initialize against a new weapon. Drops the ring buffer.
-    // Callers should invoke this once at boot and whenever the
-    // equipped weapon changes (matches retail's primehand string
-    // compare in TWeaponSwipe::Animate / Close path).
-    void ResetForNewWeapon();
-
-    // Per-frame submit driver for the --test=vfx harness. Inputs:
-    //   * world_hilt / world_tip — world-space anchor pair sampled from
-    //     the live weapon matrix this render frame. The caller resolves
-    //     these from a CharacterRig SVfxAttachment (see vfxtest.cpp).
-    //   * attack_visible — true when the owning character is in an
-    //     ACTION_ATTACK frame (`IsAttack()` in retail). The ring keeps
-    //     advancing even when false (so the trail starts on the very
-    //     first attack tick with real history); only Submit gates on
-    //     this flag.
-    //   * dbg — debug-mode forward through to SStripDrawItem.
-    //
-    // The function:
-    //   1. Sim-tick-gates ring advance to 24 Hz (matches retail).
-    //   2. CycleStrip() + insert new (hilt, tip) at head[0].
-    //   3. When attack_visible and we have >=2 ring pairs, builds the
-    //      Catmull-Rom-splined SStripSegment[] and submits.
-    //
-    // Safe to call before ResetForNewWeapon — does nothing.
-    void TickAndSubmit(const float world_hilt[3],
-                       const float world_tip[3],
-                       bool        attack_visible,
-                       EFxDebugMode dbg);
-
-    [[nodiscard]] bool Initialized() const { return initialized_; }
-
-  private:
-    // Retail ring-buffer shape — Phase A forensics:
-    //   maxsegs   = length * smooth = 5 * 8 = 40 retail triangle count
-    //   maxpoints = (maxsegs / smooth) + 3 = 8 ring entries
-    //   smooth    = 8 Catmull-Rom subdivisions per anchor pair
-    static constexpr int32_t kLength     = 5;
-    static constexpr int32_t kSmooth     = 8;
-    static constexpr int32_t kMaxPoints  = (kLength * kSmooth / kSmooth) + 3;
-
-    // Sim-tick gate. Matches S01 — retail animator ran at 24 Hz, we
-    // accumulate render-frame dt and only cycle the ring on the tick
-    // boundary so the trail history is independent of display rate.
-    static constexpr int32_t kSimTickMs  = 1000 / 24;
-
-    // Per-vertex alpha + brightness curve constants (retail
-    // `GenerateStrip`): the trail starts semi-transparent (max 0.3) at
-    // the head and fades to zero across the strip; hilt-side colour is
-    // brightened by +0.4 per channel before tapering to the normalized
-    // base. We replicate the *shape* of the curve at segment endpoints
-    // since SR pipeline only takes per-endpoint (not per-vertex) data.
-    static constexpr float   kAlphaHead       = 0.3f;
-    static constexpr float   kHiltBrightness  = 0.4f;
-
-    struct SPair
+    // The sampled history, newest first: the weapon's hilt end (+0x35c) and
+    // tip end (+0x360), in the character's model space.
+    struct SRing
     {
-        float hilt[3] = {0.0f, 0.0f, 0.0f};
-        float tip [3] = {0.0f, 0.0f, 0.0f};
+        std::array<SVec3, kPoints> hilt{};
+        std::array<SVec3, kPoints> tip{};
     };
 
-    // Catmull-Rom evaluator (mirrors src/math3d.h Spline for plain
-    // float[3]; kept private so we don't pull hmm_vec3 into the
-    // header).
-    static void CatmullRom(float out[3], float t,
-                           const float p0[3], const float p1[3],
-                           const float p2[3], const float p3[3]);
+    // One strip vertex: retail's D3DLVERTEX position and packed ARGB.
+    struct SVertex
+    {
+        SVec3 pos{};
+        uint32_t argb = 0;
+    };
+    // Even vertices on the hilt side, odd on the tip side; triangle i is
+    // (i, i + 1, i + 2).
+    using SStrip = std::array<SVertex, kStripVertices>;
 
-    std::vector<SPair>          ring_;          // size <= kMaxPoints
-    std::vector<SStripSegment>  seg_scratch_;   // reused submit buffer
+    // What TCharAnimator's SetupWeaponSwipe (0x004d8f10) hands Init.
+    struct SParams
+    {
+        SVec3 extent_min{};     // the weapon object's vertex bounds (0x004d8e60)
+        SVec3 extent_max{};
+        SVec3 color{};          // SWIPECOLOR bytes / 255: not normalised
+        bool full = false;      // SWIPEFULL, or a player's weapon's SwipeFull
+                                // stat: the strip starts at the hilt end of
+                                // the weapon, not at its pivot
+        std::string weapon;     // a player's weapon's name (empty otherwise)
+    };
 
-    float   colour_[3]   = {1.0f, 1.0f, 1.0f};  // normalized swipe colour
-    bool    colour_zero_ = false;               // pre-release "no swipe" path
-    bool    initialized_ = false;
-    bool    first_submit_logged_ = false;
+    // The owner, as one Update sees it.
+    struct SFrame
+    {
+        bool attacking = false;     // doing ACTION_ATTACK; a player needs a weapon in hand
+        int32_t frame = 0;          // the instance's animation frame
+        int32_t frame_on = 0;       // the attack's swipeframeon / swipeframeoff
+        int32_t frame_off = 0;      // (both 0: no swipe, or no attack data)
+        const SMatrix* weapon = nullptr;   // the weapon object's model matrix
+        bool player = false;
+        const char* in_hand = nullptr;     // the player's weapon's name, or null
+    };
 
-    int32_t tick_accum_  = 0;                   // ms remainder for sim-tick gate
+    // Init @ 0x004d90b0: a cleared history, then 41 samples of the weapon
+    // as it is, then the weapon's long axis picked from its bounds.
+    void Init(const SParams& params, const SFrame& now);
+    // Close @ 0x004d92d0. The next SetupWeaponSwipe starts it again.
+    void Close();
+    // Update @ 0x004d95b0: once a drawn frame (TCharAnimator::Render).
+    void Update(const SFrame& now);
+
+    [[nodiscard]] bool Initialized() const { return initialized; }
+    [[nodiscard]] const SRing& Ring() const { return ring; }
+    [[nodiscard]] const SVec3& Color() const { return color; }
+
+    // SetupWeaponSwipe's colour (0x004d9028..0x004d9072): each SWIPECOLOR
+    // byte times 0.00392156886f, not normalised.
+    [[nodiscard]] static SVec3 ColorOf(uint8_t red, uint8_t green, uint8_t blue);
+    // BuildStrip @ 0x004d9380.
+    static void BuildStrip(const SRing& ring, const SVec3& color, SStrip& out);
+    // Port: the history between two frames' samples (render interpolation).
+    [[nodiscard]] static SRing Blend(const SRing& from, const SRing& to, float t);
+    // Port: whether any sample pair is apart (an idle swipe has shrunk to
+    // nothing, and draws nothing).
+    [[nodiscard]] static bool HasWidth(const SRing& ring);
+
+  private:
+    void AddPoint(const SFrame& now);   // 0x004d96c0
+    void Reset(const SFrame& now);      // 0x004d9c60
+    void Shift();                       // 0x004d9ae0
+    void Shrink();                      // 0x004d9b60
+    void ChooseAxis();                  // 0x004d9820
+
+    SRing ring;
+    SVec3 hilt_local{};     // +0x364: the weapon-space points sampled; kept
+    SVec3 tip_local{};      // +0x370   across Close, zero until the first Init
+    SVec3 extent_min{};     // +0x384
+    SVec3 extent_max{};     // +0x390
+    SVec3 color{};          // +0x3a0
+    std::string weapon;     // +0x3b4
+    bool full = false;      // +0x3b8
+    bool initialized = false;   // +0x380
 };

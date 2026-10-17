@@ -5,6 +5,7 @@
 // *************************************************************************
 
 #include "mappane.h"
+#include "dialog.h"
 
 #include "gamemap.h"
 #include "graphics.h"
@@ -23,24 +24,31 @@
 #include "player.h"
 #include "spell.h"
 #include "script.h"
+#include "ctrlmap.h"
 #include "cursor.h"
 #include "multi.h"
 #include "savegame.h"
 #include "money.h"
 #include "exit.h"
 #include "textbar.h"
-#include "statusbar.h"
+#include "uidragstate.h"
 #include "spellpane.h"
+#include "statpane.h"
 #include "sound.h"
 #include "logging.h"
+#include "gameoptions.h"
 
+#include <algorithm>
+#include <array>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
 #include <math.h>
 #include <time.h>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
 extern TEditStatusPane StatusBar;
 extern TConsolePane Console;
@@ -79,13 +87,16 @@ inline int32_t ScreenGrid(int32_t n, int32_t s)
 
 // Fast mapindex → TObjectInstance* lookup. Holders store the integer
 // mapindex and resolve through MapPane.GetInstance() each frame (see
-// mappane.h). The map is a function-local static so it's constructed on
-// first use regardless of global-init order. Kept in sync exclusively by
+// mappane.h). Constructed on first use regardless of global-init order, and
+// never destroyed: objects deleted during static destruction (maps or
+// players a FatalError/exit path didn't shut down) still unregister here,
+// after a destructed function-local static would be gone. Same reasoning as
+// TSafeObjectBase's registry (saferef.h). Kept in sync exclusively by
 // TObjectInstance::SetMapIndex() and TObjectInstance::~TObjectInstance().
 static std::unordered_map<int32_t, TObjectInstance*>& InstMap()
 {
-    static std::unordered_map<int32_t, TObjectInstance*> m;
-    return m;
+    static auto* m = new std::unordered_map<int32_t, TObjectInstance*>();
+    return *m;
 }
 
 void TMapPane::RegisterInstance(TObjectInstance* oi, int32_t index)
@@ -155,6 +166,12 @@ TMapIterator::TMapIterator(RTObjectInstance oi, int32_t fl, int32_t objset)
     Initialize(&r, fl | CHECK_MAPRECT, objset);
 }
 
+TMapIterator::TMapIterator(int32_t lvl, PSRect maprect, int32_t fl, int32_t objset)
+    : level(lvl)
+{
+    Initialize(maprect, fl | CHECK_LOADED | (maprect ? CHECK_MAPRECT : 0), objset);
+}
+
 void TMapIterator::Initialize(PSRect sr, int32_t fl, int32_t os)
 {
     if (sr)
@@ -171,6 +188,8 @@ void TMapIterator::Initialize(PSRect sr, int32_t fl, int32_t os)
     objset = os;
     sx = -1;        // Causes NextItem() to start at sx=0
     sy = 0;
+    mapnum = 0;
+    secnum = 0;
     index = 0;
     numitems = 0;
     sector = nullptr;
@@ -223,36 +242,9 @@ TObjectInstance* TMapIterator::NextItem()
 
         while (index >= numitems)   // If at end of array (or no array) get next sector
         {
-            if (++sx >= SECTORWINDOWX)
-            {
-                sx = 0;
-                sy++;
-            }
-                
-            if (sy >= SECTORWINDOWY)
+            sector = (flags & CHECK_LOADED) ? NextLoadedSector() : NextWindowSector();
+            if (!sector)
                 return nullptr;
-            
-            if (!MapPane.sectors[sx][sy])
-                continue;
-
-            if (flags & CHECK_SECTRECT)
-            {
-                // Does rectangle intersect sector
-                SRect sr;
-                MapPane.sectors[sx][sy]->GetMaxScreenRect(sr);
-                if (!r.Intersects(sr))
-                    continue;
-            }
-            else if (flags & CHECK_MAPRECT)
-            {
-                // Does rectangle intersect sector
-                SRect sr;
-                MapPane.sectors[sx][sy]->GetMaxMapRect(sr);
-                if (!r.Intersects(sr))
-                    continue;
-            }
-
-            sector = MapPane.sectors[sx][sy];
             numitems = sector->NumObjSetItems(objset);
             index = 0;
         }
@@ -323,6 +315,71 @@ TObjectInstance* TMapIterator::NextItem()
     return item;
 }
 
+// The next sector of the pane's 3x3 window that passes the rect checks.
+TSector* TMapIterator::NextWindowSector()
+{
+    for (;;)
+    {
+        if (++sx >= SECTORWINDOWX)
+        {
+            sx = 0;
+            sy++;
+        }
+        if (sy >= SECTORWINDOWY)
+            return nullptr;
+
+        TSector* candidate = MapPane.sectors[sx][sy];
+        if (!candidate)
+            continue;
+
+        SRect sr;
+        if (flags & CHECK_SECTRECT)
+        {
+            candidate->GetMaxScreenRect(sr);
+            if (!r.Intersects(sr))
+                continue;
+        }
+        else if (flags & CHECK_MAPRECT)
+        {
+            candidate->GetMaxMapRect(sr);
+            if (!r.Intersects(sr))
+                continue;
+        }
+        return candidate;
+    }
+}
+
+// The next loaded sector of `level` (every level when negative) that meets
+// the map rect, walking MapManager's cached maps.
+TSector* TMapIterator::NextLoadedSector()
+{
+    for (; mapnum < MapManager.NumCached(); mapnum++, secnum = 0)
+    {
+        const TGameMap* map = MapManager.Cached(mapnum);
+        if (!map || (level >= 0 && map->Level() != level))
+            continue;
+
+        const std::vector<TSector*>& list = map->Sectors();
+        while (secnum < list.size())
+        {
+            TSector* candidate = list[secnum++];
+            if (!candidate)
+                continue;
+            if (flags & CHECK_MAPRECT)
+            {
+                SRect sr;
+                candidate->GetMaxMapRect(sr);
+                if (!r.Intersects(sr))
+                    continue;
+            }
+            sx = candidate->SectorX();
+            sy = candidate->SectorY();
+            return candidate;
+        }
+    }
+    return nullptr;
+}
+
 void TMapIterator::Nuke()
 {
     if (item)
@@ -353,9 +410,7 @@ bool TMapPane::Initialize()
     oldscrollx = scrollx = oldscrolly = scrolly = 0x80000000;
     oldlevel = level = 0;
 
-    for (int32_t sy = 0; sy < SECTORWINDOWY; sy++)
-        for (int32_t sx = 0; sx < SECTORWINDOWX; sx++)
-            sectors[sx][sy] = nullptr;
+    ClearWindow();
 
     SColor c;
     c.red = 255;
@@ -405,11 +460,12 @@ bool TMapPane::Initialize()
 
 void TMapPane::Close()
 {
-  // Make sure update thread is finished  
+  // Make sure update thread is finished
     EndUpdateThread();
 
-  // Delete all sectors (saving them if in editor)
-    FreeAllSectors();
+  // Retail freed every loaded sector here (FreeAllSectors). The sectors
+  // belong to TMapManager in the port; the pane only lets go of its window.
+    ClearWindow();
 
   // Free imagery in imagery system
     TObjectImagery::FreeAllImagery();
@@ -508,77 +564,6 @@ void TMapPane::FreeBackgroundBuffers()
         delete updatemulti;
         updatemulti = nullptr;
     }
-}
-
-// ******************
-// * Map Management *
-// ******************
-
-// Loads the current map in the "curmap" directory from the given directory 
-// (i.e. "savegame.001"), or clears the "curmap" directory if nullptr, forces
-// reload of all sectors.
-void TMapPane::LoadCurMap(char *from)
-{
-    char frompath[MAXPATHLEN], topath[MAXPATHLEN];
-    
-    ClearCurMap();
-
-    if (!from)
-        return;
-
-    makepath(from, frompath, MAXPATHLEN);
-    strcat(frompath, "\\*.DAT");
-    makepath(CURMAPDIR, topath, MAXPATHLEN);
-
-    copyfiles(frompath, topath);
-}
-
-// Saves map in curmap to the given game subdirectory 
-//(i.e. "savegame.001") or "map" if null
-void TMapPane::SaveCurMap(char *to)
-{
-    ReloadSectors(); // Forces sectors to be saved
-
-    LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                        // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                        //  BETWEEN THESE TWO FUNCTIONS!!)
-
-    TSector::ClearPreloadSectors();
-    
-    UNLOCKSECTORS;      // Do not return between these two things
-
-    if (!to)
-        to = BASEMAPDIR;
-
-    char frompath[MAXPATHLEN], topath[MAXPATHLEN];
-
-    makepath(CURMAPDIR, frompath, MAXPATHLEN);
-    strncatz(frompath, "\\*.DAT", MAXPATHLEN);
-    makepath(to, topath, MAXPATHLEN);
-    strncatz(topath, "\\", MAXPATHLEN);
-
-    copyfiles(frompath, topath);
-}
-
-// Deletes all files in the "curmap" directory, and forces sectors to reload.
-void TMapPane::ClearCurMap()
-{
-    char path[MAXPATHLEN];
-    
-    ReloadSectors();
-
-    LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                        // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                        //  BETWEEN THESE TWO FUNCTIONS!!)
-
-    TSector::ClearPreloadSectors();
-    
-    UNLOCKSECTORS;      // Do not return between these two things
-
-    makepath("curmap", path, MAXPATHLEN);
-    strncatz(path, "\\*.DAT", MAXPATHLEN);
-
-    deletefiles(path);
 }
 
 // ******************
@@ -688,13 +673,23 @@ void TMapPane::KeyPress(int32_t key, bool down)
         exit(0);
 }
 
+// REVSYNC: FindClickPos @ 0x0044e930 (the 1998 body). From the bottom of the
+// view (plus the height of a 255-high walk cell) up to the pointer, the first
+// walk cell whose floor, raised to its height, lies under the pointer; else
+// the pointer's point at start's height. Map-screen coordinates come from the
+// map view (retail's x + posx, y + posy).
 void TMapPane::FindClickPos(int32_t x, int32_t y, S3DPoint& start, S3DPoint& target)
 {
-    int32_t bottomy = posy + GetHeight() + ((255 * 866) / 1000);
+    int32_t mapx = 0, mapy = 0, vw = 0, vh = 0, bottomx = 0, bottomy = 0;
+    if (mapview)
+        mapview->GetViewportSize(vw, vh);
+    PaneToMapScreen(x, y, mapx, mapy);
+    PaneToMapScreen(x, vh - 1, bottomx, bottomy);
+    bottomy += 1 + ((255 * 866) / 1000);
 
     S3DPoint top, bottom;
-    ScreenToWorld(x + posx, y + posy, top);
-    ScreenToWorld(x + posx, bottomy, bottom);
+    ScreenToWorld(mapx, mapy, top);
+    ScreenToWorld(mapx, bottomy, bottom);
     top &= (uint32_t)~(WALKMAPGRANULARITY - 1);
     bottom &= (uint32_t)~(WALKMAPGRANULARITY - 1);
 
@@ -712,7 +707,7 @@ void TMapPane::FindClickPos(int32_t x, int32_t y, S3DPoint& start, S3DPoint& tar
             int32_t height = GetWalkHeight(bottom);
 
             S3DPoint walkpos;
-            ScreenToWorld(x+posx, y+posy + ((height * 866) / 1000), walkpos);
+            ScreenToWorld(mapx, mapy + ((height * 866) / 1000), walkpos);
             walkpos.x += 8;
             walkpos.y += 8;
 
@@ -728,7 +723,7 @@ void TMapPane::FindClickPos(int32_t x, int32_t y, S3DPoint& start, S3DPoint& tar
         }
 
     if (!found)
-        ScreenToWorld(x+posx, y+posy, bottom, start.z);
+        ScreenToWorld(mapx, mapy, bottom, start.z);
 
     target = bottom;
 }
@@ -801,13 +796,23 @@ char *Directions[] = { "ne", "e", "se", "s", "sw", "w", "nw", "n", "ne" };
 // Gets the world position (given character's z pos) that mouse is hovering over
 void TMapPane::GetMouseMapPos(S3DPoint &p, int32_t zoffset)
 {
-    int32_t x = cursorx - GetPosX();
-    int32_t y = cursory - GetPosY();
+    ScreenToMapPos(cursorx, cursory, p, zoffset);
+}
 
+// The world point under the screen pixel (x, y) at Locke's height plus
+// `zoffset`: the pointer conversion the right-button walk uses
+// (UpdateMouseMovement @ 0x0044ee00, + 50).
+void TMapPane::ScreenToMapPos(int32_t x, int32_t y, S3DPoint &p, int32_t zoffset)
+{
     S3DPoint curpos;
     Player->GetPos(curpos);
 
-    ScreenToWorld(x + posx, y + posy, p, curpos.z + zoffset);
+    // The map view sits at the screen's top left: the pointer is in its
+    // pixels. Retail's x + posx has no bounds: past the view (over the HUD)
+    // the point lies on beyond its edge.
+    int32_t mapx = 0, mapy = 0;
+    (void)PaneToMapScreen(x, y, mapx, mapy);
+    ScreenToWorld(mapx, mapy, p, curpos.z + zoffset);
 }
 
 // Gets the angle of the mouse from the character's current position
@@ -821,6 +826,12 @@ int32_t TMapPane::GetMouseMapAngle()
     return ConvertToFacing(curpos, target);
 }
 
+// REVSYNC: UpdateMouseMovement @ 0x0044ee00. The point under the pointer at
+// Locke's height + 50; within 16 of him (x and y) only the arrow (the held
+// direction stays); otherwise the wedge for the angle's 45-degree sector, its
+// shadow at (0, 43), and that direction held. Retail pressed the numpad keys
+// through the screen; the port holds the joystick direction in the control
+// map, the same direction flags UpdateMove reads.
 void TMapPane::UpdateMouseMovement(int32_t x, int32_t y)
 {
     if (!Player)
@@ -837,42 +848,41 @@ void TMapPane::UpdateMouseMovement(int32_t x, int32_t y)
     if (absval(target.x) < 16 && absval(target.y) < 16)
     {
         SetMouseBitmap(GameData->Bitmap("cursor"));
-        Player->Stop();
-    }
-    else
-    {
-        angle += 0x10;
-        angle = angle & 0xe0;
-
-      // Get wedge cursor name
-        char buf[32];
-        sprintf(buf, "wedge-%s", Directions[angle >> 5]);
-        SetMouseBitmap(GameData->Bitmap(buf));
-        strcat(buf, "shadow");
-        SetMouseShadow(GameData->Bitmap(buf), 0, 43);
-        SetMouseCornerBitmap((PTBitmap)nullptr, true);
-
-      // Get movement command   
-        if (lastkey != -1)
-            CurrentScreen->KeyPress(lastkey, false);
-        lastkey = -1;
-        switch (angle)
-        { 
-          case 0:   { lastkey = VK_JOYUPRIGHT;   break; }
-          case 32:  { lastkey = VK_JOYRIGHT;     break; }
-          case 64:  { lastkey = VK_JOYDOWNRIGHT; break; }
-          case 96:  { lastkey = VK_JOYDOWN;      break; }
-          case 128: { lastkey = VK_JOYDOWNLEFT;  break; }
-          case 160: { lastkey = VK_JOYLEFT;      break; }
-          case 192: { lastkey = VK_JOYUPLEFT;    break; }
-          case 224: { lastkey = VK_JOYUP;        break; }
-        }
-
-        if (lastkey != -1)
-            CurrentScreen->KeyPress(lastkey, true);
+        walking = true;
+        return;
     }
 
-    clicked = true;
+    angle = (angle + 0x10) & 0xe0;
+
+  // Get wedge cursor name
+    char buf[32];
+    snprintf(buf, sizeof(buf), "wedge-%s", Directions[angle >> 5]);
+    SetMouseBitmap(GameData->Bitmap(buf));
+    strcat(buf, "shadow");
+    SetMouseShadow(GameData->Bitmap(buf), 0, 43);
+    SetMouseCornerBitmap((PTBitmap)nullptr, true);
+
+  // Get movement command
+    static constexpr int32_t kMoveKeys[8] =
+        { VK_JOYUPRIGHT, VK_JOYRIGHT, VK_JOYDOWNRIGHT, VK_JOYDOWN,
+          VK_JOYDOWNLEFT, VK_JOYLEFT, VK_JOYUPLEFT, VK_JOYUP };
+    HoldMoveKey(kMoveKeys[angle >> 5]);
+
+    walking = true;
+}
+
+// The right-button walk's direction: `key` held in the control map (-1:
+// none), the previous one let go.
+void TMapPane::HoldMoveKey(int32_t key)
+{
+    if (key == lastkey)
+        return;
+    const uint32_t modes = PlayScreen.ControlModeMask();
+    if (lastkey != -1)
+        ControlMap.GetCommand(lastkey, false, modes);
+    lastkey = key;
+    if (lastkey != -1)
+        ControlMap.GetCommand(lastkey, true, modes);
 }
 
 void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
@@ -1024,158 +1034,320 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
         }
     }
     else        // if not in the editor (normal gameplay)
+        PlayMouseClick(button, x, y);
+}
+
+// REVSYNC: MouseClick @ 0x0044f140, outside the editor
+// (docs/gameflow/forensics/MAP_INPUT.md §4). Retail first left a point over
+// the side tabs' controls to them; the play screen's routing does that in
+// the port (TPlayScreen::ClickRoute). It hands the map every release, as
+// retail's screen did, wherever it lands: the right one ends the walk
+// anywhere, a left one off the view only forgets the press. A right press
+// with Ctrl held shows what is under the pointer on the stats pane instead of
+// walking (0x0044f87d..0x0044f8e3); a left press on an item binds the stats
+// pane to it, quietly (0x0044fb74).
+void TMapPane::PlayMouseClick(int32_t button, int32_t x, int32_t y)
+{
+    if (playMouseClickSeam)
     {
-        Notify(N_CANCELCONTROL, Player);
-
-        if (button == MB_RIGHTDOWN)
-        {
-            if (Player)
-            {
-                UpdateMouseMovement(x, y);
-            }
-        }
-        else if (button == MB_RIGHTUP)
-        {
-            if (Player && clicked)
-            {
-                SetMouseBitmap(GameData->Bitmap("cursor"));
-
-              // Stop character moving (release fake joystick key)
-                if (lastkey != -1)
-                {
-                    CurrentScreen->KeyPress(lastkey, false);
-                    lastkey = -1;
-                }
-
-                clicked = false;
-            }
-        }
-        else if (button == MB_LEFTDOWN)
-        {
-            if (Player && InPane(x, y))
-            {
-                if (Player->IsCombat())
-                {
-                    Player->ButtonAttack(random(1,3));
-                }
-                else if (Player->IsBowMode())
-                {
-                    if (!Player->IsBowDrawn())
-                    {
-                        Player->DrawBow();
-                        Player->AimBow(GetMouseMapAngle());
-                    }
-                }
-                else
-                {
-                    TObjectInstance* oi = OnObject(x, y);
-                    if (oi)
-                        onobject = oi->GetMapIndex();
-                    else
-                        onobject = -1;
-                    clicked = true;
-                }
-            }
-        }
-        else if (button == MB_LEFTUP)
-        {
-            if (Player && InPane(x, y))
-            {
-                if (Player->IsCombat())
-                {
-                }
-                else if (Player->IsBowMode())
-                {
-                    if (Player->IsBowDrawn())
-                        Player->ShootBow(GetMouseMapAngle());
-                }
-                else
-                {
-                    TObjectInstance* inst = Inventory.GetContainer()->GetInventorySlot(Inventory.GetHeldSlot());
-                    if (!inst && Player)
-                        inst = Player->GetInventorySlot(EquipPane.GetHeldSlot() + 256);
-
-                    int32_t objindex = -1;
-                    TObjectInstance* oninst = OnObject(x, y, inst);
-                    if (oninst)
-                        objindex = oninst->GetMapIndex();
-
-                    if (clicked)
-                    {
-                        TObjectInstance* inst = oninst;
-
-                        bool used = false;
-
-                        if (onobject == objindex && inst)
-                        {
-                            if (!inst->IsInventoryItem())
-                                used = inst->Use(Player);
-                            else
-                            {
-                                TakenObject = GetInstance(objindex);
-                                Player->Pickup(TakenObject);
-                                TextBar.Print("Picked up %s.", inst->GetTypeName());
-                                used = true;
-                            }
-                        }
-
-//                      if (!used)  // Goto the point the mouse clicked
-//                      {
-//                          S3DPoint target, curpos;
-//                          Player->GetPos(curpos);
-//                          FindClickPos(x, y, curpos, target);
-//                          Player->Goto(target.x, target.y);
-//                      }
-                    }
-                    else // Not clicked
-                    {
-                        // dragging from the inventory or equipment to map pane
-                        if (inst)
-                        {
-                            bool used = false;
-                            if (objindex >= 0)
-                            {
-                                // use the dragged object with the object clicked on
-                                TObjectInstance* oi = GetInstance(objindex);
-                                if (oi)
-                                {
-                                    used = oi->Use(Player, inst->GetMapIndex());
-                                    if (used)
-                                        Inventory.Update();
-                                }
-                            }
-
-                            if (!used)
-                            {
-                                // didn't click on anything special, so just drop it on the ground
-                                if (inst->InventNum() >= 256)
-                                    ((TPlayer*)Player)->Equip(nullptr, EquipPane.GetHeldSlot());   // clear from eq list
-
-                                S3DPoint curpos, target;
-                                Player->GetPos(curpos);
-                                ScreenToWorld(x+posx, y+posy, target, curpos.z + 30);
-
-                                inst->RemoveFromInventory();
-                                inst->SetPos(target, Player->GetLevel());
-                                inst->AddToMap();
-
-                                if (inst->Amount() > 1)
-                                    TextBar.Print("%d %ss dropped.", inst->Amount(), inst->GetName());
-                                else
-                                    TextBar.Print("%s dropped.", inst->GetName());
-
-                                DroppedObject = inst;
-                            }
-                        }
-                    }
-
-                } // clicked?
-
-            } // In pane and has char?
-
-            clicked = false;
-        }
+        playMouseClickSeam(button, x, y);
+        return;
     }
+    Notify(N_CANCELCONTROL, Player);
+
+    int32_t mapx = 0, mapy = 0;
+    const bool inview = PaneToMapScreen(x, y, mapx, mapy);
+    // Combat clicks attack unless the pointer shows something else to do.
+    const bool attackcursor = hovercursor == CURSOR_NONE || hovercursor == CURSOR_SWORDS;
+
+    switch (button)
+    {
+      case MB_RIGHTDOWN:
+        if (!Player)
+            return;
+        if (CtrlDown)
+        {
+            TObjectInstance* const on = OnObject(x, y);
+            switch (on ? on->ObjClass() : OBJCLASS_TILE)
+            {
+              case OBJCLASS_TILE: case OBJCLASS_EFFECT: case OBJCLASS_EXIT:
+              case OBJCLASS_HELPER: case OBJCLASS_SHADOW:
+                break;
+              default:
+                PlayScreen.ShowStatPane();
+                StatPane.SetObject(on);
+                break;
+            }
+            return;
+        }
+        UpdateMouseMovement(x, y);
+        return;
+
+      case MB_RIGHTUP:
+        if (Player && walking)
+        {
+            SetMouseBitmap(GameData->Bitmap("cursor"));
+            HoldMoveKey(-1);
+            walking = false;
+        }
+        return;
+
+      case MB_LEFTDOWN:
+      {
+        if (!Player || !inview)
+            return;
+
+        if (Player->IsCombat() && attackcursor)
+        {
+            // Another character Locke may fight becomes his target;
+            // otherwise the press is a random swing.
+            TObjectInstance* on = OnObject(x, y);
+            if (on && on->ObjClass() == OBJCLASS_CHARACTER && on != Player->Fighting())
+            {
+                if (Player->IsEnemy((TCharacter*)on))
+                    Player->SetFighting((TCharacter*)on);
+                return;
+            }
+            Player->ButtonAttack(random(1, 3));
+            return;
+        }
+
+        if (Player->IsBowMode() && attackcursor)
+        {
+            if (!Player->IsBowDrawn())
+            {
+                Player->DrawBow();
+                Player->AimBow(GetMouseMapAngle());
+            }
+            clicked = true;
+            return;
+        }
+
+        // The press only remembers what it was over (an item also goes to
+        // the stats pane); the release acts.
+        TObjectInstance* on = OnObject(x, y);
+        onobject = on ? on->GetMapIndex() : -1;
+        clicked = true;
+        if (on && on->IsInventoryItem())
+            StatPane.SetObject(on);
+        return;
+      }
+
+      case MB_LEFTUP:
+        if (Player && !Player->IsDead() && inview)
+            PlayMouseRelease(x, y, attackcursor);
+        clicked = false;
+        return;
+    }
+}
+
+// The left button's release (MAP_INPUT.md §4.3): on the object pressed, Use
+// it, or pick it up if it is an item, when it is within 96 of Locke or is a
+// character; a farther one is walked to. A release that wasn't a press on the
+// map lets go of an item held from the inventory, the belt or the equipment:
+// used on the object under it, else dropped there (INVENTORY_ACTIONS.md §11).
+void TMapPane::PlayMouseRelease(int32_t x, int32_t y, bool attackcursor)
+{
+    if (Player->IsCombat() && attackcursor && clicked)
+        return;
+    if (Player->IsBowMode() && Player->IsBowDrawn() && clicked)
+    {
+        Player->ShootBow(GetMouseMapAngle());
+        return;
+    }
+
+    // REVSYNC: 0x0044fce3 -- the item the inventory, the belt or the doll
+    // holds (retail read their held slots; the port's grab).
+    TObjectInstance* inst = clicked ? nullptr : UIDragState::HeldItem();
+
+    TObjectInstance* on = OnObject(x, y, inst);
+    const int32_t objindex = on ? on->GetMapIndex() : -1;
+    if (on)
+    {
+        S3DPoint op, pp;
+        on->GetPos(op);
+        Player->GetPos(pp);
+        log_info("[mapinput] release (%d, %d) on %s at (%d,%d,%d), Locke at (%d,%d,%d), distance %d, pressed on %d",
+                 x, y, on->GetName(), op.x, op.y, op.z, pp.x, pp.y, pp.z, on->Distance(Player), onobject);
+    }
+    else
+        log_info("[mapinput] release (%d, %d) on nothing, pressed on %d", x, y, onobject);
+
+    if (clicked)
+    {
+        constexpr int32_t kReach = 96;      // retail: Distance < 0x61
+        if (on && on->Distance(Player) > kReach && on->ObjClass() != OBJCLASS_CHARACTER)
+        {
+            WalkToward(x, y, on);
+            return;
+        }
+        if (on && onobject == objindex)
+        {
+            if (!on->IsInventoryItem())
+                on->Use(Player, -1);
+            else if (on->ObjClass() != OBJCLASS_PLAYER && on->ObjClass() != OBJCLASS_CHARACTER)
+            {
+                // Gold or food may merge into a pile and be deleted
+                const TSafeRef<TObjectInstance> taken(on);
+                Player->Pickup(on);
+                TakenObject = taken.Get();
+            }
+        }
+        if (!on && onobject == -1 && clickwalk && !Player->IsCombat() && !Player->IsBowMode())
+            ClickWalkTo(x, y);
+        return;
+    }
+
+    // REVSYNC: 0x0044fff8..0x004500a6 -- a held item let go here: used on
+    // the object under it (a character's script gets it, a container takes
+    // it, ...), else dropped at the pointer.
+    if (!inst)
+        return;
+    if (on && on->Use(Player, inst->GetMapIndex()))
+        return;
+    DropHeldItem(inst, x, y);
+}
+
+// REVSYNC: 0x004500ab..0x0045046a -- a held item onto the floor: not one that
+// can't change hands (no Value) nor ammunition, silently; a worn one comes
+// off first. The floor under the pointer (FindClickPos), moved (64, 64) but
+// for money; farther than 96 from Locke it lands on the line toward it, as
+// far as walk checks from Locke at 0, 32 and 64 allow, at his height. Then
+// "<name> dropped.", DroppedObject, and a fall from 64 above (a still toss)
+// but for armor and money. No sound: the item's played when it was picked up.
+// Deviation: retail's pile line used a PLURAL line no language ships ("3
+// Bread[PLURAL] dropped."); the port uses "s" when it is missing.
+void TMapPane::DropHeldItem(TObjectInstance* item, int32_t x, int32_t y)
+{
+    if (!item->CanTrade() || item->ObjClass() == OBJCLASS_AMMO)
+        return;
+    const int32_t worn = item->InventNum() - kInvSlotEquipFirst;
+    if ((uint32_t)worn < NUM_EQ_SLOTS)
+        Player->Equip(nullptr, worn);
+
+    S3DPoint start, target;
+    Player->GetPos(start);
+    FindClickPos(x, y, start, target);
+    if (item->ObjClass() != OBJCLASS_MONEY)
+    {
+        target.x += 64;
+        target.y += 64;
+    }
+    constexpr int32_t kDropReach = 96;
+    const double dx = target.x - start.x, dy = target.y - start.y;
+    if (int32_t(sqrt(dx * dx + dy * dy)) > kDropReach)
+    {
+        const double angle = atan2(dy, dx);
+        const float stepx = float(cos(angle) * 32.0);
+        const float stepy = float(sin(angle) * 32.0);
+        float px = float(start.x), py = float(start.y);
+        for (int32_t step = 0; step < kDropReach / 32; ++step)
+        {
+            int32_t maxdelta = 0, height = 0;
+            bool hole = false;
+            GetWalkHeightRadius(S3DPoint(int32_t(px), int32_t(py), start.z), 32, maxdelta, height, hole);
+            if (abs(maxdelta) > 32 || hole)
+                break;
+            px += stepx;
+            py += stepy;
+        }
+        target = S3DPoint(int32_t(px), int32_t(py), start.z);
+    }
+
+    item->RemoveFromInventory();
+    item->SetPos(target, Player->GetLevel());
+    item->AddToMap();
+
+    const std::string name = DialogList.DisplayName(item->GetName());
+    const int32_t amount = item->Amount();
+    char line[256];
+    if (amount > 1)
+    {
+        if (DialogList.FindLine("FULLMULTDROP") >= 0)
+            snprintf(line, sizeof(line), DialogList.GetLine("FULLMULTDROP"), amount, name.c_str());
+        else if (DialogList.FindLine("FULLMULTDROPREV") >= 0)
+            snprintf(line, sizeof(line), DialogList.GetLine("FULLMULTDROPREV"), name.c_str(), amount);
+        else
+            snprintf(line, sizeof(line), "%d %s%s %s", amount, name.c_str(),
+                     DialogList.FindLine("PLURAL") >= 0 ? DialogList.GetLine("PLURAL") : "s",
+                     DialogList.GetLine("BASEDROPEPED"));
+    }
+    else if (DialogList.FindLine("FULLSINGDROP") >= 0)
+        snprintf(line, sizeof(line), DialogList.GetLine("FULLSINGDROP"), name.c_str());
+    else
+        snprintf(line, sizeof(line), "%s %s", name.c_str(), DialogList.GetLine("BASEDROPEPED"));
+    TextBar.Print("%s", line);
+    log_info("[mapinput] dropped %s at (%d,%d,%d)", item->GetName(), target.x, target.y, target.z);
+
+    DroppedObject = item;
+
+    if (item->NeedsAnimator())
+        item->CreateAnimator();
+    TObjectAnimator* const animator = item->GetAnimator();
+    if (animator && stricmp(item->GetClassName(), "Armor") != 0 && item->ObjClass() != OBJCLASS_MONEY)
+    {
+        S3DPoint from = target;
+        from.z += 64;
+        animator->Toss(from, target, -1, true);
+    }
+}
+
+// Click to walk (docs/playtest/PLAN.md §10), a patch both games carry for the
+// playtest (retail's named build "clickwalk" patches this release path of
+// MouseClick @ 0x0044f140; CLICKWALK.md §9): a press and release on open
+// ground -- nothing under either, Locke's root neither combat nor the bow,
+// as retail's gates read it -- sends Locke to the point under the release
+// by the right-button walk's conversion (UpdateMouseMovement @ 0x0044ee00:
+// the release's own x, y at Locke's height + 50), through Goto (0x004cedb0),
+// which turns to any of 256 angles and stops on the point. The walk mode is
+// the root's (the run key held: running).
+void TMapPane::ClickWalkTo(int32_t x, int32_t y)
+{
+    S3DPoint target;
+    ScreenToMapPos(x, y, target, 50);
+    const bool going = Player->Goto(target.x, target.y, nullptr);
+    log_info("[mapinput] click walk (%d, %d) to (%d,%d): %s", x, y, target.x, target.y,
+             going ? "going" : "refused");
+}
+
+// Retail 0x0044fd98..0x0044ff40: an object out of reach. Locke walks to the
+// floor point under the pointer less 64 toward him (two steps of 32 along the
+// line) when the line from him is walkable every 32 units for (distance - 32)
+// / 32 steps; else "too far". The walk carries the object, which its arrival
+// picks up when it is an item (TCharacter::Goto); a door takes a second click.
+// The walk test is GetWalkHeightRadius within 32 (0x0044fec1): a step of
+// more than 32 between neighbouring cells, or a cell with no walkmap, ends it.
+void TMapPane::WalkToward(int32_t x, int32_t y, TObjectInstance* on)
+{
+    S3DPoint start, target;
+    Player->GetPos(start);
+    FindClickPos(x, y, start, target);
+
+    const double angle = atan2(double(target.y - start.y), double(target.x - start.x));
+    const float stepx = float(cos(angle) * 32.0);
+    const float stepy = float(sin(angle) * 32.0);
+    target.x += int32_t(stepx * -2.0f);
+    target.y += int32_t(stepy * -2.0f);
+
+    const int32_t steps = (on->Distance(Player) - 32) / 32;
+    float px = float(start.x), py = float(start.y);
+    int32_t step = 0;
+    for (; step < steps; ++step)
+    {
+        S3DPoint p(int32_t(px), int32_t(py), start.z);
+        int32_t maxdelta = 0, height = 0;
+        bool hole = false;
+        GetWalkHeightRadius(p, 32, maxdelta, height, hole);
+        if (maxdelta > 32 || hole)
+            break;
+        px += stepx;
+        py += stepy;
+    }
+
+    if (step == steps)
+        Player->Goto(target.x, target.y, on);
+    else
+        TextBar.Print(TTextBar::ELineType::Notice, "%s", DialogList.GetLine("ITEMTOFAR"));
 }
 
 #define MOUSESCROLLSPEED    8
@@ -1279,9 +1451,9 @@ void TMapPane::MouseMove(int32_t button, int32_t x, int32_t y)
             }
         }
     }
-    else        // if not in the editor (normal gameplay)
+    else        // REVSYNC: MouseMove @ 0x004504d0, outside the editor
     {
-        if (button == MB_RIGHTDOWN && clicked)
+        if (button == MB_RIGHTDOWN && walking)
             UpdateMouseMovement(x, y);
 
       // Aim the bow if we have it drawn
@@ -1354,15 +1526,17 @@ void TMapPane::SetMapPos(S3DPoint& newpos)
 // ********************
 
 // Create object
-int32_t TMapPane::NewObject(SObjectDef* def)
+int32_t TMapPane::NewObject(SObjectDef* def, int32_t imagery)
 {
+    if (newObjectSeam)
+        return newObjectSeam(def, imagery);
     TObjectClass* oc = TObjectClass::GetClass(def->objclass);
     if (!oc)
     {
         fprintf(stderr, "MAPPANE: Bad class in NewObject");
         return -1;
     }
-    TObjectInstance* oi = oc->NewObject(def);
+    TObjectInstance* oi = oc->NewObject(def, imagery);
     if (!oi)
     {
         fprintf(stderr, "MAPPANE: Unable to create obj in NewObject");
@@ -1374,14 +1548,15 @@ int32_t TMapPane::NewObject(SObjectDef* def)
     oi->SetMapIndex(-1);
     int32_t index = AddObject(oi);
 
-    if (index < 0 && shadowindex >= 0)
+    // REVSYNC: the failure path of TMapPane::NewObject @ 0x00450e40 deletes
+    // the shadow it made (once; the 1998 code deleted it a second time).
+    if (index < 0)
     {
-        TObjectInstance* shadow = GetInstance(shadowindex);
-        if (shadow)
-        {
-            DeleteObject(shadow);
-            delete shadow;
-        }
+        if (shadowindex >= 0)
+            DeleteObject(GetInstance(shadowindex));
+        // REVSYNC-DIVERGENCE: retail leaked the object it couldn't place;
+        // nothing else refers to it, so it is freed here.
+        delete oi;
     }
 
     return index;
@@ -1390,6 +1565,8 @@ int32_t TMapPane::NewObject(SObjectDef* def)
 // Add object
 int32_t TMapPane::AddObject(TObjectInstance* oi)
 {
+    if (addObjectSeam)
+        return addObjectSeam(oi);
     if (oi->GetSector() != nullptr)    // Object is already in the map
     {
         fprintf(stderr, "MAPPANE: Object already in a sector in AddObject");
@@ -1408,8 +1585,11 @@ int32_t TMapPane::AddObject(TObjectInstance* oi)
     int32_t sx = (pos.x >> SECTORWSHIFT);
     int32_t sy = (pos.y >> SECTORHSHIFT);
 
-    if ((uint32_t)sx >= MAXSECTORX || sx < sectorx || sx >= sectorx + SECTORWINDOWX ||
-        (uint32_t)sy >= MAXSECTORY || sy < sectory || sy >= sectory + SECTORWINDOWY)
+    const TGameMap* active = MapManager.CurrentMap();
+    const bool transient = active && active->IsTransient();
+    if ((!transient && ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY)) ||
+        sx < sectorx || sx >= sectorx + SECTORWINDOWX ||
+        sy < sectory || sy >= sectory + SECTORWINDOWY)
     {
         fprintf(stderr, "MAPPANE: Object not in current map area in AddObject");
         return -1;
@@ -1442,52 +1622,41 @@ int32_t TMapPane::AddObject(TObjectInstance* oi)
     return oi->GetMapIndex();
 }
 
-// Remove object (The main place objects are removed)
-TObjectInstance* TMapPane::RemoveObject(int32_t index)
+// REVSYNC: TMapPane::RemoveObject @ 0x00451610 -- take an object out of the
+// world (the main place objects are removed): its shadow, its animator, then
+// out of its owner's inventory or out of its sector. Retail works from the
+// object's own links, so this finds objects outside the sector window and
+// in sectors no window holds (the 1998 version searched the window by
+// mapindex). The object is not deleted.
+TObjectInstance* TMapPane::RemoveObject(TObjectInstance* inst)
 {
-    TObjectInstance* inst = nullptr;
-    TMapIterator i;
-
-    for ( ; i; i++)
-        if (i->GetMapIndex() == index)
-        {
-            inst = i;
-            break;
-        }
-
     if (!inst)
         return nullptr;
 
-  // Notify that object is being deleted
+  // Notify that object is being deleted. Kept where the 1998 code had it;
+  // retail notified from the object's detach (0x0046e630) instead.
     Notify(N_DELETINGOBJECT, inst);
 
-    if (i.Parent())
-    {
-        // extract from inventory
+    if (inst->GetShadow() >= 0)
+        RemoveObject(GetInstance(inst->GetShadow()));
+
+    if (inst->HasAnimator())
+        inst->FreeAnimator();
+
+    // Retail also sent a multiplayer "object removed" message (0x00584270)
+    // for objects in the map; the port is single player.
+    if (inst->IsInInventory() || inst->GetOwner())
         inst->RemoveFromInventory();
-    }
-    else
-    {
-        RemoveFromSector(inst, i.SectorX(), i.SectorY(), i.SectorIndex());
-    }
-
-    if (inst)
-    {
-        if (inst->GetShadow() >= 0)
-            RemoveObject(inst->GetShadow());
-
-        if (inst->HasAnimator())
-            inst->FreeAnimator();
-    }
+    else if (inst->GetSector())
+        RemoveFromSector(inst);
 
     return inst;
 }
 
-// Delete object
+// Removes and deletes an object
 void TMapPane::DeleteObject(TObjectInstance* obj)
 {
-    if (RemoveObject(obj->GetMapIndex()) == nullptr)
-        FatalError("Tried to delete an object not in the sector.  This is a Very Bad Thing(tm).  Get Adam to check this out RIGHT AWAY!");
+    RemoveObject(obj);
     delete obj;
 }
 
@@ -1500,25 +1669,12 @@ void TMapPane::ObjectFlagsChanged(TObjectInstance* oi, uint32_t oldflags, uint32
     oi->GetSector()->ObjectFlagsChanged(oi, oldflags, newflags);
 }
 
-// Delete sector
-void TMapPane::DeleteSector(TSector* sect)
+TObjectInstance* TMapPane::RemoveFromSector(TObjectInstance* inst)
 {
-    Notify(N_DELETINGSECTOR, sect);
+    TSector* sector = inst->GetSector();
+    if (!sector)
+        return inst;
 
-  // Make sure all objects know they are off screen now
-    for (TObjectIterator i(sect->ObjectArray()); i; i++)
-    {
-        if (!i.Item())
-            continue;
-        i.Item()->OffScreen();
-    }
-
-  // Saves and deletes
-    TSector::CloseSector(sect);
-}
-
-TObjectInstance* TMapPane::RemoveFromSector(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t sectindex)
-{
     // extract from sector
     ExtractWalkmap(inst);
 
@@ -1526,8 +1682,8 @@ TObjectInstance* TMapPane::RemoveFromSector(TObjectInstance* inst, int32_t sx, i
                         // Group the update rect and the actual removal below so update system doesn't
                         // accidently redraw this object before it is deleted
 
-    AddObjectUpdateRect(inst->GetMapIndex());  
-    sectors[sx][sy]->RemoveObject(sectindex);
+    AddObjectUpdateRect(inst->GetMapIndex());
+    sector->RemoveObject(inst);
 
     UNLOCKSECTORS;
 
@@ -1573,12 +1729,15 @@ int32_t TMapPane::AddShadow(TObjectInstance* oi)
     return index;
 }
 
-// Object find functions
-TObjectInstance* TMapPane::FindObject(char *name, int32_t occurance, int32_t objset)
+// REVSYNC: FindObject @ 0x00451d70 -- the occurance'th object of that name
+// in the loaded sectors of any level (its iterator flags 0x2a0: loaded,
+// active or not), not only the pane's 3x3 window. beginfighting and
+// giveweapons look their objects up this way.
+TObjectInstance* TMapPane::FindObject(const char *name, int32_t occurance, int32_t objset)
 {
     int32_t found = 0;
 
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+    for (TMapIterator i(-1, nullptr, CHECK_NOINVENT, objset); i; i++)
     {
         const char *instname = i->GetName();
 
@@ -1589,28 +1748,76 @@ TObjectInstance* TMapPane::FindObject(char *name, int32_t occurance, int32_t obj
     return nullptr;
 }
 
-TObjectInstance* TMapPane::FindClosestObject(char *name, S3DPoint frompos, bool partial, int32_t objset)
+// Retail drops the spoken lines and any open choices when the camera stops
+// following the player, and closes the play screen's drawer when it holds the
+// shop (SetCameraObject 0x004538d0, SetCameraPos 0x00453940).
+bool TMapPane::IsFollowingPlayer() const
 {
-    TObjectInstance* closest = nullptr;
-    int32_t closestdist = 0x800000;
+    return (centeron.flags & CENTERON_OBJ) && Player && centeron.obj == Player;
+}
 
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+// REVSYNC: the camera half of a teleport (TExit::Activate 0x0050d3a0, `pos`
+// 0x00423d40): flag 8, which UpdateMapPos clears after jumping.
+void TMapPane::SnapIfFollowing(const TObjectInstance* obj)
+{
+    if ((centeron.flags & CENTERON_OBJ) && centeron.obj == obj)
+        centeron.flags |= CENTERON_SNAP;
+}
+
+void TMapPane::StopFollowingPlayer()
+{
+    DialogPane.ClearSpeech(false);
+    if (PlayScreen.Drawer() == TPlayScreen::EDrawer::BuySell)
+        PlayScreen.CloseDrawer();
+}
+
+void TMapPane::CenterOnObj(TObjectInstance* obj, uint32_t flags)
+{
+    if (IsFollowingPlayer() && obj != Player)
+        StopFollowingPlayer();
+    centeron.obj = obj;
+    centeron.flags = (flags & ~CENTERON_POS) | CENTERON_OBJ;
+}
+
+void TMapPane::CenterOnPos(const S3DPoint& pos, int32_t level, uint32_t flags)
+{
+    if (IsFollowingPlayer())
+        StopFollowingPlayer();
+    centeron.pos = pos;
+    centeron.level = level;
+    centeron.flags = (flags & ~CENTERON_OBJ) | CENTERON_POS;
+}
+
+// REVSYNC: 0x00451de0 -- the nearest object of that name on `lvl` within
+// sqrt(0x800000) (~2896 units) of frompos, from the level's loaded sectors
+// (its iterator flags 0x4a0), not only the pane's 3x3 window: a script
+// near the window's edge finds its waypoints (Hruthford's `goto HRUWAY01`
+// with the camera elsewhere on the level). Only the sectors within that
+// reach are walked. Names match exactly (ignoring case) unless `partial`
+// asks for an abbreviation match; the 1998 source had the two branches the
+// other way round, and retail's callers pass `partial` for the abbreviated
+// forms (`get`, `select`, `swap`).
+TObjectInstance* TMapPane::FindClosestObject(const char *name, const S3DPoint& frompos, int32_t lvl, bool partial, int32_t objset)
+{
+    constexpr int32_t kMaxSqrDist = 0x800000;
+    constexpr int32_t kReach      = 2897;       // ceil(sqrt(kMaxSqrDist))
+    SRect area;
+    area.left   = frompos.x - kReach;
+    area.top    = frompos.y - kReach;
+    area.right  = frompos.x + kReach;
+    area.bottom = frompos.y + kReach;
+
+    TObjectInstance* closest = nullptr;
+    int32_t closestdist = kMaxSqrDist;
+
+    for (TMapIterator i(lvl, &area, CHECK_NOINVENT, objset); i; i++)
     {
         const char *instname = i->GetName();
+        if (!instname)
+            continue;
 
-        bool found = false;
-
-        if (partial)
-        {
-            if (instname && stricmp(name, instname) == 0)
-                 found = true;
-        }
-        else
-        {
-            if (instname && abbrevcmp(name, instname) > 0)
-                 found = true;
-        }
-
+        const bool found = partial ? abbrevcmp(name, instname) > 0
+                                   : stricmp(name, instname) == 0;
         if (found)
         {
             S3DPoint pos;
@@ -1627,159 +1834,205 @@ TObjectInstance* TMapPane::FindClosestObject(char *name, S3DPoint frompos, bool 
     return closest;
 }
 
-TObjectInstance* TMapPane::FindClosestObject(char *name, TObjectInstance* from, bool partial, int32_t objset)
+// REVSYNC: FindClosestObject @ 0x00451fe0 -- from the object's position and
+// level, else the camera's.
+TObjectInstance* TMapPane::FindClosestObject(const char *name, TObjectInstance* from, bool partial, int32_t objset)
 {
-    S3DPoint frompos;
-    if (from)
-        from->GetPos(frompos);
-    else
-        frompos = center;
-
-    return FindClosestObject(name, frompos, partial, objset);
+    const S3DPoint frompos = from ? from->Pos() : center;
+    return FindClosestObject(name, frompos, from ? from->GetLevel() : level, partial, objset);
 }
 
-int32_t TMapPane::FindObjectsInRange(S3DPoint pos, int32_t *array, int32_t width, int32_t height, int32_t objclass, int32_t maxnum, int32_t objset)
+namespace
 {
+// A square in 32 bits, wrapping as retail's imul does (sums of them wrap
+// the same way in uint32_t).
+constexpr uint32_t Square32(int32_t v)
+{
+    return static_cast<uint32_t>(v) * static_cast<uint32_t>(v);
+}
+}  // namespace
+
+// REVSYNC: TMapPane::FindObjectsInRange @ 0x00452060 (MAP_QUERIES.md §2.1)
+// -- an insertion sort by distance: a newcomer goes before the first entry
+// not nearer than it, so between equals the later found comes first, and a
+// full list drops its farthest. The distances and the ids move together;
+// the 1998 code moved bytes of the one and never the other (with two in
+// range, Use found "nothing to use" beside a chest).
+int32_t TMapPane::FindObjectsInRange(const S3DPoint& pos, int32_t lvl, int32_t* array, int32_t width,
+    int32_t height, int32_t objclass, int32_t maxnum, int32_t objset)
+{
+    if (findObjectsSeam)
+        return findObjectsSeam(pos, array, width, height, objclass, maxnum, objset);
     if (maxnum < 1)
         return 0;
+    if (lvl < 0)
+        lvl = level;
 
-    S3DPoint itempos;
-    int32_t sqrwidth = sqr(width);
-    int32_t *dist = new int32_t[maxnum];
-    int32_t found = 0, d;
-
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+    const bool sphere = height < 1;
+    SRect rect;
+    if (sphere)
     {
-        TObjectInstance* inst = i;
+        rect.left = pos.x - width;
+        rect.top = pos.y - width;
+        rect.right = rect.left + 2 * width - 1;
+        rect.bottom = rect.top + 2 * width - 1;
+    }
+    else
+    {
+        rect.left = pos.x - (width >> 1);
+        rect.top = pos.y - (height >> 1);
+        rect.right = rect.left + width - 1;
+        rect.bottom = rect.top + height - 1;
+    }
+    const int32_t sqrwidth = static_cast<int32_t>(Square32(width));
+    // Retail takes the radius off only in a search for characters or
+    // players by class: (Radius * 0.4f) squared on the x87, truncated.
+    const bool radii = objclass == OBJCLASS_CHARACTER || objclass == OBJCLASS_PLAYER;
+    constexpr double kRadiusScale = 0.4f;
 
+    // The distances found so far: on the stack up to 64, as retail's.
+    std::array<int32_t, 64> local{};
+    std::vector<int32_t> heap;
+    int32_t* dist = local.data();
+    if (maxnum > static_cast<int32_t>(local.size()))
+    {
+        heap.resize(static_cast<size_t>(maxnum));
+        dist = heap.data();
+    }
+    int32_t found = 0;
+    ForObjectsIn(lvl, rect, objset, [&](TObjectInstance* inst) {
         if (inst->IsInInventory() || (objclass != -1 && inst->ObjClass() != objclass))
-            continue;
-
-        inst->GetPos(itempos);
-
-        if (height < 1) // This is a radius check
+            return;
+        const S3DPoint& at = inst->Pos();
+        const int32_t dx = abs(pos.x - at.x);
+        const int32_t dy = abs(pos.y - at.y);
+        int32_t d;
+        if (sphere)
         {
-            int32_t r;
-
-            // if we're looking for a character or player, take into account radius
-            if (objclass != OBJCLASS_CHARACTER && objclass != OBJCLASS_PLAYER)
-                r = 0;
-            else
+            uint32_t r2 = 0;
+            if (radii)
             {
-                float tr = ((PTCharacter)inst)->Radius() / 2.5f;
-                r = (int32_t)(tr * tr);
+                const double r = static_cast<TCharacter*>(inst)->Radius() * kRadiusScale;
+                r2 = static_cast<uint32_t>(static_cast<int32_t>(r * r));
             }
-
-            if ((d = (SQRDIST(pos, itempos) - r)) < sqrwidth)
-            {
-                int32_t j;
-                for (j = 0; j < found && d > dist[j]; j++)
-                    ;
-
-                if (j >= maxnum)
-                    continue;
-
-                if (j != found)
-                    memcpy(&(dist[j+1]), &(dist[j]), min(maxnum - 1, found) - j);
-
-                array[j] = inst->GetMapIndex();
-                dist[j] = d;
-
-                if (found < maxnum)
-                    found++;
-            }
+            d = static_cast<int32_t>(Square32(dx) + Square32(dy) + Square32(abs(pos.z - at.z)) - r2);
+            if (d >= sqrwidth)
+                return;
         }
-
         else
         {
-            int32_t dx = absval(pos.x - itempos.x);
-            int32_t dy = absval(pos.y - itempos.y);
-
-            if (dx <= (width >> 1) && dy <= (height >> 1))
-            {
-                d = sqr(dx) + sqr(dy);
-
-                int32_t j;
-                for (j = 0; j < found && d > dist[j]; j++)
-                    ;
-
-                if (j >= maxnum)
-                    continue;
-
-                if (j != found)
-                    memcpy(&(dist[j+1]), &(dist[j]), min(maxnum - 1, found) - j);
-
-                array[j] = inst->GetMapIndex();
-                dist[j] = d;
-
-                if (found < maxnum)
-                    found++;
-            }
+            if (dx > (width >> 1) || dy > (height >> 1))
+                return;
+            d = static_cast<int32_t>(Square32(dx) + Square32(dy));
         }
-    }
 
-    delete dist;
+        int32_t i = 0;
+        while (i < found && d > dist[i])
+            ++i;
+        if (i >= maxnum)
+            return;
+        const int32_t kept = (std::min)(maxnum - 1, found);
+        for (int32_t k = kept; k > i; --k)
+        {
+            dist[k] = dist[k - 1];
+            array[k] = array[k - 1];
+        }
+        array[i] = inst->GetMapIndex();
+        dist[i] = d;
+        if (found < maxnum)
+            ++found;
+    });
     return found;
 }
 
-TObjectInstance* TMapPane::ObjectInCube(PS3DRect cube, int32_t objset)
+// REVSYNC: 0x00452480 -- the first object of `objset` on `lvl` inside the
+// cube, every face included, in the order the iterator hands them out. It
+// walks that level's loaded sectors that meet the cube's map rect, and their
+// objects inside that rect (iterator 0x0044cf80, flags 0x6e0: loaded
+// sectors, active or not, of one level; the map rect; no inventory) -- not
+// the pane's 3x3 window. A CUBE trigger asks on its owner's level
+// (0x004927b0); the 1998 search walked the window, the player's level.
+TObjectInstance* TMapPane::ObjectInCube(PS3DRect cube, int32_t lvl, int32_t objset)
 {
-    TObjectInstance* in = nullptr;
+    SRect area;
+    area.left   = cube->beg.x;
+    area.top    = cube->beg.y;
+    area.right  = cube->end.x;
+    area.bottom = cube->end.y;
 
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+    for (TMapIterator i(lvl, &area, CHECK_NOINVENT, objset); i; i++)
     {
         if (cube->In(i->Pos()))
             return i;
     }
 
     return nullptr;
-}   
+}
 
+// REVSYNC: OnObject @ 0x00452520 (docs/gameflow/forensics/MAP_INPUT.md §2).
+// First the 3D scene: a mesh shown at retail's probe pixels around the point
+// is the answer as it stands (Locke himself included). Else the map's
+// objects: the screen rect must hold the point; tiles (outside the editor)
+// and meshes are never answers here; the first object found stays unless a
+// later one is always on top, or, while nothing always-on-top is held, shows
+// its own pixel at the point (GetZ); outside the editor an object counts only
+// with a cursor for `with`, or as a pickup. Retail drew the probe into the
+// frame and z-found its software buffers; the port asks the map renderer what
+// the last frame showed (TMapRenderer::Pick), and the point's map-screen
+// position replaces retail's (x + posx, y + posy).
 TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with)
 {
-    bool IsPriorityItem = false;
-    TObjectInstance* on = nullptr;
+    return OnObject(screenx, screeny, with, EPickRead::Exact);
+}
 
-    screenx += posx;
-    screeny += posy;
+TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectInstance* with, EPickRead read)
+{
+    if (!mapview)
+        return nullptr;
 
-    SRect r;
+    // A deterministic run picks from the drawn frame, as retail did: what the
+    // hover and a click see then follows the frames, not the GPU's timing.
+    if (DeterministicRun())
+        read = EPickRead::Drawn;
+
+    TMapRenderer::SPick pick;
+    if (mapview->Pick(screenx, screeny, pick, read) && pick.mesh)
+        return pick.mesh;
+
     SPoint p;
-    p.x = screenx;
-    p.y = screeny;
+    if (!PaneToMapScreen(screenx, screeny, p.x, p.y))
+        return nullptr;
 
-    updatemulti->SetClipRect(screenx, screeny, 1, 1);
-
+    TObjectInstance* on = nullptr;
+    bool priority = false;
     for (TMapIterator i(nullptr, CHECK_NOINVENT); i; i++)
     {
         TObjectInstance* inst = i;
         if (!inst->OnObject(p))
             continue;
-
-        if (inst->IsInInventory() || (!Editor && inst->ObjClass() == OBJCLASS_TILE))
+        if (!Editor && inst->ObjClass() == OBJCLASS_TILE)
+            continue;
+        if (const TObjectImagery* img = inst->GetImagery())
+            if (img->GetHeader() && img->GetHeader()->imageryid == OBJIMAGE_MESH3D)
+                continue;
+        if (on && !inst->AlwaysOnTop() && (priority || !inst->GetZ(pick.frontmost)))
+            continue;
+        if (!Editor && !(!GetDragObj() && inst->IsInventoryItem()) &&
+            inst->CursorType(with) == CURSOR_NONE)
             continue;
 
-        if (!on || inst->AlwaysOnTop() || (!IsPriorityItem && inst->GetZ(updatemulti)))
-        {
-            bool good = true;
-
-            if (!Editor)
-            {
-                if ((GetDragObj() || !inst->IsInventoryItem()) && inst->CursorType(with) == CURSOR_NONE)
-                    good = false;
-            }
-
-            if (good)
-            {
-                on = inst;
-                IsPriorityItem = inst->AlwaysOnTop();
-            }
-        }
+        on = inst;
+        priority = inst->AlwaysOnTop();
     }
 
-    updatemulti->ResetClipRect();
-
     return on;
+}
+
+// Retail's x + posx, y + posy: the scroll origin of the frame that was drawn,
+// which in the port is the map renderer's camera.
+bool TMapPane::PaneToMapScreen(int32_t x, int32_t y, int32_t& mapx, int32_t& mapy) const
+{
+    return mapview && mapview->ScreenToMapScreen(x, y, mapx, mapy);
 }
 
 // Resolve an instance by mapindex. O(1) via the registry; falls back to a
@@ -1832,38 +2085,40 @@ void WalkGridToPos(int32_t x, int32_t y, S3DPoint& pos)
 // General purpose handler for transfer, extract, clear etc
 void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
 {
-    // Sector resolver: try the active 3x3 streaming window first; fall
-    // back to MapManager.CurrentMap()->FindSector for everything outside
-    // that window. The window-first ordering keeps legacy code paths
-    // that expect sectors[][] to win unchanged; the MapManager fallback
-    // covers the new "no streaming" model where the window is empty.
-    auto find_sector = [this](int32_t sx, int32_t sy) -> TSector* {
-        if ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY)
+    // Sector resolver: the walkmaps an object touches are in its own map --
+    // its own sector (which may be one no map holds, e.g. a sector an editor
+    // command loaded on its own) and the loaded sectors of its level. Not
+    // the sector window or the current map: those hold another level's
+    // sectors at the same (sx, sy) whenever the object isn't on the level
+    // being played. (The window borrows from the current map, so for
+    // objects there this is the same lookup.)
+    TSector* const own = oi ? oi->GetSector() : nullptr;
+    const TGameMap* const map = oi ? MapManager.GetCached(oi->GetLevel()) : nullptr;
+    auto find_sector = [own, map](int32_t sx, int32_t sy) -> TSector* {
+        if ((!map || !map->IsTransient()) &&
+            ((uint32_t)sx >= MAXSECTORX || (uint32_t)sy >= MAXSECTORY))
             return nullptr;
-        const bool in_window =
-            sx >= sectorx && sx < sectorx + SECTORWINDOWX &&
-            sy >= sectory && sy < sectory + SECTORWINDOWY;
-        if (in_window)
-            if (TSector* s = sectors[sx - sectorx][sy - sectory])
-                return s;
-        if (TGameMap* m = MapManager.CurrentMap())
-            return m->FindSector(sx, sy);
-        return nullptr;
+        if (own && own->SectorX() == sx && own->SectorY() == sy)
+            return own;
+        return map ? map->FindSector(sx, sy) : nullptr;
     };
 
     // EXTRACT mode also wants to redraw the walkmap rect as part of the
     // clear. Wrap the resolver to capture the sector for the redraw
-    // call, since TGameMap::StampTileWalkmap doesn't know about the
+    // call, since TGameMap::StampWalkmap doesn't know about the
     // pane redraw chrome.
     if (mode == WALK_EXTRACT)
     {
         // Stamp the clear, then walk the affected sectors a second time
         // to redraw the rect. The redraw needs imagery bbox / pos in
         // walkmap-local coords; recompute here once after the stamp.
-        TGameMap::StampTileWalkmap(oi, mode, find_sector);
+        TGameMap::StampWalkmap(oi, mode, find_sector);
 
+        // RedrawWalkmapRect re-stamps the neighbours from the sector window,
+        // which holds the current map's sectors only; redrawing them into
+        // another level's sector would corrupt it.
         TObjectImagery* imagery = oi ? oi->GetImagery() : nullptr;
-        if (imagery)
+        if (imagery && map && map == windowmap.Get())
         {
             int32_t w, l, h;
             imagery->GetWorldBoundBox(oi->GetState(), w, l, h);
@@ -1890,7 +2145,7 @@ void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
         return;
     }
 
-    TGameMap::StampTileWalkmap(oi, mode, find_sector);
+    TGameMap::StampWalkmap(oi, mode, find_sector);
 }
 
 void TMapPane::RedrawWalkmapRect(TObjectInstance* oi, int32_t x, int32_t y, int32_t w, int32_t l, TSector* dsect)
@@ -1966,59 +2221,58 @@ void TMapPane::RedrawWalkmapRect(TObjectInstance* oi, int32_t x, int32_t y, int3
         }
 }
 
-int32_t TMapPane::GetWalkHeight(S3DPoint& pos)
+// REVSYNC: GetWalkHeight @ 0x00452e10 -- the walk cell under pos: 0, 0 is
+// the centre of a walk cell, not its edge, so offset by half a cell.
+int32_t TMapPane::GetWalkHeight(const S3DPoint& pos, int32_t lvl)
 {
-    // because 0, 0 is actually the center of a walk grid, not the edge,
-    // everything has to be offset by half the walk grid size
-
-    int32_t x = pos.x + (GRIDSIZE / 2);
-    int32_t y = pos.y + (GRIDSIZE / 2);
-
-    const int32_t world_sx = x >> SECTORWSHIFT;
-    const int32_t world_sy = y >> SECTORHSHIFT;
-    const int32_t local_x  = (x & (SECTORWIDTH  - 1)) >> WALKMAPSHIFT;
-    const int32_t local_y  = (y & (SECTORHEIGHT - 1)) >> WALKMAPSHIFT;
-
-    const int32_t sx = world_sx - sectorx;
-    const int32_t sy = world_sy - sectory;
-
-    if (sx >= 0 && sx < SECTORWINDOWX && sy >= 0 && sy < SECTORWINDOWY && sectors[sx][sy])
-        return sectors[sx][sy]->ReturnWalkmap(local_x, local_y);
-
-    // Fall back to the canonical sector pool: MapManager owns the
-    // current TGameMap, which holds every loaded sector regardless of
-    // the (legacy) 3x3 streaming window. The window-first lookup
-    // above keeps any code that genuinely depends on sectors[][]
-    // unchanged; everything else routes through here.
-    if (TGameMap* m = MapManager.CurrentMap())
-        if (TSector* sec = m->FindSector(world_sx, world_sy))
-            return sec->ReturnWalkmap(local_x, local_y);
-
-    return 0;
+    return GetWalkGridHeight(lvl, (pos.x + GRIDSIZE / 2) >> WALKMAPSHIFT, (pos.y + GRIDSIZE / 2) >> WALKMAPSHIFT);
 }
 
-int32_t TMapPane::GetWalkGridHeight(int32_t x, int32_t y)
+// Retail looks a cell's sector up among every loaded one by (level, x, y)
+// (0x00499e10); the port keeps a level's sectors in its cached map, the
+// current level's also in the pane's window.
+int32_t TMapPane::GetWalkGridHeight(int32_t lvl, int32_t x, int32_t y)
 {
-    // because 0, 0 is actually the center of a walk grid, not the edge,
-    // everything has to be offset by half the walk grid size
+    if (walkGridSeam)
+        return walkGridSeam(lvl, x, y);
 
     const int32_t world_sx = x >> (SECTORWSHIFT - WALKMAPSHIFT);
     const int32_t world_sy = y >> (SECTORHSHIFT - WALKMAPSHIFT);
     const int32_t wx = x & ((1 << (SECTORWSHIFT - WALKMAPSHIFT)) - 1);
     const int32_t wy = y & ((1 << (SECTORHSHIFT - WALKMAPSHIFT)) - 1);
 
-    const int32_t sx = world_sx - sectorx;
-    const int32_t sy = world_sy - sectory;
+    if (lvl == level)
+    {
+        const int32_t sx = world_sx - sectorx;
+        const int32_t sy = world_sy - sectory;
+        if (sx >= 0 && sx < SECTORWINDOWX && sy >= 0 && sy < SECTORWINDOWY && sectors[sx][sy])
+            return sectors[sx][sy]->ReturnWalkmap(wx, wy);
 
-    if (sx >= 0 && sx < SECTORWINDOWX && sy >= 0 && sy < SECTORWINDOWY && sectors[sx][sy])
-        return sectors[sx][sy]->ReturnWalkmap(wx, wy);
+        // MapManager-canonical fallback (see GetWalkHeight comment).
+        if (TGameMap* m = MapManager.CurrentMap())
+            if (TSector* sec = m->FindSector(world_sx, world_sy))
+                return sec->ReturnWalkmap(wx, wy);
+        return 0;
+    }
 
-    // MapManager-canonical fallback (see GetWalkHeight comment).
-    if (TGameMap* m = MapManager.CurrentMap())
+    if (TGameMap* m = MapManager.GetCached(lvl))
         if (TSector* sec = m->FindSector(world_sx, world_sy))
             return sec->ReturnWalkmap(wx, wy);
-
     return 0;
+}
+
+bool TMapPane::WalkCellKnown(int32_t x, int32_t y)
+{
+    if (walkGridSeam)
+        return true;
+    const int32_t world_sx = x >> (SECTORWSHIFT - WALKMAPSHIFT);
+    const int32_t world_sy = y >> (SECTORHSHIFT - WALKMAPSHIFT);
+    const int32_t sx = world_sx - sectorx;
+    const int32_t sy = world_sy - sectory;
+    if (sx >= 0 && sx < SECTORWINDOWX && sy >= 0 && sy < SECTORWINDOWY && sectors[sx][sy])
+        return true;
+    const TGameMap* m = MapManager.CurrentMap();
+    return m && m->IsLoaded();
 }
 
 // Returns the maximum walk height in the area bounded by 
@@ -2056,125 +2310,58 @@ int32_t TMapPane::GetWalkHeightArea(S3DPoint& pos, int32_t width, int32_t height
 // Returns the minimum delta (fall), and maximum delta (rise) between any two walk grids 
 // within the radius, and also the height at the current position.
 
-#define MAXRADIUS 8
-
-void TMapPane::GetWalkHeightRadius(S3DPoint& pos, int32_t radius, 
-    int32_t &mindelta, int32_t &maxdelta, int32_t &curheight)
+// REVSYNC: GetWalkHeightRadius @ 0x004530a0 -- the height under pos; then,
+// for a radius in (0, 0xf0), every walk cell in the box pos +- radius whose
+// nearest point is within the radius (the distance table, or the squares
+// past it): maxdelta is the largest height step to the cell west or north of
+// it (when that one is in range too), hole is set by a cell of height 0 (no
+// walkmap). A radius whose cells would reach 0x80 is cut to 0x6f. The cells
+// are read from the loaded sectors of level lvl (FindSector 0x00499e10).
+void TMapPane::GetWalkHeightRadius(const S3DPoint& pos, int32_t lvl, int32_t radius, int32_t& maxdelta,
+    int32_t& height, bool& hole)
 {
-    static int32_t heights[MAXRADIUS][MAXRADIUS]; 
-    mindelta = 0;
     maxdelta = 0;
-
-    curheight = GetWalkHeight(pos);
-
-    if (radius <= 0)
+    hole = false;
+    height = GetWalkHeight(pos, lvl);
+    if (radius <= 0 || radius >= 0xf0)
         return;
+    if (((radius + GRIDSIZE - 1) & GRIDMASK) >= 0x80)
+        radius = 0x6f;
 
-    if (((radius + (GRIDSIZE - 1)) >> WALKMAPSHIFT) >= MAXRADIUS)
-        radius = ((MAXRADIUS - 1) << WALKMAPSHIFT) - 1;
+    const int32_t x0 = (pos.x - radius) & GRIDMASK;
+    const int32_t y0 = (pos.y - radius) & GRIDMASK;
+    const int32_t x1 = (pos.x + radius + GRIDSIZE) & GRIDMASK;
+    const int32_t y1 = (pos.y + radius + GRIDSIZE) & GRIDMASK;
 
-    S3DPoint p(0, 0, 0);
-
-    int32_t startx = (pos.x - radius) & (int32_t)GRIDMASK;
-    int32_t starty = (pos.y - radius) & (int32_t)GRIDMASK;
-    int32_t endx =   (pos.x + radius + GRIDSIZE) & (int32_t)GRIDMASK;
-    int32_t endy =   (pos.y + radius + GRIDSIZE) & (int32_t)GRIDMASK;
-
-    mindelta = 1000;
-    maxdelta = -1000;
-
-    for (p.y = starty; p.y <= endy; p.y += GRIDSIZE)
+    // Retail keeps the cells in one static array, eight to a column, which
+    // the larger radii run past; each read still finds the cell this call
+    // wrote, so a grid over the whole box gives the same answers.
+    constexpr int32_t kCells = (2 * 0x70 + 2 * GRIDSIZE) / GRIDSIZE + 1;
+    int32_t cells[kCells][kCells];     // [row][column]; -1 out of range
+    int32_t row = 0;
+    for (int32_t y = y0; y <= y1; y += GRIDSIZE, ++row)
     {
-        for (p.x = startx; p.x <= endx; p.x += GRIDSIZE)
+        int32_t col = 0;
+        for (int32_t x = x0; x <= x1; x += GRIDSIZE, ++col)
         {
-            int32_t x = (p.x - startx) >> WALKMAPSHIFT;
-            int32_t y = (p.y - starty) >> WALKMAPSHIFT;
-
-            int32_t xdelta, ydelta, height;
-            
-            xdelta = ydelta = 0;
-
-          // Test closest corners of walk grids
-            if (p.y <= pos.y)
+            // A cell spans its centre -8..+7: its point nearest pos.
+            const int32_t dx = abs(std::clamp(pos.x, x - GRIDSIZE / 2, x + GRIDSIZE / 2 - 1) - pos.x);
+            const int32_t dy = abs(std::clamp(pos.y, y - GRIDSIZE / 2, y + GRIDSIZE / 2 - 1) - pos.y);
+            const bool inrange = (dx < 256 && dy < 256) ? DistTable[dx][dy] <= radius
+                                                        : dx * dx + dy * dy <= radius * radius;
+            if (!inrange)
             {
-              if (p.x <= pos.x) 
-              {
-                if (dist(p.x + GRIDSIZE / 2 - 1, p.y + GRIDSIZE / 2 - 1, pos.x, pos.y) > radius)
-                {
-                    heights[x][y] = -1;
-                    continue;
-                }
-  
-              // Within radius, now get deltas between this grid and grid to left and above
-              // Deltas will be positive or negative depending on direction from center
-                height = heights[x][y] = GetWalkHeight(p);
-                if (x > 0 && heights[x - 1][y] >= 0)
-                    xdelta = heights[x - 1][y] - height;
-                if (y > 0 && heights[x][y - 1] >= 0)
-                    ydelta = heights[x][y - 1] - height;
-              }
-              else
-              {
-                if (dist(p.x - GRIDSIZE / 2, p.y + GRIDSIZE / 2 - 1, pos.x, pos.y) > radius)
-                {
-                    heights[x][y] = -1;
-                    continue;
-                }
-
-              // Within radius, now get deltas between this grid and grid to left and above
-              // Deltas will be positive or negative depending on direction from center
-                height = heights[x][y] = GetWalkHeight(p);
-                if (x > 0 && heights[x - 1][y] >= 0)
-                    xdelta = height - heights[x - 1][y];
-                if (y > 0 && heights[x][y - 1] >= 0)
-                    ydelta = heights[x][y - 1] - height;
-              }
+                cells[row][col] = -1;
+                continue;
             }
-            else
-            {
-              if (p.x <= pos.x) 
-              {
-                if (dist(p.x + GRIDSIZE / 2 - 1, p.y - GRIDSIZE / 2, pos.x, pos.y) > radius)
-                {
-                    heights[x][y] = -1;
-                    continue;
-                }
-
-              // Within radius, now get deltas between this grid and grid to left and above
-              // Deltas will be positive or negative depending on direction from center
-                height = heights[x][y] = GetWalkHeight(p);
-                if (x > 0 && heights[x - 1][y] >= 0)
-                    xdelta = heights[x - 1][y] - height;
-                if (y > 0 && heights[x][y - 1] >= 0)
-                    ydelta = height - heights[x][y - 1];
-              }
-              else
-              {
-                if (dist(p.x - GRIDSIZE / 2, p.y - GRIDSIZE / 2, pos.x, pos.y) > radius)
-                {
-                    heights[x][y] = -1;
-                    continue;
-                }
-
-              // Within radius, now get deltas between this grid and grid to left and above
-              // Deltas will be positive or negative depending on direction from center
-                height = heights[x][y] = GetWalkHeight(p);
-                if (x > 0 && heights[x - 1][y] >= 0)
-                    xdelta = height - heights[x - 1][y];
-                if (y > 0 && heights[x][y - 1] >= 0)
-                    ydelta = height - heights[x][y - 1];
-              }
-            }
-
-          // Get minimum/maximum deltas
-            if (xdelta > maxdelta)
-                maxdelta = xdelta;
-            else if (xdelta < mindelta)
-                mindelta = xdelta;
-            if (ydelta > maxdelta)
-                maxdelta = ydelta;
-            else if (ydelta < mindelta)
-                mindelta = ydelta;
+            const int32_t h = GetWalkHeight(S3DPoint(x, y, 0), lvl);
+            cells[row][col] = h;
+            if (h == 0)
+                hole = true;
+            if (col > 0 && cells[row][col - 1] >= 0)
+                maxdelta = (std::max)(maxdelta, abs(h - cells[row][col - 1]));
+            if (row > 0 && cells[row - 1][col] >= 0)
+                maxdelta = (std::max)(maxdelta, abs(h - cells[row - 1][col]));
         }
     }
 }
@@ -2200,64 +2387,72 @@ void TMapPane::ClearWalkmaps()
     }
 }
 
-bool TMapPane::LineOfSight(S3DPoint& pos, S3DPoint& to, S3DPoint* obst)
+namespace
 {
-    int32_t sx, sy, sz, ex, ey, ez, dx, dy, dz;
+// 16.16 fixed point as retail's shl / sar: the wrap and the sign's shift are
+// the x86's, not undefined behaviour.
+constexpr int32_t ToFixed(int32_t v) { return static_cast<int32_t>(static_cast<uint32_t>(v) << 16); }
+constexpr int32_t FromFixed(int32_t v) { return v >> 16; }
 
-  // Get starting values in grid coordinates
-    PosToWalkGrid(pos, sx, sy);
-    PosToWalkGrid(to, ex, ey);
-    sz = pos.z;
-    ez = to.z;
+// One fixed-point step along a line `loop` cells long, nudged one unit toward
+// its sign on all but the major axis (0x00453445..0x004534ed).
+constexpr int32_t LineStep(int32_t delta, int32_t loop, bool major)
+{
+    return ToFixed(delta) / loop + (major ? 0 : (delta >= 0 ? 1 : -1));
+}
+}  // namespace
 
-    dx = ex - sx;
-    dy = ey - sy;
-    dz = ez - sz;
+// REVSYNC: TMapPane::LineOfSight @ 0x004533d0 -- a DDA over the walk cells
+// from `from`'s cell to `to`'s, both ends included, the line's height
+// interpolated alongside (MAP_QUERIES.md §1.1). A cell blocks when its
+// level's sector isn't loaded, it has no walkmap (height 0), or its walk
+// height is above the line there.
+bool TMapPane::LineOfSight(const S3DPoint& from, const S3DPoint& to, int32_t lvl, S3DPoint* blockedat,
+    S3DPoint* laststep)
+{
+    if (lineOfSightSeam)
+        return lineOfSightSeam(from, to);
 
-  // Make fixed point increment values for drawing line, and set loop to bigest value   
-    int32_t loop;
-    if (abs(dx) >= abs(dy))
+    const int32_t sx = (from.x + GRIDSIZE / 2) >> WALKMAPSHIFT;
+    const int32_t sy = (from.y + GRIDSIZE / 2) >> WALKMAPSHIFT;
+    int32_t dx = ((to.x + GRIDSIZE / 2) >> WALKMAPSHIFT) - sx;
+    int32_t dy = ((to.y + GRIDSIZE / 2) >> WALKMAPSHIFT) - sy;
+    int32_t dz = to.z - from.z;
+
+    const bool xmajor = abs(dx) >= abs(dy);         // ties go to x
+    const int32_t loop = xmajor ? abs(dx) : abs(dy);
+    if (loop > 0)
     {
-        loop = abs(dx);
-        if (loop > 0)
-        {
-          dx = (dx << 16) / loop;
-          dy = (dy << 16) / loop + ((dy >= 0)?1:-1);  
-          dz = (dz << 16) / loop + ((dz >= 0)?1:-1);
-        }
+        dx = LineStep(dx, loop, xmajor);
+        dy = LineStep(dy, loop, !xmajor);
+        dz = LineStep(dz, loop, false);
     }
-    else
-    {
-        loop = abs(dy);
-        if (loop > 0)
-        {
-          dx = (dx << 16) / loop + ((dx >= 0)?1:-1);
-          dy = (dy << 16) / loop;  
-          dz = (dz << 16) / loop + ((dz >= 0)?1:-1);
-        }
-    }
 
-    int32_t x = sx << 16; 
-    int32_t y = sy << 16;
-    int32_t z = sz << 16;
-
-    for (int32_t c = 0; c <= loop; c++)
+    int32_t x = ToFixed(sx);
+    int32_t y = ToFixed(sy);
+    int32_t z = ToFixed(from.z);
+    for (int32_t c = 0; c <= loop; ++c)
     {
-        int32_t gridheight = GetWalkGridHeight(x >> 16, y >> 16);
-        if (gridheight == 0 || gridheight > (z >> 16))
+        const int32_t h = GetWalkGridHeight(lvl, FromFixed(x), FromFixed(y));
+        if (h == 0 || h > FromFixed(z))
         {
-            if (obst)
+            if (blockedat)
             {
-                WalkGridToPos(x >> 16, y >> 16, *obst);
-                obst->z = z >> 16;
+                WalkGridToPos(FromFixed(x), FromFixed(y), *blockedat);
+                blockedat->z = FromFixed(z);
+            }
+            if (laststep)
+            {
+                laststep->x = FromFixed(x) - FromFixed(x - dx);
+                laststep->y = FromFixed(y) - FromFixed(y - dy);
+                laststep->z = FromFixed(z) - FromFixed(z - dz);
             }
             return false;
-        } 
+        }
         x += dx;
         y += dy;
         z += dz;
     }
-                        
     return true;
 }
 
@@ -2304,8 +2499,14 @@ void TMapPane::DrawDLight()
                  bitmap, DM_ALPHALIGHTEN); //, nullptr, 31 - (dlight.intensity / 8));
 }
 
+// REVSYNC: 0x00453640. Retail adds the gamma ambient offset here, so every
+// area ambient, the map's start value (map init 0x0044d5c0 inlines this
+// with light 10) and the script's ambient command carry it. FadeAmbient
+// (0x00453720) stores its target without it, as retail.
 void TMapPane::SetAmbientLight(int32_t light, bool stopfade)
 {
+    light = (std::max)(0, light + GammaAmbientOffset(GammaLevel));
+
     if (stopfade)
         totambfadeframes = totambfadesteps = 0; // Stop fading
 
@@ -2343,8 +2544,19 @@ void TMapPane::SetAmbientColor(SColor &color, bool stopfade)
 }
 
 // Fades to the given ambient light in 'frame' frames in 'steps' discreet steps
+// REVSYNC: FadeAmbient @ 0x00453720 -- the cross-fade between nearby areas
+// (TArea::Enter 0x0041ba00: same level, within 0x400) and a load into the
+// same room.
+// REVSYNC-DIVERGENCE: retail stores the target as given, without the
+// GammaLevel offset every other ambient setter adds (SetAmbientLight
+// 0x00453640), so each such fade dropped the room's ambient by the offset
+// (+10 at the default level 3: the Keep went from 14 to 4, an orange wash)
+// until a day/night area set it again. Not reproduced: the target gets the
+// offset too (LIGHTING_FIDELITY.md §2.5).
 void TMapPane::FadeAmbient(int32_t light, SColor &color, int32_t frames, int32_t steps)
 {
+    light = (std::max)(0, light + GammaAmbientOffset(GammaLevel));
+
     if (GameSpeed == 5)
         steps = frames; // Do smooth ambient fading for fast computers
 
@@ -2455,139 +2667,95 @@ void TMapPane::UpdateMapPos()
             }
         }
     }
-    else        // Set map position code for regular game
-    {           // --------------------------------------
+    else
+    {
+        // REVSYNC: UpdateMapPos @ 0x004539d0, the game half. The camera moves
+        // toward what it follows -- the centeron object or point, else where
+        // it is -- scrolling smoothly, or jumping when it is told to snap (a
+        // teleport), changes level, is ~1024 units away or isn't scrolling.
+        // Grid scrolling is used only with smooth scrolling off while the
+        // player has control (0x0065d0d0 is PlayScreen +0x5e0, the control
+        // flag). Not ported: a map pane mode (+0x918 == 1) that ignored the
+        // centeron target; its meaning is unknown.
+        prevcenter = center;
 
-        S3DPoint pos, newpos;
-        GetMapPos(newpos);
-        int32_t newlevel = GetMapLevel();
-        static S3DPoint vel(0, 0, 0);
-        static S3DPoint lastpos;
-        static int32_t lastlevel;
-
-      // Regular game uses the contents of the 'centeron' structure to attempt
-      // to center on either a point or an object.  The center on structure is
-      // set by the CenterOn() functions, and can be called from a script.
-
-      // Get what we're supposed to center on
-        if (centeron.flags & CENTERON_OBJ)
+        S3DPoint target = center;
+        int32_t targetlevel = newlevel;
+        if ((centeron.flags & CENTERON_OBJ) && centeron.obj)
         {
-            if (centeron.obj)   // Note: check for validity of this object in Notify()
-            {
-                centeron.obj->GetPos(pos);
-                newlevel = centeron.obj->GetLevel();
-            }
+            target = centeron.obj->Pos();
+            targetlevel = centeron.obj->GetLevel();
         }
         else if (centeron.flags & CENTERON_POS)
         {
-            pos = centeron.pos;
-            newlevel = centeron.level;
-        }
-        else
-        {
-            pos = newpos; // Center on nothing
-            newlevel = GetMapLevel();
+            target = centeron.pos;
+            targetlevel = centeron.level;
         }
 
-      // Smooth out z (average last five z positions)
-        static int32_t zsmoothlist[5];
-        static int32_t zsmoothpos;
-        if (dist(lastpos.x, lastpos.y, pos.x, pos.y) < 32)
+        // Height changes under 9 units (steps, bobbing) don't move the camera.
+        if (absval(lastcamz - target.z) < 9)
+            target.z = lastcamz;
+
+        const bool gridscroll = !SmoothScroll && PlayScreen.IsControlOn();
+        bool jump = gridscroll || targetlevel != newlevel ||
+                    dist(center.x, center.y, target.x, target.y) > 0x3ff ||
+                    !(centeron.flags & CENTERON_SCROLL) || (centeron.flags & CENTERON_SNAP);
+
+        S3DPoint next = target;
+        if (!jump)
         {
-            zsmoothlist[zsmoothpos] = pos.z;
-            pos.z = (zsmoothlist[0] + 
-                     zsmoothlist[1] +
-                     zsmoothlist[2] +
-                     zsmoothlist[3] +    
-                     zsmoothlist[4]) / 5;
-            zsmoothpos++;
-            if (zsmoothpos >= 5)
-                zsmoothpos = 0;
-        }
-        else
-        {
-            zsmoothlist[0] = 
-                zsmoothlist[1] =     
-                zsmoothlist[2] =      
-                zsmoothlist[3] =     
-                zsmoothlist[4] = pos.z;
-            zsmoothpos = 0;
-        }
-
-      // If scrolling, handle scroll velocities to new position (only if scroll on and level is same)
-        if (SmoothScroll && newlevel == GetMapLevel() && (centeron.flags & CENTERON_SCROLL))
-        {
-            S3DPoint newvel;
-
-            int32_t factor = 10;
-            if (ScrollLock)
-                factor = 6;
-
-            newvel.x = (pos.x - center.x) / factor;
-            newvel.y = (pos.y - center.y) / factor;
-            newvel.z = (pos.z - center.z) / factor;
-
-            if (newvel.x > vel.x)
-                vel.x++;
-            else if (newvel.x < vel.x)
-                vel.x--;
-
-            if (newvel.y > vel.y)
-                vel.y++;
-            else if (newvel.y < vel.y)
-                vel.y--;
-
-            if (newvel.z > vel.z)
-                vel.z++;
-            else if (newvel.z < vel.z)
-                vel.z--;
-
-            vel.x = max(-12, min(12, vel.x));
-            vel.y = max(-12, min(12, vel.y));
-            vel.z = max(-12, min(12, vel.z));
-
-            newpos += vel;
-        }
-        else
-        {
-            vel.x = vel.y = vel.z = 0;
-            newpos = pos;   // No scrolling,.. just set pos
-        }
-        
-        if (SmoothScroll)
-            SetMapPos(newpos);
-        else                // Non smooth scrolling, calculate screen grid and set pos
-        {
-            int32_t x, y;
-            WorldToScreen(pos, x, y);
-            x = ScreenGrid(x, MAPGRIDWIDTH);
-            y = ScreenGrid(y - CHARACTER_HEIGHT, MAPGRIDHEIGHT);
-
-            int32_t sx, sy;
-            WorldToScreen(center, sx, sy);
-            sx = ScreenGrid(sx, MAPGRIDWIDTH);
-            sy = ScreenGrid(sy, MAPGRIDHEIGHT);
-
-            x *= MAPGRIDWIDTH;
-            y *= MAPGRIDHEIGHT;
-            ScreenToWorld(x, y, newpos);
-            if (absval(newpos.x - center.x) > 4 || absval(newpos.y - center.y) > 4)
-            //if (x != sx || y != sy)
+            const int32_t factor = ScrollLock ? 6 : 10;
+            const S3DPoint want((target.x - center.x) / factor,
+                                (target.y - center.y) / factor,
+                                (target.z - center.z) / factor);
+            // Retail's test sums signed velocities, so a fast scroll up or
+            // left never jumps.
+            if (want.x + want.y < 0x100)
             {
-                //x *= MAPGRIDWIDTH;
-                //y *= MAPGRIDHEIGHT;
-                //ScreenToWorld(x, y, newpos);
-                SetMapPos(newpos);
-                MapPane.RedrawAll();
+                auto approach = [](int32_t v, int32_t goal) {
+                    v += (goal > v) - (goal < v);
+                    return std::clamp(v, -12, 12);
+                };
+                scrollvel.x = approach(scrollvel.x, want.x);
+                scrollvel.y = approach(scrollvel.y, want.y);
+                scrollvel.z = approach(scrollvel.z, want.z);
+                next = center;
+                next += scrollvel;
+            }
+            else
+                jump = true;
+        }
+        if (jump)
+            scrollvel = S3DPoint(0, 0, 0);
+        lastcamz = target.z;
+
+        if (gridscroll)
+        {
+            // The view moves a screen (less a 64-pixel overlap) at a time, to
+            // the cell the target is in.
+            auto cell = [](int32_t v, int32_t size) {
+                if (absval(v) < size / 2)
+                    return 0;
+                return (v + (v < 0 ? -size / 2 : size / 2)) / size;
+            };
+            const int32_t cellw = MAPPANEWIDTH - 64;
+            const int32_t cellh = MAPPANEHEIGHT - 64;
+            int32_t sx, sy;
+            WorldToScreen(target, sx, sy);
+            S3DPoint snapped;
+            ScreenToWorld(cell(sx, cellw) * cellw, cell(sy - 32, cellh) * cellh, snapped);
+            if (absval(snapped.x - center.x) >= 5 || absval(snapped.y - center.y) >= 5)
+            {
+                SetMapPos(snapped);
+                RedrawAll();
             }
         }
+        else
+            SetMapPos(next);
 
-        SetMapLevel(newlevel);
-
-      // Set Last values
-        lastpos = pos;
-        lastlevel = level;
-    }       
+        SetMapLevel(targetlevel);
+        centeron.flags &= ~CENTERON_SNAP;
+    }
 }
 
 // The pulse function is pretty much the first function that's called in a screen refresh.
@@ -2602,9 +2770,9 @@ void TMapPane::Pulse()
   // Pulse fading ambient values
     PulseFadeAmbient(); 
 
-  // Do next frame for objects except if first frame of screen
-    if (!CurrentScreen->FirstFrame())
-        NextFrameObjects();
+  // REVSYNC: TMapPane::Pulse @ 0x00454390 -- objects pulse then move; their
+  // animation frames advance at the end of the tick (TPlayScreen::Pulse,
+  // retail's screen slot 0x24), not here.
 
   // Pulse objects (does object AI)
     PulseObjects();
@@ -2624,8 +2792,9 @@ void TMapPane::Pulse()
   // Update 3D position
     Update3DScenePos();
 
-  // Update Sectors
-    UpdateSectors();
+  // Borrow the sectors around the player (retail streamed them in here:
+  // UpdateSectors @ 0x00459220; TMapManager loads whole levels in the port)
+    UpdateActiveWindow();
 
   // Leave Pulse with new map position completely set
 }
@@ -3538,6 +3707,51 @@ void TMapPane::DrawUpdateRect(RSRect r, int32_t bgdraw)
         return;
 }
 
+// The static light pass, as the renderer needs it: every light retail's
+// DrawStaticLights would draw over screen rect r (the update rect), in
+// GetUpdateObjs order (REVSYNC: GetUpdateObjs @ 0x0045f800 -- the sector
+// window row by row, each sector's objects in order; a light is in when its
+// light rect meets r), each given its light-table id as it is drawn
+// (TObjectInstance::AcquireLightId, DrawLight 0x00471930). The order decides
+// both which colours take the four ids and, per pixel, which light's colour
+// shows: the last one drawn over it (docs/LIGHTING_FIDELITY.md §2.6).
+//
+// Retail gave an id back when its light's sector left the window
+// (DeleteSector -> OffScreen); the port's map manager keeps sectors past
+// the window, so a light holding an id outside the window gives it back here.
+void TMapPane::GetDrawLights(SRect &r, std::vector<TObjectInstance*> &lights)
+{
+    auto in_window = [this](const TSector* sector) {
+        for (int32_t y = 0; y < SECTORWINDOWY; ++y)
+            for (int32_t x = 0; x < SECTORWINDOWX; ++x)
+                if (sector && sectors[x][y] == sector)
+                    return true;
+        return false;
+    };
+    const auto left = std::remove_if(lightidholders.begin(), lightidholders.end(), [&](const TSafeRef<>& ref) {
+        TObjectInstance* inst = ref.Get();
+        if (!inst)
+            return true;                    // deleted: its destructor gave the id back
+        if (in_window(inst->GetSector()))
+            return false;
+        inst->ReleaseLightId();
+        return true;
+    });
+    lightidholders.erase(left, lightidholders.end());
+
+    lights.clear();
+    for (TMapIterator i(&r, CHECK_RECT|CHECK_LIGHT|CHECK_MOVING|CHECK_INVIS|CHECK_NOINVENT); i; i++)
+    {
+        TObjectInstance* inst = i.Item();
+        if (!inst->IsLight() || inst->GetLightIntensity() == 0)
+            continue;
+        if (inst->GetLightDef()->lightid == -1)
+            lightidholders.push_back(TSafeRef<>(inst));
+        inst->AcquireLightId();
+        lights.push_back(inst);
+    }
+}
+
 void TMapPane::GetUpdateObjs(SRect &r)
 {
     UpdateObjs.Clear();
@@ -3752,50 +3966,126 @@ void TMapPane::AnimateSelectedObjects()
     Display.ResetClipRect();
 }
 
+template <typename Visit>
+void TMapPane::ForEachTickObject(int32_t objset, Visit&& visit)
+{
+    if (tickObjectsSeam)
+    {
+        for (TObjectInstance* inst : tickObjectsSeam(objset))
+            visit(inst, nullptr);
+        return;
+    }
+    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+        visit(i.Item(), &i);
+}
+
+// REVSYNC: TMapPane::NextFrameObjects @ 0x00457ef0 -- the animate set's
+// NextFrame (slot 0x120), last in the tick (screen slot 0x24, 0x004902c0).
 void TMapPane::NextFrameObjects()
 {
     if (NoAnimateObjs)
         return;
 
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, OBJSET_ANIMATE); i; i++)
-    {
-        TObjectInstance* inst = i.Item();
-        inst->NextFrame();
-    }
+    ForEachTickObject(OBJSET_ANIMATE, [](TObjectInstance* inst, TMapIterator*) { inst->NextFrame(); });
 }
 
+// REVSYNC: TMapPane::PulseObjects @ 0x004580f0 -- each object of the pulse
+// set Pulses (slot 0x110), but a killed one (OF_KILL) is taken out of the
+// map: not a player, which keeps its tick (0x0045815b).
 void TMapPane::PulseObjects()
 {
     if (NoPulseObjs)
         return;
 
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, OBJSET_PULSE); i; i++)
-    {
-        if (i->GetFlags() & OF_KILL)
-            i.Nuke();
+    ForEachTickObject(OBJSET_PULSE, [](TObjectInstance* inst, TMapIterator* i) {
+        if ((inst->GetFlags() & OF_KILL) && inst->ObjClass() != OBJCLASS_PLAYER)
+        {
+            if (i)
+                i->Nuke();
+            else
+                removeObjectSeam(inst);
+        }
         else
-            i->Pulse();
-    }
+            inst->Pulse();
+    });
 }
 
+// REVSYNC: TMapPane::MoveObjects @ 0x00458390 -- every object of the moving
+// set Moves (slot 0x114, its bits kept at +0xbc for the next tick's
+// UpdateAction), then every one takes the motion of the frame it is on
+// (SetObjectMotion, slot 0x118).
 void TMapPane::MoveObjects()
 {
     if (NoPulseObjs)
         return;
 
-  // Move objects based on previous frame movement, and results of Pulse()
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, OBJSET_MOVING); i; i++)
-    {
-        i->SetMoveBits(i->Move());  // Call to move object and get blocked/hit bits
-    }
+    ForEachTickObject(OBJSET_MOVING, [](TObjectInstance* inst, TMapIterator*) { inst->SetMoveBits(inst->Move()); });
 
-  // Set next movement for next frame based on current state/frame
-    for (TMapIterator j(nullptr, CHECK_NOINVENT, OBJSET_MOVING); j; j++)
-    {
-        j->SetObjectMotion();       // Call to get imagery/object's next position
-        // NOTE: after SetObjectMotion() is called, any calls to SetNextMove() or
-        // SetMoveAngle() will OVERIDE the movement in the animation!
-    }
+    // NOTE: after SetObjectMotion() is called, any calls to SetNextMove() or
+    // SetMoveAngle() will OVERIDE the movement in the animation!
+    ForEachTickObject(OBJSET_MOVING, [](TObjectInstance* inst, TMapIterator*) { inst->SetObjectMotion(); });
+}
+
+namespace {
+
+// The animate pass's test (0x00458750): the object's screen rect or its
+// animation rect meets r.
+bool MeetsAnimateRect(TObjectInstance* oi, const SRect& r)
+{
+    SRect ir, ar;
+    oi->GetScreenRect(ir);
+    oi->GetAnimRect(ar);
+    return r.Intersects(ir) || r.Intersects(ar);
+}
+
+} // namespace
+
+// REVSYNC: TMapPane::AnimateObjects @ 0x00458750, its usual branch (+0x918
+// clear). Retail anchored the rect at +0x88/+0x8c, the scroll origin the
+// background update publishes (UpdateEdges: the scroll rounded down to the
+// 64-pixel update grid), and grew the pane by 0xc0 on every side. The scroll
+// is SetMapPos's: the view centre's screen point less half the pane, and the
+// pane is the 640x480 screen (docs/LIGHTING_FIDELITY.md F14). The port's map
+// pane has no size of its own (TMapRenderer draws the view), so the rect is
+// built from the centre the last tick set, which is the view the next draw
+// shows, and retail's pane size.
+SRect TMapPane::AnimateRect() const
+{
+    constexpr int32_t kMargin = 0xc0;
+    int32_t centrex = 0, centrey = 0;
+    WorldToScreen(center, centrex, centrey);
+    const int32_t originx = int32_t(uint32_t(centrex - WIDTH / 2) & UPDATEMASKX);
+    const int32_t originy = int32_t(uint32_t(centrey - HEIGHT / 2) & UPDATEMASKY);
+    return SRect(originx - kMargin, originy - kMargin,
+                 originx + WIDTH + kMargin - 1, originy + HEIGHT + kMargin - 1);
+}
+
+// The pass reaches what its iterator hands out (flags 0x29, CHECK_SECTRECT |
+// CHECK_INVIS | CHECK_NOINVENT, over the animate set): the visible animated
+// objects of the window's sectors whose screen rect meets AnimateRect(). It
+// is skipped while NoAnimateObjs (0x006680d8) is set.
+std::optional<bool> TMapPane::AnimatePassOnScreen(TObjectInstance* oi)
+{
+    if (NoAnimateObjs || !oi->IsAnimated() || (oi->GetFlags() & OF_INVISIBLE))
+        return std::nullopt;
+
+    TSector* const sector = oi->GetSector();
+    if (!sector)
+        return std::nullopt;
+
+    const SRect r = AnimateRect();
+    for (const auto& column : sectors)
+        for (TSector* windowsector : column)
+        {
+            if (windowsector != sector)
+                continue;
+            SRect sr;
+            sector->GetMaxScreenRect(sr);
+            if (!r.Intersects(sr))
+                return std::nullopt;
+            return MeetsAnimateRect(oi, r);
+        }
+    return std::nullopt;
 }
 
 void TMapPane::AnimateObjects(bool draw)
@@ -3803,11 +4093,7 @@ void TMapPane::AnimateObjects(bool draw)
     if (NoAnimateObjs)
         return;
 
-    SRect r; // Get area of screen where we should turn on animators
-    r.top    = scrolly - 128;
-    r.left   = scrollx - 64;
-    r.bottom = scrolly + GetHeight() + 128 - 1;
-    r.right  = scrollx + GetWidth() + 64 - 1;
+    SRect r = AnimateRect();     // Get area of screen where we should turn on animators
 
     Display.SetClipRect(MAPPANEX, MAPPANEY, GetWidth(), GetHeight());
 
@@ -3815,11 +4101,7 @@ void TMapPane::AnimateObjects(bool draw)
     {
         TObjectInstance* inst = i.Item();
 
-        SRect ir, ar;
-        inst->GetScreenRect(ir);
-        inst->GetAnimRect(ar);
-
-        bool intersects = r.Intersects(ir) || r.Intersects(ar);
+        const bool intersects = MeetsAnimateRect(inst, r);
 
         if (intersects && !inst->HasAnimator())
             inst->OnScreen();
@@ -3833,217 +4115,117 @@ void TMapPane::AnimateObjects(bool draw)
     Display.ResetClipRect();
 }
 
-// *******************************
-// * Sector Management Functions *
-// *******************************
+// *****************
+// * Sector Window *
+// *****************
 
-void TMapPane::SaveAllSectors()
+// The window borrows sectors from TMapManager's current map (see mappane.h).
+// Loading, saving and freeing sectors is the manager's job: retail's
+// FreeAllSectors / ReloadSectors / SaveAllSectors / DeleteSector and the
+// streaming UpdateSectors are in attic-final:attic/src/mappane_sectors.cpp with the
+// TMapManager operations that replace them.
+
+// REVSYNC: UpdateSectors @ 0x00459220 -- the window is the sectors around
+// the map's center (where the camera looks: normally the player, elsewhere
+// during a scripted pan), on the map's level.
+bool TMapPane::BindCommandMapWindow(int32_t maplevel, const S3DPoint& mapcenter)
 {
-    int32_t sx, sy;
-
-    LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                        // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                        //  BETWEEN THESE TWO FUNCTIONS!!)
-
-    for (sx = 0; sx < SECTORWINDOWX; sx++)
-        for (sy = 0; sy < SECTORWINDOWY; sy++)
-            if (sectors[sx][sy])
-                sectors[sx][sy]->Save();
-
-    UNLOCKSECTORS;       // Allow update system to access sector arrays again
-                         // If lock is called without unlock, system will CRASH!!
+    TGameMap* map = MapManager.CurrentMap();
+    if (!map || map->Level() != maplevel) return false;
+    // Diagnostics do not silently take over a live gameplay window.
+    if (!command_window_borrowed)
+        for (int32_t y = 0; y < SECTORWINDOWY; ++y)
+            for (int32_t x = 0; x < SECTORWINDOWX; ++x)
+                if (sectors[x][y]) return false;
+    center = prevcenter = mapcenter;
+    level = newlevel = maplevel;
+    sectorx = (mapcenter.x >> SECTORWSHIFT) - SECTORWINDOWX / 2;
+    sectory = (mapcenter.y >> SECTORHSHIFT) - SECTORWINDOWY / 2;
+    BindWindow(map); // Use the same safe-reference and unload listener as gameplay.
+    command_window_borrowed = true;
+    return true;
 }
 
-void TMapPane::FreeAllSectors()
+void TMapPane::ReleaseCommandMapWindow()
 {
-    int32_t sx, sy;
-
-    LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                        // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                        //  BETWEEN THESE TWO FUNCTIONS!!)
-
-    // NOTE: We don't need to call the LockSectors() function here because the
-    // update system is turned off by the time we get here
-
-    for (sx = 0; sx < SECTORWINDOWX; sx++)
-        for (sy = 0; sy < SECTORWINDOWY; sy++)
-            if (sectors[sx][sy])
-            {
-                DeleteSector(sectors[sx][sy]);
-                sectors[sx][sy] = nullptr;
-            }
-
-    UNLOCKSECTORS;       // Allow update system to access sector arrays again
-                         // If lock is called without unlock, system will CRASH!!
-}
-
-void TMapPane::ReloadSectors()
-{
-    FreeAllSectors();
-    sectorx += 10000000;
-    sectory += 10000000;
-    RedrawAll();
+    if (command_window_borrowed) ClearWindow();
 }
 
 void TMapPane::UpdateActiveWindow()
 {
-    if (!Player) return;
     TGameMap* map = MapManager.CurrentMap();
     if (!map) return;
 
-    S3DPoint pos;
-    Player->GetPos(pos);
-    const int32_t player_lvl = Player->GetLevel();
-    const int32_t player_sx  = pos.x >> SECTORWSHIFT;
-    const int32_t player_sy  = pos.y >> SECTORHSHIFT;
-
-    // Window origin = player sector minus half-window so the player's
-    // sector ends up at the center cell.
-    const int32_t new_sectorx = player_sx - SECTORWINDOWX / 2;
-    const int32_t new_sectory = player_sy - SECTORWINDOWY / 2;
-
-    if (level == player_lvl && sectorx == new_sectorx && sectory == new_sectory)
+    // The camera has moved to a level that isn't current yet (a teleport):
+    // nothing to borrow until TGameSession::EnterLevel brings it in.
+    if (map->Level() != newlevel)
     {
-        // Already centered correctly. Cells stay valid as long as the
-        // map underneath doesn't change -- TGameMap::Unloaded would
-        // null these out at the renderer too.
+        if (windowmap.Get())
+            ClearWindow();
+        level = newlevel;
         return;
     }
 
-    level    = player_lvl;
+    // Window origin = center's sector minus half the window, so that sector
+    // is the center cell.
+    const int32_t new_sectorx = (center.x >> SECTORWSHIFT) - SECTORWINDOWX / 2;
+    const int32_t new_sectory = (center.y >> SECTORHSHIFT) - SECTORWINDOWY / 2;
+
+    // A load replaces the map even when the center lands in the same sector
+    // cell, so the map is part of the check.
+    if (windowmap.Get() == map && level == newlevel &&
+        sectorx == new_sectorx && sectory == new_sectory)
+        return;
+
+    level    = newlevel;
     sectorx  = new_sectorx;
     sectory  = new_sectory;
+    BindWindow(map);
+}
+
+// Where the camera looks this frame: the previous tick's center, moved
+// `fraction` of the way to this tick's (the center steps at 24 Hz). At the
+// tick that is retail's view: TMapPane::Pulse (0x00454390) takes the pane's
+// current scroll as the frame's origin (+0x78) before the scroll this tick's
+// UpdateMapPos asked for comes in, so retail drew each tick one center behind.
+S3DPoint TMapPane::CameraPos(double fraction) const
+{
+    const double f = std::clamp(fraction, 0.0, 1.0);
+    return S3DPoint(prevcenter.x + (int32_t)std::lround((center.x - prevcenter.x) * f),
+                    prevcenter.y + (int32_t)std::lround((center.y - prevcenter.y) * f),
+                    prevcenter.z + (int32_t)std::lround((center.z - prevcenter.z) * f));
+}
+
+void TMapPane::BindWindow(TGameMap* map)
+{
+    if (windowmap.Get() != map)
+    {
+        ClearWindow();
+        windowmap = map;
+        // The map fires Unloaded before it frees its sectors (gamemap.h), so
+        // the window never holds a sector the map has freed.
+        windowlistener = map->AddListener([this](EGameMapEvent event, TGameMap*) {
+            if (event == EGameMapEvent::Unloaded)
+                ClearWindow();
+        });
+    }
 
     for (int32_t y = 0; y < SECTORWINDOWY; ++y)
         for (int32_t x = 0; x < SECTORWINDOWX; ++x)
             sectors[x][y] = map->FindSector(sectorx + x, sectory + y);
 }
 
-void TMapPane::UpdateSectors()
+void TMapPane::ClearWindow()
 {
-    int32_t x, y;
+    if (TGameMap* map = windowmap.Get(); map && windowlistener)
+        map->RemoveListener(windowlistener);
+    windowlistener = 0;
+    windowmap.Clear();
+    command_window_borrowed = false;
 
-  // Change sector position
-    oldlevel = level;
-    level = newlevel;
-    oldsectorx = sectorx;
-    oldsectory = sectory;
-
-  // account for the character actually being at (sectorx+1, sectory+1)
-    sectorx = (center.x >> SECTORWSHIFT) - 1;
-    sectory = (center.y >> SECTORHSHIFT) - 1;
-
-  // If sector has changed.. reload sectors
-    if (sectorx != oldsectorx || sectory != oldsectory || level != oldlevel || IsDirty())
-    {
-        LOCKSECTORS;        // Prevent update thread from accessing sectors while we change them
-                            // (MAKE SURE UNLOCK IS ALWAYS CALLED.. THERE MUST BE NO RETURN 
-                            //  BETWEEN THESE TWO FUNCTIONS!!)
-
-      // Temporary sectors
-        TSector* newsectors[SECTORWINDOWX][SECTORWINDOWY];
-        memset(newsectors, 0, sizeof(TSector*) * SECTORWINDOWX * SECTORWINDOWY);
-
-      // Delete old sectors
-        int32_t nx, ny;
-        for (x = 0; x < SECTORWINDOWX; x++)
-        {
-            for (y = 0; y < SECTORWINDOWY; y++)
-            {
-                // Offset by one, because sectorx refers to middle sector
-                nx = oldsectorx - sectorx + x;
-                ny = oldsectory - sectory + y;
-
-                // Old sector is out of sector window.. delete it
-                if (level != oldlevel || (uint32_t)nx >= SECTORWINDOWX || (uint32_t)ny >= SECTORWINDOWY)
-                {
-                    if (sectors[x][y])
-                        DeleteSector(sectors[x][y]);
-                    sectors[x][y] = nullptr;
-                }
-                else // Sector still there.. put it in a new position
-                    newsectors[nx][ny] = sectors[x][y];
-            }
-        }
-
-      // Copy new sector list to sector list
-        memcpy(sectors, newsectors, sizeof(TSector*) * SECTORWINDOWX * SECTORWINDOWY);
-
-      // Preload sectors if level changed
-        if (!PreloadSectors)
-            TSector::ClearPreloadSectors();
-        else if (!TSector::InPreloadArea(center, level)) // Reload cache if we're not in cache rect
-        {
-
-          // Get new sector rectangle area
-            SRect r;
-            r.left = center.x - SECTORWIDTH * PreloadSectorSize / 2;
-            r.right = center.x + SECTORWIDTH * PreloadSectorSize / 2;
-            r.top = center.y - SECTORHEIGHT * PreloadSectorSize / 2;
-            r.bottom = center.y + SECTORHEIGHT * PreloadSectorSize / 2;
-
-            if (TextBar.IsOpen() && !TextBar.IsHidden() && CurrentScreen->FrameCount() > 0)
-            {
-                TextBar.Print("Loading Map... Please Wait");
-                TextBar.Draw();
-                TextBar.PutToScreen();
-            }
-
-          // Now reload cache around current pos
-            TSector::LoadPreloadSectors(level, 1, &r); // Don't care if this works or not
-
-            if (TextBar.IsOpen() && !TextBar.IsHidden() && CurrentScreen->FrameCount() > 0)
-            {
-                TextBar.Print("");
-                TextBar.Draw();
-                TextBar.PutToScreen();
-            }
-        }
-
-      // Load new sectors if needed
-        bool loaded = false;
-
-        for (x = 0; x < SECTORWINDOWX; x++)
-        {
-            for (y = 0; y < SECTORWINDOWY; y++)
-            {
-                if (!sectors[x][y])
-                {
-                    if ((uint32_t)(sectorx + x) < MAXSECTORX && (uint32_t)(sectory + y) < MAXSECTORY)
-                    {
-                        sectors[x][y] = TSector::LoadSector(level, sectorx+x, sectory+y);
-                        loaded = true;
-                    }
-                }
-            }
-        }
-
-        if (loaded)
-            TransferAllWalkmaps();
-
-        // Make sure all selected objects are still valid
-        if (Editor)
-            StatusBar.Validate();
-
-        UNLOCKSECTORS;       // Allow update system to access sector arrays again
-                             // If lock is called without unlock, system will CRASH!!
-
-
-      // Now that sectors have changed, attempt to readd player characters to map
-      // if they aren't in it yet.
-      //
-      // Since player characters are OF_NONMAP. They aren't saved or deleted by the
-      // sector system.  When the map changes, we simply go through the list of characters.
-      // and add them into the current map if they aren't in there already.
-
-        for (int32_t player = 0; player < PlayerManager.NumPlayers(); player++)
-        {
-            TPlayer* p = PlayerManager.GetPlayer(player);
-            if (p && !p->GetSector())
-                AddObject(p); // Attempt to add player to current sector area
-        }
-
-    }
+    for (int32_t y = 0; y < SECTORWINDOWY; ++y)
+        for (int32_t x = 0; x < SECTORWINDOWX; ++x)
+            sectors[x][y] = nullptr;
 }
 
 /*void TMapPane::GetPlayerFocus(S3DPoint& pos)
@@ -4072,73 +4254,60 @@ void TMapPane::UpdateSectors()
 // * Main Animation Function *
 // ***************************
 
+// REVSYNC: Animate @ 0x00454450. Retail drew the map here (the objects'
+// animations, then T3DScene::DrawScene, which also picked under the
+// pointer); TMapRenderer::RenderFrame draws it in the port, so what is left
+// is the tail: the cursor for what is under the pointer. The type is worked
+// out on every 8th screen frame (retail's frame counter, one per drawn tick:
+// about three times a second) and kept (+0x12c); the cursor gets it every
+// drawn frame, which retail cleared after drawing (0x0043a480) and the port
+// clears as the next frame begins (BeginCursorFrame). Called by the game
+// mode while the pointer is on the map.
+// Not ported: the mark retail sets on a hovered item's animator (+0x35,
+// purpose unconfirmed).
 void TMapPane::Animate(bool draw)
 {
-    // Draw dynamic light
-    if (!Editor && Player)
-    {
-        S3DPoint pos;
-        Player->GetPos(pos);
-        static int32_t brighttick;
-        brighttick++;
-        S3DPoint lpos = pos;
-        lpos.x += (int32_t)(10.0 * sin((double)brighttick / 7.0));
-        lpos.y += (int32_t)(10.0 * cos((double)brighttick / 7.0));
-        lpos.z += 100 + (int32_t)(20.0 * sin((double)brighttick / 12.0));
-        MapPane.SetDLightPos(lpos);
+    if (!draw || Editor || !mapview)
+        return;
 
-        if (draw)
+    // The map view sits at the screen's top left: the pointer is in its pixels.
+    const int32_t x = cursorx;
+    const int32_t y = cursory;
+    int32_t mapx = 0, mapy = 0;
+    if (!PaneToMapScreen(x, y, mapx, mapy))
+        return;
+
+    // Each frame copies back the ids around the pointer; the hover reads the
+    // latest copy, taken where the pointer was a frame or two ago, rather
+    // than wait on the GPU for this frame's (a click reads it exactly). A
+    // deterministic run reads the drawn frame at once (OnObject), retail's
+    // synchronous pick.
+    mapview->SetPickPoint(x, y);
+
+    const int32_t frame = CurrentScreen ? CurrentScreen->FrameCount() : 0;
+    if ((frame & 7) == 1 && frame != hoverpickframe)
+    {
+        hoverpickframe = frame;
+        hovercursor = CURSOR_NONE;
+        TObjectInstance* on = OnObject(x, y, nullptr, EPickRead::Latest);
+        if (on)
         {
-            SetClipRect();
-            DrawDLight();
+            if (!GetDragObj() && on->IsInventoryItem() && !(on->GetFlags() & OF_INVISIBLE))
+                hovercursor = CURSOR_HAND;          // can pick up while in the map pane
+            else
+                hovercursor = on->CursorType(GetDragObj());
+        }
+        // The pick, in the log when it changes (test runs read it).
+        const int32_t onindex = on ? on->GetMapIndex() : -1;
+        if (onindex != hoverindex)
+        {
+            hoverindex = onindex;
+            log_info("[mapinput] over %s (%d, %d): cursor %d",
+                     on ? on->GetName() : "nothing", x, y, hovercursor);
         }
     }
 
-  // Update zbuffers before animation begins
-    if (draw)
-    {
-        SetClipRect();
-        Scene3D.RefreshZBuffer();
-    }
-
-  // Draw objects being dragged around
-    if (Editor && draw && !mx && !my)
-        AnimateSelectedObjects();
-
-  // Draw object animations
-    AnimateObjects(draw);
-
-    // Draw 3D scene stuff  
-    SetClipRect();
-    if (draw)
-        Scene3D.DrawScene();
-
-  // Update mouse cursor
-    if (draw)
-    {
-        int32_t x = cursorx - GetPosX();
-        int32_t y = cursory - GetPosY();
-
-        if (InPane(x, y))
-        {
-            int32_t type = CURSOR_NONE;
-
-            if (!Editor)
-            {
-                TObjectInstance* inst = OnObject(x, y);
-                if (inst)
-                    if (GetDragObj() == nullptr && inst->IsInventoryItem())
-                        type = CURSOR_HAND;         // can pick up while in the map pane
-                    else
-                        type = inst->CursorType(GetDragObj());
-            }
-
-            SetMouseCornerBitmap(type);
-        }
-    }
-
-  // Release time slice to update thread if necessary
-    UpdateTimeSlice(draw);  
+    SetMouseCornerBitmap(hovercursor);
 }
 
 // ***********************
@@ -4199,129 +4368,80 @@ int32_t TMapPane::GetTotalMoney(TObjectInstance* oi)
     return MoneyHandler(oi, 0);
 }
 
-// Checks new position and transfers object between sectors if object crosses a sector
-// boundry.  Also prevents objects from going outside of loaded sector list
-int32_t TMapPane::CheckPos(TObjectInstance* inst, const S3DPoint& newpos_in, int32_t newlevel)
+// The loaded sector at (level, sx, sy): any sector of a level TMapManager
+// holds (retail's loaded-sector list, 0x00499e10).
+static TSector* LoadedSector(int32_t level, int32_t sx, int32_t sy)
 {
-  // If default, or object is owned by map, set level to object level
-  // Note: only floating NONMAP objects like TPlayer objects can change their level
+    TGameMap* map = MapManager.GetCached(level);
+    return map ? map->FindSector(sx, sy) : nullptr;
+}
+
+// REVSYNC: CheckPos @ 0x00459f50 -- before an object moves to newpos (which
+// this may clamp), keep it in a loaded sector:
+// - a move within its sector changes nothing;
+// - into another loaded sector, it changes sectors;
+// - a player whose destination isn't loaded (another level, not yet
+//   brought in) leaves the map until TGameSession::EnterLevel puts it back;
+// - any other object stays inside its sector.
+// Returns the object's map index, 0 when it left the map, -1 when it can't
+// be placed.
+int32_t TMapPane::CheckPos(TObjectInstance* inst, S3DPoint& newpos, int32_t newlevel)
+{
+    if (inst->IsInInventory())
+        return inst->GetMapIndex();
+
+    // Only non-map objects (players) can change level.
     if (newlevel == -1 || !(inst->Flags() & OF_NONMAP))
         newlevel = inst->GetLevel();
 
-    // Local mutable copy so we can clamp/snap to sector bounds without
-    // mutating the caller's point.
-    S3DPoint newpos = newpos_in;
+    const TGameMap* movement_map = MapManager.GetCached(newlevel);
+    if (!movement_map || !movement_map->IsTransient()) {
+        newpos.x = std::clamp(newpos.x, 0, MAXMAPWIDTH);
+        newpos.y = std::clamp(newpos.y, 0, MAXMAPHEIGHT);
+    }
 
-    // basic bounds checking
-    if (newpos.x < 0)
-        newpos.x = 0;
-    else if (newpos.x >= MAXMAPWIDTH)
-        newpos.x = MAXMAPWIDTH;
-
-    if (newpos.y < 0)
-        newpos.y = 0;
-    else if (newpos.y >= MAXMAPHEIGHT)
-        newpos.y = MAXMAPHEIGHT;
-
-    int32_t newsx = (newpos.x >> SECTORWSHIFT) - sectorx;
-    int32_t newsy = (newpos.y >> SECTORHSHIFT) - sectory;
-
-
-    // Note: Since non map objects are usually characters, it's ok to move them outside of
-    if (inst->Flags() & OF_NONMAP)  // Non map can be outside of current sector list (it's OK)
+    if (!LoadedSector(newlevel, newpos.x >> SECTORWSHIFT, newpos.y >> SECTORHSHIFT))
     {
-
-    // Non map objects (usually characters), can be teleported outside of the current map.
-    // When this happens, they are removed from the current sector list until the DrawBackground()
-    // function reloads a new sector list which contains them again.  Objects outside of sectors
-    // will never get Pulse or Animate calls (to make sure they don't somehow hose the system).
-
-        if (newsx < 0 || newsx >= SECTORWINDOWX || 
-            newsy < 0 || newsy >= SECTORWINDOWY || 
-            newlevel != GetMapLevel())
+        if (inst->Flags() & OF_NONMAP)
         {
-            RemoveObject(inst);
+            TakeOutOfMap(inst);
             return 0;
         }
+
+        // Retail clamps to its sector's span plus one: a move past the far
+        // edge lands on the next sector's first unit, which then fails below.
+        const S3DPoint cur = inst->Pos();
+        const int32_t minx = (cur.x >> SECTORWSHIFT) << SECTORWSHIFT;
+        const int32_t miny = (cur.y >> SECTORHSHIFT) << SECTORHSHIFT;
+        newpos.x = std::clamp(newpos.x, minx, minx + SECTORWIDTH);
+        newpos.y = std::clamp(newpos.y, miny, miny + SECTORHEIGHT);
     }
-    else
+
+    TSector* from = inst->GetSector();
+    TSector* to = LoadedSector(newlevel, newpos.x >> SECTORWSHIFT, newpos.y >> SECTORHSHIFT);
+    if (!from || !to)
+        return -1;
+    if (from != to)
     {
-
-    // For normal objects, make sure new sector is within loaded sectors - 
-    // if not leave it bumping up against the sector boundry
-
-        if (newsx < 0)
-        {
-            newsx = 0;
-            newpos.x = max(sectorx, 0) << SECTORWSHIFT;
-        }
-        else if (newsx >= SECTORWINDOWX)
-        {
-            newsx = SECTORWINDOWX - 1;
-            newpos.x = ((sectorx + newsx) << SECTORWSHIFT) + SECTORWIDTH - 1;
-        }
-
-        if (newsy < 0)
-        {
-            newsy = 0;
-            newpos.y = max(sectory, 0) << SECTORHSHIFT;
-        }
-        else if (newsy >= SECTORWINDOWY)
-        {
-            newsy = SECTORWINDOWY - 1;
-            newpos.y = ((sectory + newsy) << SECTORHSHIFT) + SECTORHEIGHT - 1;
-        }
+        LOCKSECTORS;
+        from->RemoveObject(inst);
+        to->AddObject(inst);
+        UNLOCKSECTORS;
     }
-
-    // Check to see if it changed sectors while moving
-    if (!inst->IsInInventory())
-    {
-        S3DPoint pos;
-        inst->GetPos(pos);
-        int32_t sx = (pos.x >> SECTORWSHIFT) - sectorx;
-        int32_t sy = (pos.y >> SECTORHSHIFT) - sectory;
-
-      // Position is OUT OF RANGE!!!!
-        if ((uint32_t)sx >= SECTORWINDOWX || (uint32_t)sy >= SECTORWINDOWY)
-        {
-            pos.x = (inst->GetSector()->SectorX() << SECTORWSHIFT) + (SECTORWIDTH >> 1);
-            pos.y = (inst->GetSector()->SectorY() << SECTORHSHIFT) + (SECTORHEIGHT >> 1);
-            pos.z = 16;
-            inst->ForcePos(pos);
-            sx = (pos.x >> SECTORWSHIFT) - sectorx;
-            sy = (pos.y >> SECTORHSHIFT) - sectory;
-        }
-
-        if (newsx != sx || newsy != sy)
-            return TransferObject(inst, sx, sy, newsx, newsy);
-    }
-
     return inst->GetMapIndex();
 }
 
-// Moves an object from one sector to another
-int32_t TMapPane::TransferObject(TObjectInstance* inst, int32_t sx, int32_t sy, int32_t newsx, int32_t newsy)
+// The player half of CheckPos: out of its sector with its shadow and
+// animator, but not deleted -- the camera, scripts and the player list keep
+// their references (no N_DELETINGOBJECT, unlike RemoveObject).
+void TMapPane::TakeOutOfMap(TObjectInstance* inst)
 {
-    if (!inst || (uint32_t)sx >= SECTORWINDOWX || (uint32_t)sy >= SECTORWINDOWY)
-        return -1;
-
-    TMapIterator i;
-
-    for ( ; i; i++)
-        if (i == inst)
-            break;
-
-    if (!i)
-        return -1;
-
-    LOCKSECTORS;      // Prevent update system from accessing sectors
-
-    sectors[sx][sy]->RemoveObject(i.SectorIndex());
-    sectors[newsx][newsy]->AddObject(inst);
-
-    UNLOCKSECTORS;    // Allow update system to access sectors again
-
-    return inst->GetMapIndex();
+    if (inst->GetShadow() >= 0)
+        RemoveObject(GetInstance(inst->GetShadow()));
+    if (inst->HasAnimator())
+        inst->FreeAnimator();
+    if (inst->GetSector())
+        RemoveFromSector(inst);
 }
 
 // Walkmap auto-generator for current sector

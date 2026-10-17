@@ -1,0 +1,756 @@
+"""The play loop: modes owned by code, narrow questions to Jev.
+
+    director = Director(host, jev, router, kb, bindings, bundle, milestones,
+                        waypoints=Catalogue(), story='keep', start=0, parent='newgame')
+    director.run(max_ticks=24 * 60 * 20)
+
+Each turn observes the game and picks a mode from the observation
+(docs/playtest/PLAN.md §9):
+
+- wait      loading, a scene, or control off: step time on
+- dialog    choices are up: Jev picks one for the objective; a digit key
+- combat    an enemy is on Locke: the tactician (combat.py)
+- explore   control is Locke's: walk somewhere useful (walk.py), use what
+            is there
+- dead      the death screen: end the session (or reload, later)
+- unknown   a screen with no state: the router looks at the frame
+
+The milestone list (a story) gives the objective; a milestone is done when
+its check holds, and a milestone marked for saving quick-saves and adds the
+slot to the waypoint catalogue (waypoints.py) as the next point sessions
+can play from. Everything the director does goes to the host as input, so
+the session's recording replays it.
+
+The bundle keeps the whole session for finding bugs (timeline.py renders
+it): every observation (observations.jsonl), every decision and what it was
+based on (director.jsonl, and Jev's states, questions and answers in
+session.rvlog), every input and check line (session.rvrec), frames every
+two seconds of game time and at every notable moment (frames/), and the
+host's own logs (logs/, at the end).
+"""
+from __future__ import annotations
+
+import json
+import math
+import shutil
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable
+
+from combat import DIRECTIONS, Tactician, distance
+from host import Host, HostError
+from inputs import Bindings, InputState, Plan, chord
+from rec import BUTTON_RIGHT
+from jev import Choice, Jev, Router, tool
+from knowledge import Knowledge
+from nav import DEFAULT_RADIUS, LevelMaps, farthest_clear
+from walk import CLICK_HEIGHT, USE_REACH, Destination, Walker, WalkGrid, game_distance, in_rect
+from waypoints import Catalogue, Waypoint, story_states, wrong_states
+from grind import Grounds, Site
+from world import Place, World
+
+ENGAGE_RADIUS = 500                  # a living enemy this close means a fight
+WALKGRID_RADIUS = 480
+STUCK_LEGS = 3                       # stalls on one spot that make it a dead end
+IDLE_LEGS = 8                        # legs walked without getting 100 nearer that make it one too
+DEAD_ENDS_BEFORE_LOOKING = 5         # dead ends with no progress before the router looks at the screen
+LOOT_CLASSES = {'item', 'weapon', 'armor', 'food', 'potion', 'money', 'scroll', 'talisman', 'key', 'ammo',
+                'rangedweapon', 'tool', 'lightsource', 'invcontainer', 'mapscroll'}
+LOOT_RADIUS = 250                    # loose items this near are picked up before hunting on (a drop lands within ~48)
+LOOT_TRIES = 2                       # clicks on one item before it's left lying
+LOOT_WAIT = 24 * 6                   # ticks a pickup may take: the walk to it, then the pickup
+SITE_REACH = 300                     # this near a site's centre is at it
+ROAM_LEGS = 6                        # walks round a quiet site before moving on to the next
+PURSUIT_STALE = 12                   # closing-in steps without getting 24 nearer before an enemy is out of reach
+IGNORE_UNREACHABLE = 24 * 60         # ticks an enemy Locke can't get to is left alone
+WIDE_WALKGRID_RADIUS = 2400          # once per stop, when the way to it isn't in the map yet
+DIGITS = '123456'
+# Each direction straight after its opposite, so calibrating ends where it began.
+CALIBRATION_ORDER = tuple(DIRECTIONS[i + offset] for i in range(4) for offset in (0, 4))
+# Where to click a person, from the feet: the body, head, feet and either side.
+CLICK_SPOTS = ((0, -30), (0, -45), (0, -15), (-12, -30), (12, -30), (0, -60), (-20, -45), (20, -45), (0, 0))
+HOVER_TICKS = 2                      # a frame drawn with the pointer there, so its pick is the pointer's
+
+
+@dataclass
+class Milestone:
+    name: str
+    objective: str                   # what Jev is told to make progress on
+    done: Callable[[dict, 'Director'], bool]
+    save: bool = False
+    goal: str | None = None          # an object to travel to (instance name): code finds the way
+    expect: dict[str, int] = field(default_factory=dict)   # story variables its save must hold
+    activity: str = 'story'          # 'grind': with no enemy near, hunt (PLAN.md §14) rather than explore
+
+
+@dataclass
+class Director:
+    host: Host
+    jev: Jev
+    router: Router
+    kb: Knowledge
+    bindings: Bindings
+    bundle: Path
+    milestones: list[Milestone]
+    waypoints: Catalogue | None = None
+    story: str = ''                  # the milestone list's name, for waypoints
+    start: int = 0                   # milestones already done where the session starts
+    parent: str = 'newgame'          # the waypoint the session starts from
+    game: str = 'port'
+    frame_every: int = 48            # ticks between kept frames
+    world: World | None = None       # where things are and where exits lead (world.py)
+    watch: Path | None = None        # where a watcher's page reads state.json (watch.py)
+    state: InputState = field(default_factory=InputState)
+    log: list[dict] = field(default_factory=list)
+    messages: list[str] = field(default_factory=list)
+    choices_taken: dict[str, set[str]] = field(default_factory=dict)
+    talked: set[str] = field(default_factory=set)              # people Locke has talked to (names)
+    equip_tried: set[int] = field(default_factory=set)         # pack slots right-clicked to equip
+    exit_tries: dict[str, int] = field(default_factory=dict)   # uses of an exit that left Locke where he was
+    blocked_exits: set[str] = field(default_factory=set)       # exits that wouldn't take him: explore instead
+    stuck: int = 0                                             # stalls in a row at one spot while travelling
+    stuck_at: list | None = None
+    dead_ends: int = 0                                         # dead ends since Locke last got nearer
+    wide_looks: set = field(default_factory=set)               # (level, stop) a wide walk grid was fetched for
+    no_walkgrid: bool = False                                  # the host offers no walk grid (an older emulator host)
+    best_gap: float = math.inf                                 # the nearest he has been to the next stop
+    idle_legs: int = 0                                         # travel legs since he last got nearer
+    travel_stop: str = ''                                      # the stop those are measured against
+    style: str = 'mixed'                                       # grinding: 'hands', 'weapon' or 'mixed' (PLAN.md §14)
+    grounds: dict = field(default_factory=dict)                # level -> Grounds, surveyed when first hunted on
+    site: Site | None = None                                   # the hunting site now being worked
+    site_legs: int = 0                                         # quiet walks at it
+    loot_tries: dict = field(default_factory=dict)             # object id -> clicks on it
+    pursuit: dict = field(default_factory=dict)                # enemy id -> (nearest Locke got, steps since)
+    unreachable: dict = field(default_factory=dict)            # enemy id -> tick until which it's left alone
+
+    def __post_init__(self) -> None:
+        self.walker = Walker(self.jev, self.bindings, under=self.object_under, run=True)
+        self.maps = LevelMaps()                                 # walk heights seen so far, per level
+        self.tactician = Tactician(self.jev, self.kb, self.bindings, messages=self.messages)
+        self.current = self.start
+        self.created: list[tuple[Waypoint, int]] = []           # waypoints made, and the tick of their mark
+        self.last_frame = -self.frame_every
+        self.shown = ('', '')                                   # the caption: mode, text
+        if self.watch:
+            self.watch.mkdir(parents=True, exist_ok=True)
+
+    # -- the loop --
+    @property
+    def milestone(self) -> Milestone | None:
+        return self.milestones[self.current] if self.current < len(self.milestones) else None
+
+    def run(self, max_ticks: int) -> dict:
+        self.survey()
+        while self.host.tick < max_ticks and self.milestone:
+            obs = self.observe()
+            self.jev.ledger.context['t'] = self.router.ledger.context['t'] = self.host.tick
+            self.messages += obs.get('messages', [])
+            self.walker.memory.note(obs)
+            if self.milestone.done(obs, self):
+                self._reached(obs)
+                continue
+            if self.equip(obs):
+                continue
+            mode = self.mode(obs)
+            self.note('mode', mode=mode)
+            getattr(self, mode)(obs)
+            self.publish()
+            if mode == 'dead':
+                break
+        return {'tick': self.host.tick, 'reached': [m.name for m in self.milestones[self.start:self.current]],
+                'waypoints': [str(w.dir) for w, _ in self.created], 'spend': self.jev.ledger.summary()}
+
+    def observe(self, frame: bool = False, walkgrid: int | None = None) -> dict:
+        """An observation, logged (all of them: the gameplay log), with a
+        frame when one is due. The walk grid, when asked for, is used but
+        not logged: it is large and the map's, not the session's."""
+        due = frame or self.host.tick - self.last_frame >= self.frame_every
+        path = self.bundle / 'frames' / f't{self.host.tick:07d}.png' if due else None
+        if path:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self.last_frame = self.host.tick
+        if walkgrid is not None and self.no_walkgrid:
+            walkgrid = None
+        try:
+            obs = self.host.observe(objects=800, frame=path, walkgrid=walkgrid)
+        except HostError as error:
+            if walkgrid is None or 'walkgrid' not in str(error):
+                raise
+            self.no_walkgrid = True                             # this host has none: walk without it
+            self.note('no walkgrid', host=str(error))
+            obs = self.host.observe(objects=800, frame=path)
+        logged = {k: v for k, v in obs.items() if k != 'walkgrid'}
+        with (self.bundle / 'observations.jsonl').open('a', encoding='utf-8') as f:
+            f.write(json.dumps(logged, separators=(',', ':')) + '\n')
+        return obs
+
+    def mode(self, obs: dict) -> str:
+        screen = obs.get('screen')
+        if screen == 'death':
+            return 'dead'
+        if screen in ('loading', 'movie'):
+            return 'wait'
+        if (obs.get('dialog') or {}).get('choices'):
+            return 'dialog'
+        if screen != 'play':
+            return 'unknown'
+        if not obs.get('control', True):
+            return 'wait'
+        if self.threats(obs):
+            return 'combat'
+        if self.milestone.activity == 'grind':
+            return 'loot' if self.loose_items(obs) else 'hunt'
+        return 'explore'
+
+    def threats(self, obs: dict) -> list[dict]:
+        """Living enemies near enough to fight. Locke squares up to them
+        rather than waiting to be attacked: in the Keep, Rahul stands in his
+        fighting stance and only strikes once Locke closes."""
+        player = obs['player']
+        return [o for o in obs.get('objects', [])
+                if o.get('class') == 'character' and o.get('enemy') and (o.get('health') or [1])[0] > 0
+                and distance(o['pos'], player['pos']) < ENGAGE_RADIUS
+                and self.unreachable.get(o['id'], 0) <= self.host.tick]
+
+    # -- equipment --
+    def equip(self, obs: dict) -> bool:
+        """Wear and wield what the pack holds for an empty equipment slot:
+        right-click it, as a player does (PLAYER_INPUT.md §6: the item goes
+        to its own slot). One item a turn, each slot tried once, and only
+        while control is Locke's and no enemy is close enough to strike."""
+        player = obs.get('player') or {}
+        if not obs.get('control') or obs.get('screen') != 'play' or (obs.get('dialog') or {}).get('choices'):
+            return False
+        if any(distance(o['pos'], player['pos']) < 160 for o in self.threats(obs)):
+            return False
+        worn = {int(k) for k in (player.get('equipped') or {})}
+        for item in player.get('pack') or []:
+            if self.style == 'hands' and item.get('class') in ('weapon', 'rangedweapon'):
+                continue                                     # barehanded: Hands grows only from fists
+            if (item.get('eqslot', -1) >= 0 and item['eqslot'] not in worn and item.get('screen')
+                    and item['slot'] not in self.equip_tried):
+                self.equip_tried.add(item['slot'])
+                self.caption('equip', f"putting on {item['name']}")
+                plan = Plan(self.state)
+                end = plan.click(0, *item['screen'], button=BUTTON_RIGHT)
+                self.host.step(plan.ticks(end + 4), plan.events())
+                self.state = plan.state
+                after = self.observe()['player'].get('equipped') or {}
+                self.note('equip', item=item['name'], eqslot=item['eqslot'],
+                          worn=str(item['eqslot']) in after)
+                return True
+        return False
+
+    # -- modes --
+    def wait(self, obs: dict) -> None:
+        self.caption('watching', 'the scene plays' if not obs.get('control', True) else 'loading')
+        self.host.step(12)
+
+    def dialog(self, obs: dict) -> None:
+        dialog = obs['dialog']
+        choices = dialog['choices'][:len(DIGITS)]
+        if dialog.get('speaker'):
+            self.talked.add(dialog['speaker'])
+        asked = self.choices_taken.setdefault(dialog.get('speaker', '') + '|' + '|'.join(choices), set())
+        options = {DIGITS[i]: text + (' (already chosen before)' if DIGITS[i] in asked else '')
+                   for i, text in enumerate(choices)}
+        state = {'objective': self.milestone.objective, 'speaker': dialog.get('speaker'),
+                 'recent_lines': self.messages[-6:]}
+        pick = self.jev.ask(state, tag='dialog', reply=Choice(
+            'Which reply should Locke give to `speaker` to make progress on `objective`? A reply already '
+            'chosen before leads back to what was heard.', options))['reply']
+        asked.add(pick.choice)
+        text = choices[int(pick.choice) - 1]
+        self.caption('dialog', f'reply {pick.choice}: "{text}" ({pick.confidence:.2f})')
+        self.note('dialog', speaker=dialog.get('speaker'), choice=pick.choice, text=text)
+        self.press(chord(pick.choice), then=24)
+
+    def combat(self, obs: dict) -> None:
+        if obs['player'].get('mode') != 'combat':
+            self.press(self.bindings['CombatMode'], then=6)
+            return
+        if not self.tactician.steps:
+            self.calibrate()
+            return
+        if not self.tactician.history:
+            self.observe(frame=True)                                 # the first contact of a fight
+        self.tactician.ignore = {i for i, until in self.unreachable.items() if until > self.host.tick}
+        tactic = self.tactician.decide(obs)
+        if not tactic:
+            self.host.step(6)
+            return
+        self.pursue(tactic, self.tactician.assess(obs))
+        plan = Plan(self.state)
+        ticks = self.tactician.plan(tactic, obs, plan)
+        s = self.tactician.assess(obs)
+        self.caption('combat', f"{tactic.name.replace(':', ' ')} against {s.target.get('type') or s.target.get('name')} "
+                               f"({s.phase.word}, {s.reach}) - {tactic.reason} {tactic.confidence:.2f}")
+        self.note('tactic', tactic=tactic.name, reason=tactic.reason, confidence=round(tactic.confidence, 2))
+        self.host.step(plan.ticks(ticks), plan.events())
+        self.state = plan.state
+
+    def pursue(self, tactic, s) -> None:
+        """Closing in on an enemy that gets no nearer (across water, behind
+        a wall, up a ledge) ends the chase: it's left alone for a while, so
+        the fight ends and Locke gets on."""
+        if tactic.name != 'close_in':
+            self.pursuit.pop(s.target['id'], None)
+            return
+        best, stale = self.pursuit.get(s.target['id'], (math.inf, 0))
+        best, stale = (s.d, 0) if s.d < best - 24 else (best, stale + 1)
+        self.pursuit[s.target['id']] = (best, stale)
+        if stale >= PURSUIT_STALE:
+            self.unreachable[s.target['id']] = self.host.tick + IGNORE_UNREACHABLE
+            self.pursuit.pop(s.target['id'])
+            self.note('out of reach', enemy=s.target.get('name') or s.target.get('type'), id=s.target['id'],
+                      distance=round(s.d))
+
+    # -- grinding (PLAN.md §14) --
+    def survey(self) -> None:
+        """Before play, when the story grinds: the hunting sites of Locke's
+        level (decoding every sector of a level takes seconds, which
+        mid-session would look like the game had stopped)."""
+        if not self.world or not any(m.activity == 'grind' for m in self.milestones[self.start:]):
+            return
+        level = self.host.observe(objects=0).get('player', {}).get('level')
+        if level is not None and level not in self.grounds:
+            self.caption('grind', 'surveying the hunting grounds')
+            self.grounds[level] = Grounds.survey(self.world, self.kb, level)
+            self.note('survey', level=level, sites=len(self.grounds[level].sites))
+
+    def loose_items(self, obs: dict) -> list[dict]:
+        """Items lying near Locke, nearest first, that a click might still
+        pick up: a dead monster's drop, gold, anything left on the floor."""
+        pos = obs['player']['pos']
+        return sorted((o for o in obs.get('objects', [])
+                       if o.get('class') in LOOT_CLASSES and o.get('screen')
+                       and self.loot_tries.get(o['id'], 0) < LOOT_TRIES
+                       and game_distance(o['pos'], pos) <= LOOT_RADIUS),
+                      key=lambda o: game_distance(o['pos'], pos))
+
+    def loot(self, obs: dict) -> None:
+        """Pick up the nearest loose item: a click on it walks Locke to it
+        and takes it (TMapPane::MouseClick: Goto with the object, then
+        Pickup 0x004cfef0), done when it's gone from the floor."""
+        if obs['player'].get('mode') == 'combat':
+            self.press(self.bindings['CombatMode'], then=6)
+            return
+        item = self.loose_items(obs)[0]
+        self.loot_tries[item['id']] = self.loot_tries.get(item['id'], 0) + 1
+        spot = self.clickable(item)
+        if not spot:
+            self.note('loot', item=item.get('name') or item.get('type'), result='not clickable')
+            return
+        self.caption('loot', f"picking up {item.get('name') or item.get('type')}")
+        plan = Plan(self.state)
+        end = plan.click(0, *spot)
+        self.host.step(plan.ticks(end), plan.events())
+        self.state = plan.state
+        waited, taken = 0, False
+        while waited < LOOT_WAIT and not taken:
+            self.host.step(6)
+            waited += 6
+            after = self.observe()
+            taken = all(o['id'] != item['id'] for o in after.get('objects', []))
+        self.note('loot', item=item.get('name') or item.get('type'), result='taken' if taken else 'left')
+
+    def hunt(self, obs: dict) -> None:
+        """No enemy near: go to the best hunting site for Locke's level and
+        style, and roam it until something hostile shows (the fight is the
+        combat mode's); a site quiet for ROAM_LEGS walks is left for its
+        generators to restock while the next is worked."""
+        player = obs['player']
+        if player.get('mode') == 'combat':
+            self.press(self.bindings['CombatMode'], then=6)
+            return
+        level = player.get('level', 0)
+        if level not in self.grounds and self.world:
+            self.caption('grind', 'surveying the hunting grounds')
+            self.grounds[level] = Grounds.survey(self.world, self.kb, level)
+        grounds = self.grounds.get(level)
+        locke_level = (player.get('xp') or [1])[0]
+        if self.site is None or self.site.level != level:
+            self.site = grounds.next(player['pos'], locke_level, self.style, self.host.tick) if grounds else None
+            self.site_legs = 0
+            if self.site:
+                self.note('site', centre=list(self.site.centre), monsters=self.site.words(),
+                          score=round(grounds.score(self.site, locke_level, self.style), 2))
+        if self.site is None:
+            self.explore(obs)                                   # nowhere known to hunt on this level
+            return
+        place = Place(level, self.site.centre, 'hunting ground', '', 'SITE')
+        if game_distance(player['pos'], self.site.centre) > SITE_REACH:
+            if not self.travel(obs, place):
+                self.explore(obs)
+            return
+        self.site_legs += 1
+        if self.site_legs > ROAM_LEGS:
+            grounds.visited(self.site, self.host.tick)
+            self.note('site done', centre=list(self.site.centre))
+            self.site = None
+            return
+        self.explore(obs)                                       # roam round it
+
+    def explore(self, obs: dict) -> None:
+        if obs['player'].get('mode') == 'combat':                    # a click in combat attacks
+            self.press(self.bindings['CombatMode'], then=6)
+            return
+        if self.milestone.goal and self.world and self.travel(obs, self.milestone.goal):
+            return
+        full = self.observe(walkgrid=WALKGRID_RADIUS)
+        grid = WalkGrid(full['walkgrid']) if full.get('walkgrid') else None
+        candidates = self.walker.destinations(self.host, full, grid)
+        if not candidates:
+            self.unknown(full, why='no destination in view')
+            return
+        dest = self.walker.choose(self.milestone.objective, full, candidates)
+        self.caption('explore', f'walking to {dest.words}')
+        result, _, self.state = self.walker.walk(self.host, self.state, dest, observe=self.observe)
+        self.note('walk', to=dest.key, words=dest.words, result=result)
+        if result == 'talked':
+            self.talked.add(dest.name)
+        if result != 'arrived':
+            self.observe(frame=True)
+
+    def travel(self, obs: dict, goal: str | Place) -> bool:
+        """One leg toward `goal`, an object's name or a place: find it (in
+        view, else in the map data), route through the exits that get
+        there, then use or talk to the next stop once in reach, or walk the
+        path toward it. False when there is no way to tell where to go, so
+        exploring takes over."""
+        player = obs['player']
+        level, pos = player.get('level'), player['pos']
+        named = {(o.get('name') or '').lower(): o for o in obs.get('objects', [])}
+        if isinstance(goal, Place):
+            place, goal = goal, goal.name
+        elif live := named.get(goal.lower()):
+            place = Place(level, tuple(live['pos']), goal, live.get('type', ''), live.get('class', ''))
+        else:
+            places = self.world.find(goal)
+            place = next((p for p in places if p.level == level), places[0] if places else None)
+        if not place:
+            return False
+        route = self.world.route(level, pos, place)
+        if route is None:
+            return False
+        stop_name, stop_pos = (route[0].name, route[0].pos) if route else (goal, place.pos)
+        if route and route[0].name.lower() in self.blocked_exits:
+            return False                                             # that exit wouldn't open: explore instead
+        if stop_name != self.travel_stop:                      # a new stop: progress is measured afresh
+            self.travel_stop, self.best_gap, self.idle_legs, self.dead_ends = stop_name, math.inf, 0, 0
+        stop = named.get(stop_name.lower())
+        words = f"'{stop_name}'" + (f", on the way to '{goal}'" if route else '')
+        if stop and stop.get('screen') and game_distance(stop['pos'], pos) <= USE_REACH:
+            person = stop.get('class') == 'character'
+            spot = self.clickable(stop)
+            if not spot:
+                # nothing of it to click from here (Locke stands in front): step to its side
+                return self.step_aside(obs, stop)
+            self.caption('travel', ('talking to ' if person else 'using ') + words)
+            dest = Destination(f"use:{stop['id']}", words, spot, None, stop['id'], use=True,
+                               name=stop_name, person=person)
+            result, after, self.state = self.walker.walk(self.host, self.state, dest, observe=self.observe)
+            if person:
+                result = 'talked' if self.conversation_follows() else 'no answer'
+                if result == 'talked':
+                    self.talked.add(stop_name)
+            self.note('travel', to=stop_name, goal=goal, result=result)
+            if person:
+                return True
+            if distance(after['player']['pos'], pos) < 2 and after['player'].get('level') == level:
+                tries = self.exit_tries[stop_name.lower()] = self.exit_tries.get(stop_name.lower(), 0) + 1
+                if tries >= 3:
+                    self.blocked_exits.add(stop_name.lower())        # locked, or a script's turn first
+            return True
+        full = self.observe(walkgrid=WALKGRID_RADIUS)
+        if not full.get('walkgrid'):
+            return False
+        grid = WalkGrid(full['walkgrid'])
+        self.maps.merge(level, grid)
+        radius = player.get('radius') or DEFAULT_RADIUS
+        path = self.maps.plan(level, pos, stop_pos, radius)
+        if path and game_distance(path[-1], stop_pos) > USE_REACH and (level, tuple(stop_pos)) not in self.wide_looks:
+            # the way isn't in the map yet: look wider once (the host holds the whole level)
+            self.wide_looks.add((level, tuple(stop_pos)))
+            wide = self.observe(walkgrid=WIDE_WALKGRID_RADIUS)
+            if wide.get('walkgrid'):
+                self.maps.merge(level, WalkGrid(wide['walkgrid']))
+                path = self.maps.plan(level, pos, stop_pos, radius)
+        if len(path) < 2 or distance(path[-1], pos) < 32:
+            # nowhere new to go on the map seen so far: mark it, and let exploring take a turn
+            self.maps.dead_end(level, pos)
+            self.note('dead end', at=list(pos[:2]), toward=stop_name, why='no way on the known map')
+            return False
+        # the game takes a click's point at Locke's height + 50, so aim there
+        shown = dict(zip(path, self.host.project([[x, y, pos[2] + CLICK_HEIGHT] for x, y in path])))
+        field_rect = full.get('playfield', self.walker.playfield)
+        point = farthest_clear(grid, pos, path, lambda p: bool(shown[p][0]) and shown[p][1]
+                               and in_rect(shown[p][0], field_rect))
+        if not point:
+            return False
+        self.caption('travel', f'walking toward {words}')
+        dest = Destination(f'nav:{point[0]}:{point[1]}', f'toward {words}', tuple(shown[point][0]), (*point, pos[2]))
+        result, after, self.state = self.walker.walk(self.host, self.state, dest, observe=self.observe)
+        self.note('travel', to=stop_name, goal=goal, result=result, point=list(point))
+        here = after['player']['pos']
+        gap = distance(here, stop_pos)
+        if gap < self.best_gap - 100:
+            self.best_gap, self.dead_ends, self.idle_legs = gap, 0, 0   # getting closer: the dead ends did their job
+        else:
+            self.idle_legs += 1
+        if result in ('stalled', 'refused'):
+            self.stuck = (self.stuck + 1) if self.stuck_at and distance(here, self.stuck_at) < 24 else 1
+            self.stuck_at = here
+        else:
+            self.stuck = 0
+        # Stalling on one spot, or walking without getting nearer (shuttling
+        # between two points), makes where he stands a dead end.
+        if self.stuck >= STUCK_LEGS or self.idle_legs >= IDLE_LEGS:
+            self.stuck = self.idle_legs = 0
+            self.maps.dead_end(level, here)
+            self.dead_ends += 1
+            self.note('dead end', at=list(here[:2]), toward=stop_name)
+            if self.dead_ends >= DEAD_ENDS_BEFORE_LOOKING:      # no nearer after these: a look at the screen
+                self.dead_ends = 0
+                self.unknown(after, why=f"Locke can't find the way toward {words}; pick a point on "
+                                        f"open ground, stairs or a door to click that leads on")
+        return result != 'refused'
+
+    def clickable(self, obj: dict) -> tuple[int, int] | None:
+        """A screen point that the game's own pick resolves to `obj` and
+        that reaches the world: its body, head and feet in turn. The
+        object's screen position is where its feet are; Locke, a wall or
+        bars may cover that, and a click then lands on whatever is on top.
+        A host that can't pick an arbitrary point (retail: its pick draws a
+        frame) is asked as a player finds out: the pointer goes there for a
+        tick and the observation's `cursor` names what is under it."""
+        fx, fy = obj['screen']
+        for dx, dy in CLICK_SPOTS:
+            x, y = fx + dx, fy + dy
+            if 0 <= x < 640 and 0 <= y < 480 and self.object_under(x, y) == obj['id']:
+                return x, y
+        return None
+
+    def object_under(self, x: int, y: int) -> int | None | bool:
+        """What a left click at (x, y) acts on: an object's id, None for
+        the ground, False when the click doesn't reach the world. The
+        host's pick says when it can; else the pointer goes there."""
+        picked = self.host.pick(x, y)
+        if not picked.get('world', True):
+            return False
+        return picked['object'] if 'object' in picked else self.hover(x, y)
+
+    def hover(self, x: int, y: int) -> int | None:
+        """Put the pointer at (x, y) for a tick: the object under it then,
+        by the observation's `cursor` (None: nothing, or a host without it)."""
+        plan = Plan(self.state)
+        plan.move(0, x, y)
+        self.host.step(plan.ticks(HOVER_TICKS), plan.events())
+        self.state = plan.state
+        return self.host.observe(objects=0).get('cursor')
+
+    def step_aside(self, obs: dict, obj: dict) -> bool:
+        """Walk a few steps to the side of `obj`, so it isn't behind Locke."""
+        pos, at = obs['player']['pos'], obj['pos']
+        d = max(1.0, distance(pos, at))
+        side = (at[0] + (at[1] - pos[1]) / d * 70, at[1] - (at[0] - pos[0]) / d * 70)
+        (shown, reaches), = self.host.project([[side[0], side[1], pos[2] + CLICK_HEIGHT]])
+        if not shown or not reaches:
+            return False
+        self.caption('travel', f"stepping aside to reach '{obj.get('name')}'")
+        dest = Destination('aside', 'aside', tuple(shown), (round(side[0]), round(side[1]), pos[2]))
+        result, _, self.state = self.walker.walk(self.host, self.state, dest, observe=self.observe)
+        self.note('step aside', of=obj.get('name'), result=result)
+        return result != 'refused'
+
+    def conversation_follows(self, within: int = 72) -> bool:
+        """After a click on a person: does a conversation start (a dialog up,
+        a line of speech, or a scene that takes control) within `within` ticks?"""
+        waited = 0
+        while waited < within:
+            obs = self.observe()
+            self.messages += obs.get('messages', [])
+            if obs.get('screen') == 'dialog' or (obs.get('dialog') or {}).get('choices') \
+                    or (obs.get('dialog') or {}).get('text') or not obs.get('control', True):
+                return True
+            self.host.step(12)
+            waited += 12
+        return False
+
+    def dead(self, obs: dict) -> None:
+        self.observe(frame=True)
+        self.host.mark('death')
+        self.note('dead')
+
+    def unknown(self, obs: dict, why: str = 'a screen the director has no state for') -> None:
+        self.caption('looking', f'{why}: asking the router')
+        self.observe(frame=True)
+        frame = self.bundle / 'frames' / f't{self.host.tick:07d}.png'
+        reply = self.router.ask(
+            f'This is the 1999 PC game Revenant, 640x480. The player character is Locke. Objective: '
+            f'{self.milestone.objective}. Situation: {why}. Choose one action with a tool.',
+            images=[frame], tag='unknown', tool_choice='required',
+            tools=[tool('click', 'Left-click a screen point', {'x': {'type': 'integer'}, 'y': {'type': 'integer'}},
+                        ['x', 'y']),
+                   tool('press', 'Press a key (a Windows key name such as RETURN, ESCAPE, C, 1)',
+                        {'key': {'type': 'string'}}, ['key']),
+                   tool('wait', 'Let the game run', {'seconds': {'type': 'number'}}, ['seconds'])])
+        call = reply.tool_calls[0] if reply.tool_calls else None
+        self.note('router', why=why, call=vars(call) if call else None, said=reply.content[:300])
+        plan = Plan(self.state)
+        if call and call.name == 'click':
+            end = plan.click(0, int(call.arguments['x']) % 640, int(call.arguments['y']) % 480)
+            self.host.step(plan.ticks(end + 12), plan.events())
+        elif call and call.name == 'press':
+            try:
+                end = plan.press(0, chord(str(call.arguments['key'])))
+            except ValueError:
+                end = 0
+            self.host.step(plan.ticks(end + 12), plan.events())
+        else:
+            seconds = float((call.arguments if call else {}).get('seconds', 2))
+            self.host.step(max(1, min(240, round(seconds * 24))))
+        self.state = plan.state
+
+    def calibrate(self, hold: int = 3) -> None:
+        """Measure where each direction control steps Locke in the world:
+        a short step with each, opposites in turn, so he ends near where he
+        began. The tactician then steers by world vectors, which works as
+        well for an enemy off the screen. A control that didn't move him
+        (the first press can go to turning him) is tried again at the end."""
+        steps: dict[str, tuple[float, float]] = {}
+        for name in [*CALIBRATION_ORDER, *CALIBRATION_ORDER]:
+            if name in steps:
+                continue
+            before = self.observe()['player']['pos']
+            self.press(self.bindings[name], then=hold)
+            after = self.observe()['player']['pos']
+            if (after[0], after[1]) != (before[0], before[1]):
+                steps[name] = (after[0] - before[0], after[1] - before[1])
+        self.tactician.steps = steps
+        self.note('calibrated', steps={k: list(v) for k, v in steps.items()})
+
+    # -- milestones and waypoints --
+    def _reached(self, obs: dict) -> None:
+        milestone = self.milestone
+        self.caption('milestone', milestone.name)
+        self.observe(frame=True)
+        self.host.mark('milestone', name=milestone.name)
+        self.note('milestone', name=milestone.name)
+        if milestone.save and self.waypoints:
+            try:
+                self.press(self.bindings['QuickSave'], then=48)
+                exported = self.host.export_slot('@last', self.bundle / 'exports' / str(self.host.tick))
+                wrong = wrong_states(story_states(Path(exported['path'])), milestone.expect)
+                if wrong:                                    # kept as evidence, never played from
+                    self.note('save suspect', name=milestone.name, states=wrong)
+                waypoint = self.waypoints.add(
+                    self.game, milestone.name, self.story, self.current + 1, self.parent, exported['path'],
+                    obs=obs, build=self.host.info.get('build'), tick=self.host.tick,
+                    slot_name=exported['slot'], retired=f'story states {wrong}' if wrong else '')
+                self.host.mark('saved', waypoint=waypoint.dir.name, slot=exported['slot'])
+                self.created.append((waypoint, self.host.tick))
+                self.parent = waypoint.name
+                self.note('waypoint', name=milestone.name, path=str(waypoint.dir), slot=exported['slot'])
+            except (HostError, KeyError) as error:
+                self.note('save failed', error=str(error))
+        self.current += 1
+
+    # -- watching --
+    def caption(self, mode: str, text: str) -> None:
+        """What the director is doing, for a person watching: drawn by the
+        host over its window, and in the watch page's state."""
+        if (mode, text) == self.shown:
+            return
+        self.shown = (mode, text)
+        if self.host.capable('caption'):
+            self.host.request('caption', text=f'{mode}: {text}')
+        self.publish()
+
+    def publish(self) -> None:
+        if not self.watch:
+            return
+        state = {'game': self.game, 'tick': self.host.tick, 'mode': self.shown[0], 'caption': self.shown[1],
+                 'objective': self.milestone.objective if self.milestone else 'done',
+                 'milestones': [m.name for m in self.milestones], 'current': self.current,
+                 'spend': self.jev.ledger.summary()}
+        temporary = self.watch / 'state.json.tmp'
+        temporary.write_text(json.dumps(state))
+        temporary.replace(self.watch / 'state.json')
+
+    # -- helpers --
+    def press(self, keys, then: int = 0) -> None:
+        plan = Plan(self.state)
+        end = plan.press(0, keys)
+        self.host.step(plan.ticks(end + then), plan.events())
+        self.state = plan.state
+
+    def note(self, kind: str, **fields) -> None:
+        entry = {'t': self.host.tick, 'kind': kind, **fields}
+        self.log.append(entry)
+        with (self.bundle / 'director.jsonl').open('a', encoding='utf-8') as f:
+            f.write(json.dumps(entry) + '\n')
+
+
+# ---- checks for milestones -----------------------------------------------------
+
+def message_seen(text: str) -> Callable[[dict, Director], bool]:
+    lowered = text.lower()
+    return lambda obs, d: any(lowered in m.lower() for m in d.messages)
+
+
+def control_on(obs: dict, d: Director) -> bool:
+    return bool(obs.get('control')) and obs.get('screen') == 'play' and not (obs.get('dialog') or {}).get('choices')
+
+
+def character_dead(name: str) -> Callable[[dict, Director], bool]:
+    def check(obs: dict, d: Director) -> bool:
+        o = next((o for o in obs.get('objects', []) if (o.get('name') or '').lower() == name.lower()), None)
+        return o is not None and (o.get('health') or [1])[0] <= 0
+    return check
+
+
+def after_scene(check: Callable[[dict, Director], bool], settle: int = 48,
+                give_up: int = 24 * 60) -> Callable[[dict, Director], bool]:
+    """`check`, then the scene it sets off: done once `check` has held and
+    a scene (control off) has played and given control back for `settle`
+    ticks, or `give_up` ticks after `check` first held when no scene comes.
+    A waypoint saved there is past the scene, which also keeps saves out of
+    the half-settled moment just after a death (FINDINGS.md F1)."""
+    seen = {'since': None, 'off': False, 'on_since': None}
+
+    def done(obs: dict, d: Director) -> bool:
+        if seen['since'] is None:
+            if not check(obs, d):
+                return False
+            seen['since'] = d.host.tick
+        if not obs.get('control'):
+            seen['off'], seen['on_since'] = True, None
+            return False
+        if seen['on_since'] is None:
+            seen['on_since'] = d.host.tick
+        if seen['off'] and d.host.tick - seen['on_since'] >= settle:
+            return True
+        return d.host.tick - seen['since'] >= give_up
+    return done
+
+
+def talked_to(name: str) -> Callable[[dict, Director], bool]:
+    """Locke has talked to someone whose name contains `name` (instance
+    names carry suffixes: RandK, SardokR)."""
+    lowered = name.lower()
+    return lambda obs, d: any(lowered in who.lower() for who in d.talked)
+
+
+def level_is(level: int) -> Callable[[dict, Director], bool]:
+    return lambda obs, d: obs.get('player', {}).get('level') == level
+
+
+def every(*checks: Callable[[dict, Director], bool]) -> Callable[[dict, Director], bool]:
+    return lambda obs, d: all(check(obs, d) for check in checks)
+
+
+def near(pos: tuple[int, int], within: int = 200) -> Callable[[dict, Director], bool]:
+    return lambda obs, d: math.hypot(obs['player']['pos'][0] - pos[0], obs['player']['pos'][1] - pos[1]) <= within

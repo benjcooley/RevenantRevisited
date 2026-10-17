@@ -27,7 +27,7 @@ class TArrowWall : public TTrap
     void Init();
 
     virtual bool Use(TObjectInstance* user, int32_t with);
-    virtual int32_t CursorType(TObjectInstance* with = nullptr) { return CURSOR_NONE; }
+    int32_t CursorType(TObjectInstance* with = nullptr) override { return CURSOR_NONE; }
 
     virtual void Pulse();
 

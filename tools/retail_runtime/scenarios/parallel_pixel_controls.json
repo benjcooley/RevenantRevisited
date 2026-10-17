@@ -1,0 +1,42 @@
+{
+  "sessions": [
+    {
+      "name": "flame-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": {
+        "name": "retail-original",
+        "build_id": "retail-original-pixel-controls",
+        "executable": "../../../recon/retail_asm/baseline/Revenant.rebuilt.exe",
+        "executable_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+        "baseline_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+        "patch_manifest": {"kind": "unchanged-baseline"}
+      },
+      "setup": [{"op": "create_effect", "id": "fx", "type": "flame"}]
+    },
+    {
+      "name": "ripple-agent",
+      "runner": "../controls.py",
+      "pass_build_record": true,
+      "build": {
+        "name": "retail-original",
+        "build_id": "retail-original-pixel-controls",
+        "executable": "../../../recon/retail_asm/baseline/Revenant.rebuilt.exe",
+        "executable_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+        "baseline_sha256": "28bec27387bf53a553da320dd4883d00ff5bcc5a5f3d2658cca8e8ed586372b5",
+        "patch_manifest": {"kind": "unchanged-baseline"}
+      },
+      "setup": [{"op": "create_effect", "id": "fx", "type": "ripple_no_splash", "params": {"length": 4}}]
+    }
+  ],
+  "jobs": [
+    {"session": "flame-agent", "name": "flame-tick3", "scenario": {"operations": [
+      {"op": "advance_ticks", "id": "fx", "ticks": 3},
+      {"op": "capture", "id": "fx", "kind": "pixels", "output": "frame.png", "depth_output": "frame.depth-u16"}
+    ]}},
+    {"session": "ripple-agent", "name": "ripple-tick3", "scenario": {"operations": [
+      {"op": "advance_ticks", "id": "fx", "ticks": 3},
+      {"op": "capture", "id": "fx", "kind": "pixels", "output": "frame.png", "depth_output": "frame.depth-u16"}
+    ]}}
+  ]
+}

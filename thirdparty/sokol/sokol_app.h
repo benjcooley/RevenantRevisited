@@ -1500,6 +1500,7 @@ typedef struct sapp_desc {
     bool alpha;                         // whether the framebuffer should have an alpha channel (ignored on some platforms)
     bool hidden;                        // [RevenantRevisited] if true, skip makeKeyAndOrderFront so the NSWindow never appears on screen (macOS only); paired with our --headless CLI flag for snap-only test runs
     bool no_dock_icon;                  // [RevenantRevisited] if true, set NSApplicationActivationPolicyAccessory so the app gets no Dock icon (paired with hidden=true)
+    bool timer_frames;                  // [RevenantRevisited] if true, frames come from a run-loop timer in the common modes (as for hidden), so they go on while AppKit tracks the mouse in a modal loop (a title-bar click, a window drag) (macOS only)
     const char* window_title;           // the window title as UTF-8 encoded string
     bool enable_clipboard;              // enable clipboard access, default is false
     int clipboard_size;                 // max size of clipboard content in bytes
@@ -2200,6 +2201,7 @@ _SOKOL_PRIVATE double _sapp_timing_get_avg(_sapp_timing_t* t) {
 @end
 #if defined(SOKOL_METAL)
     @interface _sapp_macos_view : MTKView
+    - (void)headlessTimerFired:(id)sender;
     @end
 #elif defined(SOKOL_GLCORE33)
     @interface _sapp_macos_view : NSOpenGLView
@@ -3616,7 +3618,24 @@ _SOKOL_PRIVATE void _sapp_macos_set_icon(const sapp_icon_desc* icon_desc, int nu
 _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     _sapp_frame();
     if (_sapp.quit_requested || _sapp.quit_ordered) {
-        [_sapp.macos.window performClose:nil];
+        if (_sapp.desc.hidden) {
+            /* [RevenantRevisited] A hidden capture window may be borderless,
+               so performClose: can do nothing. The headless hide shim also
+               suppresses termination after the last window closes. Honor the
+               normal cancellable quit event, then terminate through NSApp so
+               applicationWillTerminate still runs the cleanup callback. */
+            if (!_sapp.quit_ordered) {
+                _sapp_macos_app_event(SAPP_EVENTTYPE_QUIT_REQUESTED);
+                if (_sapp.quit_requested) {
+                    _sapp.quit_ordered = true;
+                }
+            }
+            if (_sapp.quit_ordered) {
+                [NSApp terminate:nil];
+            }
+        } else {
+            [_sapp.macos.window performClose:nil];
+        }
     }
 }
 
@@ -3671,6 +3690,27 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
         _sapp.macos.window.contentView = _sapp.macos.view;
         [_sapp.macos.window makeFirstResponder:_sapp.macos.view];
         _sapp.macos.view.layer.magnificationFilter = kCAFilterNearest;
+        if (_sapp.desc.hidden || _sapp.desc.timer_frames) {
+            /* [RevenantRevisited] A hidden (headless) run paces its own
+               frames. MTKView draws from the display's refresh, which stops
+               while the display sleeps, so a headless run sat at its first
+               frame for as long as the Mac's display was off. A run-loop
+               timer keeps ticking; it draws explicitly (paused view).
+               timer_frames does the same for a shown window: in the common
+               modes the timer also fires inside AppKit's modal mouse
+               tracking (a title-bar click), which MTKView's own drawing
+               doesn't, so a session driven from frames never stalls. */
+            _sapp.macos.view.paused = YES;
+            _sapp.macos.view.enableSetNeedsDisplay = NO;
+            const NSInteger headless_fps = (max_fps > 0 ? max_fps : 60) / _sapp.swap_interval;
+            NSTimer* timer_obj = [NSTimer timerWithTimeInterval:1.0 / (double)headless_fps
+                target:_sapp.macos.view
+                selector:@selector(headlessTimerFired:)
+                userInfo:nil
+                repeats:YES];
+            [[NSRunLoop currentRunLoop] addTimer:timer_obj forMode:NSRunLoopCommonModes];
+            timer_obj = nil;
+        }
     #elif defined(SOKOL_GLCORE33)
         NSOpenGLPixelFormatAttribute attrs[32];
         int i = 0;
@@ -3792,6 +3832,21 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
     }
 }
 
+/* [RevenantRevisited] hidden: sokol quits by closing its window and letting
+   AppKit terminate the app once the last window is gone. AppKit does not do
+   that for a window that was never on screen (it never asks
+   applicationShouldTerminateAfterLastWindowClosed:), so with desc.hidden a
+   quit request would close the window and leave the app running. Terminate
+   explicitly instead; applicationWillTerminate: then runs the usual cleanup.
+   Deferred to the next run-loop pass so the window finishes closing before
+   cleanup releases it. */
+- (void)windowWillClose:(NSNotification*)notification {
+    _SOKOL_UNUSED(notification);
+    if (_sapp.desc.hidden) {
+        [NSApp performSelector:@selector(terminate:) withObject:nil afterDelay:0.0];
+    }
+}
+
 - (void)windowDidResize:(NSNotification*)notification {
     _SOKOL_UNUSED(notification);
     _sapp_macos_update_dimensions();
@@ -3888,6 +3943,12 @@ _SOKOL_PRIVATE void _sapp_macos_frame(void) {
 @end
 
 @implementation _sapp_macos_view
+#if defined(SOKOL_METAL)
+- (void)headlessTimerFired:(id)sender {
+    _SOKOL_UNUSED(sender);
+    [self draw];
+}
+#endif
 #if defined(SOKOL_GLCORE33)
 /* NOTE: this is a hack/fix when the initial window size has been clipped by
     macOS because it didn't fit on the screen, in that case the

@@ -14,6 +14,10 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <memory>
+
+#include <array>
+#include <memory>
 
 // *************************************************************************
 // * TObjectImagery/TImageryBuilder - Represents the imagery for an object *
@@ -191,8 +195,11 @@ class TObjectImagery : public TAsset
         // Draws unlit imagery to background
     virtual void DrawLit(TObjectInstance* oi, TSurface* surface) {}
         // Draws lit imagery to background
-    virtual bool GetZ(TObjectInstance* oi, TSurface* surface) { return false; }
-        // Find first uncliped portion of zbuffer
+    virtual bool GetZ(TObjectInstance* oi, const TObjectInstance* frontmost) { return false; }
+        // True when the object's own pixel is what the frame shows at the pick
+        // point. `frontmost` is the object the map renderer drew there (its id
+        // buffer); retail z-found the still in the frame's z-buffer inside a
+        // 1x1 clip at the point (docs/gameflow/forensics/MAP_INPUT.md §2.3)
     virtual void DrawSelected(TObjectInstance* oi, TSurface* surface) { }
         // Causes image to draw selection (hilighting) around itself
     virtual void DrawLight(TObjectInstance* oi, TSurface* surface) {}
@@ -230,6 +237,9 @@ class TObjectImagery : public TAsset
       // states as the state names would then not be unique.  The closest to but not
       // above way of specifying percentages in the name ensures that each state name IS
       // unique.
+    bool HasState(const char *name) const;
+      // Whether any state is called 'name', a "##:" frequency prefix aside. Unlike
+      // FindState it never rolls a random percent.
     virtual int32_t FindTransitionState(const char *from, const char *to, int32_t pcnt = -1) const;
       // Returns state number for transition state matching "<from> to <to>".  The
       // 'pcnt' value specifies the 'pcnt' used to find a random state (see above).  If 
@@ -452,12 +462,17 @@ class TObjectAnimator : public TObjectComponent
 
     virtual void ResetState();
       // Restart the current state
+    bool IsComplete() const { return complete; }
     virtual void SetComplete(bool comp) { complete = comp; }
       // The animation is complete (set to false when ResetState() caled and true when anim is done)
     virtual void SetNewState(bool newst) { newstate = newst; }
       // The this is a new state (set to true when ResetState() is called, and false after first frame)
-    virtual void Pulse() {}
-      // Called during each timer Pulse() to update animaton.
+    virtual void Pulse();
+      // Called during each timer Pulse() to update animaton. The base steps
+      // the landing pulse and any toss (retail 0x00445b20)
+    virtual void ShowNumber(int32_t /*amount*/, int32_t /*x*/, int32_t /*y*/, uint32_t /*rgb*/) {}
+      // Float `amount` up from the map-screen point (x, y), in 0xRRGGBB: a
+      // character's animator shows it (TCharAnimator); others ignore it
     virtual void Animate(bool draw);
       // Animates object
 
@@ -468,4 +483,36 @@ class TObjectAnimator : public TObjectComponent
 
     void ClearPrevState() { state = prevstate = -1; }
       // Clears previous state (prevents interpolation)
+
+    // REVSYNC: the toss record (retail +0x38, 0x150 bytes): the object
+    // thrown from one point to land at another, stepped a tick at a time,
+    // with the last kHistory poses kept for the trail
+    // (docs/gameflow/forensics/DEATH_LOOT.md §4).
+    struct SToss
+    {
+        static constexpr int32_t kHistory = 5;
+        struct SVec { double x = 0.0, y = 0.0, z = 0.0; };
+        SVec vel;                                   // +0x00
+        SVec spin;                                  // +0x18: radians a tick
+        std::array<SVec, kHistory> pos{};           // +0x30: now, then older
+        std::array<SVec, kHistory> angle{};         // +0xa8
+        S3DPoint from;                              // +0x120
+        S3DPoint to;                                // +0x12c: to.z is the floor
+        double gravity = 1.5;                       // +0x138
+        int32_t countdown = -1;                     // +0x140: ticks left once settled
+    };
+    void Toss(const S3DPoint& from, S3DPoint to, int32_t countdown = -1, bool still = false);
+      // REVSYNC: 0x00445ef0 -- throw the object from `from` to `to` (still:
+      // no flight, it waits at the target). The object stands at the target
+      // from now on; the flight is drawn by an animator that reads the record
+    [[nodiscard]] const SToss* GetToss() const { return toss.get(); }
+    [[nodiscard]] int32_t LandingPulse() const { return landpulse; }
+      // 0..6 for the ticks after a toss lands (retail +0x34)
+
+  protected:
+    void StepToss();
+
+    std::unique_ptr<SToss> toss;
+    int8_t landpulse = 0;       // +0x34
+    int8_t landpulsestep = 0;   // +0x35: 1 rising, -1 falling
 };

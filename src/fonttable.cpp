@@ -6,12 +6,19 @@
 
 #include "fonttable.h"
 
+#include "logging.h"
+
 #include "parse.h"
 #include "resource.h"
 #include "revutils.h"
 
 #include <stdio.h>
 #include <string.h>
+
+#include <iterator>
+#include <string>
+#include <unordered_set>
+#include <vector>
 
 TFontTable* FontTable = nullptr;
 
@@ -90,6 +97,69 @@ TFont* TFontTable::Bitmap(const char* nm)
 {
     TGenericFont* f = Font(nm);
     return f ? f->primary : nullptr;
+}
+
+namespace {
+
+// GDI's metrics for each FONT.DEF WINFONT. Retail makes them with
+// CreateFontA(+size): a cell height, which GDI maps to the largest em size
+// whose cell, from the face's VDMX table, fits it ("Arial" 12: a 9 px em, 9
+// above the baseline and 3 below), and lays text out with the face's widths
+// at that size (hinted, hdmx, where the face has them). Generated from the
+// Windows faces by the HUD emulator (gdi_metrics.py), whose text layout the
+// A/B compares with the port's.
+struct SGdiMetrics
+{
+    const char* face;
+    int32_t height;
+    bool bold;
+    SGdiFontCell cell;
+    uint8_t widths[0xe0];
+};
+constexpr SGdiMetrics kGdiMetrics[] = {
+#include "gdimetrics.inc"
+};
+
+const SGdiFontCell* GdiCellFor(const TGenericFont& f)
+{
+    static std::vector<SGdiFontCell> cells = [] {
+        std::vector<SGdiFontCell> all;
+        for (const SGdiMetrics& m : kGdiMetrics)
+            all.push_back({ m.cell.ppem, m.cell.ascent, m.cell.descent, m.widths });
+        return all;
+    }();
+    for (size_t i = 0; i < std::size(kGdiMetrics); ++i)
+        if (!stricmp(kGdiMetrics[i].face, f.facename) && kGdiMetrics[i].height == f.height
+            && kGdiMetrics[i].bold == f.bold)
+            return &cells[i];
+    return nullptr;
+}
+
+}  // namespace
+
+// A WINFONT draws through its metric-compatible open face
+// (project-ui-text-rendering) in GDI's cell for it; a face and size the cell
+// table doesn't know draws at its FONT.DEF size as a pixel height. No bold or
+// italic files ship, so those styles draw regular.
+const SFontAtlas* TFontTable::Atlas(const char* nm)
+{
+    const TGenericFont* f = nm ? FindFont(nm) : nullptr;
+    if (!f)
+        return nullptr;
+    if (f->type != FONT_WINFONT)
+        return BuildFontAtlas(f->primary, f->name);
+    const char* file = !stricmp(f->facename, "Times New Roman")
+                     ? "Tinos-Regular.ttf"
+                     : "Arimo-Regular.ttf";
+    // The label the A/B matches against retail's CreateFontA arguments.
+    char face[64];
+    snprintf(face, sizeof(face), "%s %d%s", f->facename, f->height, f->bold ? " bold" : "");
+    if (const SGdiFontCell* cell = GdiCellFor(*f))
+        return BuildTTFAtlas(TTFFilePath(file).c_str(), *cell, face);
+    static std::unordered_set<std::string> warned;
+    if (warned.insert(f->name).second)
+        log_warn("[font] no GDI cell for \"%s\" (%s): drawn at %d px", f->name, face, f->height);
+    return BuildTTFAtlas(TTFFilePath(file).c_str(), f->height, face);
 }
 
 TFont* TFontTable::LoadAtom(const char* resname)

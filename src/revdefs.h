@@ -12,12 +12,16 @@
 
 // Game directories
 #define BASEMAPDIR "map"
-#define CURMAPDIR "curmap"
 
 // Screen size and color depth defines
 #define WIDTH  640
 #define HEIGHT 480
 #define BPP    16
+
+// Multiplayer: retail's network game is not ported (cooperative
+// multiplayer may come later). While 0 the main menu's Multiplayer word,
+// painted into its backdrop, is not a button.
+#define MULTIPLAYER 0
 
 // math defines
 #define M_PI (3.141592654)
@@ -138,6 +142,14 @@
 #define INVITEMSY           2
 #define MAXINVITEMS         (INVITEMSX * INVITEMSY)
 
+// Retail inventory slot numbers (TObjectInstance::AddToInventory 0x0046f3d0,
+// TPlayer::Equip 0x005199b0): carried items, then the 11 equipment slots
+// (0x100 + EQ_*), then the belt (0x10b + n). One inventory holds all three.
+constexpr int kInvSlotLastCarried = 0xfe;
+constexpr int kInvSlotEquipFirst  = 0x100;
+constexpr int kInvSlotBeltFirst   = 0x10b;
+constexpr int kInvSlotLast        = 0x115;
+
 // Multipane position and size
 #define MULTIPANEX      459
 #define MULTIPANEY      346
@@ -156,13 +168,6 @@
 #define MULTICTRLPANEWIDTH  72
 #define MULTICTRLPANEHEIGHT 142
 
-// Quick spell buttons
-#define QUICKSPELLX         2
-#define QUICKSPELLY         343
-#define QUICKSPELLWIDTH     437
-#define QUICKSPELLHEIGHT    35
-#define NUMQUICKSPELLS      4
-
 // Inventory position and size
 #define INVENTORYPANEX      16
 #define INVENTORYPANEY      386
@@ -180,17 +185,6 @@
 #define TEXTBARY        336
 #define TEXTBARWIDTH    198
 #define TEXTBARHEIGHT   14
-
-// Status bars
-#define HEALTHBARX          16
-#define HEALTHBARY          94
-#define HEALTHBARWIDTH      12
-#define HEALTHBARHEIGHT     164
-
-#define STAMINABARX         612
-#define STAMINABARY         94
-#define STAMINABARWIDTH     12
-#define STAMINABARHEIGHT    164
 
 // Status bar for editor
 #define STATUSBARX      4
@@ -302,6 +296,12 @@
 #define BM_5BITPAL     0x1000   // Bitmap palette is 5 bit for r,g,b instead of 8 bit
 #define BM_COMPRESSED  0x4000   // Bitmap is compressed.
 #define BM_CHUNKED     0x8000   // Bitmap is chunked out
+// Retail's texture formats (the TSurface +0x38 / TBitmap flag values the
+// shipped Draw routine selector 0x004ad1d0 tests). The HUD archives store
+// their art as ARGB4444 (StatusBar.dat, SideBarTabs.dat, ...).
+#define BM_ARGB4444    0x10000  // Bitmap data is 16 bit A4 R4 G4 B4.
+#define BM_ARGB1555    0x20000  // Bitmap data is 16 bit A1 R5 G5 B5.
+#define BM_2BYTEFORMATS (BM_15BIT | BM_16BIT | BM_ARGB4444 | BM_ARGB1555)
 
 // Animation Drawing mode flags
 #define DM_DEFAULT      0x00000000  // Default is always defined as 0

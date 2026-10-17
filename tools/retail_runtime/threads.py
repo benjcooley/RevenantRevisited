@@ -1,0 +1,393 @@
+"""Deterministic guest threads. No host threads or wall-clock waits.
+
+Scheduling is a selected test policy, not a reproduction of Windows priorities.
+The CPU runs bounded instruction slices and switches at waits/yields.
+"""
+import copy
+from dataclasses import dataclass,replace,field
+from fractions import Fraction
+import struct
+from unicorn.x86_const import (UC_X86_REG_GDTR,UC_X86_REG_CS,UC_X86_REG_DS,
+    UC_X86_REG_ES,UC_X86_REG_SS,UC_X86_REG_FS,UC_X86_REG_EIP,UC_X86_REG_ESP,
+    UC_X86_REG_EAX,UC_X86_REG_EBX,UC_X86_REG_ECX,UC_X86_REG_EDX,
+    UC_X86_REG_ESI,UC_X86_REG_EDI,UC_X86_REG_EBP,UC_X86_REG_EFLAGS,UC_X86_REG_FPCW)
+
+
+class GuestDeadlock(RuntimeError):
+    pass
+
+
+@dataclass
+class Yield:
+    # None keeps the API call on the stack for retry after waking.
+    result: int | None = 0
+
+
+@dataclass
+class Thread:
+    tid: int
+    context: object
+    stack_low: int
+    stack_high: int
+    state: str = 'ready'
+    wake: object = None
+    wait: object = None
+    exit_code: int = 259
+    priority: int = 0
+    suspend_count: int = 0
+    tls: dict = field(default_factory=dict)
+
+
+def descriptor(base,limit,access,flags):
+    return struct.pack('<Q',(limit&0xffff)|((base&0xffffff)<<16)|(access<<40)|
+        (((limit>>16)&15)<<48)|(flags<<52)|(((base>>24)&255)<<56))
+
+
+class Scheduler:
+    GDT=0x7f000000
+    TIB=0x7f100000
+    MAX_THREADS=120
+    THREAD_RETURN=0x700ff010
+    QUANTUM=10000
+    # Solo (opt-in, `solo = True`): the only runnable thread runs without
+    # Unicorn's instruction count -- which Unicorn implements as a hook on
+    # every instruction, several times slower -- until an API call blocks
+    # it, ends it, or lets another thread run (`api_returned`). Switches
+    # still happen only at API boundaries and quantum ends, both decided by
+    # guest state, so runs stay deterministic; the interleaving differs from
+    # quantum-only scheduling, and solo slices don't draw on the budget.
+    # SOLO_TIMEOUT bounds one solo slice in host time to report a guest
+    # spinning alone with no API call; reaching it is an error, not a switch.
+    SOLO_TIMEOUT=600_000_000
+
+    def __init__(self,vm):
+        self.vm=vm;self.current=1;self.next_tid=2;self.running=False
+        self.solo=False;self.alone=False;self.preempted=False
+        self.wakes=False                       # an API since the slice began may let another thread run
+        self.ready=[];self.objects={};self.critical={};self.named_events={}
+        self.trace=[];self.threads={}
+        self.tls_slots=set()
+        vm.uc.mem_map(self.GDT,4096);vm.uc.mem_map(self.TIB,self.MAX_THREADS*4096)
+        vm.uc.mem_write(self.THREAD_RETURN,b'\xcc')
+        vm.write(self.GDT+8,descriptor(0,0xfffff,0x9b,12))
+        vm.write(self.GDT+16,descriptor(0,0xfffff,0x93,12))
+        vm.uc.reg_write(UC_X86_REG_GDTR,(0,self.GDT,4095,0))
+        for reg in (UC_X86_REG_DS,UC_X86_REG_ES,UC_X86_REG_SS):vm.uc.reg_write(reg,16)
+        vm.uc.reg_write(UC_X86_REG_CS,8)
+        self.environment(1,vm.STACK,vm.STACK+vm.STACK_SIZE)
+        vm.uc.reg_write(UC_X86_REG_FS,24)
+        # Hardware x87 reset precision. CRT/game code may change it explicitly.
+        vm.uc.reg_write(UC_X86_REG_FPCW,0x37f)
+        self.threads[1]=Thread(1,vm.uc.context_save(),vm.STACK,vm.STACK+vm.STACK_SIZE,'idle')
+
+    def environment(self,tid,low,high):
+        tib=self.TIB+(tid-1)*4096;selector=(tid+2)*8
+        self.vm.write(self.GDT+selector,descriptor(tib,4095,0x93,4))
+        self.vm.write(tib,struct.pack('<7I',0xffffffff,high,low,0,0,0,tib))
+        self.vm.put_u32(tib+0x20,1);self.vm.put_u32(tib+0x24,tid)
+        return selector
+
+    def snapshot(self):
+        # Unicorn contexts are immutable saved objects, not deepcopy/pickleable.
+        threads={tid:replace(t,wait=copy.deepcopy(t.wait),tls=dict(t.tls)) for tid,t in self.threads.items()}
+        shared=copy.deepcopy(dict(objects=self.objects,critical=self.critical,named_events=self.named_events))
+        return dict(threads=threads,current=self.current,next_tid=self.next_tid,ready=list(self.ready),tls_slots=set(self.tls_slots),**shared)
+
+    def restore(self,state):
+        self.threads={tid:replace(t,wait=copy.deepcopy(t.wait),tls=dict(t.tls)) for tid,t in state['threads'].items()}
+        shared=copy.deepcopy({name:state[name] for name in ('current','next_tid','ready','objects','critical','named_events')})
+        for name in ('current','next_tid','ready','tls_slots'):setattr(self,name,copy.deepcopy(state[name]))
+        for name,value in shared.items():setattr(self,name,value)
+        self.trace.clear();self.running=False
+
+    def handle(self,obj):
+        handle=self.vm.next_handle;self.vm.next_handle+=1;self.objects[handle]=obj;return handle
+
+    def thread_handle(self,handle):
+        if handle==0xfffffffe:return self.threads[self.current]
+        obj=self.objects.get(handle)
+        if obj is None or obj['type']!='thread':raise ValueError('Invalid thread handle')
+        return self.threads[obj['tid']]
+
+    @property
+    def tib(self):return self.TIB+(self.current-1)*4096
+    def get_error(self,args):return self.vm.u32(self.tib+0x34)
+    def set_error(self,args):self.vm.put_u32(self.tib+0x34,args[0]);return 0
+
+    def tls_alloc(self,args):
+        for index in range(64):
+            if index not in self.tls_slots:self.tls_slots.add(index);return index
+        self.set_error((8,));return 0xffffffff
+
+    def tls_get(self,args):
+        index=args[0]
+        if index not in self.tls_slots:self.set_error((87,));return 0
+        self.set_error((0,));return self.threads[self.current].tls.get(index,0)
+
+    def tls_set(self,args):
+        index,value=args
+        if index not in self.tls_slots:self.set_error((87,));return 0
+        self.threads[self.current].tls[index]=value
+        self.vm.put_u32(self.tib+0xe10+4*index,value);return 1
+
+    def tls_free(self,args):
+        index=args[0]
+        if index not in self.tls_slots:self.set_error((87,));return 0
+        self.tls_slots.remove(index)
+        for thread in self.threads.values():
+            thread.tls.pop(index,None);self.vm.put_u32(self.TIB+(thread.tid-1)*4096+0xe10+4*index,0)
+        return 1
+
+    def create_thread(self,args):
+        security,size,entry,param,flags,out_tid=args
+        # Windows honours CREATE_SUSPENDED (4) and STACK_SIZE_PARAM_IS_A_RESERVATION
+        # (0x10000, a size hint) and ignores bits CreateThread does not define (retail's
+        # _beginthreadex(..., initflag=1, ...) passes 1).
+        if security:raise ValueError('Unsupported CreateThread security attributes')
+        tid=self.next_tid
+        if tid>self.MAX_THREADS:raise MemoryError('Guest thread capacity exhausted')
+        self.next_tid+=1
+        size=size or struct.unpack_from('<I',self.vm.image,self.vm.layout['optional_offset']+72)[0]
+        size=(max(size,4096)+4095)&~4095
+        low=self.vm.allocate(size);high=low+size
+        parent=self.vm.uc.context_save()
+        try:
+            selector=self.environment(tid,low,high)
+            for reg in (UC_X86_REG_EAX,UC_X86_REG_EBX,UC_X86_REG_ECX,UC_X86_REG_EDX,
+                        UC_X86_REG_ESI,UC_X86_REG_EDI,UC_X86_REG_EBP):self.vm.uc.reg_write(reg,0)
+            self.vm.uc.reg_write(UC_X86_REG_FS,selector)
+            self.vm.uc.reg_write(UC_X86_REG_EFLAGS,0x202);self.vm.uc.reg_write(UC_X86_REG_FPCW,0x37f)
+            sp=high-0x100;self.vm.write(sp,struct.pack('<II',self.THREAD_RETURN,param))
+            self.vm.uc.reg_write(UC_X86_REG_ESP,sp);self.vm.uc.reg_write(UC_X86_REG_EIP,entry)
+            suspended=bool(flags&4)
+            self.threads[tid]=Thread(tid,self.vm.uc.context_save(),low,high,
+                'suspended' if suspended else 'ready',suspend_count=int(suspended))
+        finally:self.vm.uc.context_restore(parent)
+        if not suspended:self.ready.append(tid);self.wakes=True
+        if out_tid:self.vm.put_u32(out_tid,tid)
+        return self.handle(dict(type='thread',tid=tid))
+
+    def resume_thread(self,args):
+        thread=self.thread_handle(args[0]);previous=thread.suspend_count
+        if previous:
+            thread.suspend_count-=1
+            if not thread.suspend_count:thread.state='ready';self.ready.append(thread.tid);self.wakes=True
+        return previous
+
+    def sleep(self,args):
+        thread=self.threads[self.current];duration=args[0]
+        thread.state='ready' if not duration else 'sleeping'
+        thread.wake=None if duration==0xffffffff else self.vm.elapsed_ms+duration
+        return Yield(0)
+
+    def exit_thread(self,args):
+        thread=self.threads[self.current];thread.state='exited';thread.exit_code=args[0]
+        return Yield(args[0])
+
+    def create_event(self,args):
+        security,manual,initial,name=args
+        if security:raise ValueError('Event security attributes unsupported')
+        text=self.vm.string(name) if name else None
+        if text and text in self.named_events:
+            obj=self.named_events[text]
+            self.set_error((183,)) # ERROR_ALREADY_EXISTS; existing event parameters win.
+        else:
+            obj=dict(type='event',manual=bool(manual),signaled=bool(initial))
+            if text:self.named_events[text]=obj
+            self.set_error((0,))
+        return self.handle(obj)
+
+    def close_handle(self,handle):
+        obj=self.objects.pop(handle,None)
+        if obj is None:return 0
+        # Names identify a live kernel object, not a permanent cache. Retain
+        # aliases while another handle refers to it, then release its name.
+        if obj['type']=='event' and not any(other is obj for other in self.objects.values()):
+            for name,event in list(self.named_events.items()):
+                if event is obj:del self.named_events[name]
+        return 1
+
+    def event(self,handle):
+        obj=self.objects.get(handle)
+        if obj is None or obj['type']!='event':raise ValueError('Invalid event handle')
+        return obj
+
+    def set_event(self,args):self.event(args[0])['signaled']=True;self.wakes=True;return 1
+    def reset_event(self,args):self.event(args[0])['signaled']=False;return 1
+
+    def pulse_event(self,args):
+        # Releases the threads waiting on the event at this moment -- every one
+        # for a manual-reset event, the first for an auto-reset one -- and
+        # leaves it non-signaled; with none waiting it only resets it. A
+        # released thread holds its release until its wait consumes it.
+        handle=args[0];obj=self.event(handle)
+        waiters=[tid for tid,thread in self.threads.items() if thread.state=='waiting'
+                 and thread.wait['kind']=='objects' and handle in thread.wait['handles']]
+        obj['pulsed']=set(waiters if obj['manual'] else waiters[:1])
+        obj['signaled']=False;self.wakes=True
+        return 1
+
+    def create_mutex(self,args):
+        # Unnamed, never abandoned (a thread exiting while it owns one is not
+        # modelled). Recursive ownership per thread, like Windows.
+        security,initial_owner,name=args
+        if security:raise ValueError('Mutex security attributes unsupported')
+        if name:raise ValueError('Named mutexes unsupported')
+        self.set_error((0,))
+        return self.handle(dict(type='mutex',owner=self.current if initial_owner else None,depth=int(bool(initial_owner))))
+
+    def release_mutex(self,args):
+        obj=self.objects.get(args[0])
+        if obj is None or obj['type']!='mutex':raise ValueError('Invalid mutex handle')
+        if obj['owner']!=self.current:self.set_error((288,));return 0 # ERROR_NOT_OWNER
+        obj['depth']-=1
+        if not obj['depth']:obj['owner']=None;self.wakes=True
+        return 1
+
+    def signaled(self,handle,tid=None):
+        # `tid`: the waiting thread (a mutex is signaled for its owner).
+        obj=self.objects.get(handle)
+        if obj is None:raise ValueError('Invalid wait handle')
+        if obj['type']=='event':
+            return obj['signaled'] or (self.current if tid is None else tid) in obj.get('pulsed',())
+        if obj['type']=='mutex':return obj['owner'] in (None,self.current if tid is None else tid)
+        return self.threads[obj['tid']].state=='exited'
+
+    def consume(self,handles):
+        # Duplicate handles in wait-all are rejected before reaching this path.
+        for handle in handles:
+            obj=self.objects[handle]
+            if obj['type']=='event':
+                obj.get('pulsed',set()).discard(self.current)
+                if not obj['manual']:obj['signaled']=False
+            elif obj['type']=='mutex':obj['owner']=self.current;obj['depth']+=1
+
+    def wait(self,handles,all_objects,timeout):
+        if not handles or len(handles)>64 or (all_objects and len(set(handles))!=len(handles)):
+            raise ValueError('Unsupported/invalid wait handle list')
+        thread=self.threads[self.current]
+        states=[self.signaled(handle) for handle in handles]
+        if (all(states) if all_objects else any(states)):
+            index=0 if all_objects else states.index(True)
+            self.consume(handles if all_objects else [handles[index]])
+            thread.wait=None;return index
+        deadline=thread.wait['deadline'] if thread.wait else (None if timeout==0xffffffff else self.vm.elapsed_ms+timeout)
+        if deadline is not None and deadline<=self.vm.elapsed_ms:
+            thread.wait=None;return 258
+        thread.wait=dict(kind='objects',handles=list(handles),all=bool(all_objects),deadline=deadline)
+        thread.state='waiting';return Yield(None)
+
+    def wait_single(self,args):return self.wait([args[0]],False,args[1])
+
+    def wait_multiple(self,args):
+        count,pointer,all_objects,timeout=args
+        if count<1 or count>64:raise ValueError('Invalid WaitForMultipleObjects count')
+        handles=struct.unpack('<'+'I'*count,self.vm.uc.mem_read(pointer,count*4))
+        return self.wait(handles,bool(all_objects),timeout)
+
+    def initialize_critical(self,args):
+        self.critical[args[0]]=dict(owner=None,depth=0);return 0
+
+    def enter_critical(self,args):
+        address=args[0];critical=self.critical[address];thread=self.threads[self.current]
+        if critical['owner'] in (None,self.current):
+            critical['owner']=self.current;critical['depth']+=1;thread.wait=None;return 0
+        thread.wait=dict(kind='critical',address=address,deadline=None);thread.state='waiting';return Yield(None)
+
+    def leave_critical(self,args):
+        critical=self.critical[args[0]]
+        if critical['owner']!=self.current or not critical['depth']:raise ValueError('Critical section not owned by this thread')
+        critical['depth']-=1
+        if not critical['depth']:critical['owner']=None;self.wakes=True
+        return 0
+
+    def delete_critical(self,args):
+        if self.critical[args[0]]['owner'] is not None:raise ValueError('Cannot delete an owned critical section')
+        del self.critical[args[0]];return 0
+
+    def _wakeable(self,tid,thread):
+        if thread.state=='sleeping':return thread.wake is not None and thread.wake<=self.vm.elapsed_ms
+        if thread.state!='waiting':return False
+        wait=thread.wait
+        if wait['kind']=='critical':wake=self.critical[wait['address']]['owner'] is None
+        else:
+            states=[self.signaled(h,tid) for h in wait['handles']]
+            wake=all(states) if wait['all'] else any(states)
+        return wake or (wait['deadline'] is not None and wait['deadline']<=self.vm.elapsed_ms)
+
+    def refresh(self):
+        for tid,thread in self.threads.items():
+            if self._wakeable(tid,thread):thread.state='ready';self.ready.append(tid)
+
+    def others_runnable(self):
+        """Another thread is ready or would wake now."""
+        return any(tid!=self.current and (thread.state=='ready' or self._wakeable(tid,thread))
+                   for tid,thread in self.threads.items())
+
+    def api_returned(self):
+        """Runtime calls this after an API call that returned to its caller.
+        A thread running alone stops here once another can run (solo). Only
+        the calls that release objects or start threads (`wakes`) can make
+        one runnable: time does not move during a slice."""
+        if self.alone and self.wakes:
+            self.wakes=False
+            if self.others_runnable():self.preempted=True;self.vm.uc.emu_stop()
+
+    def execute(self,address,instruction_limit):
+        root=self.threads[1]
+        root.context=self.vm.uc.context_save();root.state='ready';root.wait=None;root.wake=None
+        self.vm.uc.reg_write(UC_X86_REG_EIP,address);root.context=self.vm.uc.context_save()
+        self.ready=[1]+[tid for tid in self.ready if tid!=1]
+        self._run(instruction_limit)
+        return self.vm.uc.reg_read(UC_X86_REG_EAX)
+
+    def resume(self,instruction_limit,until):
+        """Continue every guest thread from the state it was left in -- the
+        main thread too, blocked or not -- until `until()` holds. `until` is
+        tested after each wake-up pass, before a thread is chosen, so a wait
+        a release has satisfied never counts as blocked. A game whose main
+        thread never returns (a WinMain past its init) runs this way, a
+        slice at a time. Returns the instructions budgeted."""
+        root=self.threads[1]
+        if root.state=='running':raise RuntimeError('Main thread is already running')
+        if root.state in ('returned','exited'):raise RuntimeError(f'Main thread has {root.state}')
+        if root.state=='stopped':root.state='ready';self.ready=[1]+[tid for tid in self.ready if tid!=1]
+        return instruction_limit-self._run(instruction_limit,until)
+
+    def _run(self,instruction_limit,until=None):
+        """The scheduling loop; returns the instruction budget left."""
+        root=self.threads[1]
+        self.running=True;left=instruction_limit
+        try:
+            while root.state not in ('returned','exited','stopped'):
+                self.refresh()
+                if until is not None and until():break
+                if not self.ready:
+                    deadlines=[t.wake for t in self.threads.values() if t.state=='sleeping' and t.wake is not None]
+                    deadlines+=[t.wait['deadline'] for t in self.threads.values() if t.state=='waiting' and t.wait['deadline'] is not None]
+                    if not deadlines:raise GuestDeadlock('No runnable guest thread and no finite wake/timeout')
+                    self.vm.sleep_ms+=max(Fraction(0),min(deadlines)-self.vm.elapsed_ms)
+                    continue
+                tid=self.ready.pop(0);thread=self.threads[tid]
+                if thread.state!='ready':continue
+                self.current=tid;self.vm.uc.context_restore(thread.context);thread.state='running'
+                alone=self.solo and not any(self.threads[t].state=='ready' for t in self.ready)
+                budget=0 if alone else min(self.QUANTUM,left)
+                if not alone and budget<=0:raise RuntimeError('Guest scheduler instruction-slice budget exhausted')
+                self.trace.append(dict(tid=tid,clock=self.vm.milliseconds,pc=self.vm.uc.reg_read(UC_X86_REG_EIP)))
+                self.alone,self.preempted,self.wakes=alone,False,False
+                try:self.vm.uc.emu_start(self.vm.uc.reg_read(UC_X86_REG_EIP),0,
+                                         timeout=self.SOLO_TIMEOUT if alone else 0,count=budget)
+                finally:self.alone=False
+                left-=budget;thread.context=self.vm.uc.context_save()
+                if self.vm.error:raise self.vm.error
+                if alone and thread.state=='running' and not self.preempted:
+                    raise RuntimeError(f'Thread {tid} ran alone for {self.SOLO_TIMEOUT//1000000} s without '
+                                       f'an API call (pc 0x{self.vm.uc.reg_read(UC_X86_REG_EIP):08x})')
+                if thread.state=='running':thread.state='ready'
+                if thread.state=='ready':
+                    if self.preempted:self.refresh()   # the threads it let run go first
+                    self.ready.append(tid)
+            self.current=1;self.vm.uc.context_restore(root.context)
+            return left
+        finally:self.running=False

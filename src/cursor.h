@@ -34,8 +34,11 @@ void SetMouseShadow(PTBitmap shadow, int32_t offsetx = 1, int32_t offsety = 3);
 void SetMouseCornerBitmap(PTBitmap corner, bool toppriority = false);
 void SetMouseCornerBitmap(int32_t type, bool toppriority = false);
 void CursorOverObject(TObjectInstance* inst, bool toppriority = false);
+void BeginCursorFrame();
+  // Each frame, first: the last frame's corner picture and released drag
+  // bitmap go (the panes set them again as they animate).
 
-constexpr int32_t kMaxDragBitmapLayers = 4;
+constexpr int32_t kMaxDragBitmapLayers = 64;  // a stacked inventory icon: a pile of 64 coins
 struct SDragBitmapLayer
 {
     PTBitmap bitmap = nullptr;

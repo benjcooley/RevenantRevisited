@@ -1,0 +1,12 @@
+FROM rust:1.94.0-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libasound2-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev \
+    libx11-dev libxi-dev libxcursor-dev libxrandr-dev \
+    libvulkan1 mesa-vulkan-drivers xvfb xauth weston \
+    && rm -r /var/lib/apt/lists/*
+RUN rustup component add clippy rustfmt
+ENV CARGO_TARGET_DIR=/target CARGO_BUILD_JOBS=2 WGPU_BACKEND=vulkan
+RUN mkdir -p /tmp/revenant-runtime && chmod 700 /tmp/revenant-runtime
+ENV XDG_RUNTIME_DIR=/tmp/revenant-runtime
+WORKDIR /workspace/rust
+CMD ["bash", "ci/verify-linux.sh"]

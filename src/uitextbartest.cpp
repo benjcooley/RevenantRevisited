@@ -1,6 +1,6 @@
 // *************************************************************************
 // *                  Revenant Revisited (port) - 2026                     *
-// *    uitextbartest.cpp - --test=ui-textbar: TTextBar data API           *
+// *      uitextbartest.cpp - --test=ui-textbar: the TTextBar pane         *
 // *************************************************************************
 //
 // See uitextbartest.h.
@@ -9,144 +9,116 @@
 
 #include "uitextbartest.h"
 
-#include "display.h"
+#include "dialog.h"
 #include "logging.h"
 #include "renderer.h"
+#include "screen.h"
 #include "textbar.h"
 #include "time.h"
 
-#include <cmath>
-#include <cstring>
-#include <memory>
+#include <cstdint>
 
 namespace {
 
-std::unique_ptr<TTextBar> g_textbar;
+using ELineType = TTextBar::ELineType;
 
-// Visualizer: paints a debug-colored rect at the text bar's retail rect
-// so the pane is visible in the new HUD pipeline. The real Display.Box +
-// Display.WriteText port lands when the bitmap-font / text-rendering path
-// is wired into Renderer-> primitives.
-class TTextBarHud : public THudDrawable
+// The loading bar's run, as the map loader drives it (0x004597b0): the line,
+// the level stepped from 0 to 180 (percent * 180 / 1000), then the bar goes.
+constexpr int64_t kLoadStart = 72;
+constexpr int64_t kLoadEnd   = 120;
+constexpr int64_t kLoadStep  = 6;
+
+// A flat, mid-toned backdrop under the screen's pane layer, so the black
+// shadow reads (the test screen draws no world).
+class TBackdrop final : public THudDrawable
 {
-public:
-    void Draw() override
-    {
-        if (!g_textbar) return;
-        const int32_t x = g_textbar->GetPosX();
-        const int32_t y = g_textbar->GetPosY();
-        const int32_t w = g_textbar->GetWidth();
-        const int32_t h = g_textbar->GetHeight();
-
-        // Filled rect with a 1px outline -- looks like a status strip.
-        Renderer->DrawSolidRect(x,         y,         w, h, 30, 30, 50, 220);
-        Renderer->DrawSolidRect(x,         y,         w, 1, 180, 180, 200, 255);
-        Renderer->DrawSolidRect(x,         y + h - 1, w, 1, 180, 180, 200, 255);
-        Renderer->DrawSolidRect(x,         y,         1, h, 180, 180, 200, 255);
-        Renderer->DrawSolidRect(x + w - 1, y,         1, h, 180, 180, 200, 255);
-    }
+  public:
+    void Draw() override { Renderer->FillScreen(0.40f, 0.34f, 0.27f, 1.0f); }
 };
-TTextBarHud g_viz;
 
-// Reach in via a friend-free shim: the protected members of TTextBar are
-// not exposed publicly. For verification we infer state from the public
-// observable side -- IsDirty, rect, and "has health display" via the
-// behavior of ClearHealthDisplay (which clears dirty only if name was
-// non-empty). Logs the observable surface; the protected text / name
-// fields stay opaque.
-void LogObservable(const char* label)
+TBackdrop g_backdrop;
+int64_t g_firstTick = 0;
+int64_t g_lastTick  = 0;
+
+void LogFeed(int64_t tick)
 {
-    if (!g_textbar) { log_info("[ui-textbar] %s (null pane)", label); return; }
-    log_info("[ui-textbar] %-30s rect=(x=%d y=%d w=%d h=%d) dirty=%s open=%s",
-             label,
-             g_textbar->GetPosX(), g_textbar->GetPosY(),
-             g_textbar->GetWidth(), g_textbar->GetHeight(),
-             g_textbar->IsDirty() ? "YES" : "no",
-             g_textbar->IsOpen()  ? "YES" : "no");
+    const int32_t n = TextBar.NumLines();
+    log_info("[ui-textbar] tick %lld: %d line%s, newest \"%s\"%s", static_cast<long long>(tick), n,
+             n == 1 ? "" : "s", n ? TextBar.Line(0).text.c_str() : "",
+             TextBar.IsHealthDisplayed() ? " over the loading bar" : "");
+}
+
+// Test data, by tick since the mode started (24 per second). Ticks 6 and 12
+// print Windows-1252 dialog lines (the apostrophe 0x92, the e-grave 0xE8;
+// docs/ui/TEXT_RENDERING.md); they fade before the end, so the three lines
+// left are the same as without them.
+void Feed(int64_t tick)
+{
+    if (tick > kLoadStart && tick <= kLoadEnd)
+    {
+        if ((tick - kLoadStart) % kLoadStep)
+            return;
+        const int32_t percent = int32_t((tick - kLoadStart) * 1000 / (kLoadEnd - kLoadStart));
+        TextBar.SetLevels(percent * 180 / 1000, percent * 180 / 1000);
+        LogFeed(tick);
+        return;
+    }
+
+    switch (tick)
+    {
+        case 0:   TextBar.Print("Locke entered The Keep");                                  break;
+        case 6:   TextBar.Print("%s", DialogList.GetLine("I2MIY01"));                       break;
+        case 12:  TextBar.Print("%s", DialogList.GetLine("XII12NAV01"));                    break;
+        case 18:  TextBar.Print("%s", DialogList.GetLine("DOORLOCKED"));                    break;
+        case 36:  TextBar.Print(ELineType::Notice, "%s", DialogList.GetLine("ITEMTOFAR"));  break;
+        case 54:  TextBar.Print("Picked up Greater Mana.\nChest opened.");                   break;
+        case kLoadStart: TextBar.SetHealthDisplay(DialogList.GetLine("LOADMAPMSG"));        break;
+        case kLoadEnd + kLoadStep: TextBar.ClearHealthDisplay();                           break;
+        case 138: TextBar.Print("Got the Hammer of Wounding");                              break;
+        case 156: TextBar.Print("%s envenomed.", "Short Sword");                            break;
+        default:  return;
+    }
+    LogFeed(tick);
 }
 
 }  // namespace
 
 bool InitializeUITextBarMode()
 {
-    log_info("[ui-textbar] === TTextBar data-API contract ===");
+    if (!CurrentScreen || !TextBar.Initialize())
+    {
+        log_error("[ui-textbar] the text bar did not initialize");
+        return false;
+    }
+    CurrentScreen->AddPane(&TextBar);
+    if (Renderer)
+        Renderer->AddHud(&g_backdrop, 0.0f);
+    log_info("[ui-textbar] pane at (%d, %d) %d x %d", TextBar.GetPosX(), TextBar.GetPosY(),
+             TextBar.GetWidth(), TextBar.GetHeight());
 
-    g_textbar = std::make_unique<TTextBar>();
-    LogObservable("after construct");
-
-    g_textbar->Initialize();
-    LogObservable("after Initialize()");
-
-    // Print a message. text[] becomes "hello bar", name[] cleared, dirty=true.
-    char msg[] = "hello bar";
-    g_textbar->Print(msg);
-    LogObservable("after Print(\"hello bar\")");
-
-    // Reading a (printf-style) format
-    char fmt[] = "level %d of %s";
-    char arg2[] = "the keep";
-    g_textbar->Print(fmt, 3, arg2);
-    LogObservable("after Print(\"level %d of %s\", 3, \"the keep\")");
-
-    // Health display path: SetHealthDisplay sets name[] + level fields.
-    g_textbar->SetHealthDisplay("Skeleton", 75);
-    LogObservable("after SetHealthDisplay(\"Skeleton\", 75)");
-
-    // Updating the same name just retargets level; dirty NOT bumped again
-    // (per textbar.cpp: only the name-change branch sets dirty).
-    g_textbar->SetDirty(false);   // reset so we can observe the contract
-    g_textbar->SetHealthDisplay("Skeleton", 50);
-    LogObservable("after SetHealthDisplay(\"Skeleton\", 50) (same name)");
-
-    // New name -> dirty
-    g_textbar->SetDirty(false);   // reset
-    g_textbar->SetHealthDisplay("Orc", 90);
-    LogObservable("after SetHealthDisplay(\"Orc\", 90) (new name)");
-
-    // ClearHealthDisplay should set dirty (since name was non-empty)
-    g_textbar->ClearHealthDisplay();
-    LogObservable("after ClearHealthDisplay()");
-
-    // ClearHealthDisplay when already clear should be a no-op (no dirty bump)
-    g_textbar->SetDirty(false);
-    g_textbar->ClearHealthDisplay();
-    LogObservable("after ClearHealthDisplay() (already clear)");
-
-    g_textbar->Clear();
-    LogObservable("after Clear()");
-
-    log_info("[ui-textbar] (DrawBackground / visual render is a follow-up "
-             "commit -- needs GameData->Bitmap(\"texthealthbar\") + Font(\"silverfont\"))");
-
-    // Wire visualizer into the HUD pipeline so the text bar is visible
-    // at its retail rect. Debug-colored rect for now; text + healthbar
-    // rendering lands when the font + bitmap paths are wired.
-    Renderer->AddHud(&g_viz, 0.0f);
-    log_info("[ui-textbar] visualizer registered with renderer HUD pipeline");
-
+    g_firstTick = TTime::LegacyFrameCount();
+    g_lastTick = g_firstTick - 1;
     return true;
 }
 
+// The test screen doesn't run the screen's pane pass, so the host does, as
+// TPlayScreen::Pulse does: per tick, the world (here the feed), then the pane.
 void RenderUITextBarMode()
 {
-    RenderUITextBarModeEmbedded();
-
-    const double t = TTime::Time();
-    const float r = 0.10f + 0.04f * float(std::sin(t * 0.6));
-    const float g = 0.12f + 0.04f * float(std::sin(t * 0.8 + 1.0));
-    const float b = 0.16f + 0.04f * float(std::sin(t * 1.0 + 2.0));
-    Display.BackBuffer()->StartPass(r, g, b, 1.0f);
-    Display.BackBuffer()->EndPass();
-}
-
-void RenderUITextBarModeEmbedded()
-{
+    const int64_t now = TTime::LegacyFrameCount();
+    while (g_lastTick < now)
+    {
+        ++g_lastTick;
+        Feed(g_lastTick - g_firstTick);
+        TextBar.Pulse();
+    }
 }
 
 void CloseUITextBarMode()
 {
-    Renderer->RemoveHud(&g_viz);
-    if (g_textbar)
-        g_textbar->Close();
-    g_textbar.reset();
+    if (Renderer)
+        Renderer->RemoveHud(&g_backdrop);
+    if (CurrentScreen)
+        CurrentScreen->RemovePane(&TextBar);
+    TextBar.Close();
 }

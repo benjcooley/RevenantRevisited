@@ -12,8 +12,7 @@
 
 int main()
 {
-    const std::filesystem::path path =
-        std::filesystem::current_path() / ".." / "data" / "Resources" / "render_metadata.def";
+    const std::filesystem::path path = std::filesystem::path(REV_ASSETS_DIR) / "render_metadata.def";
 
     SRenderMetadata meta;
     std::string error;

@@ -34,6 +34,10 @@ bool priority;                      // Priority of mouse image
 // the original in-game draw runs.
 static bool g_os_cursor_owns_pixels = false;
 
+// The bitmap the OS cursor shows while it owns the pixels: the arrow (or
+// wedge), or the corner bitmap TCursorHud::Draw puts in its place.
+static PTBitmap g_os_cursor_shown = nullptr;
+
 // When false, the OS/hardware pointer is suppressed and TCursorHud draws the
 // game cursor bitmap in-frame at (cursorx, cursory). Toggled via
 // SetHardwareCursorEnabled (see cursor.h). Default: hardware cursor enabled.
@@ -44,7 +48,7 @@ int32_t grabx, graby;
 SDragBitmapLayer DragLayers[kMaxDragBitmapLayers] = {};
 int32_t DragLayerCount = 0;
 
-TObjectInstance* DragObj = nullptr;
+TSafeRef<TObjectInstance> DragObj;     // what an item pane holds (retail 0x006563cc)
 
 bool cleardragbitmap = false;
 
@@ -88,6 +92,7 @@ void SetMouseBitmap(PTBitmap cursor)
     {
         g_os_cursor_owns_pixels = false;
     }
+    g_os_cursor_shown = g_os_cursor_owns_pixels ? cursor : nullptr;
 }
 
 void SetHardwareCursorEnabled(bool enabled)
@@ -107,6 +112,7 @@ void SetHardwareCursorEnabled(bool enabled)
         rev_platform::ResetOSCursor();
         sapp_show_mouse(false);
         g_os_cursor_owns_pixels = false;
+        g_os_cursor_shown = nullptr;
     }
 }
 
@@ -118,8 +124,11 @@ bool HardwareCursorEnabled()
 void RefreshOSCursor()
 {
     if (MouseCursor && Windowed && g_hw_cursor_enabled)
+    {
         g_os_cursor_owns_pixels = rev_platform::SetOSCursor(
             MouseCursor, MouseCursor->regx, MouseCursor->regy);
+        g_os_cursor_shown = g_os_cursor_owns_pixels ? MouseCursor : nullptr;
+    }
 }
 
 void SetMouseShadow(PTBitmap shadow, int32_t offsetx, int32_t offsety)
@@ -181,14 +190,18 @@ void ClearDragBitmap()
     cleardragbitmap = true;
 }
 
+// REVSYNC: 0x0043a140 -- an item picked up makes its sound (PlayItemSound,
+// 0x00473a10); what is held decides the cursor over the map and the panes.
 void SetDragObj(TObjectInstance* inst)
 {
     DragObj = inst;
+    if (inst)
+        inst->PlayItemSound();
 }
 
 TObjectInstance* GetDragObj()
 {
-    return DragObj;
+    return DragObj.Get();
 }
 
 void DrawMouseShadow(int32_t x, int32_t y, int32_t width, int32_t height)
@@ -222,7 +235,7 @@ void TCursorHud::Draw()
         Renderer->DrawBitmap(MouseShadow,
                              cursorx + shadowoffsetx,
                              cursory + shadowoffsety,
-                             /*prefer_alias=*/true);   // soft shadow lives in the alias RLE buffer
+                             EBitmapDecode::Alias);   // soft shadow lives in the alias RLE buffer
 
     // Drag bitmap (e.g. inventory item being dragged) goes first so
     // the cursor sits above it. Still drawn here even when the OS owns
@@ -247,16 +260,28 @@ void TCursorHud::Draw()
     // and g_os_cursor_owns_pixels = true; on other platforms (and the
     // brief window before the first SetMouseBitmap call) we fall back
     // to the in-game draw.
-    if (MouseCursor && !MouseCursorAdd && !g_os_cursor_owns_pixels)
-        Renderer->DrawBitmap(MouseCursor, cursorx, cursory);
+    //
+    // The corner bitmap (hand, eye, mouth, door, ...: what the pointer is
+    // over) is drawn in place of the arrow, not beside it: retail's cursor
+    // draw (0x0043a480) puts the corner bitmap at the pointer when there is
+    // one, else the arrow. With the OS drawing the pointer, the OS cursor
+    // shows the corner bitmap for as long as it is set.
+    PTBitmap const shown = MouseCursorAdd ? MouseCursorAdd : MouseCursor;
+    if (shown && shown != g_os_cursor_shown && Windowed && g_hw_cursor_enabled)
+    {
+        g_os_cursor_owns_pixels = rev_platform::SetOSCursor(shown, shown->regx, shown->regy);
+        g_os_cursor_shown = g_os_cursor_owns_pixels ? shown : nullptr;
+    }
+    if (shown && !g_os_cursor_owns_pixels)
+        Renderer->DrawBitmap(shown, cursorx, cursory);
+}
 
-    // Corner-bitmap overlay (the little add-on icon: hand, eye, sword,
-    // etc.) is always our render, even when OS owns the main cursor --
-    // it's a per-target hint laid over the cursor pixel that the OS
-    // pointer has no awareness of.
-    if (MouseCursorAdd)
-        Renderer->DrawBitmap(MouseCursorAdd, cursorx, cursory);
-
+// REVSYNC: the tail of retail's cursor draw (0x0043a480): a released drag
+// bitmap goes, and the corner picture and its priority last a frame. The
+// port can draw a frame's HUD more than once (the window, then a capture),
+// so they end as the next frame begins, before its input.
+void BeginCursorFrame()
+{
     if (cleardragbitmap)
     {
         SetDragBitmap(nullptr);
@@ -304,7 +329,7 @@ void CursorOverObject(TObjectInstance* inst, bool toppriority)
         int32_t type = CURSOR_NONE;
 
         if (inst)
-            type = inst->CursorType(DragObj);
+            type = inst->CursorType(DragObj.Get());
 
         SetMouseCornerBitmap(type, toppriority);
     }

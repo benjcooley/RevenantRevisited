@@ -17,13 +17,9 @@
 //   - Pane content right-anchored at x = display_w − 188; width 188.
 //   - Top slot:    y=0,   h=306 (Equip 188x306 / Scroll 188x306 / Stats 188x306)
 //   - Bottom slot: y=306, h=174 (Inv 188x174 / Amap 188x174 / spellconstr 188x174)
-//   - Side-tabs strip: 52x232 overlaying the right edge of the pane block.
-//     Strip x = display_w − 52 − inset; strip y = ~24 (UNCONFIRMED-A in spec —
-//     BSS constants DAT_0066614c/DAT_0065be5c/DAT_00667c60/DAT_0065be60 are
-//     read at TSideTabsPane Initialize 0x53cc30 but their VALUES are not yet
-//     extracted from the shipped Revenant.exe BSS init; the existing
-//     uisidetabstest.cpp approximation is reused here and refined in the
-//     pixel-perfect alignment pass).
+//   - Side-tabs strip: 52x232 in the play field's lower-right corner, flush
+//     against the side panel and the bottom drawer: (400, 188) with both
+//     open (TabStripOrigin).
 //
 // *************************************************************************
 
@@ -31,13 +27,18 @@
 
 #include "bitmap.h"
 #include "bitmapatlas.h"
+#include "cursor.h"
 #include "display.h"
 #include "hudstate.h"
+#include "inventory.h"
 #include "logging.h"
 #include "multi.h"
+#include "player.h"
+#include "playscreen.h"
 #include "renderer.h"
 #include "revdefs.h"
 #include "revenant.h"
+#include "statpane.h"
 #include "surface.h"
 #include "testconfig.h"
 #include "testmodes.h"
@@ -62,24 +63,11 @@ constexpr int32_t kBtnY[kBtnCount] = { 2, 0x27, 0x4c, 0x71, 0x96, 0xbb };
 constexpr int32_t kPaneW    = 188;
 constexpr int32_t kTopH     = 306;
 constexpr int32_t kBotH     = 174;
+constexpr int32_t kBottomBarH = 60;   // matches BottomBarPane_SPEC §3
 
 // Approximations matching uisidetabstest.cpp (UNCONFIRMED-A: BSS constants
 // not yet extracted; refined in pixel-perfect alignment pass).
 constexpr int32_t kPaneRightInset = 0;
-
-// Tab-strip placement is anchored to the LOWER-RIGHT corner of the live
-// PLAYFIELD VIEW, not the display:
-//   playfield_right  = display_w - (sidebar_open    ? kPaneW : 0)
-//   playfield_bottom = display_h - (bottombar_open  ? kBarH  : 0)
-//   strip rect       = playfield - (kStripW + insets, kStripH + insets)
-// So when the sidebar opens/closes (or bottombar toggles), the six-button
-// strip moves with the corner, sitting a constant distance inside it.
-// (UNCONFIRMED-A: spec leaves the inset literal as a BSS const; small
-// gap by visual measurement until refined.)
-constexpr int32_t kTabsRightInset  = 4;   // px gap from playfield right edge
-constexpr int32_t kTabsBottomInset = 2;   // px gap from playfield bottom edge
-constexpr int32_t kBottomBarH      = 60;  // matches BottomBarPane_SPEC §3
-// kPaneW (188) is the sidebar chrome width — defined above as kPaneW.
 
 // ---- hover-fade ramp (spec §6/§9) ---------------------------------------
 constexpr int32_t kRampMax    = 8;
@@ -221,7 +209,7 @@ void DriveSyntheticState()
     // When an input-script was provided on the command line, the script owns
     // state for the entire run. It may drain before sapp_request_quit()
     // finishes, so gate on the startup arg in addition to live queue state.
-    if (StartupInputScript[0] || TestModes::InputScriptActive()) return;
+    if (!StartupInputScript.empty() || TestModes::InputScriptActive()) return;
 
     SHudState& s = GetHudState();
 
@@ -274,10 +262,11 @@ void AdvanceRamps()
     }
 }
 
-// Tab-strip screen origin — anchored to the playfield's lower-right corner.
-// Playfield = display minus whatever chrome is currently open. See the
-// constants block above for the formula. Used by both DrawTabStrip and the
-// hit-test in HandleMouseClickUISidebarMode so the two stay in lockstep.
+// REVSYNC: Pulse 0x0047bc1a..0x0047bc3d -- the strip sits in the play
+// field's lower-right corner, flush: x = display_w - strip w - side panel
+// w, y = play field bottom - strip h. The play field is the display less
+// whatever chrome is open, so the strip moves with the corner. Used by both
+// DrawTabStrip and UISideTabButtonAt, so the two stay in lockstep.
 void TabStripOrigin(int32_t& x, int32_t& y)
 {
     const SHudState& s = GetHudState();
@@ -285,10 +274,13 @@ void TabStripOrigin(int32_t& x, int32_t& y)
     const int32_t dh = Display.Height();
     const int32_t playfieldRight  = (dw > 0 ? dw : kStripW)
                                   - (s.sidebarState == HUD_SIDEBAR_OPEN ? kPaneW : 0);
+    // The bottom drawer (the bottom bar, or the shop) sits under the
+    // playfield; PlayScreen owns it (retail lays the side tabs out from its
+    // drawer code, 0x0047b4d0).
     const int32_t playfieldBottom = (dh > 0 ? dh : kStripH + kBottomBarH)
-                                  - (s.bottomBarOpen ? kBottomBarH : 0);
-    x = playfieldRight  - kStripW - kTabsRightInset;
-    y = playfieldBottom - kStripH - kTabsBottomInset;
+                                  - PlayScreen.DrawerHeight();
+    x = playfieldRight  - kStripW;
+    y = playfieldBottom - kStripH;
 }
 
 class TSidebarHud : public THudDrawable
@@ -528,16 +520,66 @@ void ToggleUIBottomPanel()
              s.bottomBarOpen ? "OPEN" : "CLOSED");
 }
 
-// Hit-test the inventory 4x3 grid. Returns column-major harness slot index
-// (page + col*3 + row) when (x,y) is inside a cell, -1 otherwise.
+// REVSYNC: 0x004364d0 (TButtonPane, here on the side tabs 0x0065be50): the
+// point must be in the pane, then in a button's rect (TButton 0x0042d0d0).
+// The tabs' button flags (0x00180010, 0x0053cc30) carry no pixel test
+// (0x20000), so a round button's corners count and the gaps between buttons
+// don't; a selected (pressed) tab holds its point like the others.
+int32_t UISideTabButtonAt(int32_t x, int32_t y)
+{
+    int32_t strip_x = 0, strip_y = 0;
+    TabStripOrigin(strip_x, strip_y);
+    const int32_t px = x - strip_x;
+    const int32_t py = y - strip_y;
+    if (px < 0 || py < 0 || px >= kStripW || py >= kStripH)
+        return -1;
+    for (int32_t i = 0; i < kBtnCount; ++i)
+        if (px >= kBtnX && px < kBtnX + kBtnW && py >= kBtnY[i] && py < kBtnY[i] + kBtnH)
+            return i;
+    return -1;
+}
+
+// The inventory pane's screen origin: the side panel's lower slot.
+static void InvPaneOrigin(int32_t& x, int32_t& y)
+{
+    const int32_t dw = Display.Width();
+    x = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
+    y = kTopH;
+}
+
+// Whether the side panel shows the inventory pane and (x, y) is on it.
+static bool InInvPane(int32_t x, int32_t y)
+{
+    const SHudState& s = GetHudState();
+    if (s.sidebarState != HUD_SIDEBAR_OPEN || s.bottomSlot != HUD_BOT_INV)
+        return false;
+    int32_t pane_x = 0, pane_y = 0;
+    InvPaneOrigin(pane_x, pane_y);
+    return x >= pane_x && x < pane_x + kPaneW && y >= pane_y && y < pane_y + kBotH;
+}
+
+// REVSYNC: 0x005385f2..0x00538610 -- the inventory's container icon, the
+// backpack or the bag shown at (10, 10): 10..30 across, 10..29 down.
+static bool OnInvContainerIcon(int32_t x, int32_t y)
+{
+    if (!InInvPane(x, y))
+        return false;
+    int32_t pane_x = 0, pane_y = 0;
+    InvPaneOrigin(pane_x, pane_y);
+    const int32_t lx = x - pane_x;
+    const int32_t ly = y - pane_y;
+    return lx >= 10 && lx <= 30 && ly >= 10 && ly < 30;
+}
+
+// Hit-test the inventory 4x3 grid. Returns the slot number of the shown
+// container (page + col*3 + row) when (x,y) is inside a cell, -1 otherwise.
 // Per InventoryPane_SPEC: origin pane-local (8, 42), pitch 45x44,
 // interior 40x40, column-major.
 static bool HitInvSlotRect(int32_t x, int32_t y, int32_t page,
                            int32_t& slot, int32_t& sx, int32_t& sy)
 {
-    const int32_t dw     = Display.Width();
-    const int32_t inv_x  = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
-    const int32_t inv_y  = kTopH;
+    int32_t inv_x = 0, inv_y = 0;
+    InvPaneOrigin(inv_x, inv_y);
     constexpr int32_t kOriginX  = 8;
     constexpr int32_t kOriginY  = 42;
     constexpr int32_t kPitchX   = 45;
@@ -607,27 +649,38 @@ static int32_t HitBarInvSlot(int32_t x, int32_t y)
     return HitBarInvSlotRect(x, y, slot, sx, sy) ? slot : -1;
 }
 
-// Hit-test the Equip paperdoll 11-slot layout. Per EquipPane_SPEC
-// DAT_005e3f60 table (mirrored in uiequiptest.cpp). Returns 0..10 in
-// EQ_* enum order, -1 otherwise.
+// The Equip paperdoll's 11 cells, pane-local top-left corners in EQ_* enum
+// order: the {x, y} table at DAT_005e3f60 that retail's MouseClick tests
+// each 40x40 cell against (0x005363fc..0x00536437; EquipPane_SPEC §4,
+// mirrored in uiequiptest.cpp).
+struct SEquipAnchor { int32_t x; int32_t y; };
+static constexpr SEquipAnchor kEquipAnchor[NUM_EQ_SLOTS] = {
+    { 0x4a, 0x25 }, { 0x07, 0x3a }, { 0x8d, 0x3a }, { 0x8d, 0x6a },
+    { 0x07, 0x6a }, { 0x07, 0x9a }, { 0x8d, 0x9a }, { 0x18, 0x0b },
+    { 0x7c, 0x0b }, { 0x07, 0xca }, { 0x8d, 0xca },
+};
+static constexpr int32_t kEquipCell = 40;
+
+// The equip pane's screen origin: the side panel's upper slot.
+static void EquipPaneOrigin(int32_t& x, int32_t& y)
+{
+    const int32_t dw = Display.Width();
+    x = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
+    y = 0;
+}
+
+// Hit-test the Equip paperdoll 11-slot layout. Returns 0..10 in EQ_* enum
+// order, -1 otherwise.
 static bool HitEquipSlotRect(int32_t x, int32_t y,
                              int32_t& slot, int32_t& sx, int32_t& sy)
 {
-    struct SA { int32_t x; int32_t y; };
-    static constexpr SA kAnchor[11] = {
-        { 0x4a, 0x25 }, { 0x07, 0x3a }, { 0x8d, 0x3a }, { 0x8d, 0x6a },
-        { 0x07, 0x6a }, { 0x07, 0x9a }, { 0x8d, 0x9a }, { 0x18, 0x0b },
-        { 0x7c, 0x0b }, { 0x07, 0xca }, { 0x8d, 0xca },
-    };
-    constexpr int32_t kSlot = 40;
-    const int32_t dw     = Display.Width();
-    const int32_t pane_x = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
-    const int32_t pane_y = 0;
-    for (int32_t i = 0; i < 11; ++i)
+    int32_t pane_x = 0, pane_y = 0;
+    EquipPaneOrigin(pane_x, pane_y);
+    for (int32_t i = 0; i < NUM_EQ_SLOTS; ++i)
     {
-        const int32_t bx = pane_x + kAnchor[i].x;
-        const int32_t by = pane_y + kAnchor[i].y;
-        if (x >= bx && x < bx + kSlot && y >= by && y < by + kSlot)
+        const int32_t bx = pane_x + kEquipAnchor[i].x;
+        const int32_t by = pane_y + kEquipAnchor[i].y;
+        if (x >= bx && x < bx + kEquipCell && y >= by && y < by + kEquipCell)
         {
             slot = i;
             sx = bx;
@@ -644,84 +697,147 @@ static int32_t HitEquipSlot(int32_t x, int32_t y)
     return HitEquipSlotRect(x, y, slot, sx, sy) ? slot : -1;
 }
 
+bool UIEquipSlotCenter(int32_t slot, int32_t& x, int32_t& y)
+{
+    const SHudState& s = GetHudState();
+    if (s.sidebarState != HUD_SIDEBAR_OPEN || s.topSlot != HUD_TOP_EQUIP || slot < 0 || slot >= NUM_EQ_SLOTS)
+        return false;
+    EquipPaneOrigin(x, y);
+    x += kEquipAnchor[slot].x + kEquipCell / 2;
+    y += kEquipAnchor[slot].y + kEquipCell / 2;
+    return true;
+}
+
+// The equip pane's whole rect (top slot, 188x306), the area retail's
+// button-up bounds test covers (0x005363e0: 0 <= x < w, 0 <= y < h).
+static bool InEquipPane(int32_t x, int32_t y)
+{
+    int32_t pane_x = 0, pane_y = 0;
+    EquipPaneOrigin(pane_x, pane_y);
+    return x >= pane_x && x < pane_x + kPaneW && y >= pane_y && y < pane_y + kTopH;
+}
+
+// REVSYNC: the right button up with Ctrl held, on the inventory
+// (0x00538267..0x00538333) and the belt (0x0052cff9..0x0052d0b5), before
+// anything else they do: the item under the pointer shows on the stats pane
+// (ShowStatPane 0x0047eff0, StatPane.SetObject 0x005496a0); with none, the
+// player does again when the stats pane is up already. Never an equip or a
+// compaction. Off the belt's boxes, nothing.
+static bool ShowItemInfoAt(int32_t x, int32_t y)
+{
+    const SHudState& s = GetHudState();
+    TObjectInstance* item = nullptr;
+    if (InInvPane(x, y))
+    {
+        TObjectInstance* const shown = Inventory.GetContainer();
+        if (!shown)
+            return false;
+        const int32_t slot = HitInvSlot(x, y, Inventory.FirstSlot());
+        item = slot >= 0 ? shown->GetInventorySlot(slot) : nullptr;
+    }
+    else if (const int32_t bs = s.bottomBarOpen && Player ? HitBarInvSlot(x, y) : -1; bs >= 0)
+        item = Player->GetInventorySlot(kInvSlotBeltFirst + bs);
+    else
+        return false;
+
+    if (item)
+    {
+        log_info("[ui-sidebar] item info: %s", item->GetName());
+        PlayScreen.ShowStatPane();
+        StatPane.SetObject(item);
+    }
+    else if (s.topSlot == HUD_TOP_STATS)
+        StatPane.SetObject(Player);
+    return true;
+}
+
 bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
 {
     SHudState& s = GetHudState();
 
-    // ---- MouseUp: commit / cancel an in-flight drag -------------------
+    // ---- Left button up: where an item grabbed in a pane lands --------
+    // Retail sends a release to every pane, and each item pane acts on the
+    // part that is over its own cells (UIDragState::Release). The equip pane
+    // takes a drop anywhere on it (0x005363e0): the item goes to its own
+    // slot, not the cell under the cursor.
     if (button == MB_LEFTUP)
     {
-        if (!UIDragState::IsActive()) return false;
-        const SUIDragState& drag = UIDragState::Get();
-        if (drag.source != EDragSource::Inventory &&
-            drag.source != EDragSource::BarInv &&
-            drag.source != EDragSource::Equip)
+        const EDragSource held = UIDragState::Get().source;
+        const bool itemGrab = held == EDragSource::Inventory || held == EDragSource::BarInv ||
+                              held == EDragSource::Equip;
+        if (held != EDragSource::None && !itemGrab)
+            return false;               // a spell: the book and the rings take it
+        if (OnInvContainerIcon(x, y))
         {
-            return false;
-        }
-        if (UIDragState::IsPending())
-        {
-            UIDragState::CompleteClick();
+            UIDragState::ReleaseOnContainerIcon();
             return true;
         }
+        if (!itemGrab)
+            return false;
 
-        // Drop targets in priority order: Equip (most specific) → BarInv →
-        // Inventory grid. First one to hit wins. Each could refuse on a
-        // real-item type-filter; the test harness accepts all.
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+        EDragSource dest = EDragSource::None;
+        int32_t cell = -1;
+        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP && InEquipPane(x, y))
         {
-            const int32_t es = HitEquipSlot(x, y);
-            if (es >= 0)
-            {
-                UIDragState::CompleteDrag(EDragSource::Equip, es, true);
-                return true;
-            }
+            dest = EDragSource::Equip;
+            cell = HitEquipSlot(x, y);
         }
-        if (s.bottomBarOpen)
-        {
-            const int32_t bs = HitBarInvSlot(x, y);
-            if (bs >= 0)
-            {
-                UIDragState::CompleteDrag(EDragSource::BarInv, bs, true);
-                return true;
-            }
-        }
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
-        {
-            const int32_t dest_slot = HitInvSlot(x, y, s.inventoryPage);
-            if (dest_slot >= 0)
-            {
-                UIDragState::CompleteDrag(EDragSource::Inventory, dest_slot, true);
-                return true;
-            }
-        }
-        // Released somewhere uninteresting → cancel (the source's slot
-        // keeps its item — no move committed).
-        UIDragState::Cancel();
+        else if (s.bottomBarOpen && (cell = HitBarInvSlot(x, y)) >= 0)
+            dest = EDragSource::BarInv;
+        else if (InInvPane(x, y) && (cell = HitInvSlot(x, y, Inventory.FirstSlot())) >= 0)
+            dest = EDragSource::Inventory;
+        UIDragState::Release(dest, cell);
         return true;
     }
 
-    // ---- Right-click: Use / Open-bag (retail eventType == 5) ---------
-    if (button == MB_RIGHTDOWN)
+    // ---- Right button up on an item cell, nothing held -----------------
+    // The inventory (0x00538210) and the belt (0x0052cfb0) with button 5:
+    // UIDragState::RightClick. On the inventory pane off its cells the shown
+    // container closes up, as on an empty cell; the other panes see that
+    // release too. Deviation: retail's belt read equipment slot 10 (0x10a)
+    // off its boxes, so it closed up the inventory, or re-equipped what is
+    // worn there with its sound; the port leaves a release off the boxes.
+    if (button == MB_RIGHTUP)
     {
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
+        if (CtrlDown)
+            return ShowItemInfoAt(x, y);
+        if (UIDragState::IsActive())
+            return false;
+        if (InInvPane(x, y))
         {
-            const int32_t slot = HitInvSlot(x, y, s.inventoryPage);
-            if (slot >= 0)
+            TObjectInstance* const shown = Inventory.GetContainer();
+            const int32_t slot = HitInvSlot(x, y, Inventory.FirstSlot());
+            UIDragState::RightClick(shown, shown && slot >= 0 ? shown->GetInventorySlot(slot) : nullptr);
+            return slot >= 0;
+        }
+        if (s.bottomBarOpen && Player)
+        {
+            if (const int32_t bs = HitBarInvSlot(x, y); bs >= 0)
             {
-                // For the test harness, any right-clicked slot is treated
-                // as a bag-open toggle. Real impl would inspect the slot's
-                // item type: bag → swap inventoryContainer; consumable →
-                // Use(); equipment → SetInventorySlot to auto-equip.
-                const int32_t was = s.inventoryContainer;
-                s.inventoryContainer = (was == slot + 1) ? 0 : (slot + 1);
-                log_info("[ui-sidebar] right-click inv slot=%d -> container=%d (was %d, %s)",
-                         slot, s.inventoryContainer, was,
-                         s.inventoryContainer == 0 ? "back to root" : "opened bag");
+                UIDragState::RightClick(Player, Player->GetInventorySlot(kInvSlotBeltFirst + bs));
                 return true;
             }
         }
         return false;
+    }
+
+    // ---- Right press on the equip pane: a worn item's sheet ------------
+    // REVSYNC: TEquipPane::MouseClick 0x005363f7..0x00536475 -- Ctrl or not,
+    // the item worn in the slot under the pointer shows on the stats pane.
+    if (button == MB_RIGHTDOWN)
+    {
+        if (s.sidebarState != HUD_SIDEBAR_OPEN || s.topSlot != HUD_TOP_EQUIP || !Player)
+            return false;
+        const int32_t es = HitEquipSlot(x, y);
+        if (es < 0)
+            return false;
+        if (TObjectInstance* const worn = Player->GetEquip(es))
+        {
+            log_info("[ui-sidebar] item info: %s", worn->GetName());
+            PlayScreen.ShowStatPane();
+            StatPane.SetObject(worn);
+        }
+        return true;
     }
 
     if (button != MB_LEFTDOWN) return false;
@@ -730,49 +846,46 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
     // The tab strip is its own controller at the playfield corner. It should
     // see clicks before content panes so tab changes never turn into item
     // grabs when the strip visually occupies the pointer point.
+    if (const int32_t i = UISideTabButtonAt(x, y); i >= 0)
     {
-        int32_t strip_x = 0, strip_y = 0;
-        TabStripOrigin(strip_x, strip_y);
-        for (int32_t i = 0; i < kBtnCount; ++i)
-        {
-            const int32_t bx = strip_x + kBtnX;
-            const int32_t by = strip_y + kBtnY[i];
-            if (x < bx || x >= bx + kBtnW) continue;
-            if (y < by || y >= by + kBtnH) continue;
+        const int32_t mode = g_buttons[i].mode;
+        const char*   region;
+        if (g_buttons[i].region == 0) { s.topSlot    = mode; region = "top"; }
+        else                          { s.bottomSlot = mode; region = "bottom"; }
+        s.sidebarState = HUD_SIDEBAR_OPEN;
 
-            const int32_t mode = g_buttons[i].mode;
-            const char*   region;
-            if (g_buttons[i].region == 0) { s.topSlot    = mode; region = "top"; }
-            else                          { s.bottomSlot = mode; region = "bottom"; }
-            s.sidebarState = HUD_SIDEBAR_OPEN;
+        // REVSYNC: TSideTabsPane::OnControl 0x0053d790, a tab turned on
+        // (0xbb9): Book and Spell show the book over the spell maker, Stats
+        // and Equip their pane over the inventory, Inv and Map only theirs.
+        bool paired = true;
+        if (mode == HUD_TOP_BOOK && g_buttons[i].region == 0)
+            s.bottomSlot = HUD_BOT_SPELL;
+        else if (g_buttons[i].region == 0)
+            s.bottomSlot = HUD_BOT_INV;
+        else if (mode == HUD_BOT_SPELL)
+            s.topSlot = HUD_TOP_BOOK;
+        else
+            paired = false;
 
-            // Retail dispatch pairs only the upper-region convenience presets:
-            // case 7/0xa = Book+Spell, case 9 = Equip+Inv. Lower-region
-            // commands 0xb/0xc update only DAT_0065d1bc, so clicking Inv/Map
-            // must not yank the upper pane away from Stats/Book/Equip.
-            bool paired = false;
-            if (s.topSlot == HUD_TOP_BOOK && g_buttons[i].region == 0)
-            { s.bottomSlot = HUD_BOT_SPELL; paired = true; }
-            else if (s.topSlot == HUD_TOP_EQUIP && g_buttons[i].region == 0)
-            { s.bottomSlot = HUD_BOT_INV;   paired = true; }
-
-            log_info("[ui-sidebar] click btn %d (%s/mode %d)%s -> top=%d bottom=%d",
-                     i, region, mode, paired ? " [paired]" : "",
-                     s.topSlot, s.bottomSlot);
-            return true;
-        }
+        log_info("[ui-sidebar] click btn %d (%s/mode %d)%s -> top=%d bottom=%d",
+                 i, region, mode, paired ? " [paired]" : "",
+                 s.topSlot, s.bottomSlot);
+        return true;
     }
 
-    // ---- Inventory grid: click-down on a cell starts a drag ----------
+    // ---- Item slots: click-down on an item starts a grab. The inventory's
+    // items are the shown container's; the belt's (slot 0x10b + n) and the
+    // doll's, the main player's.
+    // ---- Inventory grid ------------------------------------------------
     if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
     {
         int32_t slot = -1, sx = 0, sy = 0;
-        if (HitInvSlotRect(x, y, s.inventoryPage, slot, sx, sy))
+        if (HitInvSlotRect(x, y, Inventory.FirstSlot(), slot, sx, sy))
         {
-            TObjectInstance* fake_item =
-                reinterpret_cast<TObjectInstance*>(uintptr_t(slot + 1));
+            TObjectInstance* const shown = Inventory.GetContainer();
+            TObjectInstance* item = shown ? shown->GetInventorySlot(slot) : nullptr;
             UIDragState::BeginDrag(EDragSource::Inventory, slot,
-                                   fake_item, x, y,
+                                   item, x, y,
                                    nullptr, x - sx, y - sy);
             return true;
         }
@@ -784,10 +897,10 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         int32_t bs = -1, sx = 0, sy = 0;
         if (HitBarInvSlotRect(x, y, bs, sx, sy))
         {
-            TObjectInstance* fake_item =
-                reinterpret_cast<TObjectInstance*>(uintptr_t(0x100 + bs));
+            TObjectInstance* item =
+                Player ? Player->GetInventorySlot(kInvSlotBeltFirst + bs) : nullptr;
             UIDragState::BeginDrag(EDragSource::BarInv, bs,
-                                   fake_item, x, y,
+                                   item, x, y,
                                    nullptr, x - sx, y - sy);
             return true;
         }
@@ -799,63 +912,15 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
         int32_t es = -1, sx = 0, sy = 0;
         if (HitEquipSlotRect(x, y, es, sx, sy))
         {
-            TObjectInstance* fake_item =
-                reinterpret_cast<TObjectInstance*>(uintptr_t(0x200 + es));
+            TObjectInstance* item = Player ? Player->GetEquip(es) : nullptr;
             UIDragState::BeginDrag(EDragSource::Equip, es,
-                                   fake_item, x, y,
+                                   item, x, y,
                                    nullptr, x - sx, y - sy);
             return true;
         }
     }
 
-    // --- Inventory page arrows (only when bottom slot = Inv) ---------
-    // Per docs/ui/forensics/InventoryPane_SPEC.md:392/393:
-    //   scrollleft  button at pane-local (140, 11) 24x24
-    //   scrollright button at pane-local (161, 12) 24x24
-    // Pane is bottom-right at (display_w - 188, kTopH=306) → screen coords.
-    {
-        SHudState& s = GetHudState();
-        if (s.sidebarState == HUD_SIDEBAR_OPEN && s.bottomSlot == HUD_BOT_INV)
-        {
-            const int32_t dw       = Display.Width();
-            const int32_t inv_x    = (dw > 0 ? dw : kPaneW + kPaneRightInset) - kPaneW - kPaneRightInset;
-            const int32_t inv_y    = kTopH;
-            const int32_t leftBx   = inv_x + 140;
-            const int32_t leftBy   = inv_y + 11;
-            const int32_t rightBx  = inv_x + 161;
-            const int32_t rightBy  = inv_y + 12;
-            constexpr int32_t kArrW = 24;
-            constexpr int32_t kArrH = 24;
-            if (x >= leftBx && x < leftBx + kArrW && y >= leftBy && y < leftBy + kArrH)
-            {
-                if (s.inventoryPage > 0)
-                {
-                    s.inventoryPage--;
-                    log_info("[ui-sidebar] inv L-arrow click -> page=%d", s.inventoryPage);
-                }
-                else
-                {
-                    log_info("[ui-sidebar] inv L-arrow click (at page 0, no-op)");
-                }
-                return true;
-            }
-            if (x >= rightBx && x < rightBx + kArrW && y >= rightBy && y < rightBy + kArrH)
-            {
-                // Retail's hard upper bound is 0xf3 per spec UNCONFIRMED-D;
-                // clamp here so the test harness can't run away.
-                if (s.inventoryPage < 0xf3)
-                {
-                    s.inventoryPage++;
-                    log_info("[ui-sidebar] inv R-arrow click -> page=%d", s.inventoryPage);
-                }
-                else
-                {
-                    log_info("[ui-sidebar] inv R-arrow click (at max page, no-op)");
-                }
-                return true;
-            }
-        }
-    }
+    // (The inventory's page arrows are its own buttons: TInventory.)
 
     // (Tab strip already handled at the top of the LEFTDOWN section,
     // before chrome-pane slot hit-tests, so it takes precedence on
@@ -866,6 +931,33 @@ bool HandleMouseClickUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)
 void HandleMouseClickUISidebarMode(int32_t button, int32_t x, int32_t y)
 {
     (void)HandleMouseClickUISidebarModeConsumed(button, x, y);
+}
+
+// REVSYNC: the item panes' Animate -- the inventory 0x00537f90, the belt
+// 0x0052cd80, the doll 0x00536970: with no button held, the item under the
+// pointer picks the cursor's corner picture (CursorOverObject 0x0043a820),
+// the mouth over food, the eye over a scroll, the hand over a bag.
+void AnimateUISidebarItemCursor(int32_t x, int32_t y)
+{
+    if (mousebutton || !Player)
+        return;
+    const SHudState& s = GetHudState();
+    TObjectInstance* item = nullptr;
+    if (InInvPane(x, y))
+    {
+        TObjectInstance* const shown = Inventory.GetContainer();
+        const int32_t slot = HitInvSlot(x, y, Inventory.FirstSlot());
+        if (shown && slot >= 0)
+            item = shown->GetInventorySlot(slot);
+    }
+    else if (const int32_t bs = s.bottomBarOpen ? HitBarInvSlot(x, y) : -1; bs >= 0)
+        item = Player->GetInventorySlot(kInvSlotBeltFirst + bs);
+    else if (s.sidebarState == HUD_SIDEBAR_OPEN && s.topSlot == HUD_TOP_EQUIP)
+    {
+        if (const int32_t es = HitEquipSlot(x, y); es >= 0)
+            item = Player->GetEquip(es);
+    }
+    CursorOverObject(item);
 }
 
 bool HandleMouseMoveUISidebarModeConsumed(int32_t button, int32_t x, int32_t y)

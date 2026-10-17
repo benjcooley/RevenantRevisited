@@ -1,0 +1,242 @@
+# Play slot: the shipped game, played a tick at a time
+
+The retail host of the playtest track (docs/playtest/PLAN.md §7,
+PROTOCOL.md). The shipped Revenant.exe -- or a named build of it -- boots
+by its own code on the HUD slot's machine, continues into play
+(`QUICKSTART`), and runs one 24 Hz tick per `step` tick under a JSON Lines
+control channel, deterministically: virtual time, a cooperative scheduler,
+no host time or randomness. All game behaviour is retail's code; the host
+supplies Windows and the boundaries listed below.
+
+```sh
+PY=/Users/benjamincooley/RevenantRetailLab/research/retail-asm/venv/bin/python
+"$PY" tools/retail_runtime/slots/play/server.py [--build build.json] [--machine software|hud]
+                                               [--watch DIR] [--pace 24] [--work DIR]
+```
+
+then PROTOCOL.md §5 on stdin/stdout (`tools/playtest/host.py`'s
+`RetailHost` launches it). The first run of a machine boots it (about
+100-130 s) and caches the image; later runs load it in about 1.5 s.
+
+## The machine
+
+The HUD slot's (`slots/hud`: Windows 98, 64 MB, DirectDraw 4 / Direct3D 3
+on RAM surfaces, the install read-only at `C:\REVENANT`), on one of two
+Revenant.ini settings (`playworld.machine_ini`):
+
+| `--machine` | INI | What retail draws |
+|---|---|---|
+| `software` (default) | the install's, `[Options] Software3D = Yes` | retail's software renderer, as a player without a 3D card saw it: NoTex path (`0x006680c8 = 1`), the map blitted in 2D, the 2D HUD, meshes by the internal rasterizer |
+| `hud` | the install's | the HUD slot's declared hybrid (texture overlays on the internal rasterizer). Retail never ran this way: its internal rasterizer draws the map's ARGB1555 background texture (TSurface format `0x20000`) with its ARGB4444 span `0x0056bc30`, so the floor is noise |
+
+A recording's header names its machine and `ini_sha`; replay refuses a
+recording made on the other one.
+
+## Start (`playworld.py`)
+
+- **QUICKSTART.** Retail parses its command line once, in GetParameters
+  `0x00483bc0`, called from WinMain before game init: `QUICKSTART[="name"]`
+  sets `0x00668184` and copies the name to `0x0066603c`. Nothing reads
+  either before WinMain `0x00486f8a`, after game init, where they pick
+  TPlayScreen's start mode (`0x0047f4c0`: 0 new game, 1 load by name). The
+  boot image stops at `0x00486e7f`, after game init, so the host writes the
+  two parsed values there -- what a boot with `NOSOUND QUICKSTART[="name"]`
+  holds -- and WinMain's copy of the line (`0x0066819c`). One boot image
+  serves new games and every slot.
+- **Activation.** Windows sends WM_ACTIVATEAPP(TRUE) when the fullscreen
+  window shows; the HUD machine records ShowWindow without messages, so the
+  slot posts it before the first frame (the WndProc keeps wParam in
+  `0x006582c8`; TimerLoop pumps in a busy loop while it is 0).
+- **Seed.** `start(seed=N)` calls retail's own srand `0x0058c575` on the
+  main thread before WinMain continues (the CRT's rand is per thread). The
+  boot's srand(time()) at `0x0048662d` saw the virtual clock, so without
+  it the seed would be a constant too.
+- **Slot start.** The bundle's `start/<slot>` is copied into
+  `Save\Single\<slot>` (`overlay.place_slot`) before WinMain continues,
+  and the host calls retail's slot scan `0x0048d260(0)` on the save
+  manager `0x0065a618`. Retail fills that list only there (Load / Save
+  panes, QuickSave, the console's loadgame), never in game init, and
+  TPlayScreen::Initialize's start mode 1 looks the name up without a
+  rescan (`0x0047aedb`): retail's own `QUICKSTART="name"` from a cold
+  start finds nothing and starts a new game ("Unable to load saved
+  game... starting new game", seen here before the scan was added). The
+  scan is what the title's Load Game screen does before it loads.
+- `start` returns at the play screen's first tick wait: the module and
+  the game are loaded inside TPlayScreen::Initialize. A new game's opening
+  then plays under `step`, control off.
+
+## The tick
+
+`PlayWorld.step(events)`: post the tick's input, advance the virtual clock
+by 1000/24 ms, fire retail's timer once, and run every guest thread until
+the machine is quiet: the main thread waiting on the tick event
+(`0x006687f0`) and no thread runnable.
+
+- Retail's timer is `timeSetEvent(41 ms, TimerCallback 0x0049e2f0)`
+  (clockticks `0x006687ec`, TickOccurred `0x006682a4`, PulseEvent). A guest
+  thread stands in for winmm's (`mmtimer.py`): it waits on an event the
+  host sets once per tick and calls the recorded callback.
+- `GetTickCount` / `timeGetTime` are the virtual clock, so TimerLoop's
+  frame-rate estimate (`0x0049133d`..`0x00491401`) never drops below 23.5
+  and it never skips a frame: one tick is one TimerLoop pass that draws
+  (TimerTick(1); verified by the screen's frame counter, +1 per step, in
+  `test_playworld.py`).
+- Long work inside a frame (loading a level) does not move virtual time:
+  lockstep, as PLAN.md §5 asks.
+
+## Input (`userinput.py`)
+
+Traced, not assumed: keys and characters reach retail as WM_KEYDOWN / UP /
+WM_CHAR through the WndProc `0x00448cc0`; mouse buttons as
+WM_[LRM]BUTTONDOWN / UP (MouseClick `0x0048f870`, held mask `0x00668518`);
+the pointer is polled with GetCursorPos every TimerTick (`0x00490d6f`),
+the WndProc ignores WM_MOUSEMOVE (posted all the same); GetKeyboardState is
+read only by TimerTick's idle test. Messages carry Windows' lParam bits
+(scan code, extended, repeat, Alt context, transition) and MK_ flags; Alt
+makes WM_SYSKEY*. The keyboard state follows the messages the game
+removes, as Windows' does. TranslateMessage posts nothing: the recording
+carries characters as their own events. DirectInput (and so the
+joystick) stays absent, as in the HUD machine.
+
+## Frames, files, observation
+
+- Frames (`frames.py`): the primary surface, which retail presents to by
+  blitting its back buffer; RGB565 to RGB888 by bit replication, PNG.
+- Text (`gditext.py`): the HUD machine's GDI records TextOutA / DrawTextA
+  and draws nothing, so retail's own text compose (`0x004be2b0`: a work
+  surface keyed 0x7f7f, three black DrawTextA passes for the shadow, one
+  in colour, then a keyed blit) had empty pixels. The play slot also draws
+  the glyphs into the DC's surface: FreeType's (Pillow) hinted monochrome
+  shapes from the same font files, placed by gdi.py's GDI metrics (the
+  advances and ascent retail laid the text out with). Approximate, not
+  Windows 98's rasterizer; it shows the dialog, the choices, the text bar
+  and the status numbers as retail composes them.
+- Files (`overlay.py`): writes land in memory over the read-only install,
+  only under `Save\`, `CurMap\`, `ss.bmp` and INI files (anything else fails
+  by name); they persist across steps and in images. `export_slot` copies
+  `Save\Single\<slot>` out; `@last` is the slot the game wrote last.
+  Created names keep their case (winfs), so the game's own slot scan sees
+  "Quick Save 1".
+- Observation and check lines (`observe.py`): memory reads at the
+  documented layouts, each cited in the module, plus getters retail itself
+  uses for computed values (maximum health / fatigue / mana, WeaponType,
+  Radius, an item's GetStat, IsEnemy, OnObject, the panes' click tests)
+  called through `PlayWorld.peek`, which refuses any call that makes an API
+  call or draws a random number, and puts back every byte of game memory
+  the call wrote (IsEnemy lowercases names into a static buffer at
+  `0x00666648`; OnObject narrows a surface's clip rect and widens it
+  again): observing leaves the machine as it was. Text-bar lines and speech are read where
+  retail makes them (`TTextBar::AddLine` past its empty-line test
+  `0x0054d0e3`, `TCharacter::Say` `0x004d0610`).
+- `draws`: every call of the CRT rand `0x0058c582`, the game's random
+  stream (random() `0x00483300` draws only when its bounds differ; 32
+  other callers draw directly) -- what the port's RandomDraws() counts.
+
+| Field | Read from |
+|---|---|
+| `screen` | CurrentScreen `0x00667fd0` against the screen objects; `menu` while the in-game menu's open flag `0x0066f788`, `dialog` while the dialog pane's response entry `0x00667cc8+0x190` |
+| `control` | TPlayScreen `+0x5e0` (`0x0065d0d0`) |
+| player | Player `0x00667fcc`: pos `+0x10/14/18`, level `+0x0e`, facing `+0x36`; mode from `root` `+0xe0`; stats from the player's copy (`+0x34c` count, `+0x350` {id, value}), ids from `0x0066ca4c` / `0x0066ca3c` / `0x0066ca38`; maxima through vtable `+0x1d8/+0x1e0/+0x1e8`; `doing` `+0xd8` (action `+0`, name `+4`); target = `root` `+0xe0` -> obj `+0x44` while root is combat (3) or bow (0x19); xp stats 17-19; skills stats 40-42 and 43 + WeaponType (vtable `+0x2cc`); weapon = equipment hand `+0x2b0`, mask `1 << WeaponType`; belt = inventory items (`+0x68` count, `+0x78` data) in slots `0x10b..` |
+| `objects` | the loaded sectors (`0x00668578` count, `0x00668588` array; `+0x98` loaded, `+0xb8` count, `+0xc8` objects) on the player's level: id `+0x40`, name `+0x38`, type name `*(+0x4c)`, class `+0x04` (OBJCLASS_IDS.md), health and action as the player's |
+| `screen` (player, objects), `project` | retail's WorldToScreen `0x0046d7a0` less the map pane's scroll origin `0x006668d8+0x78/+0x7c`; null off the pane |
+| `pick` | `pos`: retail's ScreenToWorld `0x0046dad0` at Locke's z + 50, as UpdateMouseMovement `0x0044ee00`. The object under an arbitrary point needs the 3D pick, which draws a frame: not answered (the pointer's is `cursor`) |
+| `world` (`project`, `pick`) | retail's routing of a button message, read without clicking: the dispatcher `0x0048f870` (`0x006682bc`; a fade whose flags hold the mouse), TPlayScreen::MouseClick `0x0047ce80` (paused `+0x5d4`; demo mode's restart), TScreen::MouseClick `0x004903b0` (the top exclusive pane alone while it holds the mouse; else every pane that takes clicks -- slots `+0x3c`/`+0x44` and `+0x44` clear -- with the point in its rect); then the map pane `0x006668d8` must get the press, not over a side tab's button (`0x004364d0` on `0x0065be50`, `0x0044f17b`), the editor off, a player. A press over the status or text bar reaches the map pane too, as in retail |
+| `cursor` | TMapPane::OnObject `0x00452520` at the polled pointer (`0x00668510`/`14`) less the map pane's origin, through `peek`: it reuses the 3D pick each DrawScene makes at the pointer (`0x005e91cc`/`d0` point, `0x005e91d4` object), then walks the map's 2D objects; null off the pane, left out while the pick isn't at the pointer |
+| `player.pack` | TInventory `0x0065d4f8` while it shows the player (`+0x17c`): his items in slots first (`+0x188`) .. first + 11, cell (column, row) = slot - first as column * 3 + row, centred at pane (8 + 45 column + 20, 42 + 44 row + 20) (DrawGrid `0x00537a70`, the right click's hit test `0x0053835e`); `eqslot` GetStat("EqSlot") (vtable `+0xd4`, `0x00473600`; -1 when neither of the class's stat lists `+0x48`→`+0x1c`/`+0x14` names it); `screen` null while a press there wouldn't reach the pane |
+| `player.equipped` | TPlayer equipment `+0x2a0`, 11 slots (`EQ_*`) |
+| `player.radius` | Radius() (vtable `+0x258`, `0x004d6e40`), what FindClearPath passes GetWalkHeightRadius (`0x004c3a3f`, `0x004c3a51`) |
+| `walkgrid` | per cell, GetWalkHeight `0x00452e10`'s read: FindSector `0x00499e10` (the pool's first sector with the level, x, y: `+0x04/+0x08/+0x0c`), its walkmap `+0x00` (64 x 64 uint16, low 10 bits, `0x00499720`), 0 without one; -1 where FindSector finds none. Read a sector at a time in Python: the 2400 grid in about 2 ms |
+| `dialog` | the response entry's texts (`+0x5c` count, `+0x60` texts), the latest NPC entry's speaker and text |
+| `messages` | text-bar lines since the previous `observe` |
+
+`mode` is the root block's, as IsValidAttack's mode test reads it;
+`quick_spells` match each slot's talisman code (TPlayer `+0x2cc`, char[6],
+slots 1-4) exactly against the spell list's variants (`0x00667c38`), first
+in file order, as retail casts by talismans; `gold` is retail's
+GetInventoryAmount("Gold") (vtable `+0x84`, `0x0046fde0`, nested), called
+through `peek`. Not read (not verified): `action_tick` only for an attack
+(the one retail keeps as `lastattack` `+0x160`, started at GameFrame
+`+0x164`). Names in `pack`, `equipped` and `weapon` are the instance names
+(`+0x38`); the port shows its pack, equipped and weapon names through
+DisplayName (retail `0x0046e7f0`), which differs for an item with a dialog
+line of its name (MGCSCRL1 is the scroll's text there).
+
+Checked in `test_observe.py`, from the port's `opening` waypoint: a right
+click on the Short Sword's reported cell equips it; with the in-game menu
+up no cell and no point takes a click; at seven points `world` is exactly
+where TMapPane::MouseClick's play branch (`0x0044f84f`) received the
+press; `cursor` names Tendrick over his reported point and Locke (0) over
+his, and the next press finds the same object (`+0xf8`); `walkgrid` cells
+equal retail's own GetWalkHeight (-1 exactly where FindSector finds none);
+`radius` is what FindClearPath passes for Locke. From the same slot the
+port gives the same pack, radius, walk grid (every cell both know) and
+cursor answers.
+
+## Server (`server.py`)
+
+PROTOCOL.md §5: hello, start, step, observe, project, pick, export_slot,
+mark, replay (`verify`), checkpoint / restore (machine images on disk, with
+the recording so far), caption, quit. The log on stderr is one line per
+entry, `t=<tick> <kind> <detail>`: commands, input events, boundaries,
+text-bar lines, speech, dialog choices as the player reads them.
+`--watch DIR` writes `frame.png` (zlib level 1,
+written then renamed) after every tick and `caption.txt`; `--pace N` caps
+ticks per wall-clock second. A `start` with an `ini` other than the
+machine's is refused: retail reads the INI during game init, before play.
+
+Named builds (`--build build.json`, build_contract.py) boot their own image
+and report their name and patches in `hello` and the recording's header.
+Checked with the `clickwalk` build: from the same slot, a left click on
+open floor leaves the baseline's Locke where he stands and walks the
+build's onto the point (Goto target `(1362,534)`, reached at tick 45).
+
+## Boundaries
+
+The HUD machine's (boot log `0x004820b0`, network init `0x00575890`). The
+opening reached no other: with NOSOUND no Miles call, no Smacker (the intro
+movie is before QUICKSTART's branch). An in-game movie, DirectPlay or audio
+call would stop the run by name.
+
+## Measured (this Mac, 2026-10-11)
+
+Wall times on a shared machine (load average 4-12 while measuring, 20-45
+at other times, which slows everything proportionally):
+
+| | |
+|---|---|
+| Boot a machine image (once per build and machine) | 99-134 s idle, up to 260 s under load |
+| Load the cached image, `hello` | 0.5-1.5 s, 0.13 s |
+| `start` new game / from a slot | 3-9 s / 4-8 s |
+| Stepping, no watch (through server.py) | 8.0 ticks/s (7.0 over a whole recorded opening, 7.1 replaying it) |
+| Stepping with `--watch` / `--watch --pace 24` | 7.45 / 7.0 ticks/s |
+| `checkpoint` / `restore` (8.6-10 MB image) | 0.34-0.5 s / 0.8-1.1 s |
+| `observe` / with `walkgrid` 2400 / a check line | about 10 ms / about 20 ms through server.py (2026-10-11, load about 30) / under 0.1 ms |
+
+Where a tick goes (a dialog scene, 76 ms): the guest's own work in Unicorn
+about 40-50 ms; the Python side of API boundaries about 25-35 ms (1360
+calls a tick -- DirectDraw locks and blits, critical sections -- of which
+handler bodies 14 ms); `--watch`'s PNG 10-20 ms (RGB565 expansion and
+zlib level 1). Scenes with more on screen run slower (0.12-0.15 s).
+Already removed: Unicorn's per-instruction count (solo threads, 4.7x),
+the checkpoint write hook (1.9x), per-pixel Python colour-keyed blits
+(100x on those calls).
+
+Evidence run (`opening_session.py`, 2026-10-11): a new game recorded
+through the channel; both choice menus answered `3`; control at tick 7492;
+Locke walked right 48 ticks ((1207,667) to (1368,506)); Ctrl+Backspace
+wrote "Quick Save 1" (game.sav, ss.bmp, 25 CurMap sectors) and
+`export_slot @last` copied it; `replay` with `verify` of the 7580-tick
+bundle compared 317 check lines with no divergence. The port loads that
+slot with `--quickstart="Quick Save 1"`: Locke on level 2 at (1368,506,17),
+HP 100/100, 9 items.
+
+## Gaps
+
+- Text glyphs are approximate (gditext.py): FreeType, not Win98 GDI.
+- `pick` without the object (`cursor` has the pointer's); `action_tick` for
+  attacks only; `quick_spells` checked only empty (no spell bound in the
+  states tested).
+- The guest heap is 64 MB (`Runtime.HEAP_SIZE`); with block reuse a long
+  session holds steady (the opening: 41.6 MB used, flat), but a level
+  change has not been measured.
+- Speed: 7-13 ticks/s, not 24: see Measured.

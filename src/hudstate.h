@@ -4,9 +4,11 @@
 // *************************************************************************
 //
 // Mirror of the retail HUD's persistent state — the modal slot selections,
-// the sidebar/HUD open flags, and a few derived display modes that must
-// survive Save/Load.  Per user note 2026-05-30: this was a forensics gap,
-// the per-panel SPECs did not flag that this state belongs in the savegame.
+// the sidebar/HUD open flags, and a few derived display modes. Per user note
+// 2026-05-30: this was a forensics gap, the per-panel SPECs did not flag that
+// this state belongs in the savegame. Retail writes it there (the player's
+// HUD words, TSaveGame::CurrentHudWords) but never reads it back: entering
+// play resets it and an in-game load keeps it (TPlayScreen::Initialize).
 //
 // Retail evidence (from `recon/discovered/FUN_0047cf40_TPlayScreen_DispatchCommand.cpp`):
 //   DAT_0065d1b8 — upper-region modal: 0=Equip, 1=Stats, 2=Book (Spellbook)
@@ -59,23 +61,13 @@ struct SHudState
     int32_t bottomBarOpen   = 1;  // case 4 toggle (mbr_0x5b8 in retail)
     int32_t textBarVisible  = 1;
     int32_t statsBarVisible = 1;
-    // Inventory page index — driven by the scrollleft/scrollright arrows
-    // at pane-local (140,11)/(161,12). 0 = first page. Retail upper bound
-    // is 0xf3 per InventoryPane_SPEC `mbr_0x188` analysis.
-    int32_t inventoryPage   = 0;
-    // Currently-open container: 0 = root inventory; >0 = bag slot index
-    // (1 = bag in slot 0, 2 = bag in slot 1, …) — clicked-into-bag stack
-    // is single-level for now. Per user 2026-05-30: "Clicking on a bag in
-    // the inventory replaces the pack icon with a miniature image of the
-    // bag, and the inventory shows the contents of the bag."
-    int32_t inventoryContainer = 0;
     // Spellbook scroll offset in pixels — driven by the up/down arrows
     // at pane-local (169, 150) and (169, 174). Per SpellbookPane_SPEC:
     // ±40 per tick (one spell row = ~91px; 40 is a half-row scroll).
     int32_t spellbookScroll = 0;
 
     static constexpr uint32_t kMagic   = 0x52485644;  // 'RHVD'
-    static constexpr uint32_t kVersion = 4;
+    static constexpr uint32_t kVersion = 5;     // 5: the inventory keeps its page and container itself
 };
 
 bool SaveHudState(const SHudState& s, const char* path);

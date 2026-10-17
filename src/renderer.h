@@ -77,6 +77,7 @@
 #pragma once
 
 #include "revenant.h"
+#include "bitmapdecode.h"
 #include "render3d_types.h"
 
 #include <sokol_gfx.h>
@@ -96,8 +97,41 @@ _CLASSDEF(TSurface)
 // click-pick reads the same pixel and masks them off.
 constexpr uint32_t kObjFlagSelected = 1u << 31;
 constexpr uint32_t kObjFlagHovered  = 1u << 30;
+// The surface shows its own colours, unlit: retail drew it after the light
+// transfer (a 2D imagery state with ANIIM_LIT). The light pass tests it.
+constexpr uint32_t kObjFlagSelfLit  = 1u << 29;
+// The surface casts no sun shadow (effects: water, surf, magic): the shadow
+// pass's ray march passes through it. It still receives shadow.
+constexpr uint32_t kObjFlagNoShadow = 1u << 28;
 constexpr uint32_t kObjIdMask       = 0x0FFFFFFFu;
 constexpr uint32_t kObjFlagMask     = 0xF0000000u;
+
+// Inputs to the light pass's Classic model (lighting mode 0), which lights
+// the two G-buffer surface classes the way retail lit them: static tiles
+// with the DLS light tables, 3D meshes with T3DScene's vertex lighting.
+// The renderer only evaluates the model; the game layer derives these
+// values from the area ambient and the lighting settings
+// (classiclighting.cpp). Derivation: docs/LIGHTING_FIDELITY.md §2-§3, §6.
+struct SClassicLightModel {
+    // Static tiles (DLS through the MMX light table). Both are gains, i.e.
+    // the table's multiplier bytes over 8: tile_ambient is the truncated
+    // ambient byte / 8, so 8 * tile_ambient is an integer.
+    float tile_ambient[3]        = {};    // ambient gain per channel
+    float tile_gain_per_mult     = 0.0f;  // full-intensity light gain per unit of light multiplier
+    float tile_ambient_linear[3] = {};    // the ambient gain before the byte truncation (the modern ambient)
+    // 3D meshes (T3DScene). Light values are in effective units, after the
+    // EnhancedLighting MODULATEnX scale; mesh_overbright is that scale.
+    float mesh_ambient[3]        = {};
+    float mesh_ambient_intensity = 0.0f;  // subtracted from each light's brightness, pre-scale
+    float mesh_dir_color[3]      = {};    // directional key light colour
+    float mesh_gain_per_mult     = 0.0f;  // light brightness at the source per unit of multiplier
+    float mesh_dir_to_light[3]   = { 0.0f, 0.0f, 1.0f };  // world space, unit length
+    float mesh_overbright        = 1.0f;  // ceiling on summed mesh light
+    // Whether the map's lights reach meshes. Retail lights 3D objects with
+    // their MaxLights nearest map lights only when RealTimeLight is on
+    // (LightAffectObject 0x00415c70); otherwise ambient and key light only.
+    bool  mesh_map_lights        = false;
+};
 
 // Opaque handles to renderer-owned resources. 0 is invalid.
 using MeshHandle = uint32_t;
@@ -234,6 +268,8 @@ struct SBillboardDrawItem
     float        size_wu[2]     = {1.0f, 1.0f};
     float        color_rgba[4]  = {1.0f, 1.0f, 1.0f, 1.0f};
     float        uv_rect[4]     = {0.0f, 0.0f, 1.0f, 1.0f};   // x,y,w,h normalized
+    // Ordered multipass sprites are barriers to material-based reordering.
+    bool preserve_submission_order = false;
     SFxBatchKey  key            = {};
     EFxDebugMode debug_mode     = EFxDebugMode::Normal;
     // Per-instance per PHASE1_SPINE.md §6: lighting is a runtime
@@ -303,6 +339,35 @@ struct SStripDrawItem
     SFxBatchKey          key          = {};
     EFxDebugMode         debug_mode   = EFxDebugMode::Normal;
     EFxLightMode         light_mode   = EFxLightMode::Unlit;
+};
+
+// Authored quad geometry: corners are already in world space. Unlike a
+// billboard, this preserves the asset's tilt, shear, and per-corner depth.
+// Corner order is top-left, top-right, bottom-left, bottom-right in UV space.
+// The existing strip vertex pipeline projects these vertices without extrusion.
+struct SQuadDrawItem
+{
+    float world_pos[4][3] = {};
+    float uv[4][2] = {{0.0f, 0.0f}, {1.0f, 0.0f},
+                       {0.0f, 1.0f}, {1.0f, 1.0f}};
+    float color_rgba[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    // Optional authored vertex colors; default remains the uniform tint.
+    bool per_corner_color = false;
+    float corner_color_rgba[4][4] = {};
+    SFxBatchKey key = {};
+    uint8_t corner_count = 4; // 3 preserves one authored triangle; 4 uses the quad diagonal.
+    uint8_t retail_texture = 0; // 1: nearest; 3: ARGB4444; 4: RGB565 additive; 5: untextured RGBA5.
+    bool retail_rgb565_additive = false; // Exact RGB565/profile opt-in; software policy only.
+    bool retail_argb4444 = false; // Exact source format opt-in; fallback policy stays above.
+    // Explicit untextured format: color is literal RGB5/A5; per-triangle flat
+    // maximum depth and source contribution truncation. Native projection also
+    // uses the original integer sample lattice. Defaults preserve ordinary FX.
+    bool retail_prelit_rgba5 = false;
+    bool retail_software_pixel_grid = false; // Default-off native/software integer XYZ sample lattice.
+    bool retail_software_projection = false; // XYZ are original software MODELZ/world.
+    float retail_camera_z = 0.0f; // Explicit original camera input; XY use reconstruction camera.
+    EFxDebugMode debug_mode = EFxDebugMode::Normal;
+    EFxLightMode light_mode = EFxLightMode::Unlit;
 };
 
 class TParticleBucket;   // forward, see particlefx.h
@@ -383,6 +448,19 @@ enum class ERendererTextureFilter : uint8_t
     Nearest,
 };
 
+// Retail's two 2:1 reductions, done as the reduce pipeline draws
+// (TRenderer::DrawBitmapHalvedToTarget; kCompositeReduceFs has the
+// arithmetic).
+enum class EHalving : uint8_t
+{
+    // 0x004a31a0: the mean of the opaque texels of a block, empty where fewer
+    // than three are opaque (a pouch's thumbnail of the first item in it).
+    OpaqueMean,
+    // 0x00538e40: all four texels, the empty ones black, and empty where
+    // that comes out black (the inventory's icon of the bag it shows).
+    BoxOverBlack,
+};
+
 // Per-vertex layout for rigid meshes (mesh slot 0). Tight-packed, 32 bytes.
 struct SMeshVertex
 {
@@ -396,32 +474,96 @@ struct SMeshVertex
 // mesh handle, uploads a dynamic instance vertex buffer, and emits one
 // instanced draw per mesh at EndTilePass (instancing is always on; a single
 // instance just means count=1).
+//
+// The tint alpha picks the pass. At kOpaqueMeshAlpha or above the mesh fills
+// the G-buffer; below it the mesh is translucent and draws in the
+// transparent-world pass over the lit scene, back to front by sort_depth.
+// Translucent meshes that share a surface_id are one surface (a character's
+// body parts): it shows only its nearest layer, blended once.
 struct SMeshSubmit
 {
-    MeshHandle mesh;
-    float      world[16];     // row-major 4x4
-    float      tint[4];       // rgba multiplier
+    MeshHandle mesh = 0;
+    TTextureHandle texture_override = kInvalidTexture; // per draw; invalid uses cached albedo
+    float      world[16] = {};   // row-major 4x4
+    float      tint[4] = { 1.0f, 1.0f, 1.0f, 1.0f };   // rgba multiplier; alpha < kOpaqueMeshAlpha = translucent
     uint32_t   obj_id = 0;    // packed into id_target (RGBA8) for picking
+    float      uv_offset[2] = {0.0f, 0.0f}; // authored scrolltex, per instance
+    // Classic software I3D: 0 deferred, 1 RGB565 vertex-lit, 2 ARGB unlit,
+    // 3 exact ARGB4444 lookup (RGB565 channels and alpha nibble plus one).
+    int32_t    retail_lighting = 0;
+    // Opt-in source positive screen-down faces. Ordinary opaque depth/write
+    // policy is retained; default meshes keep their existing two-sided path.
+    bool retail_positive_face_cull = false;
+    float      sort_depth = 0.0f;   // translucent only: camera depth, wu (greater is farther)
+    uint32_t   surface_id = 0;      // translucent only: shared by one surface's meshes; 0 = its own surface
+    // A second pass of a mesh already submitted this frame: its lit colour
+    // added on top (ONE/ONE, depth-tested against its own depth, no writes).
+    // Retail blend mode 16 (litadd) re-rendering a lit mesh: a character's
+    // combat flash (TCharAnimator::Render 0x004d7be5).
+    bool       additive = false;
 };
+
+// Tint alpha at or above which a mesh is opaque. Retail drew a character's
+// materials opaque when their alpha was within 0.001 of 1 (TCharAnimator
+// SetMaterialTransparency 0x004d82a0) and alpha-blended otherwise.
+inline constexpr float kOpaqueMeshAlpha = 0.999f;
+
+// How a transparent mesh forms its color before blending.
+//   Material   -- tex*diffuse*(ambient + light*N.L) + specular + emissive
+//                 (the helper-object look).
+//   Texture    -- the texture alone.
+//   TextureLit -- the texture modulated by fixed-function vertex lighting,
+//                 saturate(emissive + ambient*A + diffuse*light*N.L), the way
+//                 a D3D MODULATE stage combines them; alpha is tex.a*diffuse.a.
+enum class EHelperMeshShade : uint8_t { Material = 0, Texture = 1, TextureLit = 2 };
 
 struct SHelperMeshSubmit
 {
-    MeshHandle mesh;
-    float      world[16];
+    MeshHandle mesh = 0;
+    TTextureHandle texture_override = kInvalidTexture;
+    float      uv_offset[2] = {0.0f, 0.0f}; // per-owner atlas/scroll, shared geometry stays immutable
+    float      world[16] = {};
     bool       shadow_plane = false;
-    bool       additive_blend = false;
-    float      diffuse[4];
-    float      ambient[4];
-    float      specular[4];
-    float      emissive[4];
-    float      power;
+    bool       additive_blend = false;   // ONE, ONE; otherwise SRC_ALPHA, ONE_MINUS_SRC_ALPHA
+    EHelperMeshShade shade = EHelperMeshShade::Material;
+    bool       premultiply_alpha = false; // color *= alpha first: SRC_ALPHA, ONE under additive_blend
+    float      diffuse[4] = {};
+    float      ambient[4] = {};
+    float      specular[4] = {};
+    float      emissive[4] = {};
+    float      power = 0.0f;
     float      sort_depth = 0.0f;
+    // 0: existing helper material shader. 1: Blue SW RGB565 normal lighting,
+    // five-bit vertex Gouraud modulation, nearest wrapped texture sampling.
+    // 2: normalized ARGB unlit. 3: exact ARGB4444 software lookup.
+    // Material specular/emissive are not implemented by the source SW path.
+    int32_t    retail_lighting = 0; // 4: untextured RGB5; 6: RGB565 constant prelit RGBA5 in diffuse (explicit input format)
+    int32_t    index_offset = 0, index_count = 0; // zero count keeps the full mesh
+    bool       retail_flat_depth = false; // original untextured max(vertex Z), one triangle
+    float      retail_flat_depth_offset = 0.0f; // depth minus camera/base translation
+    bool       retail_prelit_rgba5 = false; // explicit mode4 vertex format: normal=RGB5, uv.x=alpha5; no normal lighting
+    // Optional immutable weighted prelit mesh: uv.y is the vertex weight.
+    // Color layout is A5:R5:G5:B5 in bits15:10:5:0; exact in a float uniform.
+    bool       retail_prelit_color_uniform = false;
+    uint32_t   retail_prelit_color = 0;
+    bool       retail_additive_cull_none = false; // explicit Scene8 full native draw-state proof
+    bool       retail_opaque = false; // audited Scene1: ONE/ZERO, depth test/write, selected face cull
+    bool       retail_source_alpha = false; // audited source mode2: cull-none; mode4 writes Z as the native untextured kernel
+    bool       retail_alpha_source_quantize = false; // opt-in original ARGB4444 source contribution floor; destination precision remains GPU
+    // Undo an explicit geometry-only Z bridge before source normal lighting.
+    float      retail_normal_z_scale = 1.0f;
+    bool       retail_gold_no_depth = false; // audited authored mode80, no depth test/write
+    bool       retail_positive_face_cull = false; // source positive screen-down; opt-in only
+    bool       retail_software_projection = false;
+    bool       retail_software_pixel_grid = false; // Source integer raster inputs; explicit native/software only.
+    float      retail_camera_z = 0.0f;
 };
 
 enum class ETransparentWorldKind : uint8_t
 {
     Tile,
     Helper,
+    Mesh,       // translucent SMeshSubmit
 };
 
 struct STransparentWorldSubmit
@@ -430,6 +572,8 @@ struct STransparentWorldSubmit
     float                 sort_depth = 0.0f;
     STileSubmit           tile = {};
     SHelperMeshSubmit     helper = {};
+    SMeshSubmit           mesh = {};
+    int32_t               mesh_instance = 0;   // Mesh: row in this drain's instance buffer
 };
 
 // THudDrawable -- base class for everything that draws into the HUD layer.
@@ -471,7 +615,7 @@ public:
 
     // Max simultaneous point lights per deferred light pass. Extras are
     // silently dropped by AddPointLight.
-    static constexpr int32_t kMaxPointLights = 16;
+    static constexpr int32_t kMaxPointLights = 128;
 
     TRenderer();
     ~TRenderer();
@@ -500,6 +644,11 @@ public:
     void SubmitOverlay(const SOverlaySubmit& t);
     void SubmitMesh(const SMeshSubmit& m);
     void SubmitHelperMesh(const SHelperMeshSubmit& m);
+    // Exact Goldp default animator: retail draws alpha coins before its base
+    // additive flare. Normal helper queue and shader modes are unchanged.
+    void SubmitGoldFlareAfterFx(const SHelperMeshSubmit& m);
+    // Original mode2 ARGB layers submitted after their particle controller.
+    void SubmitRetailSourceAlphaAfterFx(const SHelperMeshSubmit& m);
     void EndTilePass();
     [[nodiscard]] SRendererTilePassStats GetLastTilePassStats() const
     {
@@ -536,7 +685,8 @@ public:
                                         int32_t height,
                                         ERendererTextureFormat format,
                                         uint64_t gpu_bytes,
-                                        ERendererTextureFilter filter = ERendererTextureFilter::Linear);
+                                        ERendererTextureFilter filter = ERendererTextureFilter::Linear,
+                                        bool repeat = false);
     const SRendererTextureInfo* TextureInfo(TTextureHandle handle) const;
     void AddTextureAssetRef(TTextureHandle handle, uint32_t count = 1);
     void ReleaseTextureAssetRef(TTextureHandle handle, uint32_t count = 1);
@@ -586,12 +736,9 @@ public:
                   float r, float g, float b, float ambient);
     // Ambient floor color, applied independently of the sun's tint.
     void SetAmbientColor(float r, float g, float b);
-    // Ceiling on summed deferred light (ambient + per-point-lights),
-    // applied per-channel before multiplying albedo. Default 1.5 lets
-    // ambient push slightly overbright (helps the linear-space GPU
-    // path match retail's non-linear palette boost) while still capping
-    // stacked point-light blow-out. Range typical [0.5..4.0].
-    void SetLightCeiling(float ceiling);
+    void SetRetailMeshLighting(const float ambient[3], const float directional[3], bool rgb_enabled);
+    [[nodiscard]] bool UsesRetailSoftwareMeshLighting() const
+    { return light.mode == 0 && retail_mesh_rgb_enabled; }
     // Z-buffer-based screen-space ambient occlusion.
     void SetAmbientOcclusion(bool enable, float radius_px, float strength,
                              float bias, float max_dist_wu);
@@ -609,10 +756,12 @@ public:
     //   4 = point-only   5 = recon heat 6 = shadow mask 7 = AO only
     //   8 = z edges      9 = ground/world height
     void SetTileViewMode(int32_t mode);
-    // 0 = retail 1998 (ambient + distance-only point lights, no sun,
-    //                  no shadows, no AO)
-    // 1 = modern (adds directional sun + screen-space contact shadows)
+    // 0 = Classic: the retail lighting model (SetClassicLightModel), no
+    //     sun, no shadows, no AO
+    // 1 = modern (ambient * light_col.w, directional sun + screen-space
+    //     contact shadows, AO, world-space point-light falloff)
     void SetLightingMode(int32_t mode);
+    void SetClassicLightModel(const SClassicLightModel& model);
     // Sun contact-shadow mask. The expensive receiver->sun ray march writes
     // a low-resolution R32F visibility buffer once; softness is then a cheap
     // separable blur of that buffer before deferred lighting samples it.
@@ -638,13 +787,36 @@ public:
     void SetShadowVariance(float sx, float sy, float sz);
 
     // ---- Point lights ---------------------------------------------------
-    // Rebuild each frame: ClearPointLights() then AddPointLight(...) per.
-    // Position is world xyz, radius is world units (linear-then-squared
-    // falloff to 0 at radius). Up to kMaxPointLights per frame; extras
-    // silently dropped.
+    // Rebuild each frame: ClearPointLights() then Add*PointLight(...) per.
+    // Up to kMaxPointLights per frame across both kinds; extras silently
+    // dropped.
     void ClearPointLights();
+    // Direct light: world xyz, radius in world units, colour * intensity
+    // added through the pow falloff in every lighting mode.
     void AddPointLight(float wx, float wy, float wz, float radius_wu,
                        float r, float g, float b, float intensity);
+    // Authored map light (an object's SLightDef): radius is the authored
+    // intensity, rgb the authored colour / 255, multiplier the resolved
+    // retail multiplier. Classic evaluates it with the retail model; modern
+    // scales it with SetRetailLightModernScale.
+    void AddRetailPointLight(float wx, float wy, float wz, float radius,
+                             float r, float g, float b, float multiplier);
+    // Modern-mode reading of retail lights: intensity = multiplier *
+    // gain_per_mult, world radius = radius * range_scale.
+    void SetRetailLightModernScale(float gain_per_mult, float range_scale);
+    // The modern model's shared scale (lightmodel.*.h modern_model): the
+    // light baked into the tile art (tile pixel = reflectance x this), the
+    // tone curve's shoulder (1 = hard clip), and for 3D objects the form
+    // retail's key light gives the light a tile at their place would get,
+    // and that light's boost. docs/lighting/LIGHTING_AB.md §6.4.
+    void SetModernModel(float tile_baked_level, float tone_shoulder,
+                        float character_key, float character_boost);
+    // Modern: how much of the local light's colour a 3D object keeps (1 all
+    // of it; lower toward neutral at the same luminance).
+    void SetCharacterLightSaturation(float saturation);
+    // Modern: how much of retail's own 3D lighting (the 3D scene's ambient
+    // and key light) a 3D object gets on top of its share of the local light.
+    void SetCharacterRetailLight(float amount);
 
     // ---- Deferred reconstruction (pass [3]) -----------------------------
     // Packed per-frame params for the light shader's iso inverse. Call
@@ -714,6 +886,7 @@ public:
     void SubmitFxParticleBucket(const TParticleBucket& bucket,
                                 EFxDebugMode debug_mode = EFxDebugMode::Normal);
     void SubmitFxStrip(const SStripDrawItem& item);
+    void SubmitFxQuad(const SQuadDrawItem& item);
 
     // ---- Composite (UI blit + swapchain present) ------------------------
     // Fullscreen blit of a TSurface into the current render pass (used by
@@ -801,7 +974,7 @@ public:
     // PTBitmap -> registered bitmap atlas slice when available, otherwise
     // a fallback one-off texture. Bitmap atlas registration/build lives in
     // bitmapatlas.cpp so icon/imagery atlasing has a single owner.
-    void DrawBitmap (PTBitmap bm,    int32_t x, int32_t y, bool prefer_alias = false);
+    void DrawBitmap (PTBitmap bm,    int32_t x, int32_t y, EBitmapDecode decode = EBitmapDecode::Pixels);
     // Subrect variant — blits the (src_x, src_y, src_w, src_h) region of
     // bm to (dst_x, dst_y). Used for sprite-atlas panels (e.g. the
     // TPlyrStatusBar `Bars` 128x128 atlas that holds 3 bar colours
@@ -829,12 +1002,14 @@ public:
     // RGBA8 render-target composite pipeline into the currently active
     // TSurface pass.
     void DrawBitmapToTarget(PTBitmap bm, int32_t x, int32_t y,
-                            int32_t target_w, int32_t target_h);
+                            int32_t target_w, int32_t target_h,
+                            EBitmapDecode decode = EBitmapDecode::Pixels);
     void DrawBitmapSubrectToTarget(PTBitmap bm,
                                    int32_t dst_x, int32_t dst_y,
                                    int32_t src_x, int32_t src_y,
                                    int32_t src_w, int32_t src_h,
-                                   int32_t target_w, int32_t target_h);
+                                   int32_t target_w, int32_t target_h,
+                                   EBitmapDecode decode = EBitmapDecode::Pixels);
     // Subrect → arbitrary dest-size variant — the bitmap's (sx,sy,sw,sh) region
     // is stretched to fill (dst_w,dst_h) at (dst_x,dst_y) in the target. This
     // is the to-target twin of the legacy retail `meth_0x4bd5e0` (the 7-arg
@@ -846,7 +1021,17 @@ public:
                                             int32_t dst_w, int32_t dst_h,
                                             int32_t src_x, int32_t src_y,
                                             int32_t src_w, int32_t src_h,
-                                            int32_t target_w, int32_t target_h);
+                                            int32_t target_w, int32_t target_h,
+                                            EBitmapDecode decode = EBitmapDecode::Pixels);
+    // The bitmap at half its size, each pixel averaged from its 2x2 block of
+    // texels as retail averages it (see EHalving).
+    void DrawBitmapHalvedToTarget(PTBitmap bm, int32_t x, int32_t y,
+                                  int32_t target_w, int32_t target_h,
+                                  EHalving halving = EHalving::OpaqueMean);
+    // The same of a composed layer (a stacked icon put together first).
+    void DrawSurfaceHalvedToTarget(TSurface* surf, int32_t x, int32_t y,
+                                   int32_t target_w, int32_t target_h,
+                                   EHalving halving = EHalving::OpaqueMean);
     void DrawBitmapTintedToTarget(PTBitmap bm, int32_t x, int32_t y,
                                   int32_t target_w, int32_t target_h,
                                   float tr, float tg, float tb, float ta);
@@ -886,6 +1071,17 @@ public:
                                     int32_t src_x, int32_t src_y,
                                     int32_t src_w, int32_t src_h,
                                     int32_t target_w, int32_t target_h);
+    // A surface's subrect stretched over (dst_x, dst_y, dst_w, dst_h), in
+    // pixels of the active target, sampled with the surface's own filter (a
+    // surface made with SG_FILTER_NEAREST draws point-sampled).
+    void DrawSurfaceStretchedToTarget(TSurface* surf,
+                                      float dst_x, float dst_y, float dst_w, float dst_h,
+                                      int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                                      int32_t target_w, int32_t target_h);
+    // Clips the draws that follow in the active target pass to (x, y, w, h)
+    // until ResetTargetClip (retail's viewport clip, T3DScene 0x00412150).
+    void SetTargetClip(int32_t x, int32_t y, int32_t w, int32_t h);
+    void ResetTargetClip(int32_t target_w, int32_t target_h);
 
     // Dropshadow convenience — draws a darkened silhouette of `bm` at
     // (x + off_x, y + off_y), then the normal bitmap on top. The shadow
@@ -906,9 +1102,19 @@ public:
     // TSurface -> quad blit, sized to the surface. Used for cached HUD
     // panels (char stats, game log, ...) that own their own surface
     // and refresh outside the draw path.
+    // TSurface layers draw premultiplied (see ECompositeAlpha): the colour
+    // the ...ToTarget primitives left in them composites unchanged, and a
+    // tint's alpha fades the whole layer as one.
     void DrawSurface(TSurface* surf, int32_t x, int32_t y);
     void DrawSurfaceTinted(TSurface* surf, int32_t x, int32_t y,
                            float tr, float tg, float tb, float ta);
+    // Sub-rect of a cached surface, tinted: the swapchain twin of
+    // DrawSurfaceSubrectToTarget (retail's colour-modulated overlay quads).
+    void DrawSurfaceSubrectTinted(TSurface* surf,
+                                  int32_t dst_x, int32_t dst_y,
+                                  int32_t src_x, int32_t src_y,
+                                  int32_t src_w, int32_t src_h,
+                                  float tr, float tg, float tb, float ta);
 
     // Composite a sub-rect of the lit_target (the post-lighting 3D scene)
     // into the currently-active TSurface render-target pass. `src_x/src_y`
@@ -939,12 +1145,39 @@ public:
     void DrawSolidRect(int32_t x, int32_t y, int32_t w, int32_t h,
                        uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
 
+    // Covers the whole swapchain with (r, g, b) at opacity `a` (0..1),
+    // blended over everything drawn before it. Tints one cached white texel,
+    // so an opacity that changes every frame creates no per-value images
+    // (unlike DrawSolidRect). The screen fade draws with it (TScreenFade).
+    void FillScreen(float r, float g, float b, float a);
+
     // Compose-to-target variant of DrawSolidRect (emits into the active TSurface
     // render-target pass). `target_w/target_h` are the RT dims. Used by the DEF
     // widget engine for listbox selection fills.
     void DrawSolidRectToTarget(int32_t x, int32_t y, int32_t w, int32_t h,
                                int32_t target_w, int32_t target_h,
                                uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255);
+    // Sets a rect of the active TSurface pass back to transparent (replacing
+    // what was drawn there, alpha included). The DEF widget engine restores
+    // a widget's rect from the pane background with it.
+    void ClearRectToTarget(int32_t x, int32_t y, int32_t w, int32_t h,
+                           int32_t target_w, int32_t target_h);
+
+    // Indexed triangles of coloured vertices, each vertex's colour (straight
+    // alpha) interpolated across its triangles and blended over the active
+    // target: retail's untextured Gouraud draws (the automap's fog mesh).
+    // Positions are in pixels of the target. At most kMaxColorMeshVertices
+    // vertices and kMaxColorMeshIndices indices a frame, all draws together.
+    struct SColorVertex2D
+    {
+        float x = 0.0f, y = 0.0f;
+        uint8_t r = 0, g = 0, b = 0, a = 0;
+    };
+    static constexpr int32_t kMaxColorMeshVertices = 4096;
+    static constexpr int32_t kMaxColorMeshIndices = 16384;
+    void DrawColoredTrianglesToTarget(const SColorVertex2D* vertices, int32_t vertex_count,
+                                      const uint16_t* indices, int32_t index_count,
+                                      int32_t target_w, int32_t target_h);
 
     // 9-slice blit (A.2d). Treats `bm` as a stretchable panel: the four
     // corner pieces render verbatim at their source size; the four edges
@@ -973,7 +1206,8 @@ public:
     void DrawNineSliceToTarget(PTBitmap bm,
                                int32_t l, int32_t t, int32_t r, int32_t b,
                                int32_t dx, int32_t dy, int32_t dw, int32_t dh,
-                               int32_t target_w, int32_t target_h);
+                               int32_t target_w, int32_t target_h,
+                               EBitmapDecode decode = EBitmapDecode::Pixels);
 
     void AddHud   (class THudDrawable* d, float z = 0.0f);
     void RemoveHud(class THudDrawable* d);
@@ -984,8 +1218,10 @@ public:
     // Called by TDisplay::FlipPage between Scene3D present and ImGui.
     // Sorts registered drawables by z ascending (ties keep insertion
     // order) and invokes Draw() on each inside the active swapchain
-    // pass.
-    void DrawHud();
+    // pass. With `belowZ`, only the drawables under that z draw (a frame
+    // capture without the layers above it).
+    void DrawHud(float belowZ = kAllHudLayers);
+    static constexpr float kAllHudLayers = 1.0e30f;
 
     // Where to composite the game image onto the swapchain. Default is
     // the entire window. Editor mode disables this (the game render
@@ -1011,6 +1247,29 @@ public:
     [[nodiscard]] uintptr_t LitTargetTextureId() const;
     [[nodiscard]] bool ReadIdTargetPixel(int32_t x, int32_t y, uint8_t out_rgba[4]) const;
 
+    // ---- Id probe ---------------------------------------------------------
+    // The id target's ids in a small square around a viewport pixel, for a
+    // pick under the pointer every frame. A request is copied back once the
+    // frame that drew it is committed (ResolveIdProbe, from FlipPage) and
+    // arrives a frame or two later (LatestIdProbe); ReadIdProbe reads the
+    // last drawn frame at once, waiting for the GPU. Ids are obj_id values
+    // (kObjIdMask applies); 0 is nothing, or outside the target. The tag is
+    // the caller's, returned with the probe (e.g. its draw-list version).
+    static constexpr int32_t kIdProbeRadius = 2;
+    static constexpr int32_t kIdProbeSize   = 2 * kIdProbeRadius + 1;
+    struct SIdProbe
+    {
+        int32_t  x = 0, y = 0;    // centre, viewport pixels
+        uint64_t tag = 0;
+        uint32_t ids[kIdProbeSize * kIdProbeSize] = {};   // row-major from (x - r, y - r)
+        [[nodiscard]] uint32_t At(int32_t dx, int32_t dy) const
+          { return ids[(dy + kIdProbeRadius) * kIdProbeSize + (dx + kIdProbeRadius)]; }
+    };
+    void RequestIdProbe(int32_t x, int32_t y, uint64_t tag);
+    void ResolveIdProbe();
+    [[nodiscard]] bool LatestIdProbe(SIdProbe& out) const;
+    [[nodiscard]] bool ReadIdProbe(int32_t x, int32_t y, uint64_t tag, SIdProbe& out) const;
+
     // Editor selection-outline plumbing. Setting this >0 turns on the
     // post-process outline glow in the lit shader for pixels whose
     // id_target value matches `id`.
@@ -1023,7 +1282,7 @@ private:
     // Fallback PTBitmap -> one-off GPU texture. Atlased bitmap draws are owned
     // by bitmapatlas.cpp; this cache is used only for late/missed bitmaps.
     std::unordered_map<uint64_t, TTextureHandle> bitmap_texture_cache;
-    TTextureHandle BitmapAsTexture(PTBitmap bm, bool prefer_alias = false);
+    TTextureHandle BitmapAsTexture(PTBitmap bm, EBitmapDecode decode = EBitmapDecode::Pixels);
 
     // Registered HUD drawables + their z-order. Renderer owns this
     // metadata; the drawable itself doesn't carry z. Sorted on demand
@@ -1049,6 +1308,13 @@ private:
     void Composite(sg_image img,
                    int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                    int32_t target_w, int32_t target_h);
+    // How a composite's source stores alpha. Bitmaps and atlas slices hold
+    // straight alpha. TSurface layers hold premultiplied colour: the
+    // ...ToTarget primitives blend straight-alpha draws into a cleared target,
+    // which leaves colour already multiplied by coverage. Drawing a layer back
+    // with the straight-alpha blend would apply its alpha twice.
+    enum class ECompositeAlpha : uint8_t { Straight, Premultiplied };
+
     void Composite(sg_image img,
                    int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                    int32_t target_w, int32_t target_h,
@@ -1056,7 +1322,23 @@ private:
                    int32_t src_tex_w, int32_t src_tex_h,
                    bool additive_blend = false,
                    bool chroma_key = false,
-                   const float* chroma_key_rgb = nullptr);
+                   const float* chroma_key_rgb = nullptr,
+                   ECompositeAlpha alpha = ECompositeAlpha::Straight);
+    // Composite's quad through pipeline `pip`.
+    void CompositeWith(sg_pipeline pip, sg_image img,
+                       int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                       int32_t target_w, int32_t target_h,
+                       int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
+                       int32_t src_tex_w, int32_t src_tex_h,
+                       bool chroma_key, const float* chroma_key_rgb);
+    // The reduce pipeline: (dst_w x dst_h) from the (2 dst_w x 2 dst_h) texels
+    // at (src_x, src_y).
+    void CompositeHalved(sg_image img,
+                         int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
+                         int32_t target_w, int32_t target_h,
+                         int32_t src_x, int32_t src_y,
+                         int32_t src_tex_w, int32_t src_tex_h,
+                         EHalving halving);
     void CompositeTinted(sg_image img,
                          int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                          int32_t target_w, int32_t target_h,
@@ -1071,15 +1353,18 @@ private:
                             int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                             int32_t target_w, int32_t target_h,
                             int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
-                            int32_t src_tex_w, int32_t src_tex_h);
+                            int32_t src_tex_w, int32_t src_tex_h,
+                            ECompositeAlpha alpha = ECompositeAlpha::Straight);
     // Tinted variant — multiplies texture sample by (tr, tg, tb, ta)
-    // before output. Backs DrawBitmapTinted + the shadow draw helpers.
+    // before output. Backs DrawBitmapTinted + the shadow draw helpers. For a
+    // premultiplied source the tint must be premultiplied too (rgb * a).
     void CompositeSwapchainTinted(sg_image img,
                                   int32_t dst_x, int32_t dst_y, int32_t dst_w, int32_t dst_h,
                                   int32_t target_w, int32_t target_h,
                                   int32_t src_x, int32_t src_y, int32_t src_w, int32_t src_h,
                                   int32_t src_tex_w, int32_t src_tex_h,
-                                  float tr, float tg, float tb, float ta);
+                                  float tr, float tg, float tb, float ta,
+                                  ECompositeAlpha alpha = ECompositeAlpha::Straight);
 
     int32_t width  = 0;
     int32_t height = 0;
@@ -1089,7 +1374,16 @@ private:
     sg_buffer   composite_vbuf     = {};
     sg_pipeline composite_pip_rt   = {};   // RGBA8 RT variant
     sg_pipeline composite_pip_add_rt = {}; // RGBA8 additive/lighten RT variant
+    sg_pipeline composite_pip_replace_rt = {};    // RGBA8 RT, no blending (ClearRectToTarget)
     sg_pipeline composite_pip_swap = {};   // Swapchain variant
+    sg_pipeline composite_pip_premul_rt   = {};   // RGBA8 RT, premultiplied source
+    sg_pipeline composite_pip_premul_swap = {};   // Swapchain, premultiplied source
+    sg_shader   composite_reduce_shader = {};     // the 2:1 reduction
+    sg_pipeline composite_pip_reduce_rt = {};     // RGBA8 RT, the 2:1 reduction
+    sg_shader   color_mesh_shader = {};           // DrawColoredTrianglesToTarget
+    sg_pipeline color_mesh_pip_rt = {};           // RGBA8 RT, straight alpha
+    sg_buffer   color_mesh_vbuf = {};             // streamed, appended per draw
+    sg_buffer   color_mesh_ibuf = {};
 
     // ---- Passes ---------------------------------------------------------
     sg_pass default_pass = {};   // G-buffer MRT fill
@@ -1123,6 +1417,7 @@ private:
     // EndTilePass. Capacity is preserved across frames to avoid churn.
     std::vector<STileSubmit> tile_queue;
     std::vector<STransparentWorldSubmit> transparent_world_queue;
+    std::vector<SHelperMeshSubmit> gold_flare_after_fx_queue;
     std::vector<SOverlaySubmit> overlay_queue;
     std::vector<SMeshSubmit> mesh_queue;
     SRendererTilePassStats current_tile_pass_stats = {};
@@ -1131,13 +1426,31 @@ private:
     // ---- Mesh pipeline -------------------------------------------------
     sg_shader   mesh_shader      = {};
     sg_pipeline mesh_pipeline    = {};
+    sg_pipeline mesh_source_cull_pipeline = {};
+    sg_pipeline mesh_source_alpha_pipeline = {};
+    // Translucent meshes, in the transparent-world pass: a depth-only pass
+    // per surface, then its lit colour where that left the nearest depth.
+    sg_shader   mesh_depth_shader          = {};
+    sg_pipeline mesh_depth_pipeline        = {};
+    sg_shader   mesh_translucent_shader    = {};
+    sg_pipeline mesh_translucent_pipeline  = {};
+    // The same lit colour added (ONE/ONE) over a mesh already drawn: no
+    // depth prepass, LESS_EQUAL against the mesh's own depth, no writes.
+    sg_pipeline mesh_additive_pipeline     = {};
     sg_shader   transparent_tile_shader   = {};
     sg_pipeline transparent_tile_pipeline = {};
     sg_shader   helper_mesh_shader        = {};
     sg_pipeline helper_mesh_back_pipeline = {};
     sg_pipeline helper_mesh_front_pipeline = {};
+    sg_pipeline helper_opaque_back_pipeline = {};
+    sg_pipeline helper_opaque_front_pipeline = {};
+    sg_pipeline helper_source_alpha_pipeline = {};
+    sg_pipeline helper_untextured_software_pipeline = {};
+    sg_pipeline helper_additive_cull_none_pipeline{};
     sg_pipeline helper_mesh_add_back_pipeline = {};
     sg_pipeline helper_mesh_add_front_pipeline = {};
+    sg_pipeline helper_gold_no_depth_back_pipeline = {};
+    sg_pipeline helper_gold_no_depth_front_pipeline = {};
     std::vector<float> mesh_instance_scratch;
     static constexpr int32_t kMaxMeshInstances = 2048;
     static constexpr int32_t kMeshInstanceVBCount = 8;
@@ -1207,6 +1520,19 @@ private:
     sg_image normal_target  = {};   // G-buffer: normal   (RGBA16F)
     sg_image scene_z_target = {};   // G-buffer: scene-z  (R32F)
     sg_image id_target      = {};   // G-buffer: obj id   (RGBA8 packed)
+
+    // Id probe state (RequestIdProbe / ResolveIdProbe): this frame's request,
+    // the copies in flight (one per readback slot) and the newest result.
+    struct SIdProbeRead { bool active = false; SIdProbe probe; };
+    bool         idProbeRequested = false;
+    SIdProbe     idProbeRequest;
+    SIdProbeRead idProbeReads[2];
+    bool         idProbeLatestValid = false;
+    SIdProbe     idProbeLatest;
+    [[nodiscard]] bool IdProbeRect(int32_t x, int32_t y, int32_t& rx, int32_t& ry,
+                                   int32_t& rw, int32_t& rh) const;
+    void DecodeIdProbe(const uint8_t* rgba, int32_t rx, int32_t ry, int32_t rw,
+                       int32_t rh, SIdProbe& probe) const;
     uint32_t selected_obj_id = 0;   // editor selection (0 = no outline)
     sg_image ao_target      = {};   // AO pass output     (R32F)
     sg_image shadow_target  = {};   // sun visibility mask (R32F, low-res)
@@ -1217,6 +1543,9 @@ private:
     int32_t shadow_height = 0;
 
     // ---- Lighting state (uploaded by RunLightingPass) -------------------
+    float retail_mesh_ambient[3] = {38.0f/255, 38.0f/255, 38.0f/255};
+    float retail_mesh_directional[3] = {1,1,1};
+    bool retail_mesh_rgb_enabled = true;
     struct SLightState {
         float dir[3]           = { 0.6f, -0.6f, 0.4f };
         float intensity        = 1.0f;
@@ -1231,9 +1560,10 @@ private:
         float normal_radius    = 1.5f;    // texels
         float edge_threshold   = 0.001f;  // zraw units
         float normal_lighting_hardness = 0.5f;
+        float character_light_saturation = 1.0f;   // modern: the local light's colour kept on 3D objects
+        float character_retail_light = 0.0f;       // modern: retail's own 3D lighting on 3D objects
         int32_t view_mode      = 0;
         int32_t mode           = 1;       // 0 retail, 1 modern
-        float   light_ceiling  = 1.5f;    // max summed light per channel; uploaded as ambient_col.w
         bool    sun_shadow_enable     = true;
         // Interactive default: one correct low-res ray plus a cheap separable
         // mask blur. Softness never multiplies the ray-march cost.
@@ -1249,6 +1579,11 @@ private:
         int32_t plight_count = 0;
         float   plight_pos[kMaxPointLights][4] = {};
         float   plight_col[kMaxPointLights][4] = {};
+        bool    plight_retail[kMaxPointLights] = {};   // AddRetailPointLight vs AddPointLight
+        SClassicLightModel classic;
+        float   retail_modern_gain_per_mult = 0.0f;
+        float   retail_modern_range_scale   = 1.0f;
+        float   modern_model[4] = { 1.0f, 1.0f, 0.0f, 1.0f };   // baked level, shoulder, character key, character boost
     } light;
 
     // ---- Reconstruction params (per frame) ------------------------------
@@ -1274,6 +1609,8 @@ private:
     void ShutdownAOPipeline();
     void InitLightPipeline();
     void ShutdownLightPipeline();
+    void PushPointLight(bool retail, float wx, float wy, float wz, float radius,
+                        float r, float g, float b, float w);
     void RunAOPass();
     void InitShadowPipeline();
     void ShutdownShadowPipeline();
@@ -1291,9 +1628,22 @@ private:
     void InitMeshPipeline();
     void ShutdownMeshPipeline();
     void DrainMeshQueue();
+    // Next buffer of the instance-row stream ring (one upload per buffer per frame).
+    sg_buffer NextMeshInstanceBuffer();
+    // The mesh vertex shader's uniform block (vp / camz / camw), 12 floats.
+    void PackMeshVsUniforms(float (&u)[20]) const;
     void EmitTransparentTile(const STileSubmit& t);
     void EmitTransparentHelper(const SHelperMeshSubmit& s);
+    // Uploads the instance rows of the queue's translucent meshes; null if none.
+    sg_buffer UploadTranslucentMeshInstances();
+    // One translucent surface: entries [first, first+count) share a surface_id.
+    void EmitTranslucentMeshSurface(const STransparentWorldSubmit* first, size_t count,
+                                    sg_buffer instances, const float* light_uniforms);
     void DrainTransparentWorldQueue();
+    void DrainGoldFlareAfterFxQueue();
+    // The light uniform block (lightmodel.*.h `params`), shared by the
+    // deferred light pass and the translucent mesh pass.
+    void PackLightUniforms(float* u) const;
 
     // ---- FX (billboards / particles / strips) ---------------------------
     void InitFxPipeline();
@@ -1329,6 +1679,7 @@ private:
     std::vector<SFxBillboardQueueEntry> fx_billboard_queue;
     std::vector<SFxParticleQueueEntry>  fx_particle_queue;
     std::vector<SFxStripQueueEntry>     fx_strip_queue;
+    std::vector<SQuadDrawItem>          fx_quad_queue;
 
     sg_pass     fx_pass         = {};   // color = lit_target, depth = scene_z_target (read)
     // Pipeline cross-product: [blend][depth_mode]. Light mode is

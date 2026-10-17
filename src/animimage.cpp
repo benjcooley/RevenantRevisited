@@ -148,36 +148,23 @@ void TAnimImagery::DrawUnlit(TObjectInstance* oi, TSurface* surface)
                       screenpos.z - GetRegZ(state), bm, flags);
 }
 
-bool TAnimImagery::GetZ(TObjectInstance* oi, TSurface* surface)
+// REVSYNC: 0x00418b70. The gates are retail's: no still, false; a lit state
+// whose still has no z-buffer, true (drawn over everything); a state neither
+// lit nor unlit, or an alpha still without a z-buffer, only in the editor.
+// Retail then z-found the still in the frame's z-buffer inside a 1x1 clip at
+// the point; the map renderer's id buffer answers the same question
+// (`frontmost`, docs/gameflow/forensics/MAP_INPUT.md §2.3, §7).
+bool TAnimImagery::GetZ(TObjectInstance* oi, const TObjectInstance* frontmost)
 {
-    int32_t state = oi->GetState();
-
+    const int32_t state = oi->GetState();
     if (state >= NumStates())
         return false;
 
-    /*
-    if (GetImageFlags(state) & ANIIM_CUTOFF && !Editor)
-    {
-        if (SmoothScroll)
-            return false;               // never show trees on smoothscrolling mode
-
-        // make sure the bitmap is cut off at the top of the screen
-        SRect r;
-        oi->GetScreenRect(r);
-        if (r.top > MapPane.GetScrollY())
-            return false;
-    }
-    */
-
-    PTBitmap bm = oi->GetStillImage();
+    const PTBitmap bm = oi->GetStillImage();
     if (!bm)
         return false;
 
-    S3DPoint screenpos;
-    oi->GetScreenPos(screenpos);
-
-    uint32_t stateflags = GetImageFlags(state);
-
+    const uint32_t stateflags = GetImageFlags(state);
     if (stateflags & ANIIM_LIT)
     {
         if (!(bm->flags & BM_ZBUFFER))
@@ -186,21 +173,10 @@ bool TAnimImagery::GetZ(TObjectInstance* oi, TSurface* surface)
     else if (!(stateflags & ANIIM_UNLIT))
         return Editor;
 
-    uint32_t flags = DM_TRANSPARENT;
-
-    if (bm->flags & BM_ZBUFFER)
-        flags |= DM_ZBUFFER;
-    else if (bm->flags & BM_ALPHA)
+    if (!(bm->flags & BM_ZBUFFER) && (bm->flags & BM_ALPHA))
         return Editor;
-    else    
-        flags |= DM_ZSTATIC;
 
-    if (oi->GetFlags() & OF_DRAWFLIP)
-        flags |= DM_REVERSEHORZ;
-
-    return surface->ZFind(screenpos.x - GetRegX(state),
-                          screenpos.y - GetRegY(state),
-                          screenpos.z - GetRegZ(state), bm, flags);
+    return frontmost == oi;
 }
 
 void TAnimImagery::DrawSelected(TObjectInstance* oi, TSurface* surface)
@@ -319,17 +295,24 @@ bool TAnimImagery::SaveBitmap(char *path, int32_t state, bool zbuffer)
     return true;
 }
 
+// REVSYNC: TAnimImagery::NeedsAnimator @ 0x00418fc0 -- for a state the
+// imagery has (the object's state read as an unsigned short): every item,
+// carried or on the map, and anything whose state animates. The 1998 test
+// gave a still item on the map none, so a dead monster's bread never flew to
+// the floor (TObjectAnimator::Toss) as retail's does.
 bool TAnimImagery::NeedsAnimator(const TObjectInstance* oi) const
 {
-    if (!oi) return false;
-    const int32_t state = oi->GetState();
-    // GetAnimation / GetInvAnimation are legacy non-const getters that
-    // don't actually mutate; const_cast preserves correct semantics here
-    // until those getters can be made const themselves.
-    auto* self = const_cast<TAnimImagery*>(this);
-    return state < NumStates() &&
-           (self->GetAnimation(state) != nullptr ||
-            (oi->IsInInventory() && self->GetInvAnimation(state) != nullptr));
+    if (!oi)
+        return false;
+    const int32_t state = static_cast<uint16_t>(oi->GetState());
+    if (state >= NumStates())
+        return false;
+    if (oi->IsInventoryItem())
+        return true;
+    // GetAnimation is a legacy non-const getter that doesn't actually
+    // mutate; const_cast preserves correct semantics here until it can be
+    // made const itself.
+    return const_cast<TAnimImagery*>(this)->GetAnimation(state) != nullptr;
 }
 
 PTObjectAnimator TAnimImagery::NewObjectAnimator(TObjectInstance* oi)
@@ -376,34 +359,31 @@ void TAnimAnimator::Animate(bool draw)
         if (anim == nullptr)
             return;
 
+        // An item in an inventory: the inventory panes draw its animation
+        // (TInvSlot).
         PTBitmap bm = anim->GetFrame(frame);
-        if (bm)
-        {
-            if (inst->IsInInventory())
-                Inventory.DrawAnim(inst, bm);
-            else
-            {
-                uint32_t drawmode = DM_TRANSPARENT | DM_USEREG;
+        if (!bm || inst->IsInInventory())
+            return;
 
-                if (bm->flags & BM_ALPHA)
-                    drawmode |= DM_ALPHA;
+        uint32_t drawmode = DM_TRANSPARENT | DM_USEREG;
 
-                S3DPoint pos, spos;
-                inst->GetPos(pos);
-                WorldToScreen(pos, spos);
-                spos.x += image->GetAnimRegX(state);
-                spos.y += image->GetAnimRegY(state);
-                spos.z -= image->GetAnimRegZ(state);
+        if (bm->flags & BM_ALPHA)
+            drawmode |= DM_ALPHA;
 
-                if (NoScrollZBuffer)
-                    MapPane.DrawRestoreRect(spos.x, spos.y, bm->width, bm->height, DM_WRAPCLIPSRC | DM_NORESTORE | DM_ZBUFFER | DM_NODRAW);
+        S3DPoint pos, spos;
+        inst->GetPos(pos);
+        WorldToScreen(pos, spos);
+        spos.x += image->GetAnimRegX(state);
+        spos.y += image->GetAnimRegY(state);
+        spos.z -= image->GetAnimRegZ(state);
 
-                if (bm->flags & BM_ZBUFFER)
-                    Display.ZPut(spos.x, spos.y, spos.z, bm, drawmode | DM_ZBUFFER);
-                else
-                    PlayScreen.AddPostCharAnim(spos.x, spos.y, spos.z, bm, drawmode | DM_ZSTATIC);
-            }
-        }
+        if (NoScrollZBuffer)
+            MapPane.DrawRestoreRect(spos.x, spos.y, bm->width, bm->height, DM_WRAPCLIPSRC | DM_NORESTORE | DM_ZBUFFER | DM_NODRAW);
+
+        if (bm->flags & BM_ZBUFFER)
+            Display.ZPut(spos.x, spos.y, spos.z, bm, drawmode | DM_ZBUFFER);
+        else
+            PlayScreen.AddPostCharAnim(spos.x, spos.y, spos.z, bm, drawmode | DM_ZSTATIC);
     }
 }
 

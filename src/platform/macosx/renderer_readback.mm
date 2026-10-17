@@ -1,7 +1,7 @@
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
-// *      renderer_readback.mm - Metal RGBA8 single-pixel readback          *
+// *      renderer_readback.mm - Metal RGBA8 readback (sync and async)      *
 // *************************************************************************
 
 #include "../../renderer_readback.h"
@@ -11,12 +11,17 @@
 
 #import <Metal/Metal.h>
 
+#include <algorithm>
+#include <atomic>
+#include <cstring>
+#include <utility>
+
 namespace RendererReadback {
 
 bool ReadPixel(sg_image img, int32_t x, int32_t y, uint8_t out_rgba[4])
 {
     out_rgba[0] = out_rgba[1] = out_rgba[2] = out_rgba[3] = 0;
-    if (img.id == SG_INVALID_ID || x < 0 || y < 0) return false;
+    if (img.id == SG_INVALID_ID || x < 0 || y < 0 || sg_mtl_has_pending_commands()) return false;
 
     sg_image_info info = sg_query_image_info(img);
     if (x >= info.width || y >= info.height) return false;
@@ -35,9 +40,13 @@ bool ReadPixel(sg_image img, int32_t x, int32_t y, uint8_t out_rgba[4])
                                               options:MTLResourceStorageModeShared];
     if (!stage) return false;
 
-    id<MTLCommandQueue> queue = [device newCommandQueue];
+    // Commit the render frame before synchronous reads. Using its queue
+    // orders this copy after the writes; waiting a different queue does not.
+    id<MTLCommandQueue> queue = (__bridge id<MTLCommandQueue>) sg_mtl_query_command_queue();
+    if (!queue) return false;
     id<MTLCommandBuffer> cmd  = [queue commandBuffer];
     id<MTLBlitCommandEncoder> blit = [cmd blitCommandEncoder];
+    if (!cmd || !blit) return false;
 
     [blit copyFromTexture:tex
               sourceSlice:0
@@ -52,6 +61,7 @@ bool ReadPixel(sg_image img, int32_t x, int32_t y, uint8_t out_rgba[4])
     [blit endEncoding];
     [cmd commit];
     [cmd waitUntilCompleted];
+    if (cmd.status != MTLCommandBufferStatusCompleted) return false;
 
     const uint8_t* px = (const uint8_t*) stage.contents;
     // Swap R<->B for BGRA8 sources (the Metal swapchain) so callers get RGBA;
@@ -69,7 +79,7 @@ bool ReadPixel(sg_image img, int32_t x, int32_t y, uint8_t out_rgba[4])
 bool ReadRect(sg_image img, int32_t x, int32_t y, int32_t w, int32_t h,
               uint8_t* out_rgba)
 {
-    if (img.id == SG_INVALID_ID || !out_rgba) return false;
+    if (img.id == SG_INVALID_ID || !out_rgba || sg_mtl_has_pending_commands()) return false;
     if (x < 0 || y < 0 || w <= 0 || h <= 0)   return false;
 
     sg_image_info info = sg_query_image_info(img);
@@ -88,9 +98,11 @@ bool ReadRect(sg_image img, int32_t x, int32_t y, int32_t w, int32_t h,
                                               options:MTLResourceStorageModeShared];
     if (!stage) return false;
 
-    id<MTLCommandQueue> queue = [device newCommandQueue];
+    id<MTLCommandQueue> queue = (__bridge id<MTLCommandQueue>) sg_mtl_query_command_queue();
+    if (!queue) return false;
     id<MTLCommandBuffer> cmd  = [queue commandBuffer];
     id<MTLBlitCommandEncoder> blit = [cmd blitCommandEncoder];
+    if (!cmd || !blit) return false;
 
     [blit copyFromTexture:tex
               sourceSlice:0
@@ -105,6 +117,7 @@ bool ReadRect(sg_image img, int32_t x, int32_t y, int32_t w, int32_t h,
     [blit endEncoding];
     [cmd commit];
     [cmd waitUntilCompleted];
+    if (cmd.status != MTLCommandBufferStatusCompleted) return false;
 
     memcpy(out_rgba, stage.contents, totalBytes);
 
@@ -123,6 +136,95 @@ bool ReadRect(sg_image img, int32_t x, int32_t y, int32_t w, int32_t h,
             out_rgba[i + 2] = b;
         }
     }
+    return true;
+}
+
+// ---- Asynchronous reads ---------------------------------------------------
+// One persistent queue, and per slot a shared staging buffer and a state the
+// copy's completion handler advances (Metal calls it on its own thread).
+
+namespace {
+
+enum : int { kSlotIdle = 0, kSlotPending = 1, kSlotDone = 2, kSlotFailed = 3 };
+
+struct SAsyncSlot
+{
+    id<MTLBuffer>    stage = nil;     // kMaxAsyncReadBytes, CPU-visible
+    std::atomic<int> state{kSlotIdle};
+    NSUInteger       bytes = 0;       // this copy's size
+    bool             bgra  = false;   // source is BGRA8: swap on the way out
+};
+
+SAsyncSlot          g_asyncSlots[kAsyncReadSlots];
+
+} // namespace
+
+bool BeginReadRect(int32_t slot, sg_image img, int32_t x, int32_t y,
+                   int32_t w, int32_t h)
+{
+    if (slot < 0 || slot >= kAsyncReadSlots) return false;
+    if (img.id == SG_INVALID_ID || x < 0 || y < 0 || w <= 0 || h <= 0) return false;
+    if (w * h * 4 > kMaxAsyncReadBytes) return false;
+
+    SAsyncSlot& s = g_asyncSlots[slot];
+    if (s.state.load() != kSlotIdle) return false;
+
+    const sg_image_info info = sg_query_image_info(img);
+    if (x + w > info.width || y + h > info.height) return false;
+
+    id<MTLTexture> tex = (__bridge id<MTLTexture>) sg_mtl_query_image_handle(img);
+    if (!tex) return false;
+    id<MTLDevice> device = tex.device;
+    if (!device) return false;
+
+    id<MTLCommandQueue> queue = (__bridge id<MTLCommandQueue>) sg_mtl_query_command_queue();
+    if (!s.stage)
+        s.stage = [device newBufferWithLength:kMaxAsyncReadBytes
+                                      options:MTLResourceStorageModeShared];
+    if (!queue || !s.stage) return false;
+
+    const NSUInteger bytesPerRow = NSUInteger(w) * 4;
+    s.bytes = bytesPerRow * NSUInteger(h);
+    s.bgra  = tex.pixelFormat == MTLPixelFormatBGRA8Unorm ||
+              tex.pixelFormat == MTLPixelFormatBGRA8Unorm_sRGB;
+    s.state.store(kSlotPending);
+
+    id<MTLCommandBuffer> cmd = [queue commandBuffer];
+    id<MTLBlitCommandEncoder> blit = [cmd blitCommandEncoder];
+    if (!cmd || !blit) { s.state.store(kSlotIdle); return false; }
+    [blit copyFromTexture:tex
+              sourceSlice:0
+              sourceLevel:0
+             sourceOrigin:MTLOriginMake(NSUInteger(x), NSUInteger(y), 0)
+               sourceSize:MTLSizeMake(NSUInteger(w), NSUInteger(h), 1)
+                 toBuffer:s.stage
+        destinationOffset:0
+   destinationBytesPerRow:bytesPerRow
+ destinationBytesPerImage:s.bytes];
+    [blit endEncoding];
+    std::atomic<int>* state = &s.state;
+    [cmd addCompletedHandler:^(id<MTLCommandBuffer> completed) {
+        state->store(completed.status == MTLCommandBufferStatusCompleted ? kSlotDone : kSlotFailed);
+    }];
+    [cmd commit];
+    return true;
+}
+
+bool PollReadRect(int32_t slot, uint8_t* out_rgba, int32_t out_bytes)
+{
+    if (slot < 0 || slot >= kAsyncReadSlots || !out_rgba || out_bytes < 0) return false;
+    SAsyncSlot& s = g_asyncSlots[slot];
+    const int status = s.state.load();
+    if (status == kSlotFailed) { s.state.store(kSlotIdle); return false; }
+    if (status != kSlotDone) return false;
+    if (NSUInteger(out_bytes) < s.bytes) return false;
+
+    const NSUInteger n = (std::min)(s.bytes, NSUInteger(out_bytes));
+    memcpy(out_rgba, s.stage.contents, n);
+    if (s.bgra)
+        for (NSUInteger i = 0; i + 3 < n; i += 4)
+            std::swap(out_rgba[i], out_rgba[i + 2]);
+    s.state.store(kSlotIdle);
     return true;
 }
 

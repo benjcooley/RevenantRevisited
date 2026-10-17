@@ -2,6 +2,7 @@
 
 #include "maprenderer.h"
 
+#include "classiclighting.h"
 #include "gamemap.h"
 #include "object.h"
 #include "renderer.h"
@@ -9,9 +10,13 @@
 #include "sector.h"
 
 #include <cstdint>
+#include <map>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
+
+class T3DImagery;
 
 struct SSectorTileTex {
     struct SDepthDump {
@@ -77,8 +82,10 @@ struct SSectorMeshAsset {
     TObjectImagery* imagery_key = nullptr;
     int32_t         objnum = -1;
     int32_t         texslot = -1;
+    int32_t         texture_index = -1; // resolved imagery slot; -1 is untextured
     int32_t         uv_variant = 0;
     MeshHandle      handle = 0;
+    int32_t         retail_lighting = 0;
     // See SSectorTileTex::ref_count. Draw items do not own this ref; the
     // sector/map residency scan records source-data references separately.
     uint32_t        ref_count = 0;
@@ -98,6 +105,8 @@ struct SMapRenderStats;
 
 struct SSectorDrawableInst {
     ESectorDrawableKind kind = ESectorDrawableKind::Tile;
+    // Separate authored I2D animation; the state still remains another record.
+    bool animation_layer = false;
     // Non-owning index into the map/level resident asset cache. A draw item
     // means "submit this instance"; it must not be treated as GPU residency
     // ownership, and destroying/rebuilding draw items must not evict assets.
@@ -253,10 +262,67 @@ struct TMapRenderer::Impl
     // frame texture every render frame, so this lookup must stay O(1) against
     // resident asset count. Draw items still do not own renderer assets.
     std::unordered_map<PTBitmap, int32_t> sectorTileTexByBitmap;
+    // Equipped items' object meshes (TCharAnimator::EquipAttachments), by
+    // imagery asset and object; non-owning, as sectorMeshAsset. An item is
+    // in no sector while worn, so it has no draw record: it draws with its
+    // wearer (submitEquipment), once a frame (frameEquipOwners).
+    std::map<std::pair<uint64_t, int32_t>, std::vector<SSectorMeshAsset>> equipMeshAssets;
+    std::vector<const TObjectInstance*> frameEquipOwners;
+    void submitEquipment(const SMapRenderContext& ctx, SMapRenderStats& stats,
+                         TObjectInstance& oi, uint32_t obj_id);
+    const std::vector<SSectorMeshAsset>& equipObjectMeshes(T3DImagery& mesh, int32_t objnum);
 
     // Non-owning draw intents derived from the current map contents. Rebuilds
     // here should be cheap bookkeeping over resident assets.
     std::vector<SSectorDrawableInst> sectorDrawInst;
+    // Bumped whenever sectorDrawInst is rebuilt or cleared: a draw id (index
+    // + 1) read back from an earlier frame names a record only while the
+    // version it was drawn under is current (the id probe's tag).
+    uint64_t drawListVersion = 0;
+    // The viewport pixel the map pane picks at this frame (the pointer), or
+    // -1: RenderFrame asks the renderer for the id probe there.
+    int32_t pickX = -1, pickY = -1;
+    // What each draw id named in the lists recent frames were drawn with,
+    // newest first. An id probe arrives a frame or two after its frame, and
+    // the pane may read the last frame back at once; either can follow a
+    // rebuild, so a probe is decoded against the list of the version it was
+    // drawn under (its tag), not the current one.
+    struct SPickRecord
+    {
+        TSafeRef<> src;
+        ESectorDrawableKind kind = ESectorDrawableKind::Tile;
+    };
+    struct SPickTable
+    {
+        uint64_t version = 0;
+        std::vector<SPickRecord> records;   // draw id - 1
+    };
+    static constexpr size_t kPickTables = 3;
+    std::vector<SPickTable> pickTables;
+    uint64_t renderedDrawListVersion = 0;   // the list the last frame drew
+
+    // Called as a frame is drawn: keep the current list's pick table.
+    void notePickTable()
+    {
+        renderedDrawListVersion = drawListVersion;
+        if (!pickTables.empty() && pickTables.front().version == drawListVersion)
+            return;
+        SPickTable table;
+        table.version = drawListVersion;
+        table.records.reserve(sectorDrawInst.size());
+        for (const SSectorDrawableInst& r : sectorDrawInst)
+            table.records.push_back({ r.src, r.kind });
+        pickTables.insert(pickTables.begin(), std::move(table));
+        if (pickTables.size() > kPickTables)
+            pickTables.pop_back();
+    }
+    [[nodiscard]] const SPickTable* pickTable(uint64_t version) const
+    {
+        for (const SPickTable& t : pickTables)
+            if (t.version == version)
+                return &t;
+        return nullptr;
+    }
     std::unordered_map<int64_t, std::vector<int32_t>> sectorDrawBins;
     // Per-frame visible/padded-sector candidate list. Capacity is retained so
     // camera movement only rewrites indices; it does not allocate draw records.
@@ -315,6 +381,8 @@ struct TMapRenderer::Impl
     bool sectorShowObjectLabels = true;
     bool sectorShowGizmos = true;
     bool sectorShowTiles = true;
+    bool sectorShowGroundTiles = true;
+    std::unordered_set<uint32_t> reviewVisibleTileTypes;
     bool sectorShowMeshes = true;
     bool sectorShowMeshLocators = false;
     bool sectorForceMeshPreviewPose = false;
@@ -377,22 +445,24 @@ struct TMapRenderer::Impl
     float color[3]     = { 1.0f, 1.0f, 1.0f };
     float ambient_color[3] = { 1.0f, 1.0f, 1.0f };
     float ambient      = 0.15f;
-    // AMBLIGHT is authored in arbitrary integer units (Demo-module values
-    // run 4..35; retail goes higher). The retail DirectX renderer mapped
-    // them through 8-bit palette lookups whose non-linear brightness
-    // boost we don't replicate in the linear-space GPU path, so the
-    // divisor is a tunable in the Lighting tab. Lower = brighter.
-    //   s.ambient = AMBLIGHT * Ambient3D / (ambient_divisor * 100)
-    // Default 20 matches retail Misthaven daytime to eye. Tune via the
-    // Lighting tab; the per-area AMBLIGHT/AMBCOLOR set elsewhere is the
-    // authored signal, this is just the curve we map it through.
-    float ambient_divisor = 20.0f;
-    // Ceiling on the summed deferred light (ambient + per-point-lights).
-    // Originally 1.0 to prevent 3D-object white-out from stacked point
-    // lights, but that also caps ambient overbright. Bumped up so the
-    // dim base ambient * dark albedo combo can be pushed brighter
-    // without immediately burning where torches stack. Tunable.
-    float light_ceiling = 1.5f;
+    // Modern lighting mode only: the ambient is retail's tile ambient gain
+    // (AMBLIGHT with the gamma offset, AMBCOLOR scaled to a largest channel
+    // of 1, before the light table's byte truncation) times this
+    // ([Revisited] AmbientScale). docs/lighting/LIGHTING_AB.md §6.4.
+    float ambient_scale = 0.85f;
+    // Modern, areas with day and night: the share of the ambient the sun
+    // takes over at full daylight ([Revisited] SunShare). The sky keeps the
+    // rest; the sun gives it back on faces turned to it (intensity 1 = all
+    // of it), so a sunlit face keeps retail's daylight level.
+    float sun_share = 0.5f;
+    // Modern: the shared scale of tiles and 3D objects ([Revisited]
+    // TileBakedLevel, ToneShoulder, CharacterKeyLight, CharacterLightBoost).
+    float tile_baked_level      = 0.35f;
+    float tone_shoulder         = 0.8f;
+    float character_key_light   = 0.5f;
+    float character_light_boost = 0.25f;
+    float character_light_saturation = 0.5f;
+    float character_retail_light = 1.0f;
     // Retail had no synthesized AO; baked occlusion lived in the tile
     // depth maps. Off by default; on in modern mode.
     bool  ao_enable    = false;
@@ -414,15 +484,18 @@ struct TMapRenderer::Impl
     bool  animate = false;
     int32_t tick = 0;
     int32_t view_mode = 0;
-    // lighting_mode 0 = classic retail (area.def AMBLIGHT/AMBCOLOR + TLight
-    // positional contributions, no synthesized sun). lighting_mode 1 =
-    // modern directional w/ sun-shadow + AO multiplier; eventually keyed
-    // off Revisited.rvr override AREA.DEF entries. Default to classic so
+    // lighting_mode 0 = Classic: retail's lighting model (classiclighting.cpp;
+    // no sun). lighting_mode 1 = modern directional w/ sun-shadow + AO
+    // multiplier. Seeded from [Revisited] LightingMode; default Classic so
     // the retail look is what you get without touching the debug UI.
     bool lights_on = true;
-    float radius_mul = 1.0f;
-    float intensity_mul = 1.0f;
+    float radius_mul = 1.0f;      // Revisited per-area POINTLIGHTRANGE (1 = authored)
+    float intensity_mul = 1.0f;   // Revisited per-area POINTLIGHTINT (1 = authored)
+    std::vector<TObjectInstance*> retailDrawLights;   // Classic: the static light pass's lights, in draw order
+    bool  retailLightOverflowLogged = false;
     int32_t lighting_mode = 0;
+    // Current area has a day/night cycle (AREA_DONIGHT); gates the modern sun.
+    bool daylight_cycle = false;
     // Retail had no synthesized sun shadow ray-march; objects cast
     // alpha-blob shadows handled separately. Off by default.
     bool  sun_shadow = false;
@@ -465,8 +538,8 @@ struct TMapRenderer::Impl
     void clearDrawRecords()
     {
         sectorDrawInst.clear();
+        ++drawListVersion;
         sectorDrawBins.clear();
-        sectorTileTexByBitmap.clear();
         frameDrawIndices.clear();
         sectorLights.clear();
         sectorLightBins.clear();
@@ -492,10 +565,12 @@ struct TMapRenderer::Impl
     void clearResidentAssetMetadataForShutdown()
     {
         sectorTileTex.clear();
+        sectorTileTexByBitmap.clear();
         // GPU resources are owned by TRenderer's asset registries and are
         // destroyed by TRenderer::Shutdown. These records are renderer-facing
         // metadata and non-owning handles.
         sectorMeshAsset.clear();
+        equipMeshAssets.clear();
         dlightTexIdx = -1;
     }
 
@@ -546,9 +621,11 @@ struct TMapRenderer::Impl
         // the physical render target so changing resolution does not widen the
         // world camera view.
         //
-        // The cameraWorld.z * iso_cos30 term keeps a world point at
-        // (cam.x, cam.y, cam.z) projecting to HEIGHT/2 -- i.e. Locke
-        // stays vertically centered on screen as he climbs. The scene
+        // The camera's height term keeps a world point at (cam.x, cam.y,
+        // cam.z) projecting to HEIGHT/2 -- retail's scroll origin is
+        // WorldToScreen(center) less half the pane (0x004539d0) -- as
+        // WorldToScreen rounds it: how far it lifts the camera above its
+        // ground point, about cam.z * cos30. The scene
         // render uses cam_ox/cam_oy (this value) as a screen-space
         // shift for tiles, meshes, and the deferred ortho projection
         // (maprenderer.cpp:418/990/1031/1165/546-549), so overlays must
@@ -561,7 +638,10 @@ struct TMapRenderer::Impl
         WorldToScreen(sectorWorldCenter, sx, sy);
         sx += sectorCenterOx;
         sy += sectorCenterOy;
-        sy += int32_t((int64_t(sectorCameraWorld.z) * 867) / 1000);
+        int32_t ground_x = 0, ground_y = 0, camera_x = 0, camera_y = 0;
+        WorldToScreen(S3DPoint(sectorCameraWorld.x, sectorCameraWorld.y, 0), ground_x, ground_y);
+        WorldToScreen(sectorCameraWorld, camera_x, camera_y);
+        sy += ground_y - camera_y;
     }
     S3DPoint sectorLightPos(const SSectorLight& L) const
     {
@@ -591,16 +671,13 @@ struct TMapRenderer::Impl
             rgb[0] = rgb[1] = rgb[2] = 0.0f;
         }
     }
-    float sectorLightIntensity(const SSectorLight& L) const
+    // The light's multiplier as retail's light tables use it: the authored
+    // SLightDef.multiplier, or the default table's 28 when it is <= 0.
+    float sectorLightMultiplier(const SSectorLight& L) const
     {
         TObjectInstance* oi = L.ref.Get();
-        PSLightDef ld = oi ? oi->GetLightDef() : nullptr;
-      // SLightDef.multiplier is a percent (retail authoring 0..100,
-      // occasionally higher for "supernova" effects). 100 -> base 1.0
-      // intensity; LightMult3D (default 250 = 2.5x) is applied at
-      // submission time. The earlier /10.0f produced 10x base intensity
-      // and burned 3D objects in close-range lights.
-        return (!ld || ld->multiplier <= 0) ? 0.0f : float(ld->multiplier) / 100.0f;
+        const SLightDef* ld = oi ? oi->GetLightDef() : nullptr;
+        return ld ? float(RetailLightMultiplier(ld->multiplier)) : 0.0f;
     }
     const char* sectorLightClassName(const SSectorLight& L) const
     {

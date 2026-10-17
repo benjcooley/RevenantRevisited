@@ -6,57 +6,83 @@
 
 #pragma once
 
-#include "revenant.h"
-#include "screen.h"
-#include "object.h"
+#include "button.h"
+#include "invslot.h"
 
-// *******************************
-// * TInventory - Inventory pane *
-// *******************************
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
 
-// Inventory for Our Hero which allows him to fool around with his possessions.
+class TMulti;
+class TObjectInstance;
 
-_CLASSDEF(TInventory)
-class TInventory : public TPane
+// REVSYNC: TInventory @ 0x0065d4f8 (vtable 0x005a58c0; docs/ui/
+// HUD_REBUILD.md §6b). The side panel's inventory, in its lower slot: the
+// container's icon, the player's gold, twelve item cells and two arrows that
+// page through the container one column at a time. The container is the
+// main player's inventory, set as the player becomes main, or a bag the
+// player opened.
+//
+// Its clicks, drags and hover cursor (MouseClick 0x00538210, Animate
+// 0x00537f90) are the side panel's (uisidebartest.cpp), which hit-tests the
+// cells (FirstSlot) and the container icon; UIDragState acts on the items.
+class TInventory final : public TButtonPane
 {
   public:
-    TInventory() : TPane(INVENTORYPANEX, INVENTORYPANEY, INVENTORYPANEWIDTH, INVENTORYPANEHEIGHT) { container = nullptr; }
-    ~TInventory() {}
+    static constexpr int32_t kWidth = 0xbc;
+    static constexpr int32_t kHeight = 0xae;
+    static constexpr int32_t kColumns = 4;
+    static constexpr int32_t kRows = 3;
+    static constexpr int32_t kLastFirstSlot = 0xf3;     // the last column's first slot keeps 12 in 0..255
 
-    virtual bool Initialize();
-    virtual void Close();
-    virtual void DrawBackground();
-    virtual void Animate(bool draw);
-    virtual void Show() { TPane::Show(); Update(); }
-    virtual void MouseClick(int32_t button, int32_t x, int32_t y);
-    virtual void MouseMove(int32_t button, int32_t x, int32_t y);
+    TInventory();
+    ~TInventory() override;
+    TInventory(const TInventory&) = delete;
+    TInventory& operator=(const TInventory&) = delete;
 
-    TObjectInstance* GetContainer() { return container; }
-        // Container whose inventory contents are currently displayed
-    TObjectInstance* GetTopContainer()
-        { TObjectInstance* inst = container; while (inst->GetOwner()) inst = inst->GetOwner(); return inst; }
-        // Master of inventory (usually Player)
-    void SetContainer(TObjectInstance* cont)
-        { if (container != cont) { container = cont; Update(); } }
-        // Sets the object whose inventory the pane displays
-    int32_t GetHeldSlot() { return heldslot; }
-        // Function for transfering objects to other panes (namely, the equipment pane)
+    bool Initialize() override;     // 0x00537650
+    void Close() override;
+    void Pulse() override;          // binds the cells, the gold readout and the container icon
+    void Compose() override;
 
-    void DrawAnim(TObjectInstance* inst, PTBitmap bm);
-        // Draw an animation for an inventory object
+    // The container whose inventory the pane shows (retail +0x17c).
+    [[nodiscard]] TObjectInstance* GetContainer() const { return container; }
+    // Its outermost owner: usually the player.
+    [[nodiscard]] TObjectInstance* GetTopContainer() const;
+    void SetContainer(TObjectInstance* cont);
+
+    // The first slot the grid shows (retail +0x188): slot first + col * 3 +
+    // row is in column col, row row.
+    [[nodiscard]] int32_t FirstSlot() const { return firstSlot; }
+    // Pages one column left (-1) or right (+1), within 0..kLastFirstSlot
+    // (0x00537520); the arrows' functions.
+    void Scroll(int32_t columns);
+
+    // The screen centre of the cell showing `slot`; false when the slot is
+    // not among the twelve in view or the pane is hidden. For the playtest
+    // director, which right-clicks an item to equip it as a player does.
+    [[nodiscard]] bool CellCenter(int32_t slot, int32_t& x, int32_t& y);
+
+    // The slot an item is being dragged from, for the panes it is dropped
+    // on; -1 while nothing is (retail +0x180, set by its drag, P4).
+    [[nodiscard]] int32_t GetHeldSlot() const { return -1; }
+
+  protected:
+    void ComposeBackground(int32_t target_w, int32_t target_h) override;    // 0x00537a70
 
   private:
-    int32_t OnSlot(int32_t x, int32_t y);
-        // Return slotnumber that pixel position x, y is on
-    void SwapSlots(int32_t oldslot, int32_t newslot);
-        // Swap the inventory objects in the slots specified
+    void RefreshArrows();
 
-    TObjectInstance* container;         // Object inventory is shown for
-
-    int32_t grabslot;                       // slot number currently dragging with mouse
-    int32_t heldslot;                       // for passing objects to other panes
-    bool isdragging;                    // whether object is in motion
-    int32_t startposx, startposy;           // dragging
+    std::unique_ptr<TMulti> archive;        // Inventory.dat (retail DAT_0065c130)
+    TBitmap* background = nullptr;
+    TBitmap* backpack = nullptr;
+    TBitmap* goldpile = nullptr;
+    const SFontAtlas* goldFont = nullptr;   // "Gold" (retail's font 9, DAT_006663dc)
+    TObjectInstance* container = nullptr;
+    int32_t firstSlot = 0;
+    SInvSlotStyle style;
+    std::vector<TInvSlot> cells;            // the grid, column-major
+    std::string goldText;                   // what the gold readout shows
+    TBitmap* containerIcon = nullptr;       // what the container icon shows
 };
-
-

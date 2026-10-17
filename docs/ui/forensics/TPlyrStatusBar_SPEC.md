@@ -12,6 +12,46 @@
 
 ---
 
+## Measured in the emulator (2026-10-09)
+
+Retail's own TPlyrStatusBar now runs in the emulator's HUD slot
+(`tools/retail_runtime/slots/hud/plyrstatusbar.py`), and the production pane
+(`src/statusbar.{h,cpp}`) is A/B'd against it pixel by pixel
+(`tools/retail_ab/hud_ab.py statusbar`: 20/20 cases, every opaque pixel
+exact). Where this spec and the measurements disagree, the measurements
+win:
+
+- **Assets (§2).** Classic is the texture-overlay path: `StatusBar.dat`, the
+  ARGB4444 (`0x10000`) bitmaps, name `bars` (lower case). `statusbarnotex.dat`
+  is the NoTexOverlay path, which retail took only on cards it listed as
+  broken (HUD_REBUILD.md §3).
+- **Chip placement (§3/§4).** Player chip art at pane (4, 4); target at
+  (pane_w − 0x88, 4). There is no inset of 6.
+- **Portrait (§4/§13).** The character's +0x130 image (InventoryImage) is
+  put whole into a 40×40 565 scratch surface. That surface is blitted
+  centred on the ring (chip (6, 11) player, (78, 11) target) with the
+  surface's key: magenta is transparent, black stays opaque, and the colour
+  truncates to 4 bits in the ARGB4444 chip. There is no LockeFace fallback.
+  T3DImagery::GetInvImage answers with the state-0 icon whatever the state
+  (0x0040ce60), so characters show their portrait.
+- **Bars (§6).** The kernel FUN_0054a5d0 draws four slices from `bars` (texel
+  column 2). The near cap lights once the fill reaches half its width, the
+  far cap once the fill reaches length − cap, and the middle splits where
+  the fill ends. The player fills from the left, the target from the right.
+  Retail's emulator traces confirm the thresholds.
+- **Text shadow (§7/§8).** FUN_004be2b0 draws the string black at (+1, +1),
+  (+2, +1) and (+1, +2), then in its colour at (0, 0): a 2 px drop shadow
+  down and to the right (DrawTextA calls recorded).
+- **Text cells (§8).** Values 50×14 at x 0x47 (player, left-aligned) and
+  pane_w − 0x80 (target, right-aligned), rows 7 / 0x17 / 0x24; names 64×64 at
+  x 0 / pane_w − 0x44, row 0x36, centred and word-wrapped. Blitted once the
+  fade passes half (fade · 255 / 6 > 128, i.e. fade ≥ 4). "Small" is
+  `CreateFontA(lfHeight = +12, "Arial")`, a 12 px cell (about 9 px em), so the
+  port's text size and placement are HUD_REBUILD P6.
+- **Fades (§9).** The chip's quads carry fade · 255 / 6 (integer) as the tint
+  alpha. On the D3D device that modulates the texture alpha (0x00417d60,
+  blend mode 4). Retail's software rasterizer ignores it.
+
 ## §0 — Sources & status
 
 **Class:** `TPlyrStatusBar` = `cls_0x5a54e4`, vtable @ `0x5a54e4`. Single global

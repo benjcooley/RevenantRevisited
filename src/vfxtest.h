@@ -136,6 +136,8 @@ struct SEffect
     EVfxPreviewStyle preview_style = EVfxPreviewStyle::Static;
     SVfxAnchor       anchor        = {};
     std::function<void*(const S3DPoint&)>                  factory;
+    // Optional controlled source/target fixture for moving review effects.
+    std::function<void*(const S3DPoint&, const S3DPoint&)> factory_endpoints;
     std::function<void(void* ctx, EFxDebugMode dbg)>       submit;
     std::function<void(void* ctx, EFxDebugMode dbg,
                        const SVfxAttachment& attach)>      submit_attached;
@@ -150,6 +152,9 @@ struct SEffect
     // pending SubmitHelperMesh entries.
     std::function<void(void* ctx, EFxDebugMode dbg)>       submit_world;
     std::function<void(void* ctx)>                         destroy;
+    // Optional current-controller completion query. Review must not invent
+    // a timeout when absent; existing submit hooks may own their own repeats.
+    std::function<bool(void* ctx)>                         is_alive;
 };
 
 void Register(const SEffect& effect);
@@ -166,5 +171,10 @@ void HandleKeyPress(int32_t key, bool down);
 // registrations into VfxTest::Register the first time the browser
 // initializes.
 void DeferredRegister(const SEffect& effect);
+
+// Review gallery only: copy registrations without initializing the browser,
+// spawning an active selection, loading backdrops, or changing scene lights.
+std::vector<SEffect> ReviewCatalogue();
+float ReviewRestartInterval(EVfxPreviewStyle style);
 
 }  // namespace VfxTest
