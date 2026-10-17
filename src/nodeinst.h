@@ -63,8 +63,8 @@ class TNodeInst : public TSafeObjectBase<TNodeInst>
     PROP_FN(1, std::string, name,   GetName,     );                   // read-only
     PROP_FN(2, hmm_vec3,    pos,    LocalPos,    SetLocalPos);
     PROP_FN(3, hmm_vec3,    rot,    LocalRotDeg, SetLocalRotDeg);     // euler, degrees
-    PROP_FN(4, hmm_vec3,    scl,    LocalScl,    SetLocalScl);
-    PROP(5) bool active = true;    // inactive = subtree neither ticked nor drawn
+    PROP_FN(4, hmm_vec3,    scl,    LocalScl,    SetLocalScl, def({1, 1, 1}));
+    PROP_FN(5, bool,        active, Active,      SetActive, def(true), "Inactive: subtree neither ticked nor drawn");
 
     // Instance-specific name. TObjectInstance overrides this with its
     // legacy strdup'd / objinfo-backed name.
@@ -74,6 +74,9 @@ class TNodeInst : public TSafeObjectBase<TNodeInst>
     // Checked downcast without RTTI. nullptr for plain nodes.
     [[nodiscard]] virtual TObjectInstance*       AsObjectInstance()       { return nullptr; }
     [[nodiscard]] virtual const TObjectInstance* AsObjectInstance() const { return nullptr; }
+
+    [[nodiscard]] bool Active() const { return active_; }
+    void SetActive(bool active) { active_ = active; }
 
     // ---- Transform / hierarchy ------------------------------------------
     [[nodiscard]] TTransform&       Transform()       { return transform_; }
@@ -134,6 +137,7 @@ class TNodeInst : public TSafeObjectBase<TNodeInst>
 
   private:
     std::string node_name_;
+    bool active_ = true;
     std::vector<std::unique_ptr<TObjectComponent>> components_;
 };
 

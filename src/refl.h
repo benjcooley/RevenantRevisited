@@ -45,9 +45,11 @@
 // asks this registry for the type's description and works on
 // (description, void* object) pairs.
 //
-// Annotated members must be accessible from outside the class (public),
-// or exposed through PROP_FN accessors. The id is also the wire tag in
-// packed buffers: append-only, never renumbered, never reused.
+// Annotated members are normally accessed through PROP_FN accessors (the
+// codebase keeps fields private). A class that annotates private fields
+// directly adds one line, `REFL_FRIEND(ClassName)`, which befriends the
+// generated access thunks. The id is also the wire tag in packed buffers:
+// append-only, never renumbered, never reused.
 //
 // *************************************************************************
 
@@ -87,6 +89,13 @@ class TObjectComponent;
 // DEF_BLOCK for nodes. Annotations on the class.
 #define DEF_BLOCK(name)
 #define DEF_COMPONENT(name)
+// Lets the generated thunks reach private annotated members. Not needed
+// under real reflection (access_context::unchecked), so it folds away.
+#if defined(__cpp_annotations)
+#  define REFL_FRIEND(ClassName)
+#else
+#  define REFL_FRIEND(ClassName) friend struct refl::Access<ClassName>;
+#endif
 
 enum class EPropType : uint8_t
 {
@@ -207,6 +216,11 @@ inline void PropSetLane(SPropValue& v, int32_t lane, float x)
 }
 
 namespace refl {
+
+// Generated per annotated class: the typed get / set / loaded thunks.
+// Specialised in the generated .cpp; a class befriends it with
+// REFL_FRIEND when its annotated members are private.
+template <class T> struct Access;
 
 // What the annotation carries (the generator reads the same arguments).
 struct SMeta

@@ -137,8 +137,13 @@ Rules that keep it honest:
   the same or next line), `enum class`, `PROP*` lines, `DEF_BLOCK` /
   `DEF_COMPONENT`, and the `OnPropChanged` hook. A line it cannot parse
   is a build error with file and line, never a guess.
-- Annotated members must be accessible (public) or exposed through
-  `PROP_FN` accessors; the generated thunks live outside the class.
+- Fields stay private, as everywhere in the codebase: annotate through
+  `PROP_FN` accessors, or annotate the private field directly and add one
+  `REFL_FRIEND(ClassName)` line (the generated thunks are a
+  `refl::Access<T>` specialization the class befriends; the macro folds
+  away under real reflection).
+- An accessor-backed property states its default with `def(literal)`;
+  a test asserts every default matches a freshly constructed object.
 - A derived annotated class sees its base's properties (`SType::base`,
   linked by name on first lookup).
 - **Everything else talks to the registry**: `refl::Of<T>()` /

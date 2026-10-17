@@ -362,8 +362,16 @@ def emit(path: Path, out: Path, include: str):
                         default_expr(m, ptype, path), opts, nopts))
         o.append("};\n\n")
 
+        o.append("} // namespace\n\n")
+        o.append("template <> struct refl::Access<%s>\n{\n" % k.name)
         if k.members:
-          o.append("bool Set_%s(void* obj, uint16_t id, const SPropValue& v)\n{\n" % k.name)
+            o.append("    static bool Set(void* obj, uint16_t id, const SPropValue& v);\n")
+            o.append("    static bool Get(const void* obj, uint16_t id, SPropValue& out);\n")
+        if k.has_loaded:
+            o.append("    static void Loaded(void* obj) { static_cast<%s*>(obj)->OnLoaded(); }\n" % k.name)
+        o.append("};\n\n")
+        if k.members:
+          o.append("bool refl::Access<%s>::Set(void* obj, uint16_t id, const SPropValue& v)\n{\n" % k.name)
           o.append("    %s& self = *static_cast<%s*>(obj);\n" % (k.name, k.name))
           o.append("    switch (id)\n    {\n")
           for m in k.members:
@@ -399,7 +407,7 @@ def emit(path: Path, out: Path, include: str):
               o.append("    self.OnPropChanged(id);\n")
           o.append("    return true;\n}\n\n")
 
-          o.append("bool Get_%s(const void* obj, uint16_t id, SPropValue& out)\n{\n" % k.name)
+          o.append("bool refl::Access<%s>::Get(const void* obj, uint16_t id, SPropValue& out)\n{\n" % k.name)
           o.append("    const %s& self = *static_cast<const %s*>(obj);\n" % (k.name, k.name))
           o.append("    switch (id)\n    {\n")
           for m in k.members:
@@ -414,14 +422,13 @@ def emit(path: Path, out: Path, include: str):
                   o.append("        case %d: out = SPropValue::Enum(int32_t(%s)); return true;\n" % (m.id, read))
           o.append("        default: return false;\n    }\n}\n\n")
 
-        if k.has_loaded:
-            o.append("void Loaded_%s(void* obj) { static_cast<%s*>(obj)->OnLoaded(); }\n\n" % (k.name, k.name))
+        o.append("namespace {\n")
         props = ("kProps_%s" % k.name) if k.members else "nullptr"
-        setf  = ("&Set_%s" % k.name) if k.members else "nullptr"
-        getf  = ("&Get_%s" % k.name) if k.members else "nullptr"
+        setf  = ("&refl::Access<%s>::Set" % k.name) if k.members else "nullptr"
+        getf  = ("&refl::Access<%s>::Get" % k.name) if k.members else "nullptr"
         cnode = ("[]() -> TNodeInst* { return new %s(); }" % k.name) if k.def_kind == "node" else "nullptr"
         ccomp = ("[]() -> TObjectComponent* { return new %s(); }" % k.name) if k.def_kind == "component" else "nullptr"
-        loaded = ("&Loaded_%s" % k.name) if k.has_loaded else "nullptr"
+        loaded = ("&refl::Access<%s>::Loaded" % k.name) if k.has_loaded else "nullptr"
         o.append('refl::SType kType_%s = { "%s", "%s", &typeid(%s), %s, %d, %s, %s, nullptr, "%s", %s, %s, %s };\n'
                  % (k.name, k.name, k.base, k.name, props, len(k.members), setf, getf, k.def_name, cnode, ccomp, loaded))
         o.append("refl::SRegistrar kReg_%s(kType_%s);\n\n" % (k.name, k.name))

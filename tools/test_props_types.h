@@ -43,6 +43,17 @@ struct STestDerived : public STestMesh
     PROP(20) float extra = 2.5f;
 };
 
+// Private annotated fields: the class befriends the generated thunks.
+class STestPrivate
+{
+  public:
+    REFL_FRIEND(STestPrivate)
+    [[nodiscard]] float Speed() const { return speed_; }
+  private:
+    PROP(1, "Units per second") float   speed_ = 3.0f;
+    PROP(2)                     int32_t count_ = 2;
+};
+
 // Accessor-backed properties (the TNodeInst shape: state lives behind
 // setters, e.g. in a TTransform).
 struct STestAccessor

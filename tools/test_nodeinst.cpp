@@ -112,6 +112,20 @@ TEST(NodeInst, AnnotatedProperties)
     EXPECT_NE(refl::FindProp(*tp, "scl"), nullptr);
     EXPECT_NE(refl::FindProp(*tp, "active"), nullptr);
     EXPECT_TRUE(refl::FindProp(*tp, "name")->read_only);
+    // Accessor-backed defaults must match a fresh node (scl is 1,1,1 not 0,0,0).
+    {
+        TNodeInst fresh("fresh");
+        for (const refl::SType* t = tp; t; t = t->base)
+            for (int32_t i = 0; i < t->prop_count; ++i)
+            {
+                const refl::SProp& p = t->props[i];
+                if (p.read_only) continue;              // name: per instance
+                SPropValue v;
+                ASSERT_TRUE(refl::Get(*tp, &fresh, p.id, v)) << p.name;
+                EXPECT_TRUE(refl::Equals(v, p.def)) << p.name << " default does not match a fresh node";
+            }
+        EXPECT_FLOAT_EQ(refl::FindProp(*tp, "scl")->def.v3[0], 1.0f);
+    }
 
     TNodeInst n("glow");
     EXPECT_TRUE(refl::Set(*tp, &n, refl::FindProp(*tp, "pos")->id, SPropValue::Vec3(1, 2, 3)));
@@ -121,7 +135,7 @@ TEST(NodeInst, AnnotatedProperties)
     EXPECT_TRUE(refl::Set(*tp, &n, refl::FindProp(*tp, "rot")->id, SPropValue::Vec3(0, 0, 90)));
     EXPECT_NEAR(n.LocalRotDeg().Z, 90.0f, 1e-3f);
     EXPECT_TRUE(refl::SetLane(*tp, &n, refl::FindProp(*tp, "active")->id, 0, 0.0f));
-    EXPECT_FALSE(n.active);
+    EXPECT_FALSE(n.Active());
     SPropValue v;
     ASSERT_TRUE(refl::Get(*tp, &n, refl::FindProp(*tp, "name")->id, v));
     EXPECT_EQ(v.str, "glow");
@@ -134,6 +148,6 @@ TEST(NodeInst, AnnotatedProperties)
     refl::Unpack(*tp, &m, r);
     EXPECT_FLOAT_EQ(m.LocalPos().Y, 2.0f);
     EXPECT_FLOAT_EQ(m.LocalScl().Z, 1.5f);
-    EXPECT_FALSE(m.active);
+    EXPECT_FALSE(m.Active());
     EXPECT_STREQ(m.GetName(), "other");                   // name is read-only: not packed
 }

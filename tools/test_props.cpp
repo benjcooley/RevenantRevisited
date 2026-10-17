@@ -203,6 +203,20 @@ TEST(Packed, Varints)
     EXPECT_FALSE(r.Next(f));
 }
 
+TEST(Props, PrivateFieldsViaFriend)
+{
+    const refl::SType* t = refl::Of<STestPrivate>();
+    ASSERT_NE(t, nullptr);
+    ASSERT_EQ(t->prop_count, 2);
+    EXPECT_STREQ(t->props[0].name, "speed");            // trailing underscore dropped
+    STestPrivate p;
+    EXPECT_TRUE(refl::Set(*t, &p, 1, SPropValue::Float(9.5f)));
+    EXPECT_FLOAT_EQ(p.Speed(), 9.5f);
+    SPropValue v;
+    ASSERT_TRUE(refl::Get(*t, &p, 2, v));
+    EXPECT_EQ(v.i, 2);
+}
+
 TEST(Props, AccessorBacked)
 {
     const refl::SType& type = *refl::Of<STestAccessor>();
@@ -214,6 +228,16 @@ TEST(Props, AccessorBacked)
     EXPECT_FALSE(t[3].visible_in_editor);
     EXPECT_EQ(t[3].def.i, int32_t(ETestBlend::Alpha));
     EXPECT_FLOAT_EQ(t[1].def.f, 1.0f);
+    {
+        STestAccessor fresh;
+        for (int32_t i = 0; i < type.prop_count; ++i)
+        {
+            if (type.props[i].read_only) continue;
+            SPropValue v;
+            ASSERT_TRUE(refl::Get(type, &fresh, type.props[i].id, v));
+            EXPECT_TRUE(refl::Equals(v, type.props[i].def)) << type.props[i].name;
+        }
+    }
 
     EXPECT_TRUE(refl::Set(type, &a, 1, SPropValue::Vec3(1, 2, 3)));
     EXPECT_FLOAT_EQ(a.LocalPos().Z, 3.0f);
