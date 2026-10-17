@@ -1,0 +1,52 @@
+// Mist prefab: the engine particle effect (same block as effects.def)
+// stamped on a node. The document is the root node's body.
+particles
+{
+    effect Mist
+    {
+        debug = normal
+        inactive_ttl_pulses = 12
+
+        bucket mist_drops
+        {
+            imagery_path = "Magic\\mist.i3d"
+            texture_slot = 0
+            atlas_cols = 1
+            atlas_rows = 1
+            atlas_frames = 1
+            width = 6.94
+            height = 6.94
+            scale = 1.0
+            blend_mode = "additive_straight"
+            light_mode = "unlit"
+            depth_mode = "test_no_write"
+            orientation = "screen_aligned"
+
+            spawn_count = 50
+            // tick_expr literals are per tick at tick_hz = 24 (see the
+            // IntegrateBucket header in effect.cpp); default_life is seconds
+            // and only a backstop -- drops respawn through kill_expr.
+            tick_hz = 24
+            default_life = 5.0
+
+            spawn_expr = "
+                pos = emit_pos + vec3(rand(-32, 32), rand(-10, 10), 5);
+                vel = vec3(rand(-2, 2), rand(-0.625, 0.625), rand(2, 4));
+                scale = vec3(6.94, 6.94, 1);
+                rot.x = 0;
+                frame = 0;
+                color = vec4(1, 1, 1, 1);
+            "
+
+            // Per tick: gravity, then one tick of motion.
+            tick_expr = "
+                vel.z = vel.z - 0.37;
+                pos = pos + vel;
+            "
+
+            // Respawn in place when the drop lands (emit_pos.z is the
+            // effect's z).
+            kill_expr = "step(pos.z, emit_pos.z)"
+        }
+    }
+}

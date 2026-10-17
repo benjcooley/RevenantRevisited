@@ -6,7 +6,8 @@
 
 #include "editorundo.h"
 
-#include "iobject.h"
+#include "nodeinst.h"
+#include "refl.h"
 
 #include <unordered_map>
 #include <utility>
@@ -31,83 +32,95 @@ private:
     std::function<void()> undo_;
 };
 
-// "Doc tree" of a single object, for the diff-based undo path. We use
-// IReflection's GetValue/SetValue as the serialization API: walking all
-// properties produces a flat vector of (name, value) pairs, and applying
-// a vector calls SetValue for each.
-//
-// TODO(deep-undo): if we ever need to capture nested state -- sectors
-// with their child arrays, instance state with sub-objects, animator
-// keyframes, anything that doesn't decompose into a flat property list
-// -- swap SObjectSnapshot for a defdoc::Node tree. The public API
-// (MarkDirty / Lock / Resolve / SetOperationName) stays the same; only
-// SnapshotOf / ApplyOnto / Diff need to grow into a recursive tree walk
-// (path-keyed match, array insert/delete detection, etc.). Probably
-// unnecessary for this game, but flagged here so future-us doesn't
-// re-derive the architecture.
-using SObjectSnapshot = std::vector<std::pair<const char*, SPropertyValue>>;
+// One captured property. SPropValue carries a string *view*, so the
+// snapshot owns the characters in `text` and re-points the view before
+// use (the vector may move the entry).
+struct SSnapEntry
+{
+    uint16_t    id = 0;
+    SPropValue  value;
+    std::string text;
 
-SObjectSnapshot SnapshotOf(IObject* obj)
+    [[nodiscard]] SPropValue Value() const
+    {
+        SPropValue v = value;
+        if (v.type == EPropType::String) v.str = text;
+        return v;
+    }
+};
+
+using SObjectSnapshot = std::vector<SSnapEntry>;
+
+SObjectSnapshot SnapshotOf(const refl::SType& type, const TNodeInst* node)
 {
     SObjectSnapshot snap;
-    if (!obj) return snap;
-    const IReflection& r = obj->GetRefl();
-    const int32_t n = r.NumProperties();
-    snap.reserve(size_t(n));
-    for (int32_t i = 0; i < n; ++i) {
-        const SPropertyDesc& p = r.GetProperty(i);
-        if (HasFlag(p.flags, EPropertyFlag::ReadOnly)) continue;
-        SPropertyValue v;
-        r.GetValue(obj, p, v);
-        snap.emplace_back(p.name, std::move(v));
+    if (!node) return snap;
+    for (const refl::SType* t = &type; t; t = t->base)
+    {
+        for (int32_t i = 0; i < t->prop_count; ++i)
+        {
+            const refl::SProp& p = t->props[i];
+            if (p.read_only || p.type == EPropType::Trigger) continue;
+            SSnapEntry e;
+            e.id = p.id;
+            if (!refl::Get(type, node, p.id, e.value)) continue;
+            if (e.value.type == EPropType::String) e.text = std::string(e.value.str);
+            snap.push_back(std::move(e));
+        }
     }
     return snap;
 }
 
-void ApplyOnto(IObject* obj, const SObjectSnapshot& snap)
+void ApplyOnto(const refl::SType& type, TNodeInst* node, const SObjectSnapshot& snap)
 {
-    if (!obj) return;
-    const IReflection& r = obj->GetRefl();
-    for (const auto& kv : snap) {
-        if (const SPropertyDesc* p = r.FindProperty(kv.first))
-            r.SetValue(obj, *p, kv.second);
-    }
+    if (!node) return;
+    for (const SSnapEntry& e : snap)
+        refl::Set(type, node, e.id, e.Value());
 }
 
-// Apply only the entries in `snap` whose names appear in `keys` -- used
-// to push targeted before/after pairs that touch only the diffed props.
+// Entries of `after` whose value differs from the same id in `before`.
 SObjectSnapshot Diff(const SObjectSnapshot& before, const SObjectSnapshot& after)
 {
-    // before and after are produced by the same reflection schema, so the
-    // entries are positional. Iterate and keep only differing slots.
     SObjectSnapshot d;
-    const size_t n = (before.size() < after.size()) ? before.size() : after.size();
-    for (size_t i = 0; i < n; ++i) {
-        if (!(before[i].second == after[i].second))
-            d.emplace_back(after[i].first, after[i].second);
+    for (const SSnapEntry& a : after)
+    {
+        bool changed = true;
+        for (const SSnapEntry& b : before)
+            if (b.id == a.id) { changed = !refl::Equals(a.Value(), b.Value()); break; }
+        if (changed) d.push_back(a);
     }
     return d;
 }
 
-// A single auto-generated undo entry covering EVERY object that changed
+// A single auto-generated undo entry covering EVERY node that changed
 // during the frame / lock period. Undo applies the before-snapshot to
-// each; Redo applies the after-snapshot. One entry, one menu label, no
-// matter how many objects the command touched.
+// each; Redo applies the after-snapshot. One entry, one menu label.
 class BatchSnapshotCommand : public IEditorCommand
 {
 public:
-    struct SEntry { IObject* obj; SObjectSnapshot before; SObjectSnapshot after; };
+    struct SEntry
+    {
+        TSafeRef<TNodeInst> node;
+        const refl::SType*  type = nullptr;
+        SObjectSnapshot     before;
+        SObjectSnapshot     after;
+    };
     BatchSnapshotCommand(std::string name, std::vector<SEntry> entries)
         : name_(std::move(name)), entries_(std::move(entries)) {}
-    void Undo() override { for (auto& e : entries_) ApplyOnto(e.obj, e.before); }
-    void Redo() override { for (auto& e : entries_) ApplyOnto(e.obj, e.after);  }
+    void Undo() override { for (auto& e : entries_) ApplyOnto(*e.type, e.node.Get(), e.before); }
+    void Redo() override { for (auto& e : entries_) ApplyOnto(*e.type, e.node.Get(), e.after);  }
     const char* Name() const override { return name_.c_str(); }
 private:
     std::string         name_;
     std::vector<SEntry> entries_;
 };
 
-struct SDirtyEntry { IObject* obj; SObjectSnapshot before; };
+struct SDirtyEntry
+{
+    TSafeRef<TNodeInst> node;
+    const refl::SType*  type = nullptr;
+    SObjectSnapshot     before;
+};
 
 std::vector<std::unique_ptr<IEditorCommand>>& UndoStack()
 {
@@ -120,9 +133,9 @@ std::vector<std::unique_ptr<IEditorCommand>>& RedoStack()
     return s;
 }
 
-std::unordered_map<IObject*, SDirtyEntry>& DirtySet()
+std::unordered_map<TNodeInst*, SDirtyEntry>& DirtySet()
 {
-    static std::unordered_map<IObject*, SDirtyEntry> s;
+    static std::unordered_map<TNodeInst*, SDirtyEntry> s;
     return s;
 }
 
@@ -142,17 +155,19 @@ std::string& PendingName()
 
 // ---- Dirty-tracking ------------------------------------------------------
 
-void EditorUndo::MarkDirty(IObject* obj)
+void EditorUndo::MarkDirty(TNodeInst* node)
 {
-    if (!obj) return;
+    if (!node) return;
     auto& d = DirtySet();
-    if (d.find(obj) != d.end()) return;     // idempotent
-    d.emplace(obj, SDirtyEntry{ obj, SnapshotOf(obj) });
+    if (d.find(node) != d.end()) return;     // idempotent
+    const refl::SType* type = refl::Of(*node);
+    if (!type) return;
+    d.emplace(node, SDirtyEntry{ TSafeRef<TNodeInst>(node), type, SnapshotOf(*type, node) });
 }
 
-void EditorUndo::DropDirty(IObject* obj)
+void EditorUndo::DropDirty(TNodeInst* node)
 {
-    DirtySet().erase(obj);
+    DirtySet().erase(node);
 }
 
 void EditorUndo::ResolveDirty()
@@ -163,30 +178,26 @@ void EditorUndo::ResolveDirty()
 
     std::vector<BatchSnapshotCommand::SEntry> changed;
     changed.reserve(d.size());
-    for (auto& [obj, entry] : d) {
-        SObjectSnapshot now   = SnapshotOf(obj);
+    for (auto& [key, entry] : d)
+    {
+        TNodeInst* node = entry.node.Get();
+        if (!node) continue;                      // deleted mid-transaction
+        SObjectSnapshot now   = SnapshotOf(*entry.type, node);
         SObjectSnapshot after = Diff(entry.before, now);
         if (after.empty()) continue;
-        // Pair each "after" key with its corresponding "before" value
-        // so undo flips back exactly what we changed.
+        // Pair each "after" id with its "before" value so undo flips back
+        // exactly what we changed.
         SObjectSnapshot before_sub;
         before_sub.reserve(after.size());
-        for (const auto& a : after) {
-            for (const auto& b : entry.before)
-                if (a.first == b.first) {
-                    before_sub.emplace_back(b.first, b.second);
-                    break;
-                }
-        }
-        changed.push_back({ obj, std::move(before_sub), std::move(after) });
+        for (const SSnapEntry& a : after)
+            for (const SSnapEntry& b : entry.before)
+                if (a.id == b.id) { before_sub.push_back(b); break; }
+        changed.push_back({ entry.node, entry.type, std::move(before_sub), std::move(after) });
     }
     d.clear();
 
     if (changed.empty()) return;
 
-    // One batch entry per Resolve. Name comes from the operation label
-    // set during this transaction (gizmo "move" / property "scale" /
-    // command name) and is consumed here.
     std::string name = std::move(PendingName());
     if (name.empty()) name = "edit";
     UndoStack().push_back(std::make_unique<BatchSnapshotCommand>(
@@ -203,10 +214,8 @@ void EditorUndo::LockResolver()  { ++LockCount(); }
 void EditorUndo::UnlockResolver()
 {
     // Only decrement the lock; do NOT resolve inline. The end-of-frame
-    // ResolveDirty() call (in EditorDrawChrome's chrome) picks it up.
-    // That keeps the diff happening at a stable point -- after every
-    // system has finished mutating the dirty objects this frame -- and
-    // matches the user-facing rule "drag, release, undo entry appears".
+    // ResolveDirty() call picks it up so the diff happens at a stable
+    // point, after every system has finished mutating the dirty nodes.
     if (LockCount() > 0) --LockCount();
 }
 bool EditorUndo::ResolverLocked() { return LockCount() > 0; }

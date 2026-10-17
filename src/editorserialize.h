@@ -19,7 +19,7 @@
 // `@type` is opaque to the parser; the leading segment names a SafeObject
 // root (TObjectInstance today; TSector / assets / editor data later) and
 // dispatches to the matching registered handler. Reflected properties
-// (everything not `@`-prefixed) round-trip via the IReflection schema --
+// (everything not `@`-prefixed) round-trip via the annotated-property registry (refl.h) --
 // same machinery undo uses.
 //
 // Two callers:

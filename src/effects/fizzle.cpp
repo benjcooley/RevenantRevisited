@@ -463,7 +463,7 @@ class TFizzleRuntimeComponent final : public TFlipbookBillboardComponent
   protected:
     void OnUpdate() override
     {
-        TObjectInstance* owner = Owner();
+        TObjectInstance* owner = OwnerInstance();
         if (!owner || (owner->Flags() & OF_KILL)) return;
         Tick(state_.get());
         if (!logged_tick_ && state_->frame_count > 0)
