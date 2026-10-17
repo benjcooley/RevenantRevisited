@@ -88,52 +88,80 @@ Files: `src/nodeinst.{h,cpp}` (new), `src/objectcomponent.{h,cpp}`,
 `src/object.{h,cpp}`, `src/transform.{h,cpp}`, `src/saferef.h` comment.
 `tools/test_transform.cpp` gains node-tree + path-resolution tests.
 
-## 2. Property channels
+## 2. Reflection: one schema per class
 
-Any component (and the node itself) exposes a table of scalar channels. A
-track, an effect component, or the editor sets a channel by **id**, resolved
-once from its **name**. The channel table is the single surface tracks, the
-editor and C++ share; C++ may also call the typed setters directly.
+Every component class and `TNodeInst` itself declares **one reflection
+table** (the existing `IReflection` / `SPropertyDesc` schema in iobject.h,
+living on the class per the editor-object-model decision, not on an
+adapter). That single declaration drives everything:
 
-```cpp
-enum class EPropType : uint8_t { Float, Bool, Trigger };
+| Consumer | How it uses the table |
+|---|---|
+| DEF text (authoring) | generic `defdoc` block → `SetValue` by property name; no hand-written parser per type |
+| Binary buffer (runtime) | field **tag** → type-encoded value (§2.5); unknown tags skipped |
+| Instance creation | decode buffer into fresh components; no text parse per spawn |
+| Editor inspector + undo | already reflection-driven (editor.cpp, editorundo.cpp) |
+| Clipboard / snapshots | the `revenant.objects.v1` text walk, unchanged |
+| Animation tracks (§5) | name → property; lanes derived from the property type |
+| Effect components (C++) | typed setters; the table is the uniform surface everyone else shares |
 
-struct SPropertyDesc
-{
-    const char* name;        // "DiffuseA", "LocalPosX", "Burst"
-    uint16_t    id;          // the class's enum value
-    EPropType   type;
-    float       default_value;
-};
+Additions to the schema, all small:
 
-class TObjectComponent
-{
-    virtual const SPropertyDesc* PropertyTable(int32_t* count) const;   // static per class
-    virtual bool  SetProperty(uint16_t id, float value);                // false = unknown id
-    virtual float GetProperty(uint16_t id) const;
-    int32_t       FindProperty(const char* name) const;                 // -1 if absent
-};
+- **Stable field tag** per property (`uint16_t id`, protobuf-style). Tags
+  are assigned once and never reused, so a baked buffer survives
+  reordering, renaming and removal of properties.
+- **`Trigger` property type** (fires on the rising edge of a write; reads
+  as 0). `Bool` is 0 / 1 when driven by a track.
+- **Lanes are derived, not enumerated.** A `Float` property is one channel;
+  `Vec3Float` exposes `.x .y .z`; `Color` exposes `.r .g .b .a`. A track
+  target is `node/path.component.property[.lane]`:
+  `"core.mesh.diffuse.a"`, `"ring.scl.z"`, `"burst.emitter.burst"`. The
+  component segment is omitted for node properties; a node with two
+  components of one type names them (`mesh:outer`).
+- **Binding** resolves at stamp time to
+  `SPropertyBinding { TSafeRef<TNodeInst> node; int16_t slot; uint32_t gen; uint16_t tag; uint8_t lane; }`
+  (slot `-1` = the node's own table). A dead node makes the binding a
+  no-op, never a crash. Unknown names are a load-time error.
+
+Node properties: `pos`, `rot` (euler degrees), `scl`, `active` (bool;
+inactive = subtree neither ticked nor drawn), `name` (read-only).
+
+`SParticleBucketEffectDef` becomes a reflected struct and
+`ParseParticleEffectDef` (effect.cpp:163, thirty hand-parsed keys) is
+deleted in favour of the generic walk. Same for every `Parse*Def` of the
+same shape.
+
+### 2.5 Serialization: one schema, three encodings
+
+```
+   DEF text  (data/Resources/prefabs/*.def, embedded in the shipped binary)
+      │  bake at startup (generic defdoc → reflected walk)
+      ▼
+   binary buffer  (per prefab, held by TPrefabLibrary)
+      │  decode on every stamp
+      ▼
+   live TNodeInst tree + components
+      ▲
+      │  editor: inspector edits the live tree; "Apply to prefab" re-encodes
+      │          the buffer; "Save" writes DEF text back to the source file
 ```
 
-- **One channel per enum value.** Vectors are split: `LocalPosX`, `LocalPosY`,
-  `LocalPosZ`; colours are `DiffuseR..A`. Each class declares
-  `enum class EProp : uint16_t { ..., Count }` and a `constexpr` table.
-- **Booleans** are floats: `>= 0.5f` is true. Written as `0` / `1`.
-- **Triggers** fire on the rising edge of a key (e.g. `Burst = 1` at t=0.3
-  re-emits a bucket's `spawn_burst`). Reading a trigger returns 0.
-- **Target addressing** is `node-path` + `.` + `component` + `.` +
-  `Property`; the component segment is omitted for node channels:
-  `"core.mesh.DiffuseA"`, `"ring.LocalSclX"`, `"burst.emitter.Burst"`.
-  Paths are relative to the prefab root. If a node has two components of the
-  same type, the component may be named: `mesh:outer`.
-- **Binding** resolves at stamp time to
-  `SPropertyBinding { TSafeRef<TNodeInst> node; int16_t slot; uint32_t gen; uint16_t prop; }`
-  (slot `-1` = the node's own table). A dead node makes the binding a no-op,
-  never a crash. Unknown names are a load-time error, not a runtime one.
+**Binary encoding.** A message is a sequence of `(tag varint, value)`
+pairs terminated by tag 0. Value encoding by property type: `Bool` one
+byte; `Int` zigzag varint; `Float` 4 bytes LE; `String` length varint +
+bytes; `Vec3Int` three zigzag varints; `Vec3Float` 12 bytes; `Color` 16
+bytes; `Enum` varint; `ObjectRef` `@refid` varint. Nested messages (a
+node's component list, a node's children) are `String`-shaped: length
+varint + bytes, with a leading type-name string so the decoder can
+construct the right class before reading its fields. Unknown tags are
+skipped by their wire type; a missing tag keeps the field's declared
+default. Nothing is versioned beyond that; tags are the version.
 
-Node channels: `LocalPosX/Y/Z` (wu), `LocalRotX/Y/Z` (degrees, euler, same
-order as TTransform::SetLocalRotEuler), `LocalSclX/Y/Z`, `Active` (bool;
-inactive = subtree neither ticked nor drawn).
+**Why both.** Text is the authoring and diff format and what the editor
+writes back. Binary is what the game decodes on every spawn and what the
+shipped build carries, so stamping an effect never touches a parser. The
+same codec serves clipboard, undo snapshots and save-game blocks for
+prefab-shaped data.
 
 ## 3. Prefab file format
 
@@ -354,11 +382,16 @@ file exists, the A/B passes, and the shim is gone.
 
 ## 8. Phases
 
-1. **PR: node split.** `TNodeInst`, component owner retype,
-   `TSafeComponentRef` relocation, `TTransform` back-pointer, update-list
-   move, tests. No behaviour change; main stays runnable.
-2. **PR: core + two archetypes.** Property channels, prefab parser and
-   library, `TPrefabComponent`, node / `mesh` / `billboard` / `light`
+1. **PR: node split + reflection on the class.** `TNodeInst`, component
+   owner retype, `TSafeComponentRef` relocation, `TTransform`
+   back-pointer, update-list move. `TNodeInst` and `TObjectComponent` gain
+   `GetRefl()`; the `TObjectInstance` table moves off `TInstanceAdapter`
+   onto the class (the adapter retirement the editor memory already
+   calls for). Field tags added to `SPropertyDesc`. Tests. No behaviour
+   change; main stays runnable.
+2. **PR: core + two archetypes.** Generic DEF ⇄ reflection walk, binary
+   codec, prefab library (bake at startup, decode on stamp),
+   `TPrefabComponent`, node / `mesh` / `billboard` / `light`
    components, `emitter` (the evolved `TParticleEffectComponent`, node
    anchored, one bucket each), clips + minimal controller, harness
    auto-registration, render hooks. Prefabs: **Sparks** (emitter only) and
@@ -378,8 +411,13 @@ file exists, the A/B passes, and the shim is gone.
   behaviours on a node, never nodes.
 - 2026-10-16 `TObjectInstance` keeps mapindex as its soft-ref id; node
   registry is separate for now.
-- 2026-10-16 Property model: one float channel per enum value, bool = 0/1,
-  triggers rising-edge, name → id resolved at stamp time through soft refs.
+- 2026-10-16 One reflection table per class (iobject.h schema, on the
+  class, not an adapter) drives DEF text, a baked binary buffer with
+  stable field tags, instance creation, the editor, undo, and animation
+  lanes derived from property types. No hand-written parsers per type.
+- 2026-10-16 Property channels: lanes derived from the reflected type,
+  bool = 0/1, triggers rising-edge, name → (tag, lane) resolved at stamp
+  time through soft refs.
 - 2026-10-16 Emitters are never hand coded. The emitter is a component
   (`TParticleEffectComponent` evolved: one bucket, node anchored).
 - 2026-10-16 Behaviour, in expected frequency: emitters only (no code) →
