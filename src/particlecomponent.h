@@ -51,6 +51,8 @@ class TParticleEffectComponent : public TObjectComponent
     // Standalone drivers only (harness): submit this runtime's buckets.
     // In the map the renderer drains every bucket once per frame.
     void Submit(EFxDebugMode debug_mode);
+    // False once a one-shot effect has no live particles left.
+    [[nodiscard]] bool HasParticles() const;
 
   protected:
     void OnUpdate() override;

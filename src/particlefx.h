@@ -41,6 +41,7 @@ enum class EParticleVar : uint16_t
     DrawColor,
     DrawFrame,
     DrawUvRect,
+    Delay,          // sim ticks left before the particle starts (held, not drawn)
     Count,
 };
 
@@ -167,6 +168,11 @@ struct SParticleBucketDesc
     int32_t frame_rows = 1;
     float default_width = 1.0f;
     float default_height = 1.0f;
+    // Motion-streak copies: each particle also draws at pos + k * vel for
+    // k in 1..trail_count-1, with vel.z reduced by trail_gravity per copy
+    // (retail TParticle3DAnimator "trails"). 1 = no copies.
+    int32_t trail_count = 1;
+    float trail_gravity = 0.0f;
     bool debug_solid = false;
     bool flip_v = false;
     bool chroma_key = false;
@@ -294,6 +300,12 @@ enum class EParticleOp : uint16_t
     Step,            // (edge, x) -> 0 if x<edge else 1 (per lane).
     Select,          // (cond, t, f) -> cond!=0 ? t : f (per lane). Branchless
                      // conditional for piecewise curves; lane count = max(t,f).
+    LoadLane,        // (var, lane) -> one lane of a particle var as a fresh
+                     // scalar. A swizzle read (`pos.z`) compiles to this so the
+                     // eval stack stays in step with the compiler's slot
+                     // accounting (a ref into the middle of a 3-lane push
+                     // carried the wrong lane count and desynced every later
+                     // slot in the statement).
 };
 
 struct SParticleOpArgDef

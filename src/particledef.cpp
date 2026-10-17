@@ -78,6 +78,10 @@ bool SParticleEffectDef::Validate(std::string* error) const
             return fail("bucket " + b.name + " has negative tick_hz");
         if (!b.chain_bucket.empty() && !FindBucket(b.chain_bucket))
             return fail("bucket " + b.name + " chain_bucket='" + b.chain_bucket + "' targets unknown bucket");
+        if (b.spawn_delay_min < 0 || b.spawn_delay_max < b.spawn_delay_min)
+            return fail("bucket " + b.name + " has an invalid spawn delay range");
+        if (b.trail_count < 1)
+            return fail("bucket " + b.name + " trail_count must be >= 1");
     }
     for (const SParticleEmitterEffectDef& e : emitter)
     {

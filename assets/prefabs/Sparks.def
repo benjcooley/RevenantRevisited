@@ -1,0 +1,74 @@
+// Sparks -- the combat hit burst (TCharacter::EffectBurst "sparks",
+// character.cpp:2262-2317; retail TParticle3DAnimator, effect_old.cpp
+// 4752-4986; forensics docs/vfx/forensics/SPARKS_TSparkAnimator.md).
+//
+// Retail parameters, all per tick at 24 Hz:
+//   count       random(15, 25)
+//   position    impact point + 45 wu up, jitter +-3 wu per axis
+//   velocity    facing direction (1 wu/tick, horizontal) + jitter +-0.5 per axis
+//   gravity     0.25 wu/tick^2 (retail; the snapshot had 0.2)
+//   start delay random(0, 8) ticks per spark
+//   life        random(20, 40) ticks
+//   trails      2 (each spark drawn again one tick ahead, retail; snapshot 1)
+//   bounce      off the ground: z mirrored, vz = -vz/2, dead if vz < 2 (retail)
+//   sprite      Misc\Sparks.I3D photon quad, 8.5 x 6.9 wu, one of four
+//               atlas cells per burst (objflags = 1 << (ObjId() & 3));
+//               alpha blend, texture colour only.
+//
+// The facing direction is +X here; in game the stamp sets it from the
+// striker's facing (TODO: emitter direction channel).
+particles
+{
+    effect Sparks
+    {
+        inactive_ttl_pulses = 12
+
+        bucket sparks
+        {
+            imagery_path = "Misc\\Sparks.I3D"
+            texture_slot = 0
+            atlas_cols = 2
+            atlas_rows = 2
+            atlas_frames = 4
+            burst_frame = true
+            width = 8.5
+            height = 6.9
+            blend_mode = "alpha"
+            light_mode = "unlit"
+            depth_mode = "test_no_write"
+            orientation = "screen_aligned"
+
+            spawn_burst = 20
+            spawn_delay_min = 0
+            spawn_delay_max = 8
+            tick_hz = 24
+            default_life = 0.8333
+            life_max = 1.6667
+            trail_count = 2
+            trail_gravity = 0.25
+
+            spawn_expr = "
+                pos = emit_pos + vec3(rand(-3, 3), rand(-3, 3), 45 + rand(-3, 3));
+                vel = vec3(1 + rand(-0.5, 0.5), rand(-0.5, 0.5), rand(-0.5, 0.5));
+                scale = vec3(8.5, 6.9, 1);
+                color = vec4(1, 1, 1, 1);
+            "
+
+            // Integrate, then bounce off the ground plane (emit_pos.z), as
+            // retail: if below, the new vz is -vz/2 and the spark is spent
+            // when that is < 2 (i.e. it landed slower than 4 wu/tick), then
+            // z is mirrored. step(a, b) is 1 when b >= a, so
+            // step(pos.z, emit_pos.z) reads "below the ground". The spent
+            // spark gets scale 0 and kill_expr reaps it.
+            tick_expr = "
+                pos = pos + vel;
+                vel.z = vel.z - 0.25;
+                scale.x = select(step(pos.z, emit_pos.z) * step(-4, vel.z), 0, scale.x);
+                vel.z = select(step(pos.z, emit_pos.z), vel.z * -0.5, vel.z);
+                pos.z = select(step(pos.z, emit_pos.z), 2 * emit_pos.z - pos.z, pos.z);
+            "
+
+            kill_expr = "step(scale.x, 0.5)"
+        }
+    }
+}

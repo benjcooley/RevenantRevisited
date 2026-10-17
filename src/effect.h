@@ -258,6 +258,9 @@ class TParticleEffectManager
     // walk drains every global bucket once per frame instead; this is for
     // a standalone driver (the --test=vfx harness) that shows one effect.
     void SubmitEffect(const SParticleEffectDef* effect_def, TNodeInst* owner, EFxDebugMode debug_mode);
+    // True while any bucket still holds a particle of this owner's runtime
+    // (a one-shot burst that has played out answers false).
+    [[nodiscard]] bool EffectHasParticles(const SParticleEffectDef* effect_def, TNodeInst* owner);
     void ExpireInactiveEffects();
     void Clear();
 
@@ -277,6 +280,7 @@ class TParticleEffectManager
         bool kill_compiled = false;
         double sim_accum_ms = 0.0;
         int32_t spawned_burst = 0;          // tracks one-shot burst so we don't re-emit
+        int32_t burst_frame = -1;           // bucket_def.burst_frame: the cell every particle of this runtime uses
     };
 
     struct SRuntime

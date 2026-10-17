@@ -212,6 +212,7 @@ constexpr SParticleOpDef kParticleOpDefs[] = {
     {"Rand",     2, { { "lo", EParticleArgKind::FloatOffset }, { "hi", EParticleArgKind::FloatOffset } }},
     {"Step",     2, { { "edge", EParticleArgKind::FloatOffset }, { "x", EParticleArgKind::FloatOffset } }},
     {"Select",   3, { { "cond", EParticleArgKind::FloatOffset }, { "t", EParticleArgKind::FloatOffset }, { "f", EParticleArgKind::FloatOffset } }},
+    {"LoadLane", 2, { { "var", EParticleArgKind::VarId }, { "lane", EParticleArgKind::ImmediateU16 } }},
 };
 
 constexpr uint16_t kPfxArgStack = 0x8000;
@@ -405,38 +406,16 @@ class TParticleExpressionParser
     {
         const int32_t natural = ParticleDefaultLanes(var);
         const uint8_t total_lanes = uint8_t(natural > 0 ? natural : 1);
-        EmitOp(EParticleOp::LoadVar);
-        EmitArg(uint16_t(var));
         if (lane >= 0)
         {
-            // Read full var to stack, then pick a single lane via a
-            // post-load swizzle. We model this by emitting LoadVar with
-            // the full natural lane count and then using a "lane pick" --
-            // implemented as a 1-lane stack push from the loaded slot.
-            // Easiest: emit a scalar Op that reads the chosen lane.
-            // The eval treats LoadVar as a multi-lane push automatically.
-            // We then push a single-lane "Lerp(self, self, 0)" or a
-            // simpler shape -- but the cleanest is to use a dedicated
-            // lane-pick op. To avoid yet-another op, materialize the
-            // single lane with a `Add(self_lane, 0_const)` pattern --
-            // since read_arg handles lane-broadcast on scalar consts, we
-            // can pop the full-lane stack entry and re-push only lane N
-            // by emitting nothing here and tagging the SPfxValueRef
-            // lanes=1 with the slot already wide enough. The evaluator's
-            // read_arg(stack, lane) walks into stack[idx+lane] -- so for
-            // a single-lane pick we just create a stack ref pointing at
-            // the chosen sub-lane of the loaded slot.
-            //
-            // Implementation: bump the stack pointer past the loaded var
-            // (which occupies natural lanes), then return a ref whose
-            // arg points at stack[loaded_slot + lane] with lanes=1. We
-            // rely on the fact that loaded var lanes are contiguous in
-            // the eval stack[] array.
-            const uint16_t base_slot = stack_top;
-            stack_top = uint16_t(stack_top + total_lanes);
-            if (stack_top > max_stack_depth) max_stack_depth = stack_top;
-            return { PfxStackArg(uint16_t(base_slot + uint16_t(lane))), 1 };
+            // One lane as a fresh scalar slot (see EParticleOp::LoadLane).
+            EmitOp(EParticleOp::LoadLane);
+            EmitArg(uint16_t(var));
+            EmitArg(uint16_t(lane));
+            return NewStackResult(1);
         }
+        EmitOp(EParticleOp::LoadVar);
+        EmitArg(uint16_t(var));
         return NewStackResult(total_lanes);
     }
 
@@ -1130,6 +1109,13 @@ void PfxEvalImpl(const std::vector<uint16_t>& code,
                     values[lane] = x < e ? 0.0f : 1.0f;
                 }
                 push_values(values, lanes);
+                break;
+            }
+            case EParticleOp::LoadLane:
+            {
+                const EParticleVar var = EParticleVar(code[pc++]);
+                const uint16_t lane = code[pc++];
+                push_scalar(read_ctx_var(var, uint8_t(lane)));
                 break;
             }
             case EParticleOp::Select:

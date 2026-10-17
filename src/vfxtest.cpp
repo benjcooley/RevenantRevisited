@@ -5110,8 +5110,26 @@ void FaultFireBespokeSubmit(void* cp, EFxDebugMode dbg)
 // is exactly what the map walk does for a stamped effect in game.
 namespace {
 struct SPrefabCtx {
-    TEffect* root = nullptr;
+    std::string name;
+    S3DPoint    origin = {0, 0, 0};
+    TEffect*    root   = nullptr;
+    bool        lived  = false;    // had particles at some point
+    float       gap    = 0.0f;     // clear gap after a one-shot plays out
 };
+
+constexpr float kPrefabRetriggerGap = 0.8f;
+
+TEffect* PrefabStamp(const SPrefab* prefab, const S3DPoint& origin)
+{
+    auto* root = new TEffect(static_cast<TObjectImagery*>(nullptr));
+    root->ForcePos(origin);
+    root->SetMapIndex(MapPane.MakeIndex());
+    auto stamp = std::make_unique<TPrefabComponent>();
+    stamp->Configure(prefab);
+    root->AddComponent(std::move(stamp));
+    root->ActivateComponents();
+    return root;
+}
 
 void* PrefabSpawn(const std::string& name, const S3DPoint& origin)
 {
@@ -5119,16 +5137,27 @@ void* PrefabSpawn(const std::string& name, const S3DPoint& origin)
     if (!prefab)
         return nullptr;
     auto* c = new SPrefabCtx();
-    c->root = new TEffect(static_cast<TObjectImagery*>(nullptr));
-    c->root->ForcePos(origin);
-    c->root->SetMapIndex(MapPane.MakeIndex());
-    auto stamp = std::make_unique<TPrefabComponent>();
-    stamp->Configure(prefab);
-    c->root->AddComponent(std::move(stamp));
-    c->root->ActivateComponents();
+    c->name = name;
+    c->origin = origin;
+    c->root = PrefabStamp(prefab, origin);
     log_info("[vfx] prefab '%s' stamped: %d child nodes", name.c_str(),
              c->root->GetComponent<TPrefabComponent>()->NodeCount());
     return c;
+}
+
+bool PrefabHasParticles(TEffect* root)
+{
+    if (auto* particles = root->GetComponent<TParticleEffectComponent>())
+        if (particles->HasParticles())
+            return true;
+    if (auto* prefab = root->GetComponent<TPrefabComponent>())
+        for (int32_t n = 0; n < prefab->NodeCount(); ++n)
+            if (TNodeInst* node = prefab->NodeAt(n))
+                for (int32_t i = 0; i < node->NumComponents(); ++i)
+                    if (auto* particles = dynamic_cast<TParticleEffectComponent*>(node->GetComponent(i)))
+                        if (particles->HasParticles())
+                            return true;
+    return false;
 }
 
 void PrefabDestroy(void* cp)
@@ -5143,6 +5172,24 @@ void PrefabSubmit(void* cp, EFxDebugMode dbg)
 {
     auto* c = static_cast<SPrefabCtx*>(cp);
     if (!c || !c->root) return;
+    // A one-shot prefab (burst, no steady-state buckets) plays out, then
+    // after a clear gap is stamped again so one clean instance is always
+    // on screen for verification. Steady-state prefabs never go empty.
+    const bool alive = PrefabHasParticles(c->root);
+    if (alive) c->lived = true;
+    if (c->lived && !alive)
+    {
+        c->gap -= float(TTime::DeltaTime());
+        if (c->gap <= 0.0f)
+        {
+            const SPrefab* prefab = PrefabLibrary().Find(c->name);
+            delete c->root;
+            c->root = PrefabStamp(prefab, c->origin);
+            c->lived = false;
+            c->gap = kPrefabRetriggerGap;
+            return;
+        }
+    }
     if (auto* particles = c->root->GetComponent<TParticleEffectComponent>())
     {
         particles->DrawPulse();

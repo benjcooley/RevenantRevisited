@@ -433,7 +433,7 @@ snapshot bodies stay in `effect_old.cpp` as reference.
 
 | Effect (shim / bespoke) | Prefab archetype | Needs |
 |---|---|---|
-| Sparks | emitter only (burst params from gameplay) | `trail_count`, per-burst sub-object pick |
+| Sparks | emitter only (burst params from gameplay) | **done 2026-10-17**: `assets/prefabs/Sparks.def`, matches the engine port in the harness; needed `spawn_delay_*`, `life_max`, `trail_count` / `trail_gravity`, `burst_frame` (all generic bucket fields) and a VM fix (swizzle reads are a dedicated `LoadLane` op). Shim + `TSparkEffect` go when the in-game hook stamps prefabs. |
 | Fountain (+4 colour variants) | emitter only | `trail_count` |
 | Fizzle | emitter ×3 (world_xy, per-particle spin) | — |
 | Blood, Mist, TorchFlame (effects.def) | emitter / billboard | move blocks into prefab files |

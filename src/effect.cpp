@@ -175,6 +175,7 @@ SParticleBufferLayout ParticleEffectBucketLayout()
     ParticleLayoutAddVar(layout, EParticleVar::DrawColor);
     ParticleLayoutAddVar(layout, EParticleVar::DrawFrame);
     ParticleLayoutAddVar(layout, EParticleVar::DrawUvRect);
+    ParticleLayoutAddVar(layout, EParticleVar::Delay);
     return layout;
 }
 
@@ -304,6 +305,8 @@ SParticleBucketDesc BuildRuntimeBucketDesc(const SParticleEffectDef& effect_def,
     desc.frame_rows = bucket_def.atlas_rows;
     desc.default_width = bucket_def.width;
     desc.default_height = bucket_def.height;
+    desc.trail_count = bucket_def.trail_count;
+    desc.trail_gravity = bucket_def.trail_gravity;
     desc.debug_solid = effect_def.debug_solid;
     desc.flip_v = bucket_def.flip_v;
     desc.chroma_key = bucket_def.chroma_key_enabled;
@@ -371,7 +374,8 @@ void InitializeSelfSpawnParticle(TParticleBucket& bucket, int32_t particle_index
                                  const SParticleBucketEffectDef& bucket_def,
                                  const TParticleExpression& spawn_expr,
                                  bool has_spawn_expr,
-                                 TNodeInst* owner)
+                                 TNodeInst* owner,
+                                 int32_t forced_frame = -1)
 {
     const hmm_vec3 p = owner ? owner->Transform().Pos() : hmm_vec3{{0, 0, 0}};
     const float emit_pos[3] = { p.X, p.Y, p.Z };
@@ -415,8 +419,15 @@ void InitializeSelfSpawnParticle(TParticleBucket& bucket, int32_t particle_index
     // stays at full-quad.
     const int32_t atlas_cells = bucket_def.atlas_cols * bucket_def.atlas_rows;
     int32_t spawn_frame = 0;
-    if (bucket_def.random_start_frame && bucket_def.atlas_frames > 1)
+    if (forced_frame >= 0)
+        spawn_frame = forced_frame;                     // one cell per burst
+    else if (bucket_def.random_start_frame && bucket_def.atlas_frames > 1)
         spawn_frame = int32_t(std::floor(seed_val * float(bucket_def.atlas_frames)));
+    // Start delay in sim ticks: held (not ticked, not drawn) until it runs out.
+    if (float* delay = bucket.VarPtr(particle_index, EParticleVar::Delay))
+        *delay = bucket_def.spawn_delay_max > 0
+                     ? float(random(bucket_def.spawn_delay_min, bucket_def.spawn_delay_max))
+                     : 0.0f;
     if (float* df = bucket.VarPtr(particle_index, EParticleVar::DrawFrame))
         *df = float(spawn_frame);
     if (float* uv = bucket.VarPtr(particle_index, EParticleVar::DrawUvRect))
@@ -576,11 +587,14 @@ void TParticleEffectManager::EmitSpawnTopup(SBucketRuntime& brt, TNodeInst* owne
 
     for (int32_t k = 0; k < target; ++k)
     {
-        const float life = brt.bucket_def->default_life > 0.0f ? brt.bucket_def->default_life : -1.0f;
+        const SParticleBucketEffectDef& bd = *brt.bucket_def;
+        float life = bd.default_life > 0.0f ? bd.default_life : -1.0f;
+        if (life > 0.0f && bd.life_max > bd.default_life)
+            life = bd.default_life + (bd.life_max - bd.default_life) * (float(std::rand()) / float(RAND_MAX));
         const int32_t pi = brt.bucket->AddParticle(owner_particle_id, life);
         if (pi < 0) break;
         InitializeSelfSpawnParticle(*brt.bucket, pi, *brt.bucket_def,
-                                    brt.spawn_expr, brt.spawn_compiled, owner);
+                                    brt.spawn_expr, brt.spawn_compiled, owner, brt.burst_frame);
     }
 }
 
@@ -776,6 +790,14 @@ void TParticleEffectManager::IntegrateBucket(SRuntime& runtime, SBucketRuntime& 
             if (!owner_slot || *owner_slot != owner_particle_id)
                 continue;
 
+            // Start delay: hold the particle (no tick, not drawn) until it runs out.
+            if (float* delay = brt.bucket->VarPtr(i, EParticleVar::Delay))
+                if (*delay > 0.0f)
+                {
+                    *delay -= 1.0f;
+                    continue;
+                }
+
             // Advance age.
             float* age = brt.bucket->VarPtr(i, EParticleVar::Age);
             float* age01 = brt.bucket->VarPtr(i, EParticleVar::Age01);
@@ -839,7 +861,7 @@ void TParticleEffectManager::IntegrateBucket(SRuntime& runtime, SBucketRuntime& 
                     if (age)   *age = 0.0f;
                     if (age01) *age01 = 0.0f;
                     InitializeSelfSpawnParticle(*brt.bucket, i, *brt.bucket_def,
-                                                brt.spawn_expr, brt.spawn_compiled, owner);
+                                                brt.spawn_expr, brt.spawn_compiled, owner, brt.burst_frame);
                 }
                 else
                 {
@@ -880,6 +902,21 @@ void TParticleEffectManager::SubmitEffect(const SParticleEffectDef* effect_def, 
             Renderer->SubmitFxParticleBucket(*bucket, debug_mode);
 }
 
+bool TParticleEffectManager::EffectHasParticles(const SParticleEffectDef* effect_def, TNodeInst* owner)
+{
+    if (!effect_def || !owner) return false;
+    SRuntime* runtime = FindRuntime(effect_def, owner->NodeId());
+    if (!runtime) return false;
+    for (TParticleBucket* bucket : runtime->buckets)
+    {
+        if (!bucket) continue;
+        for (int32_t i = 0; i < bucket->Count(); ++i)
+            if (const float* o = bucket->VarPtr(i, EParticleVar::OwnerId); o && *o == runtime->owner_particle_id)
+                return true;
+    }
+    return false;
+}
+
 void TParticleEffectManager::StartRuntime(SRuntime& runtime, TNodeInst* owner)
 {
     if (!runtime.effect_def || !owner)
@@ -900,6 +937,8 @@ void TParticleEffectManager::StartRuntime(SRuntime& runtime, TNodeInst* owner)
         SBucketRuntime brt = {};
         brt.bucket = bucket;
         brt.bucket_def = &bucket_def;
+        if (bucket_def.burst_frame && bucket_def.atlas_frames > 1)
+            brt.burst_frame = random(0, bucket_def.atlas_frames - 1);
         std::string err;
         if (!bucket_def.spawn_expr.empty())
         {
@@ -1025,6 +1064,12 @@ void TParticleEffectComponent::Submit(EFxDebugMode debug_mode)
 {
     if (ParticleEffectManager && Owner())
         ParticleEffectManager->SubmitEffect(Def(), Owner(), debug_mode);
+}
+
+bool TParticleEffectComponent::HasParticles() const
+{
+    return ParticleEffectManager && Owner()
+        && ParticleEffectManager->EffectHasParticles(Def(), Owner());
 }
 
 TObjectClass EffectClass("EFFECT", OBJCLASS_EFFECT, 0);

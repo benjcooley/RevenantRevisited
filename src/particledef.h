@@ -77,6 +77,12 @@ struct SParticleBucketEffectDef
     PROP(25) int32_t     tick_hz = 0;                   // Sim rate for tick_expr; 0 = per frame
     PROP(26) float       default_life = -1.0f;          // Seconds; <= 0 = no auto-kill
     PROP(27) std::string chain_bucket;                  // Bucket a dying particle spawns into
+    PROP(28) int32_t     spawn_delay_min = 0;           // Ticks a new particle waits before it starts
+    PROP(29) int32_t     spawn_delay_max = 0;
+    PROP(30) float       life_max = 0.0f;               // Seconds; > default_life = per-particle life in [default_life, life_max]
+    PROP(31) int32_t     trail_count = 1;               // Motion-streak copies drawn along velocity (1 = none)
+    PROP(32) float       trail_gravity = 0.0f;          // vel.z drop per trail copy (wu/tick)
+    PROP(33) bool        burst_frame = false;           // One random atlas cell per burst instead of per particle
 
     // Derived in PostLoad.
     bool  additive = true;                   // from `blend` (legacy)
