@@ -14,6 +14,7 @@ here, then read whichever sister doc matches their task.
 | [INVENTORY.md](INVENTORY.md)         | Per-effect burndown. The list of every effect, current status, owner.       |
 | [AGENT_GUIDE.md](AGENT_GUIDE.md)     | Protocol for parallel agents claiming, working, and handing off rows.       |
 | [TEST_MODE.md](TEST_MODE.md)         | `--test=vfx` spec: UI, navigation, registration, what "passing" looks like. |
+| [PREFAB_SYSTEM.md](PREFAB_SYSTEM.md) | **Current direction (2026-10-16):** prefabs, TNodeInst split, property channels, clips + controller. |
 
 Adjacent existing docs (read these — do **not** duplicate them):
 
