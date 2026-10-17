@@ -88,39 +88,60 @@ Files: `src/nodeinst.{h,cpp}` (new), `src/objectcomponent.{h,cpp}`,
 `src/object.{h,cpp}`, `src/transform.{h,cpp}`, `src/saferef.h` comment.
 `tools/test_transform.cpp` gains node-tree + path-resolution tests.
 
-## 2. Properties: int id + enum, one switch per class
+## 2. Properties: C++26 annotations, polyfilled by a generator
 
-C++26 reflection is not usable for us yet (only GCC 16 and Bloomberg's
-experimental Clang fork implement P2996; Apple Clang and MSVC do not), and
-a member-pointer macro table is the wrong tool anyway because setters have
-side effects (rebind a mesh, reload a texture, dirty a transform). So the
-property system is the simplest honest thing: **an enum per class, a tiny
-static table, and a switch.**
+Members that are tweakable, serializable or animatable carry a C++26
+annotation (P2996 reflection + P3394 annotations, both in the C++26
+draft). No compiler we ship on reads them yet (GCC 16 and Bloomberg's
+experimental Clang fork do; Apple Clang and MSVC do not), so a **small
+build-time generator** polyfills exactly what reflection would give us.
+When the compiler catches up, the generator is deleted and nothing in a
+header changes.
 
 ```cpp
-enum class EPropType : uint8_t { Bool, Int, Float, String, Vec3, Color, Enum, Ref, Trigger };
+#if __cpp_annotations
+#  define PROP(...) [[=SPropMeta{__VA_ARGS__}]]
+#else
+#  define PROP(...)
+#endif
 
-struct SPropInfo { uint16_t id; const char* name; EPropType type; uint8_t flags; };
-
-class TMeshComponent : public TObjectComponent {
-    enum class EProp : uint16_t { Visible = 1, Diffuse = 2, Emissive = 3, UvOffset = 4, Frame = 5, Object = 6, Blend = 7 };
-    static constexpr SPropInfo kProps[] = { {1,"visible",EPropType::Bool,0}, {2,"diffuse",EPropType::Color,0}, /*...*/ };
-
-    const SPropInfo* Props(int32_t* count) const override;
-    bool Set(uint16_t id, const SPropValue& v) override;      // switch; side effects live here
-    bool Get(uint16_t id, SPropValue& out) const override;    // switch
+class TMeshComponent : public TObjectComponent
+{
+    PROP(1)                  bool        visible   = true;
+    PROP(2)                  SColor      diffuse   = {1, 1, 1, 1};
+    PROP(3, PropFlag_NoSave) float       uv_scroll = 0.0f;
+    PROP(6)                  std::string object;
+    void OnPropChanged(uint16_t id);     // optional: rebind the mesh when `object` changes
 };
 ```
 
-- **The enum value is the wire tag.** Append-only, never renumbered, never
-  reused (protobuf rule). Names exist only in the table, for DEF text,
-  the editor and track binding.
-- `SPropValue` is a small tagged union (bool / int32 / float / vec3 /
-  color / string view / ref id). Lanes (`.x`, `.a`) are handled once,
-  generically: read, patch lane, write. No per-class lane code.
-- `TNodeInst` implements the same interface for `pos`, `rot` (euler
-  degrees), `scl`, `active` (bool; inactive = subtree neither ticked nor
-  drawn), `name` (read-only).
+The generator (`tools/reflect/gen.py`, run by CMake into the build
+directory) reads only `class X` / `struct X`, the matching close brace,
+and lines of the form `PROP(id[, flags]) type name [= default];`. It
+emits per class: the static table (id, name = the identifier, type from
+a closed type map, flags), `SetProp` / `GetProp` as one switch each,
+`Pack` / `Unpack` for the byte buffer, and a call to `OnPropChanged(id)`
+after a set when the class declares it. The hand-written side never
+contains a property enum or a switch.
+
+Rules that keep it honest:
+
+- **The parser stays dumb.** A `PROP` line it cannot parse is a build
+  error, never a guess. Supported member types are a closed list: bool,
+  int32_t, float, std::string, vec3, color, enums with a sibling name
+  table, soft-ref ids, and nested annotated structs (the bucket def).
+  Templates, inheritance and macros in member declarations are out of
+  scope on purpose.
+- **The id is the wire tag.** Append-only, never renumbered, never
+  reused. Names exist only for DEF text, the editor and track binding.
+- **One interface for every consumer.** `TPropertyHost` on both
+  `TNodeInst` and `TObjectComponent`: `Props(count)`, `SetProp(id, value)`,
+  `GetProp(id, out)`, plus lane-generic `SetPropLane` / `GetPropLane`.
+  The packed codec, the DEF bake, the inspector, undo and tracks talk to
+  this and nothing else.
+- Lanes are derived from the type (`Vec3` → `.x .y .z`, `Color` →
+  `.r .g .b .a`). `Bool` is 0 / 1 under a track; `Trigger` fires on a
+  rising edge and reads as 0.
 - **Track / script targets** are `node/path.component.property[.lane]`:
   `"core.mesh.diffuse.a"`, `"ring.scl.z"`, `"burst.emitter.burst"`.
   Component segment omitted for node properties; two components of one
@@ -128,15 +149,16 @@ class TMeshComponent : public TObjectComponent {
   `SPropertyBinding { TSafeRef<TNodeInst> node; int16_t slot; uint32_t gen; uint16_t id; uint8_t lane; }`.
   A dead node makes the binding a no-op. Unknown names are a load-time
   error.
-- `Bool` is 0 / 1 when driven by a track; `Trigger` fires on a rising
-  edge and reads as 0.
-- The editor inspector and undo (editor.cpp, editorundo.cpp) already walk
-  a (name, type, get, set) table; they move onto this interface, which
-  also lets the `TInstanceAdapter` table move onto `TObjectInstance`
-  itself as the editor memory already calls for.
+- `TNodeInst` annotates `pos`, `rot` (euler degrees), `scl`, `active`
+  (bool; inactive = subtree neither ticked nor drawn) and `name`
+  (read-only).
+- The editor inspector and undo already walk a (name, type, get, set)
+  table; they move onto `TPropertyHost`, which also lets the
+  `TInstanceAdapter` table move onto `TObjectInstance` itself as the
+  editor memory already calls for.
 
-`SParticleBucketEffectDef` gets an enum + switch like every other block
-and `ParseParticleEffectDef` (effect.cpp:163, thirty hand-parsed keys) is
+`SParticleBucketEffectDef` becomes an annotated struct and
+`ParseParticleEffectDef` (effect.cpp:163, thirty hand-parsed keys) is
 deleted. Same for every `Parse*Def` of that shape.
 
 ### 2.5 Packed buffers: bake from DEF once, read fast forever
@@ -403,13 +425,14 @@ file exists, the A/B passes, and the shim is gone.
 
 ## 8. Phases
 
-1. **PR: node split + reflection on the class.** `TNodeInst`, component
-   owner retype, `TSafeComponentRef` relocation, `TTransform`
-   back-pointer, update-list move. `TNodeInst` and `TObjectComponent` gain
-   the int-id property interface (`Props` / `Set` / `Get`); the
-   `TObjectInstance` table moves off `TInstanceAdapter` onto the class
-   (the adapter retirement the editor memory already calls for). Tests.
-   No behaviour change; main stays runnable.
+1. **PR: generator + node split.** `tools/reflect/gen.py` + CMake hook,
+   `TPropertyHost`, packed reader/writer, generic DEF → packed bake, with
+   a gtest that round-trips an annotated struct through DEF text, bytes
+   and Set/Get. Then `TNodeInst`, component owner retype,
+   `TSafeComponentRef` relocation, `TTransform` back-pointer, update-list
+   move; node properties are the first real annotated class. No
+   behaviour change; main stays runnable. (The `TInstanceAdapter` table
+   moves onto `TObjectInstance` in a follow-up.)
 2. **PR: core + two archetypes.** Generic DEF → packed bake, packed
    reader/writer, prefab library (bake at startup, decode on stamp),
    `TPrefabComponent`, node / `mesh` / `billboard` / `light`
@@ -432,9 +455,10 @@ file exists, the A/B passes, and the shim is gone.
   behaviours on a node, never nodes.
 - 2026-10-16 `TObjectInstance` keeps mapindex as its soft-ref id; node
   registry is separate for now.
-- 2026-10-16 Properties: int id + enum per class, tiny static table, one
-  switch for Set/Get/decode; no member-pointer macro reflection, no C++26
-  reflection (Apple Clang / MSVC lack it). Enum value = wire tag,
+- 2026-10-16 Properties: C++26 annotations on members (`PROP(id)`),
+  polyfilled by a dumb build-time generator that emits the table +
+  Set/Get/Pack/Unpack switches until Apple Clang / MSVC read annotations;
+  then the generator is dropped and no header changes. Id = wire tag,
   append-only.
 - 2026-10-16 Packed buffers: DEF text baked once at startup into a
   protobuf-style byte buffer per prefab; spawns decode with a cursor
