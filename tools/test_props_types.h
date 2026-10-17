@@ -28,7 +28,7 @@ struct STestMesh
 
     int32_t changed_count = 0;
     uint16_t last_changed = 0;
-    void OnPropChanged(uint16_t id) { ++changed_count; last_changed = id; }
+    void PropChanged(uint16_t id) { ++changed_count; last_changed = id; }
 };
 
 // A class with no annotations is simply not in the registry.

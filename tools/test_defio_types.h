@@ -27,12 +27,12 @@ class STestGlow : public TObjectComponent
     PROP_NOSAVE(5)                          float       phase   = 0.0f;
 
     // Derived state: what a constructor would have computed from the
-    // fields. Set by OnLoaded, so it is valid by the time OnAttach runs.
+    // fields. Set by PostLoad, so it is valid by the time OnAttach runs.
     float   radius_sq      = -1.0f;
     int32_t loaded_count   = 0;
     float   radius_at_attach = -1.0f;
 
-    void OnLoaded() { radius_sq = radius * radius; ++loaded_count; }
+    void PostLoad() { radius_sq = radius * radius; ++loaded_count; }
     void OnAttach() override { radius_at_attach = radius; }
     const char* ComponentName() const override { return "glow"; }
 };

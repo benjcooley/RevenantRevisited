@@ -7,7 +7,7 @@ would let us write generically: a refl::SType (property table + typed
 get/set thunks) registered under the class's type_info, and name tables for
 any `enum class` used by an annotated member. See docs/vfx/PREFAB_SYSTEM.md §2.
 The class itself carries nothing but the annotations (and, optionally, an
-`OnPropChanged(uint16_t)` hook the setter thunk calls).
+`PropChanged(uint16_t)` hook the setter thunk calls).
 
 The parser is deliberately dumb. It understands exactly:
 
@@ -26,8 +26,8 @@ The parser is deliberately dumb. It understands exactly:
     numbers, true / false, a string literal, a brace list of numbers, or an
     enumerator (EType::Name). Named constants, macros and expressions are
     rejected.
-    void OnPropChanged(uint16_t ...);    (presence only; called after a set)
-    void OnLoaded();                     (presence only; called once a loader has
+    void PropChanged(uint16_t ...);    (presence only; called after a set)
+    void PostLoad();                     (presence only; called once a loader has
                                           filled the object -- the post-deserialize
                                           constructor, Unity-style)
     DEF_BLOCK("name") | DEF_COMPONENT("name")   block keyword + factory (one per class)
@@ -60,8 +60,8 @@ RE_DECL_HEAD = re.compile(r"^\s*(?:(?:class|struct)\s+[A-Za-z_]\w*\s*(?:final\s*
 RE_PROP  = re.compile(r"^\s*(PROP|PROP_NOSAVE|PROP_HIDDEN|PROP_READONLY)\((.*?)\)\s+([\w:]+)\s+([A-Za-z_]\w*)\s*(?:=\s*([^;]*?))?\s*;")
 RE_PROP_ANY = re.compile(r"^\s*PROP(_NOSAVE|_HIDDEN|_READONLY)?\(")
 RE_PROP_FN  = re.compile(r"^\s*(PROP_FN|PROP_FN_NOSAVE|PROP_FN_HIDDEN)\((.*)\)\s*;?")
-RE_HOOK  = re.compile(r"\bvoid\s+OnPropChanged\s*\(")
-RE_LOADED = re.compile(r"\bvoid\s+OnLoaded\s*\(\s*\)")
+RE_HOOK  = re.compile(r"\bvoid\s+PropChanged\s*\(")
+RE_POSTLOAD = re.compile(r"\bvoid\s+PostLoad\s*\(\s*\)")
 RE_DEFNAME = re.compile(r"^\s*(DEF_BLOCK|DEF_COMPONENT)\(\s*\"([^\"]+)\"\s*\)")
 
 
@@ -92,7 +92,7 @@ class Klass:
         self.base = base or ""
         self.members = []
         self.has_hook = False
-        self.has_loaded = False
+        self.has_postload = False
         self.ids = set()
         self.def_name = ""
         self.def_kind = ""      # "node" | "component"
@@ -245,8 +245,8 @@ def parse(path: Path):
         if cur is not None:
             if RE_HOOK.search(code):
                 cur.has_hook = True
-            if RE_LOADED.search(code):
-                cur.has_loaded = True
+            if RE_POSTLOAD.search(code):
+                cur.has_postload = True
             m_def = RE_DEFNAME.match(code)
             if m_def:
                 if cur.def_name:
@@ -367,8 +367,8 @@ def emit(path: Path, out: Path, include: str):
         if k.members:
             o.append("    static bool Set(void* obj, uint16_t id, const SPropValue& v);\n")
             o.append("    static bool Get(const void* obj, uint16_t id, SPropValue& out);\n")
-        if k.has_loaded:
-            o.append("    static void Loaded(void* obj) { static_cast<%s*>(obj)->OnLoaded(); }\n" % k.name)
+        if k.has_postload:
+            o.append("    static void PostLoad(void* obj) { static_cast<%s*>(obj)->PostLoad(); }\n" % k.name)
         o.append("};\n\n")
         if k.members:
           o.append("bool refl::Access<%s>::Set(void* obj, uint16_t id, const SPropValue& v)\n{\n" % k.name)
@@ -404,7 +404,7 @@ def emit(path: Path, out: Path, include: str):
                   o.append("        case %d: if (v.type != EPropType::Enum && v.type != EPropType::Int) return false; %s = %s(v.i); break;\n" % (m.id, tgt, m.ctype))
           o.append("        default: return false;\n    }\n")
           if k.has_hook:
-              o.append("    self.OnPropChanged(id);\n")
+              o.append("    self.PropChanged(id);\n")
           o.append("    return true;\n}\n\n")
 
           o.append("bool refl::Access<%s>::Get(const void* obj, uint16_t id, SPropValue& out)\n{\n" % k.name)
@@ -428,7 +428,7 @@ def emit(path: Path, out: Path, include: str):
         getf  = ("&refl::Access<%s>::Get" % k.name) if k.members else "nullptr"
         cnode = ("[]() -> TNodeInst* { return new %s(); }" % k.name) if k.def_kind == "node" else "nullptr"
         ccomp = ("[]() -> TObjectComponent* { return new %s(); }" % k.name) if k.def_kind == "component" else "nullptr"
-        loaded = ("&refl::Access<%s>::Loaded" % k.name) if k.has_loaded else "nullptr"
+        loaded = ("&refl::Access<%s>::PostLoad" % k.name) if k.has_postload else "nullptr"
         o.append('refl::SType kType_%s = { "%s", "%s", &typeid(%s), %s, %d, %s, %s, nullptr, "%s", %s, %s, %s };\n'
                  % (k.name, k.name, k.base, k.name, props, len(k.members), setf, getf, k.def_name, cnode, ccomp, loaded))
         o.append("refl::SRegistrar kReg_%s(kType_%s);\n\n" % (k.name, k.name))

@@ -57,7 +57,7 @@ void CheckTree(const TNodeInst& root)
     EXPECT_EQ(g->mode, ETestMode::Steady);
     EXPECT_EQ(g->texture, "Magic\\flare.i3d");
     EXPECT_TRUE(g->Label().empty());
-    EXPECT_EQ(g->loaded_count, 1);                     // OnLoaded once, after the fields
+    EXPECT_EQ(g->loaded_count, 1);                     // PostLoad once, after the fields
     EXPECT_FLOAT_EQ(g->radius_sq, 625.0f);
     EXPECT_FLOAT_EQ(g->radius_at_attach, 25.0f);       // attached after loading
 

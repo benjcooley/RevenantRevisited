@@ -88,7 +88,7 @@ bool UnpackNode(TPackedReader& r, TNodeInst& node,
                 TPackedReader br(body);
                 refl::Unpack(*ct, c.get(), br);
             }
-            refl::Loaded(*ct, c.get());              // fields complete, before attach
+            refl::PostLoad(*ct, c.get());              // fields complete, before attach
             node.AddComponent(std::move(c));
             continue;
         }
@@ -142,7 +142,7 @@ bool UnpackNode(TPackedReader& r, TNodeInst& node,
         refl::Set(*t, &node, p->id, v);
     }
     if (t)
-        refl::Loaded(*t, &node);                     // node complete: fields, components, children
+        refl::PostLoad(*t, &node);                     // node complete: fields, components, children
     return ok;
 }
 

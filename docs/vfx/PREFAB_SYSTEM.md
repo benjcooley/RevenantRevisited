@@ -105,7 +105,7 @@ class TMeshComponent : public TObjectComponent
     PROP(2, "Material colour")      SRgba       diffuse   = {1, 1, 1, 1};
     PROP_NOSAVE(3)                  float       uv_scroll = 0.0f;
     PROP_FN(4, hmm_vec3, pos, LocalPos, SetLocalPos, "Local position");
-    void OnPropChanged(uint16_t id);                  // optional hook
+    void PropChanged(uint16_t id);                  // optional hook
 };
 ```
 
@@ -135,7 +135,7 @@ Rules that keep it honest:
 
 - **The parser stays dumb.** It recognises `class` / `struct` (brace on
   the same or next line), `enum class`, `PROP*` lines, `DEF_BLOCK` /
-  `DEF_COMPONENT`, and the `OnPropChanged` hook. A line it cannot parse
+  `DEF_COMPONENT`, and the `PropChanged` hook. A line it cannot parse
   is a build error with file and line, never a guess.
 - Fields stay private, as everywhere in the codebase: annotate through
   `PROP_FN` accessors, or annotate the private field directly and add one
@@ -161,7 +161,7 @@ Rules that keep it honest:
 - `TNodeInst` annotates `pos`, `rot` (euler degrees), `scl`, `active`
   (bool; inactive = subtree neither ticked nor drawn) and `name`
   (read-only), and is `DEF_BLOCK("node")`.
-- A class may declare `void OnLoaded()`: the post-deserialize
+- A class may declare `void PostLoad()`: the post-deserialize
   constructor (Unity-style). Loading bypasses normal construction, so a
   loader calls it once the object's block is complete, and attaches a
   component to its node only after that, so `OnAttach` never sees
@@ -477,7 +477,7 @@ file exists, the A/B passes, and the shim is gone.
   tree; defdoc's parser streams to sinks. Property record = id, name,
   description, type, serialized / visibleInEditor / readOnly, default
   (literal from the initializer). Rare cases are separate macros.
-  `OnLoaded()` is the post-deserialize constructor. The old editor
+  `PostLoad()` is the post-deserialize constructor. The old editor
   reflection (`iobject.h`, adapters) is deleted.
 - 2026-10-16 Emitters are never hand coded. The emitter is a component
   (`TParticleEffectComponent` evolved: one bucket, node anchored).

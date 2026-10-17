@@ -14,12 +14,12 @@
 //         PROP(2, "Material colour")             SRgba  diffuse   = {1, 1, 1, 1};
 //         PROP_NOSAVE(3)                         float  uv_scroll = 0.0f;
 //         PROP_FN(4, hmm_vec3, pos, LocalPos, SetLocalPos, "Local position");
-//         void OnPropChanged(uint16_t id);       // optional: after any set
-//         void OnLoaded();                       // optional: after a loader filled the object
+//         void PropChanged(uint16_t id);       // optional: after any set
+//         void PostLoad();                       // optional: after a loader filled the object
 //     };
 //
 // Loading bypasses the normal constructor flow (factory default-construct,
-// then fields are set one by one), so OnLoaded() is the post-deserialize
+// then fields are set one by one), so PostLoad() is the post-deserialize
 // constructor: derive cached state, validate, resolve names. A loader
 // calls it once the object's block is complete (fields, and for a node
 // its components and children), and attaches a component to its node
@@ -279,7 +279,7 @@ struct SType
     const char*           def_name          = "";
     TNodeInst*        (*create_node)()      = nullptr;
     TObjectComponent* (*create_component)() = nullptr;
-    void (*on_loaded)(void* obj)            = nullptr;   // the class's OnLoaded(), if any
+    void (*post_load)(void* obj)            = nullptr;   // the class's PostLoad(), if any
 };
 
 // Registry. Generated code registers; everyone else looks up.
@@ -301,8 +301,8 @@ template <class T>
 // Reset every writable property to its table default.
 void Reset(const SType& type, void* obj);
 
-// Post-deserialize hook: runs OnLoaded() for the base chain, base first.
-void Loaded(const SType& type, void* obj);
+// Post-deserialize hook: runs PostLoad() for the base chain, base first.
+void PostLoad(const SType& type, void* obj);
 
 // Property lookup, walking the base chain.
 [[nodiscard]] const SProp* FindProp(const SType& type, std::string_view name);

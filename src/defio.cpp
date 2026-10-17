@@ -175,7 +175,7 @@ class TReaderSink : public defdoc::Sink
                 frames_.push_back({});
                 return;
             }
-            // Held until the block closes: fields first, OnLoaded, then
+            // Held until the block closes: fields first, PostLoad, then
             // attach (so OnAttach never runs on default fields).
             std::unique_ptr<TObjectComponent> c(type->create_component());
             c->SetLabel(label);
@@ -207,7 +207,7 @@ class TReaderSink : public defdoc::Sink
         frames_.pop_back();
         if (!done.type)
             return;                                  // skipped block
-        refl::Loaded(*done.type, done.obj);
+        refl::PostLoad(*done.type, done.obj);
         if (done.pending && done.attach_to)
             done.attach_to->AddComponent(std::move(done.pending));
     }
@@ -216,7 +216,7 @@ class TReaderSink : public defdoc::Sink
     void Finish()
     {
         if (!frames_.empty() && frames_.front().type)
-            refl::Loaded(*frames_.front().type, frames_.front().obj);
+            refl::PostLoad(*frames_.front().type, frames_.front().obj);
     }
 
   private:
