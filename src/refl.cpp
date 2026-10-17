@@ -144,6 +144,20 @@ void Reset(const SType& type, void* obj)
     }
 }
 
+void Loaded(const SType& type, void* obj)
+{
+    std::vector<const SType*> chain;
+    for (const SType* t = &type; t; t = t->base)
+    {
+        chain.push_back(t);
+        if (t->base == nullptr && t->base_name && *t->base_name)
+            LinkBase(const_cast<SType&>(*t));
+    }
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it)
+        if ((*it)->on_loaded)
+            (*it)->on_loaded(obj);
+}
+
 const SEnumOption* FindEnumOption(const SProp& prop, std::string_view name)
 {
     for (int32_t i = 0; i < prop.option_count; ++i)

@@ -114,6 +114,11 @@ class TSector final
 
     // Sector
 
+    PROP_FN(1, int32_t, level,     SectorLevel, );
+    PROP_FN(2, int32_t, sector_x,  SectorX,     );
+    PROP_FN(3, int32_t, sector_y,  SectorY,     );
+    PROP_FN(4, int32_t, num_items, NumItems,    , "Object count");
+
     int32_t SectorLevel() const { return level; }
     int32_t SectorX() const { return sectorx; }
     int32_t SectorY() const { return sectory; }

@@ -156,8 +156,17 @@ Rules that keep it honest:
 - `TNodeInst` annotates `pos`, `rot` (euler degrees), `scl`, `active`
   (bool; inactive = subtree neither ticked nor drawn) and `name`
   (read-only), and is `DEF_BLOCK("node")`.
-- The editor inspector and undo walk the same records; `IObject` /
-  `IReflection` and the adapters are deleted (phase 1 follow-up).
+- A class may declare `void OnLoaded()`: the post-deserialize
+  constructor (Unity-style). Loading bypasses normal construction, so a
+  loader calls it once the object's block is complete, and attaches a
+  component to its node only after that, so `OnAttach` never sees
+  default fields.
+- The editor inspector, undo and clipboard walk the same records
+  (editor.cpp, editorundo.cpp, editorserialize.cpp); `iobject.h` and the
+  adapters are gone. `TObjectInstance` annotates class / type / state /
+  frame / mapindex and routes the node `pos` / `rot` setters through its
+  legacy fields; `TSector` annotates level / sector_x / sector_y /
+  num_items.
 
 `SParticleBucketEffectDef` becomes an annotated struct and
 `ParseParticleEffectDef` (effect.cpp:163, thirty hand-parsed keys) is
@@ -458,6 +467,13 @@ file exists, the A/B passes, and the shim is gone.
   (`Next() → id + pointer`); editor edits live and writes DEF back.
   Lanes derived from the property type, bool = 0/1, triggers rising-edge,
   name → (id, lane) resolved at stamp time through soft refs.
+- 2026-10-16 Reflection is its own module (`refl`); the DEF reader/writer
+  (`defio`) uses it, loading straight into classes with no document
+  tree; defdoc's parser streams to sinks. Property record = id, name,
+  description, type, serialized / visibleInEditor / readOnly, default
+  (literal from the initializer). Rare cases are separate macros.
+  `OnLoaded()` is the post-deserialize constructor. The old editor
+  reflection (`iobject.h`, adapters) is deleted.
 - 2026-10-16 Emitters are never hand coded. The emitter is a component
   (`TParticleEffectComponent` evolved: one bucket, node anchored).
 - 2026-10-16 Behaviour, in expected frequency: emitters only (no code) →

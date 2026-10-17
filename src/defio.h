@@ -71,4 +71,9 @@ void WriteObject(const T& obj, std::string& out, int32_t indent = 0)
 // Text form of one value (what Write emits after `key = `).
 [[nodiscard]] std::string FormatValue(const refl::SProp& prop, const SPropValue& v);
 
+// Parse one value in that text form. `storage` backs the string view of a
+// String value; keep it alive as long as `out` is used.
+bool ParseValue(const refl::SProp& prop, std::string_view text, SPropValue& out,
+                std::string& storage, std::string* error = nullptr);
+
 } // namespace defio

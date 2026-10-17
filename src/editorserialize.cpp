@@ -6,9 +6,9 @@
 
 #include "editorserialize.h"
 
-#include "editoradapters.h"
-#include "iobject.h"
+#include "defio.h"
 #include "logging.h"
+#include "refl.h"
 #include "mappane.h"
 #include "maprenderer.h"
 #include "object.h"
@@ -26,114 +26,6 @@ namespace {
 
 constexpr const char* kHeaderV1 = "revenant.objects.v1";
 constexpr const char* kBlockMarker = "[obj]";
-
-// ---------------------------------------------------------------------------
-// String <-> SPropertyValue
-// ---------------------------------------------------------------------------
-
-std::string EscapeString(const std::string& s)
-{
-    std::string out;
-    out.reserve(s.size() + 2);
-    out.push_back('"');
-    for (char c : s) {
-        if      (c == '\\') out += "\\\\";
-        else if (c == '"')  out += "\\\"";
-        else if (c == '\n') out += "\\n";
-        else                out.push_back(c);
-    }
-    out.push_back('"');
-    return out;
-}
-
-std::string UnescapeString(std::string_view in)
-{
-    std::string s;
-    s.reserve(in.size());
-    bool quoted = !in.empty() && in.front() == '"' && in.back() == '"';
-    size_t a = quoted ? 1 : 0;
-    size_t b = quoted ? in.size() - 1 : in.size();
-    for (size_t i = a; i < b; ++i) {
-        char c = in[i];
-        if (c == '\\' && i + 1 < b) {
-            char n = in[++i];
-            if      (n == 'n')  s.push_back('\n');
-            else if (n == '\\') s.push_back('\\');
-            else if (n == '"')  s.push_back('"');
-            else                s.push_back(n);
-        } else {
-            s.push_back(c);
-        }
-    }
-    return s;
-}
-
-std::string PropValueToText(const SPropertyValue& v)
-{
-    char buf[64];
-    if (auto p = std::get_if<bool>(&v))     return *p ? "true" : "false";
-    if (auto p = std::get_if<int64_t>(&v))  { std::snprintf(buf, sizeof(buf), "%lld", (long long)*p); return buf; }
-    if (auto p = std::get_if<double>(&v))   { std::snprintf(buf, sizeof(buf), "%g", *p); return buf; }
-    if (auto p = std::get_if<std::string>(&v)) return EscapeString(*p);
-    if (auto p = std::get_if<SVec3i>(&v))   { std::snprintf(buf, sizeof(buf), "%d,%d,%d", p->x, p->y, p->z); return buf; }
-    if (auto p = std::get_if<SVec3f>(&v))   { std::snprintf(buf, sizeof(buf), "%g,%g,%g", p->x, p->y, p->z); return buf; }
-    if (auto p = std::get_if<SColor4f>(&v)) { std::snprintf(buf, sizeof(buf), "%g,%g,%g,%g", p->r, p->g, p->b, p->a); return buf; }
-    if (auto p = std::get_if<IObject*>(&v)) {
-        // Cross-object refs round-trip as @refid:<mapindex>; null becomes empty.
-        // The mapindex IS the universal id (see memory/project_object_ref.md);
-        // restoring with original ids heals these refs implicitly.
-        IObject* obj = *p;
-        if (!obj) return "";
-        std::snprintf(buf, sizeof(buf), "@refid:%d", obj->GetId());
-        return buf;
-    }
-    return "";
-}
-
-bool TextToPropValue(EPropertyType type, std::string_view text, SPropertyValue& out)
-{
-    auto eq = [](std::string_view a, const char* b) {
-        return a.size() == std::strlen(b) && std::strncmp(a.data(), b, a.size()) == 0;
-    };
-    std::string s(text);
-    switch (type) {
-        case EPropertyType::Bool:
-            out = eq(text, "true") || eq(text, "1");
-            return true;
-        case EPropertyType::Int:
-        case EPropertyType::Enum:
-            out = int64_t(std::strtoll(s.c_str(), nullptr, 10));
-            return true;
-        case EPropertyType::Float:
-            out = std::strtod(s.c_str(), nullptr);
-            return true;
-        case EPropertyType::String:
-            out = UnescapeString(text);
-            return true;
-        case EPropertyType::Vec3Int: {
-            SVec3i v{};
-            std::sscanf(s.c_str(), "%d,%d,%d", &v.x, &v.y, &v.z);
-            out = v; return true;
-        }
-        case EPropertyType::Vec3Float: {
-            SVec3f v{};
-            std::sscanf(s.c_str(), "%f,%f,%f", &v.x, &v.y, &v.z);
-            out = v; return true;
-        }
-        case EPropertyType::Color: {
-            SColor4f c{};
-            std::sscanf(s.c_str(), "%f,%f,%f,%f", &c.r, &c.g, &c.b, &c.a);
-            out = c; return true;
-        }
-        case EPropertyType::ObjectRef:
-            // Cross-object refs deserialize to nullptr at this layer; the
-            // registry will resolve them implicitly once the referenced
-            // object is restored (or stay null if it isn't).
-            out = (IObject*)nullptr;
-            return true;
-    }
-    return false;
-}
 
 // ---------------------------------------------------------------------------
 // Dispatcher: one registration per SafeObject root
@@ -192,20 +84,21 @@ bool CaptureInstance(TObjectInstance* oi,
     if (!tn) tn = "";
     type_out = std::string("TObjectInstance:") + cn + ":" + tn;
 
-    // Walk reflected props via the existing IReflection adapter. Skip
-    // ReadOnly entries (those are derived from ctor inputs / live state)
-    // and skip "class" / "type" / "mapindex" which the meta keys cover.
-    IObject* adapter = EditorAdapters().For(oi);
-    if (!adapter) return false;
-    const IReflection& r = adapter->GetRefl();
-    const int32_t n = r.NumProperties();
-    for (int32_t i = 0; i < n; ++i) {
-        const SPropertyDesc& p = r.GetProperty(i);
-        if (HasFlag(p.flags, EPropertyFlag::ReadOnly)) continue;
-        if (HasFlag(p.flags, EPropertyFlag::Hidden))   continue;
-        SPropertyValue v;
-        r.GetValue(adapter, p, v);
-        props_out.emplace_back(p.name, PropValueToText(v));
+    // Walk the annotated properties (base chain first). Read-only ones
+    // ("class" / "type" / "mapindex") are covered by the meta keys; values
+    // use the DEF text form so the clipboard reads like a DEF.
+    const refl::SType* type = refl::Of(*oi);
+    if (!type) return false;
+    std::vector<const refl::SType*> chain;
+    for (const refl::SType* t = type; t; t = t->base) chain.push_back(t);
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+        for (int32_t i = 0; i < (*it)->prop_count; ++i) {
+            const refl::SProp& p = (*it)->props[i];
+            if (p.read_only || !p.serialized || p.type == EPropType::Trigger) continue;
+            SPropValue v;
+            if (!refl::Get(*type, oi, p.id, v)) continue;
+            props_out.emplace_back(p.name, defio::FormatValue(p, v));
+        }
     }
     return true;
 }
@@ -252,10 +145,21 @@ int32_t InstantiateInstance(const SParsedBlock& blk, bool preserve_refid)
     def.objclass = (short)objclass;
     def.objtype  = (short)objtype;
     def.level    = (uint16_t)mr->CameraLevel();
-    for (const auto& kv : blk.props) {
-        if (kv.first == "pos") {
-            std::sscanf(kv.second.c_str(), "%d,%d,%d", &def.pos.x, &def.pos.y, &def.pos.z);
-            break;
+    // The spawn position decides the sector, so it is read before the
+    // object exists; the node's `pos` property describes its text form.
+    if (const refl::SType* node_type = refl::Of<TNodeInst>()) {
+        const refl::SProp* pos_prop = refl::FindProp(*node_type, "pos");
+        for (const auto& kv : blk.props) {
+            if (kv.first == "pos" && pos_prop) {
+                SPropValue v;
+                std::string storage;
+                if (defio::ParseValue(*pos_prop, kv.second, v, storage)) {
+                    def.pos.x = int32_t(v.v3[0]);
+                    def.pos.y = int32_t(v.v3[1]);
+                    def.pos.z = int32_t(v.v3[2]);
+                }
+                break;
+            }
         }
     }
 
@@ -286,18 +190,18 @@ int32_t InstantiateInstance(const SParsedBlock& blk, bool preserve_refid)
         live->SetMapIndex(MapPane.MakeIndex());
     const int32_t final_idx = live->GetMapIndex();
 
-    // Apply remaining reflected props. Pos already landed via def, but
-    // re-applying is a no-op so we don't bother filtering.
-    IObject* adapter = EditorAdapters().For(live);
-    if (adapter) {
-        const IReflection& r = adapter->GetRefl();
+    // Apply the remaining annotated props. Pos already landed via def;
+    // re-applying it is a no-op. Unknown keys are ignored (forward-compat).
+    if (const refl::SType* type = refl::Of(*live)) {
         for (const auto& kv : blk.props) {
-            const SPropertyDesc* p = r.FindProperty(kv.first.c_str());
-            if (!p) continue;
-            if (HasFlag(p->flags, EPropertyFlag::ReadOnly)) continue;
-            SPropertyValue v;
-            if (TextToPropValue(p->type, kv.second, v))
-                r.SetValue(adapter, *p, v);
+            const refl::SProp* p = refl::FindProp(*type, kv.first);
+            if (!p || p->read_only) continue;
+            SPropValue v;
+            std::string storage, err;
+            if (defio::ParseValue(*p, kv.second, v, storage, &err))
+                refl::Set(*type, live, p->id, v);
+            else
+                log_warn("[serialize] %s: %s", kv.first.c_str(), err.c_str());
         }
     }
     return final_idx;

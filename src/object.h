@@ -729,6 +729,20 @@ class TObjectInstance : public TNodeInst, protected SObjectDef
         // Get instance-specific name
     TObjectInstance*       AsObjectInstance() override       { return this; }
     const TObjectInstance* AsObjectInstance() const override { return this; }
+
+  // Annotated properties (editor inspector, undo, clipboard). Ids continue
+  // after TNodeInst's 1..5 -- a derived class must never reuse a base id.
+    PROP_FN(10, std::string, class,    GetClassName, );
+    PROP_FN(11, std::string, type,     GetTypeName,  );
+    PROP_FN(12, int32_t,     state,    GetState,     SetState, "Animation state");
+    PROP_FN(13, int32_t,     frame,    GetFrame,     );
+    PROP_FN(14, int32_t,     mapindex, GetMapIndex,  );
+
+  // Node transform setters routed through the legacy fields so `pos` and
+  // rotatex / y / z stay in lockstep with the transform.
+    void     SetLocalPos(const hmm_vec3& p) override;
+    hmm_vec3 LocalRotDeg() const override;
+    void     SetLocalRotDeg(const hmm_vec3& deg) override;
     void SetName(char *newname);
         // Set context name
     uint32_t ObjId() const { return inf->uniqueid; }

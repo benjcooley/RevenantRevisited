@@ -663,6 +663,28 @@ void TObjectInstance::SetMapIndex(int32_t newindex)
     }
 }
 
+// Node transform properties for a map object: position goes through
+// SetPos (sector bookkeeping + legacy `pos` mirror), rotation through the
+// 0..255 legacy angle fields (SyncTransformRot keeps the transform current).
+void TObjectInstance::SetLocalPos(const hmm_vec3& p)
+{
+    SetPos(S3DPoint{ int32_t(std::lround(p.X)), int32_t(std::lround(p.Y)), int32_t(std::lround(p.Z)) });
+}
+
+hmm_vec3 TObjectInstance::LocalRotDeg() const
+{
+    constexpr float kToDeg = 360.0f / 256.0f;
+    return hmm_vec3{{ float(rotatex) * kToDeg, float(rotatey) * kToDeg, float(rotatez) * kToDeg }};
+}
+
+void TObjectInstance::SetLocalRotDeg(const hmm_vec3& deg)
+{
+    auto legacy = [](float d) { return int32_t(std::lround(d * 256.0f / 360.0f)) & 255; };
+    SetRotateX(legacy(deg.X));
+    SetRotateY(legacy(deg.Y));
+    SetRotateZ(legacy(deg.Z));
+}
+
 // REVSYNC: ~TObjectInstance @ 0x0046e420
 TObjectInstance::~TObjectInstance()
 {

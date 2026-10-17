@@ -207,7 +207,9 @@ add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
 target_link_libraries(Revenant PRIVATE imgui revsmk)
 # Annotated classes (PROP / PROP_FN). One line per header; see rev_reflect.
 rev_reflect(Revenant
-  src/nodeinst.h)
+  src/nodeinst.h
+  src/object.h
+  src/sector.h)
 
 # buildinfo.h: the commit the binary is built from (the playtest recordings
 # name it) and its version (the main menu shows it). Regenerated every

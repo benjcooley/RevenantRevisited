@@ -26,7 +26,10 @@ The parser is deliberately dumb. It understands exactly:
     numbers, true / false, a string literal, a brace list of numbers, or an
     enumerator (EType::Name). Named constants, macros and expressions are
     rejected.
-    void OnPropChanged(uint16_t ...);    (presence only)
+    void OnPropChanged(uint16_t ...);    (presence only; called after a set)
+    void OnLoaded();                     (presence only; called once a loader has
+                                          filled the object -- the post-deserialize
+                                          constructor, Unity-style)
     DEF_BLOCK("name") | DEF_COMPONENT("name")   block keyword + factory (one per class)
 
 Anything else is ignored. A PROP line it cannot parse is a build error.
@@ -51,13 +54,14 @@ TYPE_MAP = {
     "SRgba":       ("Color",  "c4",  "{m} = SRgba{{v.c4[0], v.c4[1], v.c4[2], v.c4[3]}};", "out = SPropValue::Color({m}.r, {m}.g, {m}.b, {m}.a);"),
 }
 
-RE_CLASS = re.compile(r"^\s*(?:class|struct)\s+([A-Za-z_]\w*)\s*(?::\s*(?:(?:public|protected|private|virtual)\s+)*([\w:]+)[^{;]*)?\{")
+RE_CLASS = re.compile(r"^\s*(?:class|struct)\s+([A-Za-z_]\w*)\s*(?:final\s*)?(?::\s*(?:(?:public|protected|private|virtual)\s+)*([\w:]+)[^{;]*)?\{")
 RE_ENUM  = re.compile(r"^\s*enum\s+class\s+([A-Za-z_]\w*)\s*(?::\s*[\w:]+)?\s*\{")
-RE_DECL_HEAD = re.compile(r"^\s*(?:(?:class|struct)\s+[A-Za-z_]\w*\s*(?::[^{;]*)?|enum\s+class\s+[A-Za-z_]\w*\s*(?::\s*[\w:]+)?)\s*$")
+RE_DECL_HEAD = re.compile(r"^\s*(?:(?:class|struct)\s+[A-Za-z_]\w*\s*(?:final\s*)?(?::[^{;]*)?|enum\s+class\s+[A-Za-z_]\w*\s*(?::\s*[\w:]+)?)\s*$")
 RE_PROP  = re.compile(r"^\s*(PROP|PROP_NOSAVE|PROP_HIDDEN|PROP_READONLY)\((.*?)\)\s+([\w:]+)\s+([A-Za-z_]\w*)\s*(?:=\s*([^;]*?))?\s*;")
 RE_PROP_ANY = re.compile(r"^\s*PROP(_NOSAVE|_HIDDEN|_READONLY)?\(")
 RE_PROP_FN  = re.compile(r"^\s*(PROP_FN|PROP_FN_NOSAVE|PROP_FN_HIDDEN)\((.*)\)\s*;?")
 RE_HOOK  = re.compile(r"\bvoid\s+OnPropChanged\s*\(")
+RE_LOADED = re.compile(r"\bvoid\s+OnLoaded\s*\(\s*\)")
 RE_DEFNAME = re.compile(r"^\s*(DEF_BLOCK|DEF_COMPONENT)\(\s*\"([^\"]+)\"\s*\)")
 
 
@@ -88,6 +92,7 @@ class Klass:
         self.base = base or ""
         self.members = []
         self.has_hook = False
+        self.has_loaded = False
         self.ids = set()
         self.def_name = ""
         self.def_kind = ""      # "node" | "component"
@@ -240,6 +245,8 @@ def parse(path: Path):
         if cur is not None:
             if RE_HOOK.search(code):
                 cur.has_hook = True
+            if RE_LOADED.search(code):
+                cur.has_loaded = True
             m_def = RE_DEFNAME.match(code)
             if m_def:
                 if cur.def_name:
@@ -407,13 +414,16 @@ def emit(path: Path, out: Path, include: str):
                   o.append("        case %d: out = SPropValue::Enum(int32_t(%s)); return true;\n" % (m.id, read))
           o.append("        default: return false;\n    }\n}\n\n")
 
+        if k.has_loaded:
+            o.append("void Loaded_%s(void* obj) { static_cast<%s*>(obj)->OnLoaded(); }\n\n" % (k.name, k.name))
         props = ("kProps_%s" % k.name) if k.members else "nullptr"
         setf  = ("&Set_%s" % k.name) if k.members else "nullptr"
         getf  = ("&Get_%s" % k.name) if k.members else "nullptr"
         cnode = ("[]() -> TNodeInst* { return new %s(); }" % k.name) if k.def_kind == "node" else "nullptr"
         ccomp = ("[]() -> TObjectComponent* { return new %s(); }" % k.name) if k.def_kind == "component" else "nullptr"
-        o.append('refl::SType kType_%s = { "%s", "%s", &typeid(%s), %s, %d, %s, %s, nullptr, "%s", %s, %s };\n'
-                 % (k.name, k.name, k.base, k.name, props, len(k.members), setf, getf, k.def_name, cnode, ccomp))
+        loaded = ("&Loaded_%s" % k.name) if k.has_loaded else "nullptr"
+        o.append('refl::SType kType_%s = { "%s", "%s", &typeid(%s), %s, %d, %s, %s, nullptr, "%s", %s, %s, %s };\n'
+                 % (k.name, k.name, k.base, k.name, props, len(k.members), setf, getf, k.def_name, cnode, ccomp, loaded))
         o.append("refl::SRegistrar kReg_%s(kType_%s);\n\n" % (k.name, k.name))
     o.append("} // namespace\n")
     out.parent.mkdir(parents=True, exist_ok=True)

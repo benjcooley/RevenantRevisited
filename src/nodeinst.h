@@ -79,12 +79,14 @@ class TNodeInst : public TSafeObjectBase<TNodeInst>
     [[nodiscard]] TTransform&       Transform()       { return transform_; }
     [[nodiscard]] const TTransform& Transform() const { return transform_; }
 
+    // Virtual so a map object can route them through its own setters
+    // (TObjectInstance keeps a legacy position / rotation in lockstep).
     [[nodiscard]] const hmm_vec3& LocalPos() const           { return transform_.LocalPos(); }
-    void                          SetLocalPos(const hmm_vec3& p) { transform_.SetLocalPos(p); }
-    [[nodiscard]] hmm_vec3        LocalRotDeg() const;
-    void                          SetLocalRotDeg(const hmm_vec3& deg);
+    virtual void                  SetLocalPos(const hmm_vec3& p) { transform_.SetLocalPos(p); }
+    [[nodiscard]] virtual hmm_vec3 LocalRotDeg() const;
+    virtual void                  SetLocalRotDeg(const hmm_vec3& deg);
     [[nodiscard]] const hmm_vec3& LocalScl() const           { return transform_.LocalScl(); }
-    void                          SetLocalScl(const hmm_vec3& s) { transform_.SetLocalScl(s); }
+    virtual void                  SetLocalScl(const hmm_vec3& s) { transform_.SetLocalScl(s); }
 
     [[nodiscard]] TNodeInst* Parent() const;
     void                     SetParent(TNodeInst* parent);

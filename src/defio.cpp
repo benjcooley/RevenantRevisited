@@ -175,11 +175,17 @@ class TReaderSink : public defdoc::Sink
                 frames_.push_back({});
                 return;
             }
+            // Held until the block closes: fields first, OnLoaded, then
+            // attach (so OnAttach never runs on default fields).
             std::unique_ptr<TObjectComponent> c(type->create_component());
             c->SetLabel(label);
             TObjectComponent* raw = c.get();
-            cur.node->AddComponent(std::move(c));
-            frames_.push_back({ type, raw, nullptr });
+            SFrame f;
+            f.type = type;
+            f.obj = raw;
+            f.attach_to = cur.node;
+            f.pending = std::move(c);
+            frames_.push_back(std::move(f));
         }
         else
         {
@@ -195,8 +201,22 @@ class TReaderSink : public defdoc::Sink
 
     void EndBlock() override
     {
-        if (frames_.size() > 1)
-            frames_.pop_back();
+        if (frames_.size() <= 1)
+            return;
+        SFrame done = std::move(frames_.back());
+        frames_.pop_back();
+        if (!done.type)
+            return;                                  // skipped block
+        refl::Loaded(*done.type, done.obj);
+        if (done.pending && done.attach_to)
+            done.attach_to->AddComponent(std::move(done.pending));
+    }
+
+    // Root: the document is complete.
+    void Finish()
+    {
+        if (!frames_.empty() && frames_.front().type)
+            refl::Loaded(*frames_.front().type, frames_.front().obj);
     }
 
   private:
@@ -205,6 +225,8 @@ class TReaderSink : public defdoc::Sink
         const refl::SType* type = nullptr;           // nullptr = skipping
         void*              obj  = nullptr;
         TNodeInst*         node = nullptr;           // when the object is a node
+        TNodeInst*         attach_to = nullptr;      // component: node to attach to on close
+        std::unique_ptr<TObjectComponent> pending;   // component not yet attached
     };
 
     void Fail(int line, const std::string& msg)
@@ -235,6 +257,7 @@ bool Run(std::string_view text, TReaderSink& sink, std::string* error)
         if (error) *error = sink.Error();
         return false;
     }
+    sink.Finish();
     return true;
 }
 
@@ -326,6 +349,49 @@ bool ReadObject(std::string_view text, const refl::SType& type, void* obj, std::
 {
     TReaderSink sink(type, obj, nullptr, nullptr);
     return Run(text, sink, error);
+}
+
+namespace {
+
+// Captures the single `v = <text>` statement ParseValue feeds the parser.
+class TOneValueSink : public defdoc::Sink
+{
+  public:
+    defdoc::Node value;
+    bool got = false;
+    void Value(const std::string&, defdoc::Node v, int) override { value = std::move(v); got = true; }
+    void Item(defdoc::Node, int) override {}
+    void BeginBlock(const std::string&, defdoc::Node, int) override {}
+    void EndBlock() override {}
+};
+
+} // namespace
+
+bool ParseValue(const refl::SProp& p, std::string_view text, SPropValue& out,
+                std::string& storage, std::string* error)
+{
+    TOneValueSink sink;
+    try
+    {
+        defdoc::Document::parse_into("v = " + std::string(text) + "\n", sink);
+    }
+    catch (const std::exception& e)
+    {
+        if (error) *error = e.what();
+        return false;
+    }
+    if (!sink.got)
+    {
+        if (error) *error = "no value";
+        return false;
+    }
+    std::string why;
+    if (!NodeToValue(p, sink.value, out, storage, why))
+    {
+        if (error) *error = why;
+        return false;
+    }
+    return true;
 }
 
 std::string FormatValue(const refl::SProp& p, const SPropValue& v)
