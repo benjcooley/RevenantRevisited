@@ -9,6 +9,30 @@ project(RevenantRevisited
   LANGUAGES C CXX
 )
 include(FetchContent)
+
+# ----------------------------------------------------------------------------
+# Annotated properties (docs/vfx/PREFAB_SYSTEM.md §2). Headers mark members
+# with PROP(id); until our compilers read C++26 annotations, tools/reflect/
+# gen.py emits the property tables + Set/Get switches into the build tree.
+# rev_reflect(<target> <header>...) wires one generated .cpp per header into
+# the target. Delete this block and the script when the compilers catch up.
+# ----------------------------------------------------------------------------
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+set(REV_REFLECT_GEN "${CMAKE_SOURCE_DIR}/tools/reflect/gen.py")
+function(rev_reflect target)
+  foreach(header IN LISTS ARGN)
+    get_filename_component(abs "${header}" ABSOLUTE)
+    get_filename_component(stem "${header}" NAME_WE)
+    set(out "${CMAKE_BINARY_DIR}/generated/reflect/${target}_${stem}.props.cpp")
+    add_custom_command(
+      OUTPUT "${out}"
+      COMMAND ${Python3_EXECUTABLE} -I "${REV_REFLECT_GEN}" "${abs}" "${out}"
+      DEPENDS "${abs}" "${REV_REFLECT_GEN}"
+      COMMENT "reflect: ${header}"
+      VERBATIM)
+    target_sources(${target} PRIVATE "${out}")
+  endforeach()
+endfunction()
 if(APPLE)
   enable_language(OBJC)
 endif()
@@ -253,6 +277,15 @@ target_include_directories(test_particlefx PRIVATE
   ${HANDMADE_MATH_DIR})
 target_compile_definitions(test_particlefx PRIVATE REV_ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")
 
+add_executable(test_props
+  tools/test_props.cpp
+  src/refl.cpp
+  src/packed.cpp
+  src/propdef.cpp)
+target_include_directories(test_props PRIVATE ${HANDMADE_MATH_DIR})
+target_link_libraries(test_props PRIVATE GTest::gtest_main)
+rev_reflect(test_props tools/test_props_types.h)
+
 add_executable(test_savefile
   tools/test_savefile.cpp
   src/savefile.cpp)
@@ -447,6 +480,7 @@ foreach(test IN ITEMS
     test_defwidget
     test_particlefx
     test_playerstats
+    test_props
     test_savefile
     test_sectorstore
     test_shadowplan)
