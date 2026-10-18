@@ -360,12 +360,12 @@ class TFountainRuntimeComponent final : public TFlipbookBillboardComponent
     void OnUpdate() override
     {
         Tick(state_.get());
-        if (!logged_tick_ && state_->sim_ticks > 0 && Owner())
+        if (!logged_tick_ && state_->sim_ticks > 0 && OwnerInstance())
         {
             logged_tick_ = true;
             log_info("[fountain-runtime] first simulation tick type='%s' id=%08x map_index=%d "
                      "colorobj=%d ticks=%llu",
-                     Owner()->GetTypeName(), Owner()->ObjId(), Owner()->GetMapIndex(),
+                     OwnerInstance()->GetTypeName(), OwnerInstance()->ObjId(), OwnerInstance()->GetMapIndex(),
                      state_->colorobj, static_cast<unsigned long long>(state_->sim_ticks));
         }
     }

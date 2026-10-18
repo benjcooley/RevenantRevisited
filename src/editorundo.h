@@ -7,12 +7,12 @@
 // Two flavours of undo coexist on one stack:
 //
 //   (1) Dirty-tracked snapshot diffs (default for property edits + gizmo
-//       transforms).  The editor calls EditorUndo::MarkDirty(obj) before
-//       any edit -- idempotent.  On the first MarkDirty for an object we
-//       snapshot all of its reflected properties.  On Resolve (end of
-//       frame, or mouse-up for an actively-locked drag) we snapshot
+//       transforms).  The editor calls EditorUndo::MarkDirty(node) before
+//       any edit -- idempotent.  On the first MarkDirty for a node we
+//       snapshot all of its annotated properties (refl.h).  On Resolve
+//       (end of frame, or mouse-up for an actively-locked drag) we snapshot
 //       again, diff against the baseline, and push one undo entry per
-//       changed object that captures (before -> after) for the changed
+//       changed node that captures (before -> after) for the changed
 //       properties only.  Edit code never has to construct undo data;
 //       it just toggles the dirty flag and writes.
 //
@@ -20,6 +20,9 @@
 //       property mutation -- create/delete/paste, structure changes,
 //       command-pattern actions.  Pushed via Push(); they own their own
 //       Undo/Redo logic.
+//
+// Snapshots hold a soft ref to the node, so undoing an edit on a node
+// that has since been deleted is a no-op rather than a dangling write.
 //
 // During a drag (mouse-down through mouse-up) the editor calls
 // LockResolver()/UnlockResolver() so end-of-frame Resolve calls turn into
@@ -34,7 +37,7 @@
 #include <memory>
 #include <string>
 
-class IObject;
+class TNodeInst;
 
 class IEditorCommand
 {
@@ -49,23 +52,21 @@ namespace EditorUndo {
 
 // ---- Dirty-tracking snapshot diffs ---------------------------------------
 
-// Mark `obj` dirty. Idempotent: the first call this transaction snapshots
-// the object's reflected properties; subsequent calls do nothing. Edit
-// code calls this BEFORE writing.
-void MarkDirty(IObject* obj);
+// Mark `node` dirty. Idempotent: the first call this transaction snapshots
+// the node's annotated properties; subsequent calls do nothing. Edit code
+// calls this BEFORE writing.
+void MarkDirty(TNodeInst* node);
 
-// Drop `obj` from the dirty set without producing an undo entry. Use for
-// the rare case where you marked something dirty speculatively.
-void DropDirty(IObject* obj);
+// Drop `node` from the dirty set without producing an undo entry.
+void DropDirty(TNodeInst* node);
 
-// Take the current snapshot of every dirty object, diff vs its baseline,
-// and push one undo entry per object that actually changed. Clears the
+// Take the current snapshot of every dirty node, diff vs its baseline,
+// and push one undo entry per node that actually changed. Clears the
 // dirty set. No-op while the resolver is locked.
 void ResolveDirty();
 
 // Lock/unlock the resolver. Lock counter is a counted semaphore so
 // nested locks (e.g. property drag while gizmo drag) compose cleanly.
-// When the counter returns to zero, ResolveDirty fires automatically.
 void LockResolver();
 void UnlockResolver();
 bool ResolverLocked();
@@ -73,15 +74,13 @@ bool ResolverLocked();
 // Optional operation label, surfaced in the Edit > Undo / Redo menu
 // items ("Undo move", "Undo position", ...). The next ResolveDirty
 // stamps every produced undo entry with this name and clears it.
-// Falls back to "edit" if unset.
 void SetOperationName(const char* name);
 
 // ---- Explicit command-pattern entries ------------------------------------
 
 // Push a custom command and execute its Redo. Drops any redo-stack
-// entries (the new edit branches off the previous undo state). Resolves
-// any pending dirty state first so the explicit command lands AFTER any
-// in-flight edits.
+// entries. Resolves any pending dirty state first so the explicit command
+// lands AFTER any in-flight edits.
 void Push(std::unique_ptr<IEditorCommand> cmd);
 
 // One-line helper for ad-hoc commands. `do_fn` is invoked once at Push

@@ -37,6 +37,8 @@ _CLASSDEF(TEffect)
 _CLASSDEF(TSpellBlock)
 
 #include "particlefx.h"
+#include "particledef.h"
+#include "particlecomponent.h"
 #include "photoncore.h"
 #include "effectlightramp.h"
 #include "iceboltcore.h"
@@ -238,119 +240,27 @@ class TFlipbookBillboardComponent : public TObjectComponent
     EFxDebugMode debug_mode = EFxDebugMode::Normal;
 };
 
-struct SParticleBucketEffectDef
-{
-    std::string name;
-    int32_t texture_slot = 0;
-    int32_t atlas_cols = 1;
-    int32_t atlas_rows = 1;
-    int32_t atlas_frames = 1;
-    // Random start frame from the atlas grid on spawn (and on chain-spawn).
-    // When true and atlas_frames > 1, DrawFrame is auto-set to a uniform
-    // [0, atlas_frames) integer per particle, using the per-particle seed
-    // for determinism. Saves `frame = floor(rand01() * N)` boilerplate in
-    // spawn_expr for "N drop variants" / "N spark variants" cases.
-    // spawn_expr (if any) can still override.
-    bool random_start_frame = false;
-    float width = 1.0f;
-    float height = 1.0f;
-    float scale = 1.0f;
-    bool additive = true;
-    bool flip_v = false;
-    bool chroma_key = false;
-    float chroma_key_rgb[3] = {1.0f, 0.0f, 0.0f};
-    std::string frame_expr;
-    std::string uv_rect_expr;
-
-    // ---- VM-extension fields (2026-05-17) -----------------------------
-    // Imagery override for buckets that ship a procedural texture or
-    // reach into a non-owner imagery (B01 / M05 ports load a separate
-    // I3D via TObjectImagery::LoadImagery rather than using the owner's
-    // primary imagery). Empty = use the owner-imagery texture_slot path.
-    std::string imagery_path;
-
-    // Blend/light/depth/orientation knobs (canonical strings parsed into
-    // the per-bucket EParticle* enums). When unset, BuildRuntimeBucketDesc
-    // falls back to the legacy `additive` bool + Unlit + TestNoWrite +
-    // ScreenAligned defaults.
-    std::string blend_mode;          // "alpha" | "additive" | "additive_straight" | "premul_alpha"
-    std::string light_mode;          // "unlit" | "lit_flat"
-    std::string depth_mode;          // "test_no_write" | "test_write" | "none"
-    std::string orientation;         // "screen_aligned" | "world_xy"
-
-    // Per-particle dynamics (statement-form expressions). Compiled once
-    // at first-use; cached on the runtime bucket record.
-    std::string spawn_expr;          // ran once at particle add time
-    std::string tick_expr;           // ran each sim tick per live particle
-    std::string kill_expr;           // boolean; true -> respawn (re-run spawn_expr, age=0)
-
-    // Spawn cadence:
-    //   spawn_burst > 0 → emit N particles once at attach (one-shot)
-    //   spawn_count > 0 → maintain a steady-state population of N particles
-    //                     (runtime tops up when count drops below target)
-    // At most one should be non-zero; if both are zero the bucket emits
-    // nothing on its own and is driven by the legacy emitter/output path.
-    int32_t spawn_burst = 0;
-    int32_t spawn_count = 0;
-
-    // Integration cadence:
-    //   tick_hz > 0  → integrate tick_expr at this fixed rate (sim-tick
-    //                  gated, matches retail's 24 Hz authoring cadence)
-    //   tick_hz == 0 → integrate every render frame (no gating)
-    int32_t tick_hz = 0;
-
-    // Default particle life in seconds (set into EParticleVar::Life at
-    // spawn time). <= 0 means "no auto-kill" (drops live until kill_expr
-    // fires).
-    float default_life = -1.0f;
-
-    // ---- Chain emission (reflection-plane / state-transition mechanism) ----
-    // When a particle in this bucket dies (kill_expr fires, or life
-    // expires, or default_life is 0 with no kill_expr running), spawn one
-    // particle into `chain_bucket` instead of (or in addition to) reaping
-    // the source. The chain spawn runs the target bucket's spawn_expr
-    // with `emit_pos` and `emit_vel` set to the dying particle's pos /
-    // vel — so the chain particle inherits the impact site naturally.
-    //
-    // Generic mechanism — blood uses it for FLY droplet -> SPLAT decal
-    // transition; future "bullet impact -> spark burst", "spell missile ->
-    // explosion smoke", etc. wire through the same field. Empty = no
-    // chain emission (default).
-    std::string chain_bucket;
-};
-
-struct SParticleEmitterOutputDef
-{
-    std::string bucket;
-    float life = -1.0f;
-};
-
-struct SParticleEmitterEffectDef
-{
-    std::string name;
-    float local_pos[3] = {};
-    std::vector<SParticleEmitterOutputDef> outputs;
-};
-
-struct SParticleEffectDef
-{
-    std::string name;
-    bool debug_solid = false;
-    uint32_t inactive_ttl_pulses = 1;
-    std::vector<SParticleBucketEffectDef> buckets;
-    std::vector<SParticleEmitterEffectDef> emitters;
-};
-
+// Owners are nodes: a map object or a prefab node. Runtimes are keyed by
+// (definition, node id) and emission is anchored at the node's world
+// position. Buckets without an imagery_path take their texture from the
+// owner's imagery, which needs the owner to be a map object.
 class TParticleEffectManager
 {
   public:
-    void PulseEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner);
-    void StopEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner);
+    void PulseEffect(const SParticleEffectDef* effect_def, TNodeInst* owner);
+    void StopEffect(const SParticleEffectDef* effect_def, TNodeInst* owner);
     // Per-frame integration tick. Called from TParticleEffectComponent::
     // DrawPulse via the render-frame walk so each runtime's bucket
     // expressions (spawn / tick / kill) advance once per frame using the
     // shared TTime::DeltaTime.
-    void IntegrateEffect(const SParticleEffectDef* effect_def, TObjectInstance* owner, float dt_seconds);
+    void IntegrateEffect(const SParticleEffectDef* effect_def, TNodeInst* owner, float dt_seconds);
+    // Submit the buckets of this owner's runtime to the renderer. The map
+    // walk drains every global bucket once per frame instead; this is for
+    // a standalone driver (the --test=vfx harness) that shows one effect.
+    void SubmitEffect(const SParticleEffectDef* effect_def, TNodeInst* owner, EFxDebugMode debug_mode);
+    // True while any bucket still holds a particle of this owner's runtime
+    // (a one-shot burst that has played out answers false).
+    [[nodiscard]] bool EffectHasParticles(const SParticleEffectDef* effect_def, TNodeInst* owner);
     void ExpireInactiveEffects();
     void Clear();
 
@@ -370,28 +280,29 @@ class TParticleEffectManager
         bool kill_compiled = false;
         double sim_accum_ms = 0.0;
         int32_t spawned_burst = 0;          // tracks one-shot burst so we don't re-emit
+        int32_t burst_frame = -1;           // bucket_def.burst_frame: the cell every particle of this runtime uses
     };
 
     struct SRuntime
     {
         const SParticleEffectDef* effect_def = nullptr;
-        TSafeRef<> owner;
-        float owner_particle_id = -1.0f;
+        TSafeRef<TNodeInst> owner;
+        float owner_particle_id = -1.0f;    // the owner's NodeId()
         uint32_t last_draw_pulse_pass = 0;
         std::vector<TParticleBucket*> buckets;
         std::vector<SBucketRuntime> bucket_runtimes;
     };
 
-    SRuntime* FindRuntime(const SParticleEffectDef* effect_def, int32_t owner_map_index);
-    void StartRuntime(SRuntime& runtime, TObjectInstance* owner);
+    SRuntime* FindRuntime(const SParticleEffectDef* effect_def, int32_t owner_node_id);
+    void StartRuntime(SRuntime& runtime, TNodeInst* owner);
     void StopRuntime(size_t runtime_index);
-    void IntegrateBucket(SRuntime& runtime, SBucketRuntime& brt, TObjectInstance* owner,
+    void IntegrateBucket(SRuntime& runtime, SBucketRuntime& brt, TNodeInst* owner,
                          float dt_seconds, float owner_particle_id);
-    void EmitSpawnTopup(SBucketRuntime& brt, TObjectInstance* owner, float owner_particle_id);
+    void EmitSpawnTopup(SBucketRuntime& brt, TNodeInst* owner, float owner_particle_id);
     // Emit one chain particle into `chain_brt` using `(pos, vel)` as the
     // chain spawn's emit_pos / emit_vel. Returns the new particle index
     // (-1 if the chain bucket is full or the chain runtime is missing).
-    int32_t EmitChainParticle(SBucketRuntime& chain_brt, TObjectInstance* owner,
+    int32_t EmitChainParticle(SBucketRuntime& chain_brt, TNodeInst* owner,
                               float owner_particle_id,
                               const float dying_pos[3],
                               const float dying_vel[3]);
@@ -404,38 +315,6 @@ class TParticleEffectManager
 };
 
 extern TParticleEffectManager* ParticleEffectManager;
-
-class TParticleEffectComponent : public TObjectComponent
-{
-  public:
-    [[nodiscard]] const char* ComponentName() const override { return "particle_effect"; }
-
-    void Configure(const SParticleEffectDef* def) { effect_def = def; }
-
-    void OnAttach() override
-    {
-        RegisterUpdate(&TObjectComponent::Update);
-    }
-
-    void OnDetach() override
-    {
-        if (ParticleEffectManager)
-            ParticleEffectManager->StopEffect(effect_def, Owner());
-        UnregisterUpdate(&TObjectComponent::Update);
-    }
-
-    void DrawPulse();
-
-  protected:
-    void OnUpdate() override
-    {
-        if (ParticleEffectManager)
-            ParticleEffectManager->ExpireInactiveEffects();
-    }
-
-  private:
-    const SParticleEffectDef* effect_def = nullptr;
-};
 
 // ***************
 // * TFireEffect *

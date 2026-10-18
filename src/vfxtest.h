@@ -158,6 +158,8 @@ struct SEffect
 };
 
 void Register(const SEffect& effect);
+// One harness entry per prefab file (assets/prefabs/*.def), "Prefab:<Name>".
+void RegisterPrefabs();
 
 bool Initialize();
 void Close();

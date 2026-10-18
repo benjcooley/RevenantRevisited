@@ -265,9 +265,20 @@ effect Blood
 }
 
 // M05 TMistEffect -- ambient ascending wisps; steady-state 50-particle
-// emitter, respawn-in-place on landing. Migrated from bespoke C++ per
-// docs/vfx/VM_EXTENSION_FORENSICS.md Phase 5. Constants 1:1 with the
-// retail TMistAnimator forensics body in INVENTORY M05 §1.
+// emitter, respawn-in-place on landing. Constants 1:1 with retail
+// TMistAnimator (effect_old.cpp:11359-11450), checked 2026-10-17 against
+// the bespoke port and the Magic\mist.i3d dump:
+//   drop quad  'photon01' is 9.92 wu square, drawn at MIST_SCALE 0.7
+//              -> 6.94 wu; texture is a soft white radial dot, material
+//              white, SetAddBlendState (additive), no tint
+//   spawn      pos.x = random(-64, 64)/2 = +-32 wu, pos.y = random(-20, 20)/2
+//              = +-10 wu, pos.z = 5 wu above the effect
+//   velocity   vx = +-2 wu/tick, vy = +-0.625 wu/tick, vz = 2..4 wu/tick
+//   gravity    RIPPLE_GRAVITY 0.37 wu/tick^2; a drop respawns when it
+//              falls back to the effect's z
+// (An earlier revision widened the spawn box 3x, drew 56 wu drops with a
+// dark tint and a random size per drop; that saturated to a white blob
+// and was not retail.)
 effect Mist
 {
     debug = normal
@@ -280,8 +291,8 @@ effect Mist
         atlas_cols = 1
         atlas_rows = 1
         atlas_frames = 1
-        width = 56.0
-        height = 56.0
+        width = 6.94
+        height = 6.94
         scale = 1.0
         blend_mode = "additive_straight"
         light_mode = "unlit"
@@ -289,52 +300,29 @@ effect Mist
         orientation = "screen_aligned"
 
         spawn_count = 50
-        // ---------------------------------------------------------------
-        // UNIT CONVENTION (explicit-tick-multiplier; see effect.cpp
-        // IntegrateBucket header):
-        //   * tick_expr runs once per tick at tick_hz=24 (frame-rate
-        //     independent: exactly 24 invocations per simulated second).
-        //   * Velocity / gravity literals in tick_expr are PER-TICK
-        //     (wu/tick and wu/tick^2). The retail TMistAnimator constants
-        //     (effect_old.cpp:11342+) were authored at this exact cadence.
-        //   * default_life is SECONDS (5.0s = 120 ticks @ 24Hz upper bound;
-        //     drops typically die earlier via the kill_expr below).
-        // ---------------------------------------------------------------
+        // tick_expr literals are per tick at tick_hz = 24 (see the
+        // IntegrateBucket header in effect.cpp); default_life is seconds
+        // and only a backstop -- drops respawn through kill_expr.
         tick_hz = 24
         default_life = 5.0
 
-        // Retail TMistAnimator constants (effect_old.cpp:11342+):
-        //   MIST_LENGTH = 64, MIST_WIDTH = 20, MIST_HEIGHT = 4
-        //   vx = random(-L,L)/32 = -2..+2 wu/tick
-        //   vy = random(-W,W)/32 = -0.625..+0.625 wu/tick
-        //   vz = random(H/2, H) = +2..+4 wu/tick (always upward)
-        //   pos.x = random(-L,L)/2 = -32..+32 wu
-        //   pos.y = random(-W,W)/2 = -10..+10 wu
-        //   pos.z = +5 wu (slightly above origin)
         spawn_expr = "
-            pos = emit_pos + vec3(floor(rand(-64, 65)) / 2, floor(rand(-20, 21)) / 2, 5);
-            vel = vec3(floor(rand(-64, 65)) / 32, floor(rand(-20, 21)) / 32,
-                       floor(rand(2, 5)));
-            scale = vec3(56 * 0.7, 56 * 0.7, 1);
+            pos = emit_pos + vec3(rand(-32, 32), rand(-10, 10), 5);
+            vel = vec3(rand(-2, 2), rand(-0.625, 0.625), rand(2, 4));
+            scale = vec3(6.94, 6.94, 1);
             rot.x = 0;
             frame = 0;
             color = vec4(1, 1, 1, 1);
         "
 
-        // Per-tick body. RIPPLE_GRAVITY = 0.37 wu/tick^2 (shared retail
-        // constant with H03/H04). Under the explicit-tick-multiplier
-        // model, the engine invokes this body exactly tick_hz=24 times/sec,
-        // so per-tick literals produce the retail-authored motion verbatim:
-        //   pos  += vel       -- one tick's position advance (vel is wu/tick)
-        //   vel.z -= 0.37     -- gravity after movement, as in the source
+        // Per tick: gravity, then one tick of motion.
         tick_expr = "
-            pos = pos + vel;
             vel.z = vel.z - 0.37;
+            pos = pos + vel;
         "
 
-        // Respawn-in-place when the drop lands. emit_pos.z is the
-        // bucket-anchor z (the spawning instance's origin); a drop dies
-        // when its z falls to or below that level.
+        // Respawn in place when the drop lands (emit_pos.z is the
+        // effect's z).
         kill_expr = "step(pos.z, emit_pos.z)"
     }
 }

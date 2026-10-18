@@ -28,7 +28,6 @@
 #include "editor.h"
 
 #include "debugui.h"
-#include "editoradapters.h"
 #include "editorcommands.h"
 #include "editorfonts.h"
 #include "editoricons.h"
@@ -38,9 +37,9 @@
 #include "editorplatform.h"
 #include "editorprefs.h"
 #include "editorstub.h"
-#include "iobject.h"
 #include "logging.h"
 #include "mappane.h"
+#include "refl.h"
 #include "maprenderer.h"
 #include "player.h"
 #include "object.h"
@@ -164,14 +163,6 @@ TObjectInstance* SelectionPrimary()
 {
     return g_selection.empty() ? nullptr
                                : safe_cast<TObjectInstance>(g_selection.back());
-}
-// IObject* view of the primary selection, for code paths that still drive
-// off IReflection (property panel, schema-based UI). Falls through the
-// adapter cache so the underlying TObjectInstance is wrapped as needed.
-IObject* SelectionPrimaryAsObject()
-{
-    TObjectInstance* oi = SelectionPrimary();
-    return oi ? EditorAdapters().For(oi) : nullptr;
 }
 bool IsSelected(int32_t mapindex)
 {
@@ -387,7 +378,6 @@ ImGuizmo::OPERATION ToolToGizmoOp(EEditorTool t)
     return ToolDef(t).gizmo_op;
 }
 
-// Pick the right category icon for an editor IObject. Sectors get the
 // Icon for a TObjectInstance: dispatched by ObjClass().
 TTextureHandle IconForInstance(TObjectInstance* oi)
 {
@@ -743,110 +733,84 @@ void DrawScenePanel()
     ImGui::End();
 }
 
-// Render one IReflection property row. Reads the value via the schema,
-// shows a type-appropriate widget, and writes back when edited (unless
-// the property is ReadOnly).
-void DrawPropertyRow(IObject* obj, const IReflection& r, const SPropertyDesc& p)
+// Render one annotated property row (refl.h). Reads the value through
+// the registry, shows a type-appropriate widget, and writes back when
+// edited (unless the property is read-only).
+void DrawPropertyRow(TNodeInst* node, const refl::SType& type, const refl::SProp& p)
 {
-    if (HasFlag(p.flags, EPropertyFlag::Hidden)) return;
+    if (!p.visible_in_editor) return;
 
-    const bool read_only = HasFlag(p.flags, EPropertyFlag::ReadOnly);
-    SPropertyValue v;
-    r.GetValue(obj, p, v);
+    const bool read_only = p.read_only;
+    SPropValue v;
+    refl::Get(type, node, p.id, v);
 
-    ImGui::PushID(p.name);
+    ImGui::PushID(int(p.id));
     ImGui::TableNextRow();
     ImGui::TableSetColumnIndex(0);
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(p.label && *p.label ? p.label : p.name);
+    ImGui::TextUnformatted(p.name);
+    if (p.desc && *p.desc && ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", p.desc);
 
     ImGui::TableSetColumnIndex(1);
     ImGui::SetNextItemWidth(-FLT_MIN);
 
     if (read_only) ImGui::BeginDisabled();
 
+    auto commit = [&](const SPropValue& nv) {
+        if (read_only) return;
+        refl::Set(type, node, p.id, nv);
+        EditorMarkDirty();
+    };
+
     switch (p.type) {
-        case EPropertyType::Bool: {
-            bool b = std::get_if<bool>(&v) ? std::get<bool>(v) : false;
-            if (ImGui::Checkbox("##v", &b) && !read_only) {
-                v = b; r.SetValue(obj, p, v); EditorMarkDirty();
-            }
+        case EPropType::Bool:
+        case EPropType::Trigger: {
+            bool b = v.b;
+            if (ImGui::Checkbox("##v", &b)) commit(SPropValue::Bool(b));
             break;
         }
-        case EPropertyType::Int: {
-            int n = std::get_if<int64_t>(&v) ? int(std::get<int64_t>(v)) : 0;
-            if (ImGui::DragInt("##v", &n, 1.0f,
-                               int(p.min_hint), int(p.max_hint)) && !read_only) {
-                v = int64_t(n); r.SetValue(obj, p, v); EditorMarkDirty();
-            }
+        case EPropType::Int:
+        case EPropType::Ref: {
+            int n = v.i;
+            if (ImGui::DragInt("##v", &n, 1.0f)) commit(SPropValue::Int(n));
             break;
         }
-        case EPropertyType::Float: {
-            float f = std::get_if<double>(&v) ? float(std::get<double>(v)) : 0.0f;
-            if (ImGui::DragFloat("##v", &f, 0.1f,
-                                 float(p.min_hint), float(p.max_hint)) && !read_only) {
-                v = double(f); r.SetValue(obj, p, v); EditorMarkDirty();
-            }
+        case EPropType::Float: {
+            float f = v.f;
+            if (ImGui::DragFloat("##v", &f, 0.1f)) commit(SPropValue::Float(f));
             break;
         }
-        case EPropertyType::String: {
-            std::string s = std::get_if<std::string>(&v) ? std::get<std::string>(v) : std::string();
+        case EPropType::String: {
             char buf[256];
-            std::snprintf(buf, sizeof(buf), "%s", s.c_str());
+            std::snprintf(buf, sizeof(buf), "%.*s", int(v.str.size()), v.str.data());
             if (ImGui::InputText("##v", buf, sizeof(buf),
-                                 read_only ? ImGuiInputTextFlags_ReadOnly : 0)
-                && !read_only)
-            {
-                v = std::string(buf); r.SetValue(obj, p, v); EditorMarkDirty();
-            }
+                                 read_only ? ImGuiInputTextFlags_ReadOnly : 0))
+                commit(SPropValue::String(buf));
             break;
         }
-        case EPropertyType::Vec3Int: {
-            SVec3i iv = std::get_if<SVec3i>(&v) ? std::get<SVec3i>(v) : SVec3i{};
-            int xyz[3] = { iv.x, iv.y, iv.z };
-            if (ImGui::DragInt3("##v", xyz, 1.0f) && !read_only) {
-                v = SVec3i{ xyz[0], xyz[1], xyz[2] }; r.SetValue(obj, p, v); EditorMarkDirty();
-            }
+        case EPropType::Vec3: {
+            float xyz[3] = { v.v3[0], v.v3[1], v.v3[2] };
+            if (ImGui::DragFloat3("##v", xyz, 1.0f)) commit(SPropValue::Vec3(xyz[0], xyz[1], xyz[2]));
             break;
         }
-        case EPropertyType::Vec3Float: {
-            SVec3f fv = std::get_if<SVec3f>(&v) ? std::get<SVec3f>(v) : SVec3f{};
-            float xyz[3] = { fv.x, fv.y, fv.z };
-            if (ImGui::DragFloat3("##v", xyz, 0.1f) && !read_only) {
-                v = SVec3f{ xyz[0], xyz[1], xyz[2] }; r.SetValue(obj, p, v); EditorMarkDirty();
-            }
+        case EPropType::Color: {
+            float rgba[4] = { v.c4[0], v.c4[1], v.c4[2], v.c4[3] };
+            if (ImGui::ColorEdit4("##v", rgba)) commit(SPropValue::Color(rgba[0], rgba[1], rgba[2], rgba[3]));
             break;
         }
-        case EPropertyType::Color: {
-            SColor4f c = std::get_if<SColor4f>(&v) ? std::get<SColor4f>(v) : SColor4f{};
-            float rgba[4] = { c.r, c.g, c.b, c.a };
-            if (ImGui::ColorEdit4("##v", rgba) && !read_only) {
-                v = SColor4f{ rgba[0], rgba[1], rgba[2], rgba[3] }; r.SetValue(obj, p, v); EditorMarkDirty();
-            }
-            break;
-        }
-        case EPropertyType::Enum: {
-            int cur = std::get_if<int64_t>(&v) ? int(std::get<int64_t>(v)) : 0;
-            const char* preview = "(?)";
-            for (int i = 0; i < p.enum_count; ++i)
-                if (p.enum_options[i].value == cur) { preview = p.enum_options[i].label; break; }
+        case EPropType::Enum: {
+            const char* preview = refl::EnumName(p, v.i);
+            if (!*preview) preview = "(?)";
             if (ImGui::BeginCombo("##v", preview)) {
-                for (int i = 0; i < p.enum_count; ++i) {
-                    const bool sel = (p.enum_options[i].value == cur);
-                    if (ImGui::Selectable(p.enum_options[i].label, sel) && !read_only) {
-                        v = int64_t(p.enum_options[i].value);
-                        r.SetValue(obj, p, v); EditorMarkDirty();
-                    }
+                for (int32_t i = 0; i < p.option_count; ++i) {
+                    const bool sel = (p.options[i].value == v.i);
+                    if (ImGui::Selectable(p.options[i].name, sel))
+                        commit(SPropValue::Enum(p.options[i].value));
                     if (sel) ImGui::SetItemDefaultFocus();
                 }
                 ImGui::EndCombo();
             }
-            break;
-        }
-        case EPropertyType::ObjectRef: {
-            IObject* ref = std::get_if<IObject*>(&v) ? std::get<IObject*>(v) : nullptr;
-            ImGui::TextUnformatted(ref ? ref->GetName() : "(null)");
-            // TODO: drag-target / picker; selection swap on click.
             break;
         }
     }
@@ -856,26 +820,22 @@ void DrawPropertyRow(IObject* obj, const IReflection& r, const SPropertyDesc& p)
     // Dirty-tracking: lock the resolver while the user is actively
     // dragging the widget so we don't generate one undo entry per
     // pixel. MarkDirty is idempotent -- the first call snapshots the
-    // object, the rest are no-ops. Unlock at drag end fires Resolve,
-    // which diffs and pushes a single entry per changed object.
+    // node, the rest are no-ops. Unlock at drag end fires Resolve,
+    // which diffs and pushes a single entry per changed node.
     if (!read_only) {
         if (ImGui::IsItemActivated()) {
-            EditorUndo::MarkDirty(obj);
+            EditorUndo::MarkDirty(node);
             EditorUndo::LockResolver();
-            EditorUndo::SetOperationName(
-                p.label && *p.label ? p.label : (p.name ? p.name : "edit"));
+            EditorUndo::SetOperationName(p.name);
         }
         if (ImGui::IsItemDeactivatedAfterEdit()) {
             EditorUndo::UnlockResolver();
         }
-        // For widgets that don't go through Activated/Deactivated
-        // (Checkbox, Combo selection, etc.) make sure a direct value
-        // change still gets snapshotted, and also stamp a name for
-        // the upcoming end-of-frame resolve.
+        // Widgets that don't go through Activated/Deactivated (Checkbox,
+        // Combo selection) still get snapshotted on a direct value change.
         if (ImGui::IsItemEdited()) {
-            EditorUndo::MarkDirty(obj);
-            EditorUndo::SetOperationName(
-                p.label && *p.label ? p.label : (p.name ? p.name : "edit"));
+            EditorUndo::MarkDirty(node);
+            EditorUndo::SetOperationName(p.name);
         }
     }
     ImGui::PopID();
@@ -884,27 +844,32 @@ void DrawPropertyRow(IObject* obj, const IReflection& r, const SPropertyDesc& p)
 void DrawPropertiesPanel()
 {
     if (ImGui::Begin("Properties")) {
-        IObject* primary = SelectionPrimaryAsObject();
-        if (!primary) {
+        TObjectInstance* primary = SelectionPrimary();
+        const refl::SType* type = primary ? refl::Of(*primary) : nullptr;
+        if (!primary || !type) {
             ImGui::TextDisabled("(no selection)");
         } else {
             // Large category icon + name/class header.
-            const TTextureHandle icon = IconForInstance(SelectionPrimary());
+            const TTextureHandle icon = IconForInstance(primary);
             const float sz = 64.0f;
             if (Renderer && icon != kInvalidTexture) {
                 ImGui::Image((ImTextureID)Renderer->TextureImGuiId(icon), ImVec2(sz, sz));
                 ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
             }
-            const IReflection& r = primary->GetRefl();
             ImGui::BeginGroup();
             ImGui::TextUnformatted(primary->GetName());
-            ImGui::TextDisabled("[%s]", r.GetClassName());
+            ImGui::TextDisabled("[%s]", type->name);
             ImGui::EndGroup();
             ImGui::Separator();
 
-            const int32_t n = r.NumProperties();
-            if (n <= 0) {
-                ImGui::TextDisabled("(no reflected properties)");
+            // Base properties first (node transform), then the class's own.
+            std::vector<const refl::SType*> chain;
+            for (const refl::SType* t = type; t; t = t->base) chain.push_back(t);
+            int32_t total = 0;
+            for (const refl::SType* t : chain) total += t->prop_count;
+
+            if (total <= 0) {
+                ImGui::TextDisabled("(no annotated properties)");
             } else if (ImGui::BeginTable("##props", 2,
                           ImGuiTableFlags_BordersInnerV |
                           ImGuiTableFlags_Resizable |
@@ -912,8 +877,9 @@ void DrawPropertiesPanel()
             {
                 ImGui::TableSetupColumn("Name",  ImGuiTableColumnFlags_WidthStretch, 0.40f);
                 ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.60f);
-                for (int32_t i = 0; i < n; ++i)
-                    DrawPropertyRow(primary, r, r.GetProperty(i));
+                for (auto it = chain.rbegin(); it != chain.rend(); ++it)
+                    for (int32_t i = 0; i < (*it)->prop_count; ++i)
+                        DrawPropertyRow(primary, *type, (*it)->props[i]);
                 ImGui::EndTable();
             }
         }
@@ -1130,7 +1096,7 @@ void DrawGameViewPanel()
                             for (int32_t mi : g_selection) {
                                 TObjectInstance* sel = safe_cast<TObjectInstance>(mi);
                                 if (!sel) continue;
-                                EditorUndo::MarkDirty(EditorAdapters().For(sel));
+                                EditorUndo::MarkDirty(sel);
                                 if (sel != oi)
                                     s_drag_others.push_back({ mi, sel->Pos() });
                             }
@@ -1364,34 +1330,6 @@ void DrawGameViewPanel()
     }
     ImGui::End();
     ImGui::PopStyleVar();
-}
-
-// ---------------------------------------------------------------------------
-// World position lookup for selection
-// ---------------------------------------------------------------------------
-//
-// IObject doesn't expose a world position directly; only the editor's
-// adapters know how to read one out of the underlying game object. The
-// Frame command uses dynamic_cast since both adapter types live here.
-
-bool ObjectWorldPos(IObject* obj, int32_t& level, int32_t& wx, int32_t& wy, int32_t& wz)
-{
-    if (!obj) return false;
-    if (auto* ia = dynamic_cast<TInstanceAdapter*>(obj); ia && ia->Instance()) {
-        const S3DPoint& p = ia->Instance()->Pos();
-        level = ia->Instance()->GetLevel();
-        wx = p.x; wy = p.y; wz = p.z;
-        return true;
-    }
-    if (auto* sa = dynamic_cast<TSectorAdapter*>(obj); sa && sa->Sector()) {
-        TSector* s = sa->Sector();
-        level = s->SectorLevel();
-        wx = s->SectorX() * SECTORWIDTH  + SECTORWIDTH  / 2;
-        wy = s->SectorY() * SECTORHEIGHT + SECTORHEIGHT / 2;
-        wz = 0;
-        return true;
-    }
-    return false;
 }
 
 // Editor color tweaks. Applied once -- ImGui's style is global and our
