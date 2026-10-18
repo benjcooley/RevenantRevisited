@@ -72,6 +72,7 @@ class TAnimImagery : public TObjectImagery
         // Creates an animtor for the given object
     bool NeedsAnimator(const TObjectInstance* oi) const override;
       // Returns whether or not an animator is necessary
+    std::unique_ptr<TVisualComponent> NewVisualComponent() override;
 };
 
 class TAnimAnimator : public TObjectAnimator

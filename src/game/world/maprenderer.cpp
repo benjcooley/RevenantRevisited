@@ -9,9 +9,10 @@
 #include "game/world/maprenderer_internal.h"
 
 #include "game/imagery/animimage.h"
-#include "engine/assets/animimagebody.h"
 #include "game/world/area.h"
 #include "game/imagery/3dimage.h"
+#include "game/imagery/visual2d.h"
+#include "game/imagery/visual3d.h"
 #include "game/effects/staticpartsysprofiles.h"
 #include "engine/assets/bitmap.h"
 #include "engine/assets/bitmapdata.h"
@@ -857,29 +858,6 @@ static bool UploadTileBitmap(PTBitmap bm,
     return true;
 }
 
-// The still bitmap a 2D (animation) imagery shows for a state, or nullptr
-// when the imagery isn't 2D or the state is out of range.
-static TBitmap* StateStillBitmap(TObjectImagery* img, int32_t state)
-{
-    SImageryHeader* hdr = img ? img->GetHeader() : nullptr;
-    SImageryBody* body = img ? img->GetBody() : nullptr;
-    if (!hdr || !body || hdr->imageryid != OBJIMAGE_ANIMATION)
-        return nullptr;
-    if (state < 0 || state >= hdr->numstates)
-        return nullptr;
-    return static_cast<TBitmap*>(reinterpret_cast<SAnimImageryBody*>(body)->states[state].still);
-}
-
-// The animation is a separate layer, not a replacement for the state's still.
-// TAnimAnimator::Animate draws this at animreg minus the frame bitmap reg.
-static TBitmap* StateAnimationBitmap(TObjectImagery* img, int32_t state, int32_t frame)
-{
-    auto* anim_img = dynamic_cast<TAnimImagery*>(img);
-    if (!anim_img || state < 0 || state >= anim_img->NumStates() || frame < 0) return nullptr;
-    PTAnimation anim = anim_img->GetAnimation(state);
-    return anim ? anim->GetFrame(frame) : nullptr;
-}
-
 static bool AnimationLayerVisible(TObjectInstance* oi)
 {
     if (!oi) return false;
@@ -1101,16 +1079,12 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
     if (kind != ESectorDrawableKind::Billboard && Renderer &&
         !oi->GetComponent<TParticleEffectComponent>())
     {
-        if (auto* visual = oi->GetComponent<TFlipbookBillboardComponent>())
-            if (visual->ReplacesDefaultVisual())
-            {
-                if (visual->Texture() != kInvalidTexture)
-                {
-                    visual->Submit(*Renderer, *oi);
-                    ++stats.draw_submitted;
-                }
-                return;
-            }
+        if (TVisualComponent* replacement = ReplacingVisual(*oi->Node()))
+        {
+            replacement->Submit(*Renderer);
+            ++stats.draw_submitted;
+            return;
+        }
     }
 
     if (kind == ESectorDrawableKind::Tile)
@@ -1259,21 +1233,10 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         if (oi->GetComponent<TParticleEffectComponent>())
             return;
 
-        auto* flipbook = oi->GetComponent<TFlipbookBillboardComponent>();
-        if (!flipbook || !Renderer)
+        TVisualComponent* billboard = visual.Get();
+        if (!billboard || !Renderer)
             return;
-        if (flipbook->Texture() == kInvalidTexture)
-            return;
-
-        static bool logged_billboard_submit = false;
-        if (!logged_billboard_submit)
-        {
-            logged_billboard_submit = true;
-            log_info("[component-render] submit billboard via fx inst=%p class='%s' type='%s' debug=%d texture=%u",
-                     (void*)oi, oi->GetClassName(), oi->GetTypeName(),
-                     int(flipbook->DebugMode()), flipbook->Texture());
-        }
-        flipbook->Submit(*Renderer, *oi);
+        billboard->Submit(*Renderer);
         ++stats.draw_submitted;
         return;
     }
@@ -1283,9 +1246,9 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         if (!ctx.show_meshes || !ctx.mesh_assets) return;
         if (!ctx.show_gizmos && (oi->IsLight() || oi->ObjClass() == OBJCLASS_HELPER)) return;
         if ((uint32_t)asset_idx >= (uint32_t)ctx.mesh_assets->size()) { ++stats.mesh_skipped; return; }
-        TObjectImagery* img = oi->GetImagery();
-        T3DImagery* meshimg = dynamic_cast<T3DImagery*>(img);
-        if (!meshimg) { ++stats.mesh_skipped; return; }
+        T3DVisualComponent* mesh = T3DVisualComponent::Of(oi);
+        if (!mesh) { ++stats.mesh_skipped; return; }
+        T3DImagery* meshimg = &mesh->Imagery();
 
         if (oi->ObjId()==0xad99fdf2u && (state!=0 || !meshimg->HasRetailMPAppearStartProfile()))
         { ++stats.mesh_skipped; return; } // exact profile fails closed, no opaque substitute
@@ -1314,7 +1277,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         // The animator says how opaque the object draws this frame. A
         // character that is OF_INVISIBLE, or faded below retail's threshold,
         // isn't drawn (TCharAnimator::DrawAlpha).
-        T3DAnimator* d3 = dynamic_cast<T3DAnimator*>(oi->GetAnimator());
+        T3DAnimator* d3 = mesh->Animator();
         float warp_uv[2] = {};
         const bool warp_atlas = d3 && d3->WarpAtlasOffset((*ctx.mesh_assets)[asset_idx].objnum,warp_uv);
         if (retail_warp::AssetPath(oi->ObjId()) && !warp_atlas)
@@ -1333,7 +1296,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             d3 ? d3->GetObject(asset.objnum) : nullptr, asset.texture_index,
             asset.texslot >= 0 ? asset.texslot : asset.texture_index + 1, oi->GetFrame(),
             Renderer->WhiteTextureHandle());
-        if (auto* animator = dynamic_cast<T3DAnimator*>(oi->GetAnimator()))
+        if (T3DAnimator* animator = d3)
             if (animator->PartSysOwnsObject(asset.objnum))
             {
                 // Retail partsys hides the shared prototype between draws.
@@ -1420,7 +1383,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         }
 
         uint32_t authored_blend = 0;
-        const auto* authored_animator = dynamic_cast<T3DAnimator*>(oi->GetAnimator());
+        const T3DAnimator* authored_animator = d3;
         const bool gold_flare = authored_animator &&
             authored_animator->GoldBaseMeshBlend(asset.objnum, authored_blend);
         const bool combat_flash_base = authored_animator &&
@@ -1608,9 +1571,8 @@ void TMapRenderer::Impl::submitEquipment(const SMapRenderContext& ctx, SMapRende
     auto* animator = dynamic_cast<TCharAnimator*>(oi.GetAnimator());
     if (!animator || animator->EquipAttachments().empty())
         return;
-    if (const auto* visual = oi.GetComponent<TFlipbookBillboardComponent>())
-        if (visual->ReplacesDefaultVisual())
-            return;
+    if (ReplacingVisual(*oi.Node()))
+        return;
     const float draw_alpha = animator->DrawAlpha();
     if (draw_alpha <= 0.0f)
         return;
@@ -1625,7 +1587,8 @@ void TMapRenderer::Impl::submitEquipment(const SMapRenderContext& ctx, SMapRende
     {
         TObjectInstance* item = attachment.item.Get();
         const S3DAnimObj* bone = animator->GetObject(attachment.bone);
-        auto* mesh = item ? dynamic_cast<T3DImagery*>(item->GetImagery()) : nullptr;
+        T3DVisualComponent* item_visual = T3DVisualComponent::Of(item);
+        T3DImagery* mesh = item_visual ? &item_visual->Imagery() : nullptr;
         if (!bone || !mesh)
             continue;
 
@@ -2473,10 +2436,10 @@ static void CountExistingAssetRefForObject(TImpl& s, TObjectInstance* oi)
         return;
 
     const int32_t st = oi->GetState();
-    if (hdr->imageryid == OBJIMAGE_MESH3D)
+    if (T3DVisualComponent* mesh = T3DVisualComponent::Of(oi))
     {
-        T3DImagery* meshimg = dynamic_cast<T3DImagery*>(img);
-        if (!meshimg || st < 0 || st >= hdr->numstates)
+        T3DImagery* meshimg = &mesh->Imagery();
+        if (st < 0 || st >= hdr->numstates)
             return;
 
         for (SSectorMeshAsset& asset : s.sectorMeshAsset)
@@ -2493,10 +2456,11 @@ static void CountExistingAssetRefForObject(TImpl& s, TObjectInstance* oi)
         return;
     }
 
-    if (hdr->imageryid != OBJIMAGE_ANIMATION) return;
-    PTBitmap still = oi->ObjClass() != OBJCLASS_EFFECT ? StateStillBitmap(img, st) : nullptr;
-    PTBitmap frame = (oi->ObjClass() == OBJCLASS_EFFECT || oi->IsAnimated())
-        ? StateAnimationBitmap(img, st, oi->GetFrame()) : nullptr;
+    T2DVisualComponent* sprite = T2DVisualComponent::Of(oi);
+    if (!sprite) return;
+    TBitmap* still = oi->ObjClass() != OBJCLASS_EFFECT ? sprite->Still(st) : nullptr;
+    TBitmap* frame = (oi->ObjClass() == OBJCLASS_EFFECT || oi->IsAnimated())
+        ? sprite->AnimationFrame(st, oi->GetFrame()) : nullptr;
     for (SSectorTileTex& tex : s.sectorTileTex)
         if (tex.bm_key == still || tex.bm_key == frame)
             ++tex.ref_count;
@@ -2635,48 +2599,47 @@ void TMapRenderer::RebuildForCurrentMap()
                 continue;
             }
             const int32_t st = oi->GetState();
-            if (T3DImagery* meshimg = dynamic_cast<T3DImagery*>(img))
+            T3DVisualComponent* mesh = T3DVisualComponent::Of(oi);
+            T2DVisualComponent* sprite = T2DVisualComponent::Of(oi);
+            if (mesh)
             {
-                meshimg->AttachAnimatorComponents(oi);
+                mesh->EnsureAnimatorComponents();
                 if (oi->NeedsAnimator() && !oi->HasAnimator())
                     oi->OnScreen();
                 if (!oi->IsAnimated() && oi->HasAnimator())
                     oi->Animate(false);
             }
 
-            TFlipbookBillboardComponent* flipbook = oi->GetComponent<TFlipbookBillboardComponent>();
-            if (flipbook)
+            // A self-drawing visual (an effect's billboard) gets a record of
+            // its own; one that replaces the default visual is the object's
+            // whole picture.
+            bool replaced = false;
+            for (const auto& component : oi->Node()->Components())
             {
-                static bool logged_billboard_build = false;
-                if (!logged_billboard_build)
-                {
-                    logged_billboard_build = true;
-                    log_info("[component-render] build billboard inst=%p class='%s' type='%s' debug=%d texture=%u size=%.1fx%.1f",
-                             (void*)oi, oi->GetClassName(), oi->GetTypeName(),
-                             int(flipbook->DebugMode()),
-                             flipbook->Texture(),
-                             flipbook->Width(), flipbook->Height());
-                }
-                SSectorDrawableInst billboard = {};
-                billboard.kind = ESectorDrawableKind::Billboard;
-                billboard.world_pos = IntPos(oi);
-                billboard.state = st;
-                billboard.frame = oi->GetFrame();
-                billboard.src = TSafeRef<>(oi);
-                billboard.debug_sector_level = L.lvl;
-                billboard.debug_sector_x = L.sx;
-                billboard.debug_sector_y = L.sy;
-                billboard.debug_sector_slot = i;
-                draw_work.push_back(billboard);
-                if (flipbook->ReplacesDefaultVisual())
+                auto* billboard = dynamic_cast<TVisualComponent*>(component.get());
+                if (!billboard || billboard->Kind() != EVisualKind::Billboard)
                     continue;
+                SSectorDrawableInst record = {};
+                record.kind = ESectorDrawableKind::Billboard;
+                record.world_pos = IntPos(oi);
+                record.state = st;
+                record.frame = oi->GetFrame();
+                record.src = TSafeRef<>(oi);
+                record.visual.Set(billboard);
+                record.debug_sector_level = L.lvl;
+                record.debug_sector_x = L.sx;
+                record.debug_sector_y = L.sy;
+                record.debug_sector_slot = i;
+                draw_work.push_back(record);
+                replaced |= billboard->ReplacesDefaultVisual();
             }
+            if (replaced)
+                continue;
 
-            if (hdr->imageryid == OBJIMAGE_MESH3D)
+            if (mesh)
             {
                 ++total_mesh_objs;
-                T3DImagery* meshimg = dynamic_cast<T3DImagery*>(img);
-                if (!meshimg) continue;
+                T3DImagery* meshimg = &mesh->Imagery();
                 if (st < 0 || st >= hdr->numstates) {
                     ++bad_state;
                     if (oi->IsCharacter() && char_no_drawable_logged < 64)
@@ -2849,10 +2812,10 @@ void TMapRenderer::RebuildForCurrentMap()
                 ++char_no_drawable_logged;
             }
 
-            if (hdr->imageryid == OBJIMAGE_ANIMATION &&
+            if (sprite &&
                 (oi->ObjClass() == OBJCLASS_EFFECT || oi->IsAnimated()))
             {
-                PTBitmap bm = StateAnimationBitmap(img, st, oi->GetFrame());
+                TBitmap* bm = sprite->AnimationFrame(st, oi->GetFrame());
                 const int32_t tex_idx = bm
                     ? CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st)
                     : -1;
@@ -2895,9 +2858,9 @@ void TMapRenderer::RebuildForCurrentMap()
             // objects are filtered per frame in Submit, as retail filters
             // them per update.
             ++total_tiles;
-            if (hdr->imageryid != OBJIMAGE_ANIMATION) { ++non_2d; continue; }
+            if (!sprite) { ++non_2d; continue; }
             if (st < 0 || st >= hdr->numstates) { ++bad_state; continue; }
-            TBitmap* bm = StateStillBitmap(img, st);
+            TBitmap* bm = sprite->Still(st);
             if (!bm) { ++no_still; continue; }
             int32_t tex_idx = FindSectorBitmap(s.sectorTileTex, bm);
             if (tex_idx < 0)
@@ -3265,7 +3228,8 @@ void TMapRenderer::RenderFrame()
         {
             TObjectImagery* img = oi->GetImagery();
             const int32_t st = oi->GetState();
-            PTBitmap bm = StateAnimationBitmap(img, st, oi->GetFrame());
+            T2DVisualComponent* sprite = T2DVisualComponent::Of(oi);
+            TBitmap* bm = sprite ? sprite->AnimationFrame(st, oi->GetFrame()) : nullptr;
             const int32_t tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st);
             inst.asset_idx = tex_idx;
             if (tex_idx >= 0)
@@ -3287,7 +3251,8 @@ void TMapRenderer::RenderFrame()
                 // state's still, as the imagery draw does in retail.
                 if (st != old_state)
                 {
-                    TBitmap* bm = StateStillBitmap(img, st);
+                    T2DVisualComponent* sprite = T2DVisualComponent::Of(oi);
+                    TBitmap* bm = sprite ? sprite->Still(st) : nullptr;
                     int32_t tex_idx = bm ? FindSectorBitmap(s.sectorTileTex, bm) : -1;
                     if (bm && tex_idx < 0)
                         tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st);
@@ -3697,10 +3662,9 @@ void TMapRenderer::RenderFrame()
         // record; ordinary meshes and particle-component owners keep their path.
         if (TObjectInstance* owner = s.sectorDrawInst[idx].src.Get())
             if (!owner->GetComponent<TParticleEffectComponent>())
-                if (auto* visual = owner->GetComponent<TFlipbookBillboardComponent>())
-                    if (visual->ReplacesDefaultVisual() &&
-                        !submitted_replacement_owners.insert(owner).second)
-                        continue;
+                if (ReplacingVisual(*owner->Node()) &&
+                    !submitted_replacement_owners.insert(owner).second)
+                    continue;
         // obj_id = drawable index + 1 (0 reserved for "no object").
         // OR editor-state flag bits into obj_id for any selected
         // drawable. We compare by map index (the universal id all

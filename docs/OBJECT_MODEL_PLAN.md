@@ -220,13 +220,44 @@ radius / multiplier setters keep both in step as retail's object setters did.
 A prefab node can carry one too. Props: offset, color, intensity,
 multiplier, flags.
 
-### Phase 3d: render components (next)
+### Phase 3d: visual components (in progress)
 
-A `TRenderComponent` base (engine) that the renderer submits through, with
-the sprite (2D imagery) and mesh (I3D) components deriving from it; the map
-renderer walks sector roots and asks each node's render components to
-submit instead of switching on imagery type. This is what unparks the
-imagery and lighting files listed in docs/SOURCE_LAYOUT.md.
+What a node shows is a component, as its light is. `TVisualComponent`
+(engine, `src/engine/render/visualcomponent.h`) is the base the map
+renderer walks: a kind (`Sprite`, `Mesh`, `Billboard`), whether the
+component is the node's whole picture (`ReplacesDefaultVisual`), and a
+`Submit(TRenderer&)` for components that fill the renderer's queues
+themselves. The two imagery-born visuals derive from it in the game:
+
+- `T2DVisualComponent` (`src/game/imagery/visual2d.{h,cpp}`) wraps the 2D
+  `TAnimImagery`: the still and the animation-layer frame for a state, the
+  registration point and world box. The Classic software path (DrawUnlit /
+  DrawLit / DrawSelected / GetZ / AlwaysOnTop) keeps calling the imagery
+  through TObjectInstance for now; it moves onto this component next.
+- `T3DVisualComponent` (`src/game/imagery/visual3d.{h,cpp}`) wraps the
+  `T3DImagery`: the mesh asset the renderer registers submeshes from, the
+  authored animator (`Animator()`, a `T3DAnimator` while the playhead still
+  lives on the object), and `EnsureAnimatorComponents()` which attaches the
+  retail animator's components once per object.
+- `TFlipbookBillboardComponent` rebases onto the base (kind `Billboard`);
+  its many effect subclasses are untouched.
+
+Creation: `TObjectImagery::NewVisualComponent()` is a virtual the two
+imagery classes implement; `TObjectInstance` attaches the result when it
+takes its imagery, in both constructors, and reaches it with `Visual()`
+through a `TSafeComponentRef`, as `Light()` does. A node can carry more than
+one visual (a flame's billboard sits next to its mesh); the renderer walks
+the node's components, skips the imagery-born visual when another one
+replaces it, and never asks what kind of imagery an object has.
+
+Inch 1 (this commit): base + two components + creation + the map
+renderer's classification and submit paths reading through them (the
+`T3DImagery` / `TAnimImagery` / `T3DAnimator` dynamic_casts in
+maprenderer.cpp go). Inch 2: the Classic software draw path through
+`T2DVisualComponent`; `TParticleEffectComponent` onto the base; the
+billboard's `Submit` loses its instance parameter. Then the playhead
+(state / frame) moves into the animator component, and the imagery and
+3D-scene files unpark into the engine (docs/SOURCE_LAYOUT.md).
 
 ### Phase 4: native packed sector format
 

@@ -6,6 +6,7 @@
 
 #include "game/app/revenant.h"
 #include "game/imagery/animimage.h"
+#include "game/imagery/visual2d.h"
 #include "engine/render/graphics.h"
 #include "game/object/animation.h"
 #include "engine/assets/bitmap.h"
@@ -300,6 +301,11 @@ bool TAnimImagery::SaveBitmap(char *path, int32_t state, bool zbuffer)
 // carried or on the map, and anything whose state animates. The 1998 test
 // gave a still item on the map none, so a dead monster's bread never flew to
 // the floor (TObjectAnimator::Toss) as retail's does.
+std::unique_ptr<TVisualComponent> TAnimImagery::NewVisualComponent()
+{
+    return std::make_unique<T2DVisualComponent>(*this);
+}
+
 bool TAnimImagery::NeedsAnimator(const TObjectInstance* oi) const
 {
     if (!oi)

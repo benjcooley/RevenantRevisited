@@ -155,6 +155,8 @@ class TNode final : public TSafeObjectBase<TNode>
         // goes. Re-entrant: a nested call finds nothing left to do.
     [[nodiscard]] TComponent* GetComponent(int32_t component_slot) const;
     [[nodiscard]] int32_t NumComponents() const { return int32_t(components_.size()); }
+    [[nodiscard]] const std::vector<std::unique_ptr<TComponent>>& Components() const { return components_; }
+        // Every slot, in slot order; a removed slot is a null entry
     template <class T>
     [[nodiscard]] T* GetComponent() const
     {

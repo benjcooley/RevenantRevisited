@@ -54,6 +54,7 @@ uint32_t GenerateUniqueID();
 
 _CLASSDEF(TObjectAnimator)
 class TLightComponent;
+class TVisualComponent;
 
 // Forward-declared free function used by TObjectInstance::SafeRefLookup
 // (and by TSafeRef<TObjectInstance>) to avoid pulling the mappane /
@@ -1215,6 +1216,12 @@ class TObjectInstance : public TComponent
         // The light component, or nullptr
     TLightComponent& EnsureLight();
         // The light component, added if the object has none yet
+
+  // Visual: the component the object's imagery draws through
+  // (T2DVisualComponent / T3DVisualComponent), attached when the object
+  // takes its imagery. An effect may add further visuals next to it.
+    [[nodiscard]] TVisualComponent* Visual() const;
+        // The imagery-born visual, or nullptr (no imagery, or none to draw)
     int32_t GetShadow() { return shadow; }
       // Returns shadow index
     void SetShadow(int32_t index) { shadow = index; }
@@ -1391,6 +1398,11 @@ class TObjectInstance : public TComponent
 
   // Light
     TSafeComponentRef<TLightComponent> light_;   // the light component, when OF_LIGHT
+
+  // Visual
+    TSafeComponentRef<TVisualComponent> visual_; // the imagery-born visual
+    void AttachVisual();
+        // Adds the imagery's visual component, in the constructors
 
   // Statistics
     TStatisticList stats;       // Stats for object

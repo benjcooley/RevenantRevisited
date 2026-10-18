@@ -1403,6 +1403,12 @@ bool SaveBlendState()    { return true; }
 bool SetBlendState()     { return true; }
 bool RestoreBlendState() { return true; }
 
+void TFlipbookBillboardComponent::Submit(TRenderer& renderer) const
+{
+    if (const TObjectInstance* owner = OwnerInstance())
+        Submit(renderer, *owner);
+}
+
 void TFlipbookBillboardComponent::Submit(TRenderer& renderer, const TObjectInstance& inst) const
 {
     if (texture_handle == kInvalidTexture)

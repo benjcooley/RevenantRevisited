@@ -45,6 +45,7 @@ _CLASSDEF(TSpellBlock)
 #include "game/effects/firewindcore.h"
 #include "game/effects/missilestate.h"
 #include "engine/render/renderer.h"   // EFxDebugMode, SBillboardDrawItem, TRenderer
+#include "engine/render/visualcomponent.h"
 
 // ***********
 // * TEffect *
@@ -145,10 +146,12 @@ class TEffect : public TObjectInstance
 // Diagnostic ladder is per-instance EFxDebugMode; the shader branches per
 // PHASE1_SPINE.md §6 so the same pipeline serves Normal / SolidColor /
 // FullTexture / CurrentFrame.
-class TFlipbookBillboardComponent : public TComponent
+class TFlipbookBillboardComponent : public TVisualComponent
 {
   public:
     [[nodiscard]] const char* ComponentName() const override { return "flipbook_billboard"; }
+    [[nodiscard]] EVisualKind Kind() const override { return EVisualKind::Billboard; }
+    [[nodiscard]] bool ReplacesDefaultVisual() const override { return replaces_default_visual; }
 
     void Configure(TTextureHandle texture, int32_t texture_width, int32_t texture_height,
                    int32_t columns, int32_t rows, int32_t frames,
@@ -175,7 +178,6 @@ class TFlipbookBillboardComponent : public TComponent
     void OnAttach() override { RegisterUpdate(&TComponent::Update); }
     void OnDetach() override { UnregisterUpdate(&TComponent::Update); }
 
-    [[nodiscard]] bool ReplacesDefaultVisual() const { return replaces_default_visual; }
     [[nodiscard]] TTextureHandle Texture() const { return texture_handle; }
     [[nodiscard]] float Width() const { return size_w; }
     [[nodiscard]] float Height() const { return size_h; }
@@ -186,6 +188,7 @@ class TFlipbookBillboardComponent : public TComponent
     // it to the renderer's FX queue. Called from the per-instance Submit
     // walk in maprenderer.cpp.
     virtual void Submit(TRenderer& renderer, const TObjectInstance& inst) const;
+    void Submit(TRenderer& renderer) const override;
 
   protected:
     void OnUpdate() override

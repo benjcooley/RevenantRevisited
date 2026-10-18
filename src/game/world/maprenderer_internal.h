@@ -7,6 +7,7 @@
 #include "game/object/object.h"
 #include "game/world/lightcomponent.h"
 #include "engine/render/renderer.h"
+#include "engine/render/visualcomponent.h"
 #include "game/app/revenant.h"
 #include "game/world/sector.h"
 
@@ -128,6 +129,7 @@ struct SSectorDrawableInst {
     int32_t   debug_sector_y = 0;
     int32_t   debug_sector_slot = -1;
     TSafeRef<> src;
+    TSafeComponentRef<TVisualComponent> visual;   // the self-drawing visual, for a Billboard
 
     void UpdateFromInstance();
     void AccumulateSceneZ(const SMapRenderContext& ctx, float& scene_z_min_fit,

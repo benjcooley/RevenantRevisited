@@ -8,6 +8,7 @@
 
 #include "engine/scene/intworld.h"
 #include "game/world/lightcomponent.h"
+#include "engine/render/visualcomponent.h"
 
 #include "game/world/3dscene.h"
 #include "game/object/animation.h"
@@ -489,6 +490,7 @@ TObjectInstance::TObjectInstance(TObjectImagery* img)
     AdoptNode();
     ClearObject();
     imagery = img;
+    AttachVisual();
 
     // Null-imagery is a legitimate state for the --test=vfx harness path
     // (effects that don't need a TObjectImagery — e.g. TStripEffect S01,
@@ -525,6 +527,7 @@ TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
 
   // Set imagery
     imagery = img;
+    AttachVisual();
 
   // REVSYNC: TObjectInstance::TObjectInstance(SObjectDef*, ...) @ 0x0046e1f0.
   // Every object asks to be notified; the flags each class starts with are
@@ -2015,6 +2018,21 @@ TLightComponent& TObjectInstance::EnsureLight()
     AddComponent(std::move(owned));
     light_.Set(light);
     return *light;
+}
+
+TVisualComponent* TObjectInstance::Visual() const
+{
+    return visual_.Get();
+}
+
+void TObjectInstance::AttachVisual()
+{
+    std::unique_ptr<TVisualComponent> owned = imagery ? imagery->NewVisualComponent() : nullptr;
+    if (!owned)
+        return;
+    TVisualComponent* visual = owned.get();
+    AddComponent(std::move(owned));
+    visual_.Set(visual);
 }
 
 // A light's extent on screen is its lit square; anything else is its

@@ -17,6 +17,7 @@
 #include "game/effects/barrierlegacykeys.h"
 #include "game/effects/firelegacykeys.h"
 #include "engine/assets/i3dtexturealpha.h"
+#include "game/imagery/visual3d.h"
 #include "game/imagery/3dimage.h"
 #include "engine/render/retailsoftwaretransform.h"
 
@@ -3530,6 +3531,11 @@ TObjectAnimator* T3DImagery::NewObjectAnimator(TObjectInstance* oi)
 bool T3DImagery::NeedsAnimator(const TObjectInstance* /*oi*/) const
 {
     return true;
+}
+
+std::unique_ptr<TVisualComponent> T3DImagery::NewVisualComponent()
+{
+    return std::make_unique<T3DVisualComponent>(*this);
 }
 
 // *******************************

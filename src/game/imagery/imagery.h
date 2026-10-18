@@ -10,6 +10,7 @@
 
 #include "engine/assets/assetcache.h"
 #include "engine/scene/component.h"
+#include "engine/render/visualcomponent.h"
 #include "engine/assets/imageres.h"
 
 #include <stdio.h>
@@ -218,6 +219,9 @@ class TObjectImagery : public TAsset
 
     virtual PTObjectAnimator NewObjectAnimator(TObjectInstance* oi) { return nullptr; }
       // Creates an animator for the given object
+    virtual std::unique_ptr<TVisualComponent> NewVisualComponent() { return nullptr; }
+      // The visual component an object with this imagery shows through
+      // (T2DVisualComponent / T3DVisualComponent); nullptr: nothing to draw
     virtual bool NeedsAnimator(const TObjectInstance* oi) const { return false; }
       // Returns whether or not an animator is necessary
 
