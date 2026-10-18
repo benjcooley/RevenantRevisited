@@ -13,12 +13,12 @@ WIDTH=256;HEIGHT=384
 
 
 def production_spans():
-    source=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     return dict(types=span(header,'inline constexpr int32_t kPixieBespokeNumParts','// ----- X04/X05/X06/X07/X08 TFountainAnimator'),
         initialize=span(source,'    // --- Port of TPixieAnimator::Initialize','    if (attach_runtime_component) {'),
         advance_submit=span(source,'void TPixieEffect_Bespoke::Advance(','void TPixieEffect_Bespoke::TickAndSubmitForTest_BESPOKE('),
         map_dispatch=span(source,'class TPixieReferenceComponent final','void TPixieEffect_Bespoke::Initialize('),
-        math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
+        math=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text())
 
 
 def parse_asset(asset):
@@ -73,7 +73,7 @@ int main(int argc,char**argv){SMeshVertex vertices[2][4]={VERTICES};uint16_t ind
 }
 '''.replace('VERTICES',','.join(verts)).replace('INDICES',topology).replace('TICKS',str(ticks))
     source=output/'pixie-port-component.cpp';source.write_text(prelude+'\n'+types+'\n'+initializer+'\n'+pieces['advance_submit']+'\n'+trailer)
-    binary=output/'pixie-port-component';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'pixie-port-component';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     r=subprocess.run(cmd,capture_output=True,text=True);(output/'port-compile.log').write_text(r.stdout+r.stderr)
     if r.returncode:raise RuntimeError('Pixie production compile failed')
     r=subprocess.run([str(binary),str(inputs)],capture_output=True,text=True);(output/'port-trace.txt').write_text(r.stdout);(output/'port-run.log').write_text(r.stderr)
@@ -84,7 +84,7 @@ int main(int argc,char**argv){SMeshVertex vertices[2][4]={VERTICES};uint16_t ind
         if p[0]=='S':frames[key]=dict(random_count=int(p[3]),map_queries=int(p[4]),particles=[],draws=[])
         elif p[0]=='P':frames[key]['particles'].append(dict(index=int(p[3]),time=int(p[4]),values=[float(x)for x in p[5:]]))
         else:frames[key]['draws'].append(dict(mesh=int(p[3]),positions=[[float(x)for x in p[4+i*5:7+i*5]]for i in range(3)],uvs=[[float(x)for x in p[7+i*5:9+i*5]]for i in range(3)],indices=[0,1,2]))
-    return frames,dict(command=cmd,generated_source_sha256=sha(source.read_bytes()),binary_sha256=sha(binary.read_bytes()),bodies=['Initialize state','Advance','Submit','src/math3d.cpp'],boundaries=['exact authored assets','identity owner/face zero','strict original RNG replay','empty nearby-character query provider','loader/component installation separate'])
+    return frames,dict(command=cmd,generated_source_sha256=sha(source.read_bytes()),binary_sha256=sha(binary.read_bytes()),bodies=['Initialize state','Advance','Submit','src/engine/core/math3d.cpp'],boundaries=['exact authored assets','identity owner/face zero','strict original RNG replay','empty nearby-character query provider','loader/component installation separate'])
 
 
 class PixieFixture:

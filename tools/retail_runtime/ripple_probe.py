@@ -26,12 +26,12 @@ def source_span(source,start,end):
 
 
 def production_spans():
-    source=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     return dict(helpers=source_span(source,'constexpr double kWaterTicksPerSecond','\nT3DImagery* LoadWaterImagery'),
         submit=source_span(source,'void SubmitWaterQuad(','\ntemplate <typename Effect>'),
         methods=source_span(source,'void TRippleEffect::Advance(double seconds)','\nvoid TRippleEffect::TickAndSubmitForTest'),
         declaration=source_span(header,'class TRippleEffect :','\n// *******************\n// * Ripple Animator'),
-        math_cpp=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
+        math_cpp=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text())
 
 
 def build_port(output,asset):
@@ -92,7 +92,7 @@ int main(){
     generated.write_text(prelude+'\n'+declaration+'\n'+helpers+'\n'+submit+'\n'+methods+'\n'+trailer)
     binary=output/'ripple-port-component'
     command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),
-             str(generated),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+             str(generated),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     result=subprocess.run(command,capture_output=True,text=True);(output/'port-compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Compiled Ripple production bodies failed; see port-compile.log')
     rows={}
@@ -180,7 +180,7 @@ def main():
     parser.add_argument('--repeat',type=int,default=2);args=parser.parse_args()
     if args.repeat<2:parser.error('--repeat must be at least two')
     args.output.mkdir(parents=True,exist_ok=True)
-    paths=[ROOT/p for p in ('src/effect.cpp','src/effect.h','src/math3d.cpp','src/math3d.h')]
+    paths=[ROOT/p for p in ('src/game/effects/effect.cpp','src/game/effects/effect.h','src/engine/core/math3d.cpp','src/engine/core/math3d.h')]
     before={str(p.relative_to(ROOT)):sha(p.read_bytes()) for p in paths}
     before_spans={name:sha(text.encode()) for name,text in production_spans().items()}
     with zipfile.ZipFile(args.archive) as archive:asset=archive.read('Imagery/Magic/ripples.i3d')

@@ -20,11 +20,11 @@ namespace adapter {
 struct Owner {int flags=0,steps=0;void NextFrame(){++steps;}void SetCommandDone(bool){}void SetFlag(int f){flags|=f;}int GetFlags()const{return flags;}};
 struct State {std::unique_ptr<Owner>owner=std::make_unique<Owner>();retail_teleporter::State core;double accumulator=0;};
 bool Alive(State*s){return s&&s->owner&&!(s->owner->GetFlags()&OF_KILL);}
-''' + function((ROOT/'src/effects/teleporteroriginal.cpp').read_text(),'void Advance(State*s,double seconds)') + r'''
+''' + function((ROOT/'src/game/effects/legacy/teleporteroriginal.cpp').read_text(),'void Advance(State*s,double seconds)') + r'''
 void Check(){State s;Advance(&s,0);Advance(&s,-1);Advance(&s,std::numeric_limits<double>::quiet_NaN());assert(s.owner->steps==0);Advance(&s,3.0);assert(s.owner->steps==51&&s.core.ticks==51&&!Alive(&s));Advance(&s,3.0);assert(s.owner->steps==51);}
 }
 int main(){adapter::Check();''');driver.write_text(source)
- binary=output/'pose';subprocess.run(['clang++','-std=c++20','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),'-I',str(ROOT/'thirdparty/handmademath'),str(driver),str(ROOT/'src/math3d.cpp'),'-o',str(binary)],check=True)
+ binary=output/'pose';subprocess.run(['clang++','-std=c++20','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),'-I',str(ROOT/'thirdparty/handmademath'),str(driver),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)],check=True)
  text=subprocess.check_output([str(binary)],text=True);(output/'source.txt').write_text(text);states={};draws={}
  for line in text.splitlines():
   v=line.split();tick=int(v[1])
@@ -40,6 +40,6 @@ int main(){adapter::Check();''');driver.write_text(source)
   for x,d in zip(actual,r['draws']):
    err=max(abs(a-b)for a,b in zip(x,d['matrix']));checks+=16;maximum=max(maximum,err)
    if err>4e-5:errors.append([r['tick'],'matrix',err])
- report=dict(status='pass'if not errors else'fail',native_sha256=sha(native),core_sha256=sha(ROOT/'src/teleportercore.h'),batched_terminal_update_pass=True,matrix_channels=checks,lifecycle_channels=len(rows)*6,maximum_matrix_error=maximum,errors=errors);(output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report));assert not errors
+ report=dict(status='pass'if not errors else'fail',native_sha256=sha(native),core_sha256=sha(ROOT/'src/game/effects/teleportercore.h'),batched_terminal_update_pass=True,matrix_channels=checks,lifecycle_channels=len(rows)*6,maximum_matrix_error=maximum,errors=errors);(output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report));assert not errors
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--native',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.native,a.output)

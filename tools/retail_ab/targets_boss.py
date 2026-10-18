@@ -2,7 +2,7 @@
 C3c; forensics docs/gameplay/forensics/BOSS_AI.md).
 
 `melee-boss` (kata C3c): ticks of AI_PerMonster (retail 0x4c9b70, port
-TCharacter::AIPerMonster and src/bossai.cpp) on the four bosses with their
+TCharacter::AIPerMonster and src/game/ai/bossai.cpp) on the four bosses with their
 real char.def records -- every state of each one's machine and its
 transitions, the health bands and their edges, the timers at their turns,
 the random draws by tape, the world each one reads (Baez's crowd, ring wall
@@ -10,7 +10,7 @@ and table; Solifuge's brood; Jhaga's waypoints; the player) -- and a few
 ticks of the whole AI with a boss in it.
 
 Retail: tools/retail_runtime/slots/combat/melee_attack.py (`per-monster`);
-port: src/retailab_melee.cpp (`Revenant --retail-ab=melee-boss`). The
+port: src/game/ab/retailab_melee.cpp (`Revenant --retail-ab=melee-boss`). The
 compare is combat_targets.compare.
 """
 from __future__ import annotations

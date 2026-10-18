@@ -33,7 +33,7 @@ def run(exe,output):
 #include "cometsoftwarebounds.h"
 #include <cstdio>
 int main(){hmm_vec3 p[3];while(scanf("%f %f %f %f %f %f",&p[0].X,&p[0].Y,&p[1].X,&p[1].Y,&p[2].X,&p[2].Y)==6)printf("%d\n",RetailCometProjectedTriangleAllowed(p));}
-''');binary=output/'bounds';cmd=['clang++','-std=c++17','-O1','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(source),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+''');binary=output/'bounds';cmd=['clang++','-std=c++17','-O1','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(source),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
  q=subprocess.run(cmd,capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr);assert q.returncode==0,q.stderr
  q=subprocess.run([str(binary)],input='\n'.join(' '.join(str(v)for p in c for v in p)for c in cases),capture_output=True,text=True);assert q.returncode==0,q.stderr;port=list(map(int,q.stdout.split()));f=NativeBounds(exe);rows=[]
  for points,current in zip(cases,port):
@@ -64,7 +64,7 @@ int main(){hmm_mat4 m;hmm_vec3 p[3];while(scanf("%f",&m.Elements[0][0])==1){for(
  q=subprocess.run(world_cmd,capture_output=True,text=True);assert q.returncode==0,q.stderr
  q=subprocess.run([str(world_binary)],input='\n'.join(' '.join(map(str,row))for row in inputs),capture_output=True,text=True);assert q.returncode==0,q.stderr
  for row,current in zip(native_cases,map(int,q.stdout.split())):row['source']=bool(current);assert row['native']==row['source'],row
- report=dict(status='pass',checks=len(rows),cases=rows,authored_triangle_checks=len(native_cases),authored_triangles=native_cases,source_sha256=sha((ROOT/'src/cometsoftwarebounds.h').read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),executable_sha256=sha(exe.read_bytes()),scope='Primitive admission only; zero replacement geometry/color; guard enabled solely by native-domain and software-lighting conjunction in Comet adapter.')
+ report=dict(status='pass',checks=len(rows),cases=rows,authored_triangle_checks=len(native_cases),authored_triangles=native_cases,source_sha256=sha((ROOT/'src/game/effects/cometsoftwarebounds.h').read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),executable_sha256=sha(exe.read_bytes()),scope='Primitive admission only; zero replacement geometry/color; guard enabled solely by native-domain and software-lighting conjunction in Comet adapter.')
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print('pass',len(rows));return report
 def run_visual(exe,output):
  import zipfile

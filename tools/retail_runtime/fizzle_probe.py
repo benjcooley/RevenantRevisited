@@ -31,12 +31,12 @@ def f32(value):return struct.pack('<f',value)
 
 
 def production_spans():
-    source=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     return dict(constants=span(source,'constexpr double kFizzleSimTickMs','// Resolve which texture slot a sub-object'),
         slot=span(source,'int32_t FizzleFindFreeSlot','}   // namespace'),
         method=span(source,'void TFizzleEffect::TickAndSubmitForTest','// *************************************************************************\n// * TRippleEffect'),
         types=span(header,'inline constexpr int32_t kFizzleParticlesPerSystem','// ********************\n// * TFireBallEffect'),
-        math_cpp=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
+        math_cpp=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text())
 
 
 def build_port(output,asset,inputs):
@@ -100,7 +100,7 @@ int main(int argc,char**argv){random_inputs.open(argv[1]);if(!random_inputs)retu
     generated=output/'fizzle-port-component.cpp'
     generated.write_text(prelude+'\n'+types+'\n'+pieces['constants']+'\n'+pieces['slot']+'\n'+pieces['method']+'\n'+trailer)
     binary=output/'fizzle-port-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),
-        '-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+        '-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     result=subprocess.run(command,capture_output=True,text=True);(output/'port-compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Fizzle production-body compile failed; see port-compile.log')
     trace=subprocess.run([str(binary),str(inputs)],capture_output=True,text=True)
@@ -113,7 +113,7 @@ int main(int argc,char**argv){random_inputs.open(argv[1]);if(!random_inputs)retu
         elif tag=='P':frames[tick]['particles'].append(dict(index=int(fields[2]),used=bool(int(fields[3])),phase=int(fields[4]),flicker=bool(int(fields[5])),values=[float(v) for v in fields[6:]]))
         elif tag=='D':frames[tick]['draws'].append(dict(system=int(fields[2])-1,positions=[[float(v) for v in fields[3+i*5:6+i*5]] for i in range(4)],uvs=[[float(v) for v in fields[6+i*5:8+i*5]] for i in range(4)]))
     return frames,dict(command=command,generated_source_sha256=sha(generated.read_bytes()),binary_sha256=sha(binary.read_bytes()),
-        compiled_production_bodies=['TFizzleEffect::TickAndSubmitForTest','FizzleFindFreeSlot','src/math3d.cpp'],
+        compiled_production_bodies=['TFizzleEffect::TickAndSubmitForTest','FizzleFindFreeSlot','src/engine/core/math3d.cpp'],
         boundaries=['identity owner Transform boundary; nonzero owner separately verified against original','exact asset vertices/UVs/texture handles','renderer captures production SubmitFxQuad',
                     'time steps exactly 1/24 seconds','RNG consumes unchanged retail outputs with strict range/order validation'])
 

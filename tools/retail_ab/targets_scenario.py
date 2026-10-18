@@ -7,7 +7,7 @@ far as it plays the game -- the player's keys, UpdateMove, the map pane's
 PulseObjects and MoveObjects, the frame count and game time, NextFrameObjects
 -- over two or three characters on a flat floor, every function the tick
 reaches as original code (retail: tools/retail_runtime/slots/combat/
-scenario.py; port: src/retailab_scenario.cpp, its own tick functions). Both
+scenario.py; port: src/game/ab/retailab_scenario.cpp, its own tick functions). Both
 sides draw from the case's random tape. Each tick is compared whole: every
 character's place, facing, move angle, state and frame, its three action
 blocks by meaning (with the attack, impact, damage, to-hit and roll they

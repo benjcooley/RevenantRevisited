@@ -66,7 +66,7 @@ class WaterFixture(WaterfallFixture):
 
 
 def production_spans():
-    source=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     initialize=span(source,'void TWaterEffect_Bespoke::Initialize(','TWaterEffect_Bespoke*\nTWaterEffect_Bespoke::SpawnForTest_BESPOKE(') if 'void TWaterEffect_Bespoke::Initialize('in source else span(source,'    w->numdrops_ = kWaterMaxDrops;','    log_info("[water] SpawnForTest_BESPOKE:')
     tick=span(source,'void TWaterEffect_Bespoke::TickAndSubmitForTest_BESPOKE(','// wave-bespoke-W2A')
     advance=span(source,'void TWaterEffect_Bespoke::Advance(','void TWaterEffect_Bespoke::SetNativeDomain(') if 'void TWaterEffect_Bespoke::Advance('in source else ''
@@ -77,7 +77,7 @@ def production_spans():
             'void TWaterEffect_Bespoke::Initialize('if 'void TWaterEffect_Bespoke::Initialize('in source else 'TWaterEffect_Bespoke::SpawnForTest_BESPOKE('),
         runtime_component=span(source,'class TLiteralWaterReferenceComponent final','class TLiteralWaterAnimatorBuilder final')if'class TLiteralWaterReferenceComponent final'in source else'',
         initialize=initialize,advance_submit=advance,tick_submit=tick,
-        math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
+        math=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text())
 
 
 def build_port(output,asset,inputs,ticks):
@@ -173,7 +173,7 @@ for(int tick=0;tick<=TICKS;++tick){renderer.billboards.clear();renderer.quads.cl
 '''.replace('SETUP',setup).replace('INITIALIZE',initializer).replace('CLOCK_CHECK',clock_check).replace('RUNTIME','runtime'if has_initialize else'false').replace('TICKS',str(ticks)).replace('FIRST_SUBMIT','effect.Submit(EFxDebugMode::Normal);'if parts['advance_submit']else'')
     prelude=prelude.replace('return1','return 1')
     generated=output/'water-port-component.cpp';generated.write_text('\n'.join((prelude,parts['particle'],types,parts['constants'],helpers,parts['runtime_component'],parts['initialize']if has_initialize else'',parts['advance_submit'],parts['tick_submit'],trailer)))
-    binary=output/'water-port-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'water-port-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     compile_result=subprocess.run(command,capture_output=True,text=True);(output/'port-compile.log').write_text(compile_result.stdout+compile_result.stderr)
     if compile_result.returncode:raise RuntimeError('Water production compile failed; see port-compile.log')
     result=subprocess.run([str(binary),str(inputs)],capture_output=True,text=True);(output/'port-trace.txt').write_text(result.stdout);(output/'port-run.log').write_text(result.stderr)

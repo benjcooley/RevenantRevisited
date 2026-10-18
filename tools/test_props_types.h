@@ -2,7 +2,7 @@
 // struct in the exact shape a prefab component will use.
 #pragma once
 
-#include "../src/refl.h"
+#include "../src/engine/refl/refl.h"
 
 #include <HandmadeMath.h>
 

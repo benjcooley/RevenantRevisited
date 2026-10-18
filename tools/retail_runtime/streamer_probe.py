@@ -19,12 +19,12 @@ WIDTH=256;HEIGHT=384;PIXELS=WIDTH*HEIGHT
 
 
 def production_spans():
-    source=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     return dict(types=span(header,'class TStreamerEffect_Bespoke :','// --- X11 TRibbonAnimator_Bespoke'),
         helpers=span(source,'void TStreamerEffect_Bespoke::InitStreamerSnap(','// =========================================================================\n// X11 TRibbonAnimator_Bespoke'),
         advance_submit=span(source,'void TStreamerEffect_Bespoke::Advance(','void TStreamerEffect_Bespoke::TickAndSubmitForTest_BESPOKE'),
         initialize_state=span(source,'        scl_init_[j]=0.15f*float(j+1);','    runtime_owned_=attach_runtime_component;')+'    runtime_owned_=attach_runtime_component;',
-        math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
+        math=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text())
 
 
 def parse_asset(data):
@@ -99,7 +99,7 @@ int main(){SMeshVertex vertices[4][4]={VERTICES};uint16_t indices[4][6]=INDICES;
     # state loop below is extracted unchanged from the actual map producer.
     initialize='TStreamerEffect_Bespoke::~TStreamerEffect_Bespoke()=default;\nbool TStreamerEffect_Bespoke::BindMeshes()const{return true;}\nvoid TStreamerEffect_Bespoke::Initialize(bool attach_runtime_component) {\nfor(int j=0;j<kStreamerMaxStreams;++j) {\n'+pieces['initialize_state']+'\n}\n'
     source=output/'streamer-port-components.cpp';source.write_text(prelude+'\n'+types+'\n'+initialize+'\n'+pieces['helpers']+'\n'+pieces['advance_submit']+'\n'+trailer)
-    binary=output/'streamer-port-components';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'streamer-port-components';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     result=subprocess.run(command,capture_output=True,text=True);(output/'port-compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Streamer production compile failed; see port-compile.log')
     text=subprocess.check_output([str(binary)],text=True);(output/'port-trace.txt').write_text(text);frames={}
@@ -110,7 +110,7 @@ int main(){SMeshVertex vertices[4][4]={VERTICES};uint16_t indices[4][6]=INDICES;
         elif p[0]=='P':frames[key]['particles'].append(dict(stream=int(p[3]),slot=int(p[4]),count=int(p[5]),values=[float(x)for x in p[6:]]))
         else:frames[key]['draws'].append(dict(stream=int(p[3]),positions=[[float(x)for x in p[4+k*5:7+k*5]]for k in range(3)],uvs=[[float(x)for x in p[7+k*5:9+k*5]]for k in range(3)],indices=[0,1,2]))
     return frames,dict(command=command,generated_source_sha256=sha(source.read_bytes()),binary_sha256=sha(binary.read_bytes()),
-        bodies=['Initialize state loop','InitStreamerSnap','AddStreamerSnap','Advance','Submit','src/math3d.cpp'],
+        bodies=['Initialize state loop','InitStreamerSnap','AddStreamerSnap','Advance','Submit','src/engine/core/math3d.cpp'],
         ownership_modes=['preview runtime_owned=false','actual map component runtime_owned=true'],
         boundaries=['authoredreadygeometry/texture','identityowner/no spell/face0','normal KillThisEffect request recorded','asset/component binding remains separate'])
 

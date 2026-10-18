@@ -24,11 +24,11 @@ def parse_asset(asset):
 
 
 def production_spans():
- s=(ROOT/'src/effect.cpp').read_text();h=(ROOT/'src/effect.h').read_text()
+ s=(ROOT/'src/game/effects/effect.cpp').read_text();h=(ROOT/'src/game/effects/effect.h').read_text()
  return dict(types=span(h,'class TFaultFireEffect_Bespoke :','// ========================================================================='),
   initialize=span(s,'    // SetupObjects preserves each authored V','    if (attach_runtime_component) {'),
   advance_submit=span(s,'void TFaultFireEffect_Bespoke::Advance(','void TFaultFireEffect_Bespoke::TickAndSubmitForTest_BESPOKE('),
-  map_dispatch=span(s,'class TFaultFireReferenceComponent final','void TFaultFireEffect_Bespoke::Initialize('),math=(ROOT/'src/math3d.cpp').read_text())
+  map_dispatch=span(s,'class TFaultFireReferenceComponent final','void TFaultFireEffect_Bespoke::Initialize('),math=(ROOT/'src/engine/core/math3d.cpp').read_text())
 
 
 def build_port(output,mesh,ticks,rng):
@@ -64,7 +64,7 @@ int main(int argc,char**argv){std::ifstream input(argv[1],std::ios::binary);std:
 '''.replace('TICKS',str(ticks))
  src=output/'faultfire-port.cpp';src.write_text(prelude+types+init+pieces['advance_submit']+tail)
  data=output/'mesh.bin';data.write_bytes(mesh['vertex_bytes']+mesh['index_bytes']);rngfile=output/'rng.txt';rngfile.write_text(''.join(f'{a} {b} {v}\n'for a,b,v in rng))
- binary=output/'faultfire-port';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(src),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+ binary=output/'faultfire-port';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(src),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
  p=subprocess.run(cmd,text=True,capture_output=True);(output/'compile.log').write_text(p.stdout+p.stderr)
  if p.returncode:raise RuntimeError('Production compilation failed')
  p=subprocess.run([str(binary),str(data),str(rngfile)],text=True,capture_output=True);(output/'port-trace.txt').write_text(p.stdout);(output/'port-run.log').write_text(p.stderr)

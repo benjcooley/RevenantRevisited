@@ -11,7 +11,7 @@ def run(reference,output):
     output.mkdir(parents=True,exist_ok=False)
     original=json.loads((reference/'manifest.json').read_text())
     if original['status']!='pass':raise AssertionError('Original prerequisite failed')
-    source=(ROOT/'src/effects/fizzle.cpp').read_text()
+    source=(ROOT/'src/game/effects/legacy/fizzle.cpp').read_text()
     body=span(source,'constexpr int32_t kDustCount','// =========================================================================\n// Render')
     prelude=r'''
 #include <cstdint>
@@ -70,7 +70,7 @@ int main(int argc,char**argv){inputs.open(argv[1]);State s;
         exact_float_fields=fields,original_rng_calls=original['original_rng_calls'],
         source_body_sha256=sha(body.encode()),compiled_source_sha256=sha(generated.read_bytes()),
         reference_manifest_sha256=sha((reference/'manifest.json').read_bytes()),
-        compiler_command=cmd,scope='Actual src/effects/fizzle.cpp constants/state/snap_random/SpawnParticle/Animate compiled unchanged. Original range outputs are common explicit inputs with strict call range/order validation; shared engine random() supplies original MSVC generator in live runtime. All used-particle state and whole birth/death cadence compared; renderer/map scene remain separate.')
+        compiler_command=cmd,scope='Actual src/game/effects/legacy/fizzle.cpp constants/state/snap_random/SpawnParticle/Animate compiled unchanged. Original range outputs are common explicit inputs with strict call range/order validation; shared engine random() supplies original MSVC generator in live runtime. All used-particle state and whole birth/death cadence compared; renderer/map scene remain separate.')
     (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n')
     if errors:raise AssertionError(str(errors[:12]))
     return report

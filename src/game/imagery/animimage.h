@@ -1,0 +1,90 @@
+// *************************************************************************
+// *                         Cinematix Revenant                            *
+// *                    Copyright (C) 1998 Cinematix                       *
+// *                  animimage.h - TAnimImagery object                    *
+// *************************************************************************
+
+#pragma once
+
+#include "game/app/revenant.h"
+#include "engine/assets/animimagebody.h"
+#include "engine/assets/bitmap.h"
+#include "game/object/animation.h"
+#include "engine/assets/resource.h"
+#include "game/object/object.h"
+
+// ****************
+// * TAnimImagery *
+// ****************
+
+// This object displays an anim image resource to the screen.
+// It draws lit or unlit data for various states, and also
+// creates a 2D sprite animator for animated objects.
+
+_CLASSDEF(TAnimImagery)
+class TAnimImagery : public TObjectImagery
+{
+  public:
+    TAnimImagery(int32_t imageryid) : TObjectImagery(imageryid) {}
+    virtual ~TAnimImagery() {}
+
+    PSAnimImageryState GetAnimState(int32_t state)
+      { return  &(((PSAnimImageryBody)GetBody())->states[state]); }
+        // Returns pointer to anim imagery state
+
+  // Caching functions
+    virtual void CacheImagery();
+      // Causes imagery to load itself and get ready for drawing
+      // (Called by the SectorCache system to cause imagery to be loaded and decompressed)
+      // AnimImagery uses this to call the TBitmap::CacheChunks() function  
+
+    virtual void DrawUnlit(TObjectInstance* oi, TSurface* surface);
+        // Draws unlit imagery to background
+    virtual void DrawLit(TObjectInstance* oi, TSurface* surface);
+        // Draws lit imagery to background
+    bool GetZ(TObjectInstance* oi, const TObjectInstance* frontmost) override;
+        // Retail's gates on the state and the still, then whether the still's
+        // pixel is the one shown at the pick point (TAnimImagery::GetZ 0x00418b70)
+    virtual void DrawSelected(TObjectInstance* oi, TSurface* surface);
+        // Causes image to draw selection (hilighting) around itself
+    virtual bool AlwaysOnTop(TObjectInstance* oi);
+        // Lit imagery is always on top because it has no zbuffer
+    PTBitmap GetStillImage(int32_t state, int32_t num = 0) override
+      { return (PTBitmap)GetAnimState(state)->still.ptr(); }
+      // Returns the still image for the item
+    PTBitmap GetInvImage(int32_t state, int32_t num = 0) override
+      { return (PTBitmap)GetAnimState(state)->invitem.ptr(); }
+      // Returns the inventory image for the item
+    PTAnimation GetInvAnimation(int32_t state) override
+      { return (PTAnimation)GetAnimState(state)->invanim.ptr(); }
+        // Get inventory animation for state
+    PTAnimation GetAnimation(int32_t state) override { return (PTAnimation)GetAnimState(state)->anim.ptr(); }
+        // Get animation for state
+    uint32_t GetImageFlags(int32_t state) override { return GetAnimState(state)->flags; }
+        // Gets imagery flags for state
+    virtual int32_t GetAniLength(int32_t state)
+      { if (GetAnimation(state)) return GetAnimation(state)->NumFrames(); return 0; }
+      // Returns length (in frames) of animation for this state
+    virtual bool SaveBitmap(char *path, int32_t state = 0, bool zbuffer = true);
+        // Saves a bitmap of the current object given the current state
+
+    virtual PTObjectAnimator NewObjectAnimator(TObjectInstance* oi);
+        // Creates an animtor for the given object
+    bool NeedsAnimator(const TObjectInstance* oi) const override;
+      // Returns whether or not an animator is necessary
+};
+
+class TAnimAnimator : public TObjectAnimator
+{
+  public:
+    TAnimAnimator(TObjectInstance* oi);
+      // Constructor. Sets objectimagery. and object instance to nullptr.
+    virtual void Animate(bool draw);
+      // Animates object
+    virtual ~TAnimAnimator();
+      // Destructor.
+};
+
+DEFINE_IMAGERYBUILDER(OBJIMAGE_ANIMATION, TAnimImagery);
+
+

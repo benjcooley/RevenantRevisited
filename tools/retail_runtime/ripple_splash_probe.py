@@ -125,7 +125,7 @@ int main(int argc,char**argv){rng.open(argv[1]);if(!rng)return 2;ASSETS
   for(auto&d:renderer.draws){printf("Q %d",now);for(int i=0;i<4;++i)printf(" %.9g %.9g %.9g %.9g %.9g",d.world_pos[i][0],d.world_pos[i][1],d.world_pos[i][2],d.uv[i][0],d.uv[i][1]);puts("");}}
  for(auto&b:allbirths)printf("B %d %d %d %d %d %d %d\n",b.tick,b.id,b.parent,b.x,b.y,b.z,b.length);for(auto&d:deaths)printf("D %d %d\n",d.tick,d.id);int a,b,c,d;if(rng>>a>>b>>c>>d)throw std::runtime_error("Unused Ripple native RNG");}
 '''.replace('ASSETS',asset_prefix).replace('LENGTH',str(length)).replace('OX',str(origin[0])).replace('OY',str(origin[1])).replace('OZ',str(origin[2]))
-    generated=output/'ripple-family-production.cpp';generated.write_text(code[:start]+program);binary=output/'ripple-family-production';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    generated=output/'ripple-family-production.cpp';generated.write_text(code[:start]+program);binary=output/'ripple-family-production';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     r=subprocess.run(cmd,capture_output=True,text=True);(output/'family-compile.log').write_text(r.stdout+r.stderr)
     if r.returncode:raise RuntimeError('Ripple family compile failed')
     r=subprocess.run([str(binary),str(inputs)],capture_output=True,text=True);(output/'family-port-trace.txt').write_text(r.stdout);(output/'family-port-run.log').write_text(r.stderr)

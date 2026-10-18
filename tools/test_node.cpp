@@ -3,8 +3,8 @@
 // *                         soft refs, annotated properties               *
 // *************************************************************************
 
-#include "../src/node.h"
-#include "../src/packed.h"
+#include "../src/engine/scene/node.h"
+#include "../src/engine/refl/packed.h"
 
 #include <gtest/gtest.h>
 

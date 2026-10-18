@@ -23,7 +23,7 @@ def run(exe,archive,out):
    delta=abs(expected-actual);maximum=max(maximum,delta);fields+=1
    if delta>2e-6:errors.append(dict(tick=tick,field=k,native=expected,port=actual))
   before=f.state();f.raster_enabled=False;f.render();assert before==f.state();rows.append(n)
- report=dict(status='fail'if errors else'pass',fields=fields,max_float_error=maximum,errors=errors,native=rows,source_sha256=sha((ROOT/'src/pukecore.h').read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),driver_sha256=sha(driver.read_bytes()),first_dead=next(t for t,r in enumerate(rows)if not r['alive']),controls='All 33 states and RNG; full original Render on every live tick leaves state/RNG unchanged; post-kill updates preserve state; source ASan/UBSan.')
+ report=dict(status='fail'if errors else'pass',fields=fields,max_float_error=maximum,errors=errors,native=rows,source_sha256=sha((ROOT/'src/game/effects/pukecore.h').read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),driver_sha256=sha(driver.read_bytes()),first_dead=next(t for t,r in enumerate(rows)if not r['alive']),controls='All 33 states and RNG; full original Render on every live tick leaves state/RNG unchanged; post-kill updates preserve state; source ASan/UBSan.')
  (out/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],fields,maximum,errors[:3]);return report
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('executable',type=Path);p.add_argument('--archive',type=Path,default=ROOT/'data/imagery.rvi');p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.executable,a.archive,a.output)

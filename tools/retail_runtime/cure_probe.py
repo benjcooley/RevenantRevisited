@@ -103,10 +103,10 @@ class CureFixture:
 
 
 def build_submission(output,port_states,ticks):
-    body=span((ROOT/'src/effects/cure.cpp').read_text(),'void TCureEffect_Bespoke::Submit(','void TCureEffect_Bespoke::TickAndSubmitForTest_BESPOKE(')
+    body=span((ROOT/'src/game/effects/legacy/cure.cpp').read_text(),'void TCureEffect_Bespoke::Submit(','void TCureEffect_Bespoke::TickAndSubmitForTest_BESPOKE(')
     prelude=r'''
 #define CURE_STATE_ONLY
-#include "effects/cure.h"
+#include "game/effects/legacy/cure.h"
 #include "math3d.h"
 #include <fstream>
 #include <cstdio>
@@ -130,7 +130,7 @@ int main(int argc,char**argv){std::ifstream input(argv[1],std::ios::binary);TCur
  }}
 '''.replace('TICKS',str(ticks))
     source=output/'cure-submit-driver.cpp';source.write_text(prelude+body+trailer);binary=output/'cure-submit-driver'
-    command=['clang++','-std=c++17','-iquote',str(ROOT/'src'),'-I',str(ROOT/'thirdparty/handmademath'),str(source),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    command=['clang++','-std=c++17','-iquote',str(ROOT/'src'),'-I',str(ROOT/'thirdparty/handmademath'),str(source),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     result=subprocess.run(command,capture_output=True,text=True);(output/'submit-compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Actual Cure Submit compile failed')
     trace=subprocess.check_output([str(binary),str(port_states)],text=True);(output/'submit-trace.txt').write_text(trace);matrices={}
@@ -144,7 +144,7 @@ int main(int argc,char**argv){std::ifstream input(argv[1],std::ios::binary);TCur
 def build_port(output,rng_path,ticks):
     source=output/'cure-state-driver.cpp'
     source.write_text(r'''
-#include "effects/cure.h"
+#include "game/effects/legacy/cure.h"
 #include <fstream>
 #include <stdexcept>
 int main(int argc,char**argv){std::ifstream inputs(argv[1]);std::ofstream out(argv[2],std::ios::binary);
@@ -157,7 +157,7 @@ int main(int argc,char**argv){std::ifstream inputs(argv[1]);std::ofstream out(ar
  }int a,b,v;if(inputs>>a>>b>>v)throw std::runtime_error("Unconsumed Cure RNG");
 }
 '''.replace('TICKS',str(ticks)))
-    binary=output/'cure-state-driver';command=['clang++','-std=c++17','-DCURE_STATE_ONLY','-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/effects/cure.cpp'),'-o',str(binary)]
+    binary=output/'cure-state-driver';command=['clang++','-std=c++17','-DCURE_STATE_ONLY','-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/game/effects/legacy/cure.cpp'),'-o',str(binary)]
     result=subprocess.run(command,capture_output=True,text=True);(output/'port-compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Cure production compile failed')
     result=subprocess.run([str(binary),str(rng_path),str(output/'port-states.bin')],capture_output=True,text=True);(output/'port-run.log').write_text(result.stdout+result.stderr)
@@ -169,7 +169,7 @@ int main(int argc,char**argv){std::ifstream inputs(argv[1]);std::ofstream out(ar
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--output',type=Path,required=True);p.add_argument('--ticks',type=int,default=150);args=p.parse_args()
-    args.output.mkdir(parents=True,exist_ok=True);paths=[ROOT/'src/effects/cure.cpp',ROOT/'src/effects/cure.h'];before={str(p.relative_to(ROOT)):sha(p.read_bytes())for p in paths}
+    args.output.mkdir(parents=True,exist_ok=True);paths=[ROOT/'src/game/effects/legacy/cure.cpp',ROOT/'src/game/effects/legacy/cure.h'];before={str(p.relative_to(ROOT)):sha(p.read_bytes())for p in paths}
     with zipfile.ZipFile(ROOT/'data/imagery.rvi')as archive:asset=archive.read('Imagery/Magic/cure.i3d')
     mesh=parse_asset(asset);fixture=CureFixture(args.executable,mesh);fixture.reset();states=[fixture.raw_state()];samples=[t for t in(0,1,8,16,32,48,52,64,80,104,120,131,132,150)if t<=args.ticks];native_matrices={0:fixture.original_matrices()}
     for tick in range(1,args.ticks+1):

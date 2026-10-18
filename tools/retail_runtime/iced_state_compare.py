@@ -6,7 +6,7 @@ from fizzle_probe import ROOT,span,sha,f32
 
 
 def run(reference,output):
- output.mkdir(parents=True,exist_ok=False);n=json.loads((reference/'manifest.json').read_text());s=(ROOT/'src/effect.cpp').read_text();h=(ROOT/'src/effect.h').read_text()
+ output.mkdir(parents=True,exist_ok=False);n=json.loads((reference/'manifest.json').read_text());s=(ROOT/'src/game/effects/effect.cpp').read_text();h=(ROOT/'src/game/effects/effect.h').read_text()
  constants=span(s,'constexpr float kIcedBouncePlane','constexpr float kIcedFacetSizeWu')
  types=span(h,'inline constexpr double kIcedSimTickMs','// *************************************************************************\n// * Magic family').replace('  private:','  public:').replace('_CLASSDEF(TIcedEffect_Bespoke)','')
  init=span(span(s,'TIcedEffect_Bespoke* TIcedEffect_Bespoke::SpawnForTest_BESPOKE','void TIcedEffect_Bespoke::Advance'),'    iced->frameon_=0;','    log_info(')

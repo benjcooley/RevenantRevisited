@@ -32,7 +32,7 @@ for(int tick=0;tick<=std::atoi(argv[1]);++tick){if(tick){s.Advance(random);if(ar
  negatives={}
  for name,mode in [('snapshot_birth_offsets',1),('double_animate',2)]:
   wrong=subprocess.check_output([str(binary),'1',str(mode)]);reference=raw[stride:2*stride];different=sum(a!=b for a,b in zip(wrong[stride:2*stride],reference));assert different>0;negatives[name]=dict(rejected=True,differing_bytes=different)
- result=dict(negative_controls=negatives,status='pass',ticks=n,fields=fields,max_float_error=maximum,native_manifest_sha256=hashlib.sha256(native.read_bytes()).hexdigest(),core_sha256=hashlib.sha256((ROOT/'src/dragonfirecore.h').read_bytes()).hexdigest(),scope=__doc__,ignored='Uninitialized cold/dead storage and unused per-particle flicker; Render(false,false).')
+ result=dict(negative_controls=negatives,status='pass',ticks=n,fields=fields,max_float_error=maximum,native_manifest_sha256=hashlib.sha256(native.read_bytes()).hexdigest(),core_sha256=hashlib.sha256((ROOT/'src/game/effects/dragonfirecore.h').read_bytes()).hexdigest(),scope=__doc__,ignored='Uninitialized cold/dead storage and unused per-particle flicker; Render(false,false).')
  (out/'manifest.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--native',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.native,a.output)

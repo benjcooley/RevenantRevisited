@@ -14,7 +14,7 @@ printf("%.9g %.9g %.9g\n",c.value[0],c.value[1],c.value[2]);}return f?0:3;}
 '''
 def run(trace,poses,out):
  out.mkdir(parents=True,exist_ok=True);source=out/'cache.cpp';source.write_text(DRIVER);binary=out/'cache'
- subprocess.run(['clang++','-std=c++17','-O1','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/partsysdefinition.cpp'),'-o',str(binary)],check=True)
+ subprocess.run(['clang++','-std=c++17','-O1','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/engine/fx/partsysdefinition.cpp'),'-o',str(binary)],check=True)
  keys={tuple(map(int,p[:3])):list(map(float,p[3:]))for l in poses.read_text().splitlines()if(p:=l.split())}
  records=json.loads(trace.read_text())['records'];raw=struct.pack('<i',len(records));initials=[];previous=set()
  for r in records:
@@ -38,7 +38,7 @@ def run(trace,poses,out):
  for t,n in initials:
   p=port[t-1]if t else[0,0,0]
   if max(abs(x-y)for x,y in zip(n,p))>.00002:errors.append(dict(tick=t,initial=n,source=p))
- result=dict(status='fail'if errors else'pass',fields=len(records)*3+len(initials)*3,errors=errors,initials=initials,trace_sha256=sha(trace.read_bytes()),source_sha256=sha((ROOT/'src/dragonattackcache.h').read_bytes()))
+ result=dict(status='fail'if errors else'pass',fields=len(records)*3+len(initials)*3,errors=errors,initials=initials,trace_sha256=sha(trace.read_bytes()),source_sha256=sha((ROOT/'src/game/effects/dragonattackcache.h').read_bytes()))
  (out/'manifest.json').write_text(json.dumps(result,indent=2)+'\n');print(result['status'],result['fields'],errors[:3]);return result
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('trace',type=Path);p.add_argument('--poses',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.trace,a.poses,a.output)

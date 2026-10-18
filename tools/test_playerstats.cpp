@@ -10,9 +10,9 @@
 // armor.def / spell.def numbers. Run via build/test_playerstats.
 // *************************************************************************
 
-#include "../src/charstats.h"
-#include "../src/parse.h"
-#include "../src/playerstats.h"
+#include "../src/game/object/charstats.h"
+#include "../src/engine/core/parse.h"
+#include "../src/game/object/playerstats.h"
 
 #include <gtest/gtest.h>
 

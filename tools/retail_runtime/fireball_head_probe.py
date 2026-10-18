@@ -40,7 +40,7 @@ def function(text,signature):
 
 def port_driver(output,asset):
     """Actual SubmitBillboards body with a capturing renderer/owner fixture."""
-    effect=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    effect=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     body=function(effect,'void TFireBallEffect::SubmitBillboards(')
     uv=function(effect,'void TFireBallEffect::FillAtlasUv(')
     helper=function(effect,'void TFireBallEffect::SubmitAuthoredCard(') if 'void TFireBallEffect::SubmitAuthoredCard(' in effect else ''
@@ -141,8 +141,8 @@ int main(int argc,char**argv){
     source=output/'port-submit.cpp';source.write_text(prelude+'\n'+constants+'\n'+data+'\n'+class_body+'\n'+uv+'\n'+helper+'\n'+trail_helper+'\n'+spark_helper+'\n'+burst_helper+'\n'+body+'\n'+trailer)
     vertices=output/'authored-box01.bin';vertices.write_bytes(asset[VERTEX_OFFSET:VERTEX_OFFSET+128])
     binary=output/'port-submit'
-    command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/math3d.cpp')]
-    if helper:command.append(str(ROOT/'src/fireballquad.cpp'))
+    command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/engine/core/math3d.cpp')]
+    if helper:command.append(str(ROOT/'src/game/effects/fireballquad.cpp'))
     command+=['-o',str(binary)]
     result=subprocess.run(command,text=True,capture_output=True);(output/'compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Production Submit compile failed; see compile.log')
@@ -225,8 +225,8 @@ def main():
     with zipfile.ZipFile(args.archive)as archive:asset=archive.read('Imagery/Magic/newfireball.i3d')
     if sha(asset)!=ASSET_SHA or struct.unpack_from('<6H',asset,INDEX_OFFSET)!=INDICES:raise ValueError('Wrong authored asset')
     if struct.unpack_from('<I',asset,TEXTURE_OFFSET-4)[0]!=4:raise ValueError('Expected uncompressed atlas')
-    paths=[ROOT/p for p in ('src/effect.cpp','src/effect.h','src/math3d.cpp','src/math3d.h')]
-    paths+=[p for p in (ROOT/'src/fireballquad.h',ROOT/'src/fireballquad.cpp')if p.exists()]
+    paths=[ROOT/p for p in ('src/game/effects/effect.cpp','src/game/effects/effect.h','src/engine/core/math3d.cpp','src/engine/core/math3d.h')]
+    paths+=[p for p in (ROOT/'src/game/effects/fireballquad.h',ROOT/'src/game/effects/fireballquad.cpp')if p.exists()]
     before={str(p.relative_to(ROOT)):sha(p.read_bytes()) for p in paths}
     if args.producer:
         if not args.producer_manifest:parser.error('--producer requires its retained --producer-manifest')

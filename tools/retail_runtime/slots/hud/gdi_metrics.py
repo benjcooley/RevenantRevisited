@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes src/gdimetrics.inc: GDI's metrics for each FONT.DEF WINFONT, as the
+"""Writes src/engine/assets/gdimetrics.inc: GDI's metrics for each FONT.DEF WINFONT, as the
 HUD emulator's gdi.py answers them -- the cell CreateFontA(+height) maps to
 (the em size whose VDMX cell fits the height, its ascent and descent) and the
 advance width of every Windows-1252 character (the face's hdmx width at that

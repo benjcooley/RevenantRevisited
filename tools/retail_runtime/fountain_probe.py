@@ -23,12 +23,12 @@ VTABLES=(0x5a9964,0x5a99cc,0x5a9a34,0x5a9a9c)
 
 
 def production_spans():
-    source=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     return dict(types=span(header,'inline constexpr int32_t kFountainBespokeNumBubbles','// =========================================================================\n// W2D batch'),
         initialize=span(source,'    // --- Port of TFountainAnimator::Initialize','    log_info("[fountain] SpawnForTest:'),
         tick_submit=span(source,'void TFountainAnimator_Bespoke::TickAndSubmitForTest_BESPOKE','// --- end TFountainAnimator_Bespoke'),
-        math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text(),
-        runtime=(ROOT/'src/effects/fountain.cpp').read_text())
+        math=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text(),
+        runtime=(ROOT/'src/game/effects/legacy/fountain.cpp').read_text())
 
 
 def build_port(output,asset,inputs,ticks,color):
@@ -86,7 +86,7 @@ int main(int argc,char**argv){random_inputs.open(argv[1]);if(!random_inputs)retu
 }
 '''.replace('VERTICES',','.join(initializer)).replace('INITIALIZE',pieces['initialize']).replace('TICKS',str(ticks))
     generated=output/'fountain-port-component.cpp';generated.write_text(prelude+'\n'+types+'\n'+pieces['tick_submit']+'\n'+trailer)
-    binary=output/'fountain-port-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'fountain-port-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     if not binary.exists():
         result=subprocess.run(command,capture_output=True,text=True);(output/'port-compile.log').write_text(result.stdout+result.stderr)
         if result.returncode:raise RuntimeError('Production Fountain compile failed; see port-compile.log')
@@ -100,13 +100,13 @@ int main(int argc,char**argv){random_inputs.open(argv[1]);if(!random_inputs)retu
         elif p[0]=='P':frames[tick]['particles'].append(dict(index=int(p[2]),frame=int(p[3]),values=[float(v)for v in p[4:]]))
         else:frames[tick]['draws'].append(dict(positions=[[float(v)for v in p[2+i*5:5+i*5]]for i in range(4)],uvs=[[float(v)for v in p[5+i*5:7+i*5]]for i in range(4)]))
     return frames,dict(command=command,generated_source_sha256=sha(generated.read_bytes()),binary_sha256=sha(binary.read_bytes()),
-        bodies=['production SpawnForTest initialization loop','TickAndSubmitForTest_BESPOKE','src/math3d.cpp'],
+        bodies=['production SpawnForTest initialization loop','TickAndSubmitForTest_BESPOKE','src/engine/core/math3d.cpp'],
         boundaries=['exactSparklevertices/UVs/texture','identityowner','rendererrecordsactualSubmitFxQuad','strictunchangednativeRNGoutputs'])
 
 
 def build_runtime(output,asset,inputs,ticks,color):
     """Compile the actual map producer, with RNG/asset/owner inputs explicit."""
-    source=(ROOT/'src/effects/fountain.cpp').read_text()
+    source=(ROOT/'src/game/effects/legacy/fountain.cpp').read_text()
     prelude=(output/'fountain-port-component.cpp').read_text().split('inline constexpr int32_t kFountainBespokeNumBubbles')[0]
     prelude=prelude.replace('struct TObjectImagery {};','struct T3DImagery;struct TObjectImagery {static void FreeImagery(T3DImagery*){}};')
     prelude+='''
@@ -142,7 +142,7 @@ int main(int argc,char**argv){random_inputs.open(argv[1]);if(!random_inputs)retu
 '''.replace('VERTICES',','.join(vertices)).replace('TICKS',str(ticks))
     generated=output/'fountain-runtime-component.cpp'
     generated.write_text(prelude+constants+'\nstatic int32_t snap_random(int32_t lo,int32_t hi){return random(lo,hi);}\n'+bodies+'\n'+update+'\n'+trailer)
-    binary=output/'fountain-runtime-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'fountain-runtime-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     if not binary.exists():
         result=subprocess.run(command,capture_output=True,text=True);(output/'runtime-compile.log').write_text(result.stdout+result.stderr)
         if result.returncode:raise RuntimeError('Actual runtime Fountain compile failed; see runtime-compile.log')

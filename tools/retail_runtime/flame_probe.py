@@ -71,8 +71,8 @@ def extract_class(path,name,terminator):
 def production_spans(definitions=None):
     text=(definitions or (ROOT/'assets/effects.def').read_bytes()).decode()
     start=text.index('effect TorchFlame')
-    return dict(base=extract_class(ROOT/'src/effect.h','TFlipbookBillboardComponent','\nstruct SParticleBucketEffectDef'),
-        flame=extract_class(ROOT/'src/effect.cpp','TFlameQuadComponent','\nDEFINE_BUILDER("FLAME"'),
+    return dict(base=extract_class(ROOT/'src/game/effects/effect.h','TFlipbookBillboardComponent','\nstruct SParticleBucketEffectDef'),
+        flame=extract_class(ROOT/'src/game/effects/effect.cpp','TFlameQuadComponent','\nDEFINE_BUILDER("FLAME"'),
         definition=text[start:text.index('\n    emitter billboard',start)],
         **{name:(ROOT/'src'/name).read_text() for name in ('math3d.cpp','math3d.h','particlefx.cpp','particlefx.h')})
 
@@ -150,8 +150,8 @@ int main(){
     generated.write_text(prelude+'\n'+base+'\n'+flame+'\n'+trailer)
     binary=output/'flame-port-component'
     command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),
-             '-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/math3d.cpp'),
-             str(ROOT/'src/particlefx.cpp'),'-o',str(binary)]
+             '-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/engine/core/math3d.cpp'),
+             str(ROOT/'src/engine/fx/particlefx.cpp'),'-o',str(binary)]
     result=subprocess.run(command,capture_output=True,text=True)
     (output/'port-compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Port component compile failed; see port-compile.log')
@@ -230,8 +230,8 @@ def main():
     args=parser.parse_args()
     if args.repeat<2:parser.error('--repeat must be at least two')
     args.output.mkdir(parents=True,exist_ok=True)
-    source_paths=[ROOT/p for p in ('src/effect.cpp','src/effect.h','src/math3d.cpp','src/math3d.h',
-                   'src/particlefx.cpp','src/particlefx.h','assets/effects.def')]
+    source_paths=[ROOT/p for p in ('src/game/effects/effect.cpp','src/game/effects/effect.h','src/engine/core/math3d.cpp','src/engine/core/math3d.h',
+                   'src/engine/fx/particlefx.cpp','src/engine/fx/particlefx.h','assets/effects.def')]
     before={str(p.relative_to(ROOT)):digest(p.read_bytes()) for p in source_paths}
     before_spans={name:digest(text.encode()) for name,text in production_spans().items()}
     type_id,asset_member=PROFILES[args.profile]

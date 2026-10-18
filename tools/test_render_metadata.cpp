@@ -4,7 +4,7 @@
 // *             test_render_metadata.cpp - Render Metadata Tests           *
 // *************************************************************************
 
-#include "../src/render_metadata.h"
+#include "../src/engine/render/render_metadata.h"
 
 #include <cassert>
 #include <filesystem>

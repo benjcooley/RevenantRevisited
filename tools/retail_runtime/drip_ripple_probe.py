@@ -10,7 +10,7 @@ PARAMS=(20,128,1);STOP_TICK=121;TICKS=144
 
 
 def production_spans():
-    source=(ROOT/'src/effect.cpp').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text()
     return {**{'drip_'+k:v for k,v in drip_spans().items()},**{'ripple_'+k:v for k,v in ripple_spans().items()},
         'ripple_factory':span(source,'TRippleEffect* TRippleEffect::SpawnForTest(','void TRippleEffect::Advance('),
         'asset_quad_loader':span(source,'bool LoadWaterQuad(','void SubmitWaterQuad(')}
@@ -139,7 +139,7 @@ int main(int argc,char**argv){rng.open(argv[1]);if(!rng)return 2;S3DVertex head[
  int a,b,c,d;if(rng>>a>>b>>c>>d)throw std::runtime_error("Unused linked physics RNG input");}
 '''.replace('HEAD',vertices(drip_asset,0xfc)).replace('RING',vertices(ripple_asset,0x144)).replace('SPLASH',vertices(ripple_asset,0x1c4))
     generated=output/'drip-ripple-production.cpp';generated.write_text(prelude+'\nnamespace production_random {\n'+pieces['drip_random_helper']+'}\n'+rng_wrapper+'\n'+types+'\n'+boundary+'\n'+pieces['drip_constants']+'\n'+pieces['drip_time_helpers']+'\n'+pieces['asset_quad_loader']+'\n'+pieces['drip_quad']+'\n'+pieces['ripple_factory']+'\n'+pieces['ripple_methods']+'\n'+pieces['drip_advance_submit']+'\n'+trailer)
-    binary=output/'drip-ripple-production';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'drip-ripple-production';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     result=subprocess.run(cmd,capture_output=True,text=True);(output/'compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Composed production compile failed')
     result=subprocess.run([str(binary),str(inputs)],capture_output=True,text=True);(output/'port-trace.txt').write_text(result.stdout);(output/'port-run.log').write_text(result.stderr)

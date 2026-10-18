@@ -26,7 +26,7 @@ return f?0:5;}
 '''
 def run(trace,output):
  output.mkdir(parents=True,exist_ok=True);data=json.loads(trace.read_text());records=data['records'];source=output/'state.cpp';source.write_text(DRIVER);binary=output/'state'
- cmd=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/authoredpartsys.cpp'),str(ROOT/'src/partsysdefinition.cpp'),'-o',str(binary)]
+ cmd=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/engine/fx/authoredpartsys.cpp'),str(ROOT/'src/engine/fx/partsysdefinition.cpp'),'-o',str(binary)]
  q=subprocess.run(cmd,capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr)
  if q.returncode:raise RuntimeError('Compile failed')
  raw=struct.pack('<i',len(records));rows=[];alive_before=True
@@ -51,7 +51,7 @@ def run(trace,output):
    if a[1]not in born and i in(13,17):continue
    d=abs(x-y);maximum=max(maximum,d);checks+=1
    if d>(0 if i in(0,1,2,3,4,12)else .001):errors.append(dict(tick=a[0],slot=a[1],field=i,native=x,source=y,error=d))
- report=dict(status='fail'if errors else'pass',checks=checks,rows=len(rows),maximum_error=maximum,errors=errors[:100],error_count=len(errors),trace_sha256=sha(trace.read_bytes()),source_sha256=sha(source.read_bytes()),production_sha256={p:sha((ROOT/p).read_bytes())for p in('src/authoredpartsys.cpp','src/partsysdefinition.cpp','src/authoredpartsys.h','src/partsysdefinition.h')},inputs_sha256=sha(raw),render_stride=data['render_stride'],sanitizers='ASan/UBSan',accepted=False)
+ report=dict(status='fail'if errors else'pass',checks=checks,rows=len(rows),maximum_error=maximum,errors=errors[:100],error_count=len(errors),trace_sha256=sha(trace.read_bytes()),source_sha256=sha(source.read_bytes()),production_sha256={p:sha((ROOT/p).read_bytes())for p in('src/engine/fx/authoredpartsys.cpp','src/engine/fx/partsysdefinition.cpp','src/engine/fx/authoredpartsys.h','src/engine/fx/partsysdefinition.h')},inputs_sha256=sha(raw),render_stride=data['render_stride'],sanitizers='ASan/UBSan',accepted=False)
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],checks,len(errors))
 if __name__=='__main__':
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('trace',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.trace,a.output)

@@ -5,7 +5,7 @@ SPELLS_MISSILES.md).
 - `spell-data` (D1s): spell.def as each side parses it. Retail runs
   TSpellList::Load in the emulator (slots/combat/spell_data.py); the port
   runs TSpellList::Load (`Revenant --retail-ab=spell-data`,
-  src/retailab_spells.cpp). Both dump every spell, variant and CONTROLDATA
+  src/game/ab/retailab_spells.cpp). Both dump every spell, variant and CONTROLDATA
   block by field name; the compare walks them by spell and variant name.
 
 Cases are written under the work directory so both sides read the same

@@ -3,11 +3,11 @@
 // *************************************************************************
 
 #include "test_defio_types.h"
-#include "../src/defio.h"
-#include "../src/node.h"
-#include "../src/nodepack.h"
-#include "../src/packed.h"
-#include "../src/particledef.h"
+#include "../src/engine/refl/defio.h"
+#include "../src/engine/scene/node.h"
+#include "../src/engine/refl/nodepack.h"
+#include "../src/engine/refl/packed.h"
+#include "../src/engine/fx/particledef.h"
 
 #include <gtest/gtest.h>
 

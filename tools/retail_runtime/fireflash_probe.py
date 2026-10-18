@@ -117,7 +117,7 @@ def function(source,signature):
 
 
 def build_port(output,parts,rng,lookup,ticks):
-    source=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text();obj=(ROOT/'src/object.cpp').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text();obj=(ROOT/'src/game/object/object.cpp').read_text()
     methods={name:function(source,'void TFireFlashEffect_Bespoke::'+name+'(')for name in('SimulateTick','Advance','Submit')}
     methods['BindMeshes']=function(source,'bool TFireFlashEffect_Bespoke::BindMeshes(')
     initialize=span(source,'    // Value-clear the full pool before seeding','    if (attach_runtime_component) {')
@@ -163,7 +163,7 @@ int main(int argc,char**argv){inputs.open(argv[1]);std::ifstream tables(argv[2],
 }
 '''.replace('TICKS',str(ticks))
     cpp=output/'fireflash-port.cpp';cpp.write_text(prelude+vector+'\nvoid TFireFlashEffect_Bespoke::Initialize(bool attach_runtime_component){\n'+initialize+'}\n'+'\n'.join(methods.values())+trailer)
-    binary=output/'fireflash-port';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(cpp),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'fireflash-port';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(cpp),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     compile_result=subprocess.run(command,capture_output=True,text=True);(output/'compile.log').write_text(compile_result.stdout+compile_result.stderr)
     if compile_result.returncode:raise RuntimeError('Production FireFlash compile failed')
     assets=output/'authored-parts.bin';assets.write_bytes(b''.join(struct.pack('<32f',*(n for v in p['vertices']for n in v))+struct.pack('<6H',*p['indices'])+struct.pack('<17f',*p['material'])for p in parts))

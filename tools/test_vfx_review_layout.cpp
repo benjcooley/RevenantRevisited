@@ -1,5 +1,5 @@
 // clang++ -std=c++17 -O2 -Wall -Wextra -pedantic tools/test_vfx_review_layout.cpp -o /tmp/test_vfx_review_layout
-#include "../src/vfxreviewlayout.h"
+#include "../src/game/ab/vfxreviewlayout.h"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif

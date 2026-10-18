@@ -6,7 +6,7 @@ This exercises dispatch counts, not the GPU or full map/component lifecycle.
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
-source=(root/'src/maprenderer.cpp').read_text()
+source=(root/'src/game/world/maprenderer.cpp').read_text()
 start=source.index('        // A late replacement can inherit several cached submesh records.')
 end=source.index('        // obj_id = drawable index + 1',start)
 gate=source[start:end]

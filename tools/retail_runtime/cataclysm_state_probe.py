@@ -25,5 +25,5 @@ for tick,row in enumerate(rows):
   checks+=1
   if n[pos:pos+4]==c[pos:pos+4]:exact+=1;continue
   if len(errors)<100:errors.append(dict(tick=tick,offset=hex(pos+0xfc),native_hex=n[pos:pos+4].hex(),port_hex=c[pos:pos+4].hex(),native_float=struct.unpack_from('<f',n,pos)[0],port_float=struct.unpack_from('<f',c,pos)[0]))
-r=dict(status='pass'if not errors else'differences',checks=checks,exact=exact,errors=errors,trace=dict(path=str(a.trace.resolve()),sha256=sha(a.trace.read_bytes())),source_sha256=sha((ROOT/'src/cataclysmcore.h').read_bytes()),scope='Complete 30-piece/70-dust/50-glow pool, owner position/velocity/phase/life and all RNG seeds, null-spell empty-character-world owner Pulse cadence including actual kill tick.')
+r=dict(status='pass'if not errors else'differences',checks=checks,exact=exact,errors=errors,trace=dict(path=str(a.trace.resolve()),sha256=sha(a.trace.read_bytes())),source_sha256=sha((ROOT/'src/game/effects/cataclysmcore.h').read_bytes()),scope='Complete 30-piece/70-dust/50-glow pool, owner position/velocity/phase/life and all RNG seeds, null-spell empty-character-world owner Pulse cadence including actual kill tick.')
 (a.output/'manifest.json').write_text(json.dumps(r,indent=2)+'\n');print(r['status'],checks,'exact',exact,'errors',errors[:8]);assert not errors

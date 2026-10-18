@@ -2,8 +2,8 @@
 // the way a prefab component will be declared.
 #pragma once
 
-#include "../src/component.h"
-#include "../src/refl.h"
+#include "../src/engine/scene/component.h"
+#include "../src/engine/refl/refl.h"
 
 #include <HandmadeMath.h>
 

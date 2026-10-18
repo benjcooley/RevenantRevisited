@@ -13,7 +13,7 @@ WIDTH=320;HEIGHT=512;INDICES=(1,0,2,2,3,1)
 
 
 def production_spans():
-    source=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     return dict(types=span(header,'class TWaterFallEffect_Bespoke :','// *************************************************************************\n// * TWaterEffect_Bespoke'),
         particle=span(header,'struct SWaterParticle','_CLASSDEF(TWaterFallAnimator)'),
         constants=span(source,'constexpr int32_t kWaterFallMaxDrops','// Snapshot constants — direct from effect_old.cpp:11903'),
@@ -21,7 +21,7 @@ def production_spans():
         helpers=span(source,'TWaterFallEffect_Bespoke::~TWaterFallEffect_Bespoke()','void TWaterFallEffect_Bespoke::Initialize('),
         advance_submit=span(source,'void TWaterFallEffect_Bespoke::Advance(','void TWaterFallEffect_Bespoke::SetNativeDomain('),
         map_dispatch=span(source,'class TWaterfallReferenceComponent final','TWaterFallEffect_Bespoke::~TWaterFallEffect_Bespoke()'),
-        math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
+        math=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text())
 
 
 def build_port(output,asset,inputs,ticks):
@@ -63,7 +63,7 @@ int main(int argc,char**argv){rng.open(argv[1]);if(!rng)return 2;TWaterFallEffec
  int a,b,c;if(rng>>a>>b>>c)throw std::runtime_error("Unused original RNG inputs");}
 '''.replace('VERTICES',vertices).replace('TICKS',str(ticks))
     source=output/'waterfall-port-component.cpp';source.write_text(prelude+'\n'+pieces['particle']+'\n'+types+'\n'+pieces['constants']+'\n'+pieces['helpers']+'\n'+initializer+'\n'+pieces['advance_submit']+'\n'+trailer)
-    binary=output/'waterfall-port-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'waterfall-port-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     result=subprocess.run(command,capture_output=True,text=True);(output/'port-compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Waterfall production compile failed')
     result=subprocess.run([str(binary),str(inputs)],capture_output=True,text=True);(output/'port-trace.txt').write_text(result.stdout);(output/'port-run.log').write_text(result.stderr)
@@ -75,7 +75,7 @@ int main(int argc,char**argv){rng.open(argv[1]);if(!rng)return 2;TWaterFallEffec
         elif p[0]=='P':frames[tick]['particles'].append(dict(index=int(p[2]),time=int(p[3]),values=[float(x)for x in p[4:]]))
         else:frames[tick]['draws'].append(dict(positions=[[float(x)for x in p[2+i*5:5+i*5]]for i in range(4)],uvs=[[float(x)for x in p[5+i*5:7+i*5]]for i in range(4)],material_diffuse=[float(x)for x in p[22:26]]))
     return frames,dict(command=command,generated_source_sha256=sha(source.read_bytes()),binary_sha256=sha(binary.read_bytes()),
-        bodies=['Initialize actual state/warmup loop','InitParticle','UpdateStuff','Advance','Submit','src/math3d.cpp'],boundaries=['exact authored geometry/texture','identity owner, face zero','unchanged original range-RNG result replay','asset/component binding separate'])
+        bodies=['Initialize actual state/warmup loop','InitParticle','UpdateStuff','Advance','Submit','src/engine/core/math3d.cpp'],boundaries=['exact authored geometry/texture','identity owner, face zero','unchanged original range-RNG result replay','asset/component binding separate'])
 
 
 class WaterfallFixture:

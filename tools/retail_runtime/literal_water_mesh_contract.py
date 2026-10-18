@@ -15,8 +15,8 @@ reject("texture",[](auto&v){++v.textures[0].numframes;});reject("texture",[](aut
 }
 '''
 def run(output):
- output.mkdir(parents=True,exist_ok=False);header=(ROOT/'src/literalwatermesh.h').read_text();guard=header[:header.index('inline MeshHandle Cache')];guard='\n'.join(l for l in guard.splitlines()if not l.startswith('#include')and l!='#pragma once')+'\n}\n'
- body=(ROOT/'src/3dimagebody.h').read_text();render=(ROOT/'src/render3d_types.h').read_text();records='\n'.join(function(s,t)+';'for s,t in[(body,'struct SAniKey32\n'),(body,'struct S3DFace\n'),(render,'struct S3DVertex\n'),(render,'struct SRenderColor\n'),(body,'struct S3DMaterial\n')])
+ output.mkdir(parents=True,exist_ok=False);header=(ROOT/'src/game/effects/literalwatermesh.h').read_text();guard=header[:header.index('inline MeshHandle Cache')];guard='\n'.join(l for l in guard.splitlines()if not l.startswith('#include')and l!='#pragma once')+'\n}\n'
+ body=(ROOT/'src/engine/assets/3dimagebody.h').read_text();render=(ROOT/'src/engine/render/render3d_types.h').read_text();records='\n'.join(function(s,t)+';'for s,t in[(body,'struct SAniKey32\n'),(body,'struct S3DFace\n'),(render,'struct S3DVertex\n'),(render,'struct SRenderColor\n'),(body,'struct S3DMaterial\n')])
  cls=CLASS.replace('#include "staticpartsysprofiles.h"','').replace('TYPED_METHOD','').replace('uint32_t ValidateRetailStaticParticleProfile();','uint32_t ValidateRetailStaticParticleProfile(){return 0;}').replace('bool null_filename=false;','bool null_filename=false,hidden=false;int NumObjVerts(int i){return objects[i].numverts;}int NumObjFaces(int i){return objects[i].numfaces;}bool IsHidden(int,int){return hidden;}void GetObject(int i,S3DObj*out){*out=objects[i];}void GetTexture(int i,S3DTex*out){*out=textures[i];}void GetMaterial(int i,S3DMat*out){*out=materials[i];}')
  # The old sixteen-frame eight-byte keys are irrelevant to these custom
  # OBJ3D_MATRIX Render paths; keep only the exact parent field in this guard

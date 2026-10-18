@@ -5,7 +5,7 @@
 
 #include "test_sectorimages.h"
 
-#include "../src/savefile.h"
+#include "../src/game/save/savefile.h"
 
 #include <gtest/gtest.h>
 

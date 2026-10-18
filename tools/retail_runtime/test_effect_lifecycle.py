@@ -24,7 +24,7 @@ def function(source,signature):
 
 class EffectLifecycleTests(unittest.TestCase):
     def test_actual_merged_pulse_lifecycle(self):
-        source=(ROOT/'src/effect.cpp').read_text()
+        source=(ROOT/'src/game/effects/effect.cpp').read_text()
         prelude=r'''#include <cstdint>
 #include <cstdio>
 #include <cstdlib>

@@ -3,7 +3,7 @@
 // *************************************************************************
 
 #include "test_props_types.h"
-#include "../src/packed.h"
+#include "../src/engine/refl/packed.h"
 
 #include <gtest/gtest.h>
 

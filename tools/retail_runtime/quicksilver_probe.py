@@ -114,7 +114,7 @@ def sha(data):return hashlib.sha256(data).hexdigest()
 
 def run(executable,archive,output,retain_draws=False,native_mode=False):
     output.mkdir(parents=True,exist_ok=True)
-    source_paths=('src/3dimage.cpp','src/3dimage.h','src/authoredpartsys.cpp','src/authoredpartsys.h','src/partsysdefinition.cpp','src/partsysdefinition.h','src/speedauthoredmatrix.h','src/goldauthoredmatrix.h','src/math3d.cpp','src/math3d.h')
+    source_paths=('src/game/imagery/3dimage.cpp','src/game/imagery/3dimage.h','src/engine/fx/authoredpartsys.cpp','src/engine/fx/authoredpartsys.h','src/engine/fx/partsysdefinition.cpp','src/engine/fx/partsysdefinition.h','src/game/effects/speedauthoredmatrix.h','src/game/effects/goldauthoredmatrix.h','src/engine/core/math3d.cpp','src/engine/core/math3d.h')
     pinned={p:sha((ROOT/p).read_bytes())for p in source_paths}
     with zipfile.ZipFile(archive)as z:
         member=next(n for n in z.namelist()if n.lower()=='imagery/magic/quicksilver.i3d');data=z.read(member)
@@ -127,14 +127,14 @@ def run(executable,archive,output,retain_draws=False,native_mode=False):
     (output/'retail-state-trace.json').write_text(json.dumps(native,indent=2)+'\n')
     state_compare=compare_state(output,output/'state-comparison')
     if state_compare['status']!='pass':raise AssertionError('Full independent production state/RNG differs')
-    production=(ROOT/'src/3dimage.cpp').read_text();body=fn(production,'int32_t T3DAnimator::SubmitPartSys(')
-    family=fn((ROOT/'src/3dimage.h').read_text(),'bool HasRetailSpeedFamilyPartSysProfile(')
+    production=(ROOT/'src/game/imagery/3dimage.cpp').read_text();body=fn(production,'int32_t T3DAnimator::SubmitPartSys(')
+    family=fn((ROOT/'src/game/imagery/3dimage.h').read_text(),'bool HasRetailSpeedFamilyPartSysProfile(')
     cpp=PRELUDE.replace('SPEED_FAMILY_METHOD',family)+'\n'+body+'\n'+MAIN
     if native_mode:cpp=cpp.replace('a.SubmitPartSys(renderer,2,2,{1,1,1})','a.SubmitPartSys(renderer,2,2,{1,1,1},true)')
     source=output/'packet_driver.cpp';source.write_text(cpp);binary=output/'packet_driver'
     command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer',
         '-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(source),
-        str(ROOT/'src/authoredpartsys.cpp'),str(ROOT/'src/partsysdefinition.cpp'),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+        str(ROOT/'src/engine/fx/authoredpartsys.cpp'),str(ROOT/'src/engine/fx/partsysdefinition.cpp'),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     q=subprocess.run(command,capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr)
     if q.returncode:raise RuntimeError('Actual SubmitPartSys compile failed; see compile.log')
     inputs=struct.pack('<i',90)+bytes.fromhex(asset['objects'][2]['vertex_hex'])

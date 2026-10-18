@@ -20,8 +20,8 @@ from pathlib import Path
 
 WM_HAND = 0x0001                     # char.def's weapon mask for bare hands
 CA_SPECIAL = 0x0001                  # char.def: a scripted special (finishers, throws)
-CA_DEATH = 0x0008                    # fires only when the blow would kill: a finisher (src/rules.h)
-CA_INTERACTIVE = 0x2000000           # a grapple: both play synced impacts (src/rules.h)
+CA_DEATH = 0x0008                    # fires only when the blow would kill: a finisher (src/game/script/rules.h)
+CA_INTERACTIVE = 0x2000000           # a grapple: both play synced impacts (src/game/script/rules.h)
 CATCH_ALL = 1000                     # attacks with maxdist past this are fallbacks at any distance
 DAMAGE_TYPES = ('misc', 'hand', 'puncture', 'cut', 'chop', 'bludgeon', 'magical', 'burn', 'freeze', 'poison')
 # spell.def's talisman letters (its header comment; class.def Codes 65-76).

@@ -59,7 +59,7 @@ int main(){retail_barrier::Vec3 vertices[]={VERTICES};retail_barrier::State s;s.
                         errors.append(dict(tick=tick,field=field,source=a,native=b))
             (folder/'native.json').write_text(json.dumps(rows,indent=2)+'\n')
             cases.append(dict(name=name,status='pass'if not errors else'fail',fields=fields,max_error=maximum,errors=errors[:20],native_sha256=sha((folder/'native.json').read_bytes())))
-    report=dict(status='pass'if all(c['status']=='pass'for c in cases)else'fail',cases=cases,core_sha256=sha((ROOT/'src/barriercore.h').read_bytes()),scope='All30 original pool slots, copied own-resource bounds, delay and exact MSVC stream through original Animate and every intervening Render. Equal random-range endpoints return without consuming CRT RNG, matching the original integer helper. No visual credit, source renderer or natural caller claim.')
+    report=dict(status='pass'if all(c['status']=='pass'for c in cases)else'fail',cases=cases,core_sha256=sha((ROOT/'src/game/effects/barriercore.h').read_bytes()),scope='All30 original pool slots, copied own-resource bounds, delay and exact MSVC stream through original Animate and every intervening Render. Equal random-range endpoints return without consuming CRT RNG, matching the original integer helper. No visual credit, source renderer or natural caller claim.')
     (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report));assert report['status']=='pass'
 

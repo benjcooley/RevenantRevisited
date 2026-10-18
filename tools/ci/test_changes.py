@@ -56,12 +56,12 @@ class ChangedFilesTests(unittest.TestCase):
                 self.assertTrue(self.selected())
 
     def test_cpp_change_survives_a_rust_only_followup_push(self):
-        previous = self.commit("src/renderer.cpp")
+        previous = self.commit("src/engine/render/renderer.cpp")
         self.commit("rust/src/main.rs")
         self.assertTrue(self.selected(before=previous))
 
     def test_main_only_compares_the_current_push(self):
-        previous = self.commit("src/renderer.cpp")
+        previous = self.commit("src/engine/render/renderer.cpp")
         self.commit("rust/src/main.rs")
         self.assertFalse(self.selected(ref="refs/heads/main", before=previous))
         previous = self.git("rev-parse", "HEAD")
@@ -70,20 +70,20 @@ class ChangedFilesTests(unittest.TestCase):
 
     def test_unrelated_new_main_changes_do_not_select_feature_build(self):
         self.git("checkout", "main")
-        current_main = self.commit("src/renderer.cpp")
+        current_main = self.commit("src/engine/render/renderer.cpp")
         self.git("update-ref", "refs/remotes/origin/main", current_main)
         self.git("checkout", "feature")
         self.commit("rust/src/main.rs")
         self.assertFalse(self.selected())
 
     def test_cpp_removal_and_rename_out_of_src_select_build(self):
-        base = self.commit("src/renderer.cpp")
+        base = self.commit("src/engine/render/renderer.cpp")
         self.git("update-ref", "refs/remotes/origin/main", base)
-        self.git("mv", "src/renderer.cpp", "notes.txt")
+        self.git("mv", "src/engine/render/renderer.cpp", "notes.txt")
         self.git("commit", "-m", "rename fixture")
         self.assertTrue(self.selected())
         self.git("checkout", "-B", "deletion", base)
-        self.git("rm", "src/renderer.cpp")
+        self.git("rm", "src/engine/render/renderer.cpp")
         self.git("commit", "-m", "delete fixture")
         self.assertTrue(self.selected())
 

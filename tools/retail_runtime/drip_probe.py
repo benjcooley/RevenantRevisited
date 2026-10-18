@@ -13,7 +13,7 @@ PROFILES={'short_no_splash':(20,128,1),'caverns_parameters':(20,200,35),'default
 
 
 def production_spans():
-    source=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     return dict(types=span(header,'class TDripEffect :','// *******************\n// * Drip Animator'),
         constants=span(source,'constexpr double kWaterTicksPerSecond','int32_t WaterRandom('),
         random_helper=span(source,'int32_t WaterRandom(','// Split time at authored event boundaries.'),
@@ -21,7 +21,7 @@ def production_spans():
         quad=span(source,'void SubmitWaterQuad(','template <typename Effect>\nclass TWaterReferenceComponent'),
         advance_submit=span(source,'void TDripEffect::Advance(','void TDripEffect::TickAndSubmitForTest('),
         map_dispatch=span(source,'template <typename Effect>\nclass TWaterReferenceComponent','template <typename Effect>\nclass TWaterReferenceBuilder'),
-        math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
+        math=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text())
 
 
 def build_port(output,asset,inputs,ticks,params):
@@ -83,7 +83,7 @@ int main(int argc,char**argv){rng.open(argv[1]);if(!rng)return 2;TDripEffect eff
  int a,b,c;if(rng>>a>>b>>c)throw std::runtime_error("Unused Drip native physics RNG inputs");}
 '''.replace('VERTICES',vertices).replace('TICKS',str(ticks))
     src=output/'drip-port-components.cpp';src.write_text(prelude+'\nnamespace production_random {\n'+pieces['random_helper']+'}\n'+rng_wrapper+'\n'+types+'\n'+unsupported+'\n'+pieces['constants']+'\n'+pieces['time_helpers']+'\n'+pieces['quad']+'\n'+pieces['advance_submit']+'\n'+trailer)
-    binary=output/'drip-port-components';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(src),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'drip-port-components';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(src),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     r=subprocess.run(cmd,capture_output=True,text=True);(output/'compile.log').write_text(r.stdout+r.stderr)
     if r.returncode:raise RuntimeError('Drip production compile failed')
     r=subprocess.run([str(binary),str(inputs),*map(str,params)],capture_output=True,text=True);(output/'port-trace.txt').write_text(r.stdout);(output/'port-run.log').write_text(r.stderr)
@@ -94,7 +94,7 @@ int main(int argc,char**argv){rng.open(argv[1]);if(!rng)return 2;TDripEffect eff
         if p[0]=='S':frames[tick]=dict(dead=bool(int(p[2])),time=int(p[3]),random_count=int(p[4]),values_valid=bool(int(p[5])),event_count=int(p[6]),values=[float(x)for x in p[7:]],draws=[])
         elif p[0]=='D':frames[tick]['draws'].append(dict(positions=[[float(x)for x in p[2+i*5:5+i*5]]for i in range(4)],uvs=[[float(x)for x in p[5+i*5:7+i*5]]for i in range(4)]))
         else:events.append(dict(tick=tick,arguments=[int(x)for x in p[2:]]))
-    return frames,events,dict(command=cmd,generated_source_sha256=sha(src.read_bytes()),binary_sha256=sha(binary.read_bytes()),bodies=['TDripEffect inline constructor/SetParams','WaterRandom actual helper','Advance','Submit','AdvanceWaterTime','WaterDropPosition','SubmitWaterQuad','src/math3d.cpp'],boundaries=['raw authored asset/identity owner','native physics raw CRT RNG subset replay; native audio RNG separately observed','child factory/lifecycle/submission captured only','owner Initialize/Pulse/Load/Save unsupported','map component dispatch source retained, installation separate'])
+    return frames,events,dict(command=cmd,generated_source_sha256=sha(src.read_bytes()),binary_sha256=sha(binary.read_bytes()),bodies=['TDripEffect inline constructor/SetParams','WaterRandom actual helper','Advance','Submit','AdvanceWaterTime','WaterDropPosition','SubmitWaterQuad','src/engine/core/math3d.cpp'],boundaries=['raw authored asset/identity owner','native physics raw CRT RNG subset replay; native audio RNG separately observed','child factory/lifecycle/submission captured only','owner Initialize/Pulse/Load/Save unsupported','map component dispatch source retained, installation separate'])
 
 
 class DripFixture:

@@ -25,9 +25,9 @@ PROFILES = (
 
 
 def compile_matrices(output, asset, name):
-    source = (ROOT / 'src/3dimage.cpp').read_text()
-    body = (ROOT / 'src/3dimagebody.h').read_text()
-    render = (ROOT / 'src/render3d_types.h').read_text()
+    source = (ROOT / 'src/game/imagery/3dimage.cpp').read_text()
+    body = (ROOT / 'src/engine/assets/3dimagebody.h').read_text()
+    render = (ROOT / 'src/engine/render/render3d_types.h').read_text()
     prefixes = ('SMALLKEY', 'ANIKEY32_', 'ANIFLAG32_', 'ANICODE32_', 'ANIKEY_POSSCALE', 'ANIKEY_ANGSCALE', 'I3D_ANIKEY32')
     constants = '\n'.join(line for line in body.splitlines() if line.startswith('#define ') and any(line.startswith('#define ' + p) for p in prefixes))
     records = '\n'.join(function(text, signature) + ';' for text, signature in (
@@ -82,7 +82,7 @@ int main(int argc,char**argv){if(argc!=2)return 2;std::ifstream f(argv[1],std::i
     cpp = output / 'matrix-driver.cpp'
     cpp.write_text('\n'.join((prelude, constants, records, model, fixture, '\n'.join(methods.values()), main)))
     binary = output / 'matrix-driver'
-    command = ['clang++', '-std=c++17', '-O1', '-fsanitize=address,undefined', '-I', str(ROOT / 'thirdparty/handmademath'), '-iquote', str(ROOT / 'src'), str(cpp), str(ROOT / 'src/math3d.cpp'), '-o', str(binary)]
+    command = ['clang++', '-std=c++17', '-O1', '-fsanitize=address,undefined', '-I', str(ROOT / 'thirdparty/handmademath'), '-iquote', str(ROOT / 'src'), str(cpp), str(ROOT / 'src/engine/core/math3d.cpp'), '-o', str(binary)]
     result = subprocess.run(command, capture_output=True, text=True)
     (output / 'compile.log').write_text(result.stdout + result.stderr)
     if result.returncode:

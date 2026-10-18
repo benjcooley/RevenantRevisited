@@ -1,0 +1,252 @@
+// *************************************************************************
+// *                         Cinematix Revenant                            *
+// *                    Copyright (C) 1998 Cinematix                       *
+// *                      money.cpp - TMoney module                        *
+// *************************************************************************
+
+#include "game/app/revenant.h"
+#include "engine/assets/bitmap.h"
+#include "game/imagery/imagery.h"
+#include "game/object/money.h"
+#include "game/world/mappane.h"
+#include "engine/core/logging.h"
+
+REGISTER_BUILDER(TMoney)
+TObjectClass MoneyClass("MONEY", OBJCLASS_MONEY, 0);
+
+// Hard coded class stats
+DEFSTAT(Money, Value,       VAL, 0, 1, 1, 10000)
+
+// Hard coded object stats
+DEFOBJSTAT(Money, Amount,   AMT, 0, 1, 1, 10000)
+
+
+// These were originally static members of TMoney but the compiler wasn't
+// very hip on that, so they are now here.
+PTBitmap grounditem[MAXMONEYTYPES][MAXMONEYIMAGE];  // Ground images
+int32_t groundusecount[MAXMONEYTYPES][MAXMONEYIMAGE];   // Use count for ground
+
+struct { int32_t x, y; } MoneyPos[MAXMONEYIMAGE] =
+{ { 20, 28 }, { 13, 22 }, { 22, 18 }, { 22, 31 }, { 13, 35 }, { 0, 27 }, { 9, 25 },
+  { 32, 27 }, { 5, 32 }, { 29, 30 }, { 12, 29 }, { 25, 24 }, { 6, 17 }, { 30, 34 }, { 19, 33 },
+  // stacks
+  { 19, 19 }, { 8, 21 }, { 15, 24 }, { 20, 17 }, { 9, 19 }, { 30, 23 }, { 20, 15 }, { 8, 17 }, 
+  { 8, 15 }, { 16, 22 }, { 15, 20 }, { 19, 13 }, { 31, 21 }, { 31, 19 }, { 4, 25 }, { 21, 28 }, 
+  { 19, 11 }, { 8, 13 }, { 9, 11 }, { 15, 18 }, { 14, 16 }, { 14, 14 }, { 30, 17 }, { 19, 9 },
+  { 20, 7 }, { 5, 23 }, { 11, 28 }, { 30, 15 }, { 31, 13 }, { 22, 26 }, { 8, 9 }, { 5, 21 }, 
+  { 29, 11 }, { 19, 5 }, { 18, 3 }, { 9, 7 }, { 19, 1 }, { 15, 12 }, { 29, 9 }, { 4, 19 },
+  { 4, 17 }, { 21, 24 }, { 22, 22 }, { 10, 26 }, { 15, 10 }, { 30, 7 }, { 5, 15 }, { 22, 20 },
+  { 10, 24 }
+};
+
+bool TMoney::Initialize()
+{
+    for (int32_t t = 0; t < MAXMONEYTYPES; t++)
+        for (int32_t i = 0; i < MAXMONEYIMAGE; i++)
+        {
+            grounditem[t][i] = nullptr;
+            groundusecount[t][i] = 0;
+        }
+
+    return true;
+}
+
+void TMoney::Close()
+{
+    for (int32_t t = 0; t < MAXMONEYTYPES; t++)
+        for (int32_t i = 0; i < MAXMONEYIMAGE; i++)
+        {
+            if (groundusecount[t][i])
+            {
+                groundusecount[t][i] = 1;
+                FreeGroundItem(t, i);
+            }
+        }
+}
+
+TMoney::~TMoney()
+{
+    int32_t count = max(1, min(Amount(), MAXMONEYIMAGE-1));
+
+    if (groundusecount[objtype][count])
+        FreeGroundItem(objtype, count);
+}
+
+namespace {
+
+// The name retail's merge looks the pile up by (0x005e1d98); class.def has
+// one money type, "Gold".
+constexpr const char* kPileName = "Gold";
+
+// REVSYNC: 0x00516370 -- an inventory icon shows 1..64 coins.
+constexpr int32_t kPileCoins = 64;
+
+// REVSYNC: the state retail's SetAmount (0x00515c90) gives a pile of
+// `amount`: bigger piles look bigger.
+int32_t PileState(int32_t amount)
+{
+    if (amount < 11)
+        return 0;
+    if (amount < 101)
+        return 2;
+    if (amount < 301)
+        return 4;
+    if (amount < 501)
+        return 6;
+    return 8;
+}
+
+} // namespace
+
+bool TMoney::AddToMap()
+{
+    SetState(PileState(Amount()));
+    return TObjectInstance::AddToMap();
+}
+
+// REVSYNC: TMoney::MergeInto @ 0x00515b50 (vtable 0x98). Gold joins the first
+// "Gold" in the new owner's inventory, bags included, when that is money of
+// the same type. (Retail also counts the uses of its composed inventory icons
+// on the path that doesn't merge; the port draws icons as they are,
+// InventoryIcon.)
+bool TMoney::MergeInto(TObjectInstance* newowner)
+{
+    TObjectInstance* pile = newowner->FindObjInventory(kPileName);
+    if (!pile || pile->ObjClass() != ObjClass() || pile->ObjType() != ObjType())
+        return false;
+
+    pile->SetAmount(pile->Amount() + Amount());
+    log_debug("[inv] %s: %d %s merged into the pile in %s, now %d", newowner->GetName(),
+              Amount(), GetName(), pile->GetOwner()->GetName(), pile->Amount());
+    return true;
+}
+
+// REVSYNC: 0x00515c90: the icons (inventory and ground) for the new count,
+// the pile state, then the amount.
+void TMoney::SetAmount(int32_t amt)
+{
+    if (Amount() == amt || amt < 1)
+        return;
+
+    if (!GetOwner())
+    {
+        FreeGroundItem(objtype, Amount());
+        if (imagery)
+            AllocGroundItem(imagery->GetStillImage(GetState()), objtype, amt);
+    }
+
+    SetState(PileState(amt));
+    SetObjStat(se_Amount.id, amt);
+}
+
+// REVSYNC: TMoney::Use @ 0x00515e70 -- after the scripts (the base Use), a
+// pile of the same kind used on this one joins it: that pile is deleted and
+// this one takes both amounts, uncapped (SetAmount picks the pile's
+// picture). Deviation: a pile isn't used on itself (retail deleted it).
+bool TMoney::Use(TObjectInstance* user, int32_t with)
+{
+    if (TObjectInstance::Use(user, with))
+        return true;
+
+    TObjectInstance* inst = MapPane.GetInstance(with);
+    if (!inst || inst == this || inst->ObjClass() != ObjClass() || inst->ObjType() != ObjType())
+        return false;
+
+    const int32_t total = inst->Amount() + Amount();
+    MapPane.DeleteObject(inst);
+    SetAmount(total);
+    return true;
+}
+
+// REVSYNC: CursorType @ 0x00515f10 -- the hand when a pile of the same kind
+// is held over this one, unless this one is invisible.
+int32_t TMoney::CursorType(TObjectInstance* with)
+{
+    if (with && with->ObjClass() == ObjClass() && with->ObjType() == ObjType() && !(GetFlags() & OF_INVISIBLE))
+        return CURSOR_HAND;
+
+    return CURSOR_NONE;
+}
+
+void TMoney::AllocGroundItem(PTBitmap ground, int32_t type, int32_t count)
+{
+    if (!ground)
+        return;
+
+    count = max(1, min(count, MAXMONEYIMAGE-1));
+
+    if (groundusecount[type][count] < 1)
+    {
+        grounditem[type][count] = TBitmap::NewBitmap(INVITEMREALWIDTH/2, INVITEMREALHEIGHT/2, BM_8BIT | BM_PALETTE);
+
+        memset(grounditem[type][count]->data16, 0, (INVITEMREALWIDTH/2)*(INVITEMREALHEIGHT/2));
+        memcpy(grounditem[type][count]->palette.ptr(), ground->palette.ptr(), ground->palettesize);
+
+        for (int32_t i = 0; i < count; i++)
+            grounditem[type][count]->Put(MoneyPos[i].x >> 1, MoneyPos[i].y >> 1, ground, DM_TRANSPARENT);
+
+        groundusecount[type][count] = 1;
+    }
+    else
+        groundusecount[type][count]++;
+}
+
+void TMoney::FreeGroundItem(int32_t type, int32_t count)
+{
+    count = max(1, min(count, MAXMONEYIMAGE-1));
+
+    if (groundusecount[type][count] == 0)
+        return;
+
+    if (--(groundusecount[type][count]) < 1 && grounditem[count])
+    {
+        delete grounditem[type][count];
+        grounditem[type][count] = nullptr;
+    }
+}
+
+// REVSYNC: 0x00516370 / 0x00515fb0 -- the pile retail composed into its
+// inventory icon: the state's inventory image at the first 1..64 MoneyPos.
+// Retail first makes the coin's key 0 (its inventory images carry 0 anyway).
+SInvIcon TMoney::InventoryIcon()
+{
+    SInvIcon icon;
+    TBitmap* coin = imagery ? imagery->GetInvImage(GetState(), 0) : nullptr;
+    if (!coin)
+        return icon;
+    coin->keycolor = 0;
+    for (int32_t i = 0, count = max(1, min(Amount(), kPileCoins)); i < count; i++)
+        icon.Add(coin, MoneyPos[i].x, MoneyPos[i].y);
+    return icon;
+}
+
+void TMoney::GetScreenRect(SRect &r)
+{
+    if (imagery)
+    {
+        PSImageryStateHeader st = imagery->GetState(GetState());
+
+        int32_t x, y;
+        WorldToScreen(IntPos(*this), x, y);
+
+        r.left   = x - st->regx;
+        r.right  = r.left + (INVITEMREALWIDTH / 2) - 1;
+        r.top    = y - st->regy;
+        r.bottom = r.top + (INVITEMREALHEIGHT / 2) - 1;
+    }
+}
+
+void TMoney::DrawUnlit(TSurface* surface)
+{
+    int32_t count = min(Amount(), MAXMONEYIMAGE-1);
+
+    if (groundusecount[objtype][count] < 1 && imagery)
+        AllocGroundItem(imagery->GetStillImage(GetState()), objtype, count);
+
+    imagery->DrawUnlit(this, surface);
+}
+
+PTBitmap TMoney::GetStillImage(int32_t ostate)
+{
+    return grounditem[objtype][min(Amount(), MAXMONEYIMAGE-1)];
+}

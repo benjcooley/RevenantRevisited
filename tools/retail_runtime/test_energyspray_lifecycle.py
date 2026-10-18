@@ -5,7 +5,7 @@ from speed_profile_contract import function
 ROOT=Path(__file__).resolve().parents[2]
 class EnergyLifecycle(unittest.TestCase):
  def test_actual_advance_external_and_phase_completion(self):
-  s=(ROOT/'src/effects/energyspraypreview.cpp').read_text();body=function(s,'void Advance(State* s,double seconds)');alive=function(s,'bool Alive(State* s)');marker='s->owner->Pulse();if(!Alive(s))return;';self.assertEqual(body.count(marker),1)
+  s=(ROOT/'src/game/effects/legacy/energyspraypreview.cpp').read_text();body=function(s,'void Advance(State* s,double seconds)');alive=function(s,'bool Alive(State* s)');marker='s->owner->Pulse();if(!Alive(s))return;';self.assertEqual(body.count(marker),1)
   pre=r'''
 #include "energyspraycore.h"
 #include <cassert>

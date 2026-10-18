@@ -87,8 +87,8 @@ def function(text,signature):
 
 class ReviewSpawnTests(unittest.TestCase):
  def test_actual_admission_and_dispatch(self):
-  source=(ROOT/'src/vfxreviewspawn.cpp').read_text();source='\n'.join(l for l in source.splitlines()if not l.startswith('#include'))
-  endpoint=function((ROOT/'src/effect.cpp').read_text(),'bool TFireBallEffect::SetProjectileEndpoints(')
+  source=(ROOT/'src/game/ab/vfxreviewspawn.cpp').read_text();source='\n'.join(l for l in source.splitlines()if not l.startswith('#include'))
+  endpoint=function((ROOT/'src/game/effects/effect.cpp').read_text(),'bool TFireBallEffect::SetProjectileEndpoints(')
   with tempfile.TemporaryDirectory(prefix='vfxreviewspawn-')as tmp:
    p=Path(tmp);driver=p/'contract.cpp';driver.write_text(STUB+'\n'+endpoint+'\n'+source+'\n'+MAIN);binary=p/'contract'
    q=subprocess.run(['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),str(driver),'-o',str(binary)],capture_output=True,text=True)

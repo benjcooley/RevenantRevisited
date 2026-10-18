@@ -12,8 +12,8 @@
 // device is opened. Run via build/test_audio_decode after build.
 // *************************************************************************
 
-#include "../src/audio_backend.h"
-#include "../src/wavedata.h"
+#include "../src/engine/audio/audio_backend.h"
+#include "../src/engine/assets/wavedata.h"
 
 #include <miniz.h>
 

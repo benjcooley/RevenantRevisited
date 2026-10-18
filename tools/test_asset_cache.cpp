@@ -1,4 +1,4 @@
-#include "../src/assetcache.h"
+#include "../src/engine/assets/assetcache.h"
 
 #include <cassert>
 #include <memory>

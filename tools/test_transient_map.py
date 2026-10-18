@@ -14,10 +14,10 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 
 HARNESS = r'''
-#include "gamemap.h"
-#include "mapmanager.h"
-#include "sector.h"
-#include "sectorstore.h"
+#include "game/world/gamemap.h"
+#include "game/world/mapmanager.h"
+#include "game/world/sector.h"
+#include "game/world/sectorstore.h"
 #include <cassert>
 #include <cstdio>
 #include <strings.h>
@@ -172,7 +172,7 @@ def main():
         binary = path / "check"
         subprocess.run([
             *compiler, "-std=c++17", *includes, str(source),
-            str(ROOT / "src/gamemap.cpp"), str(ROOT / "src/mapmanager.cpp"),
+            str(ROOT / "src/game/world/gamemap.cpp"), str(ROOT / "src/game/world/mapmanager.cpp"),
             "-o", str(binary),
         ], check=True, cwd=path)
         subprocess.run([str(binary), str(path)], check=True, cwd=path)

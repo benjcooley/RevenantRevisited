@@ -277,7 +277,7 @@ def generate(ledger):
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--ledger', type=Path, default=ROOT/'docs/vfx/EFFECT_BURNDOWN.json')
-    p.add_argument('--output', type=Path, default=ROOT/'src/vfxreviewpreviewmap.inc')
+    p.add_argument('--output', type=Path, default=ROOT/'src/game/ab/vfxreviewpreviewmap.inc')
     p.add_argument('--check', action='store_true')
     a = p.parse_args(); result = generate(a.ledger)
     if a.check:

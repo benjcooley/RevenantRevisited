@@ -5,7 +5,7 @@ from speed_profile_contract import function
 ROOT=Path(__file__).resolve().parents[2]
 class PukeLifecycleTests(unittest.TestCase):
  def test_actual_raster_policy_is_native_only_and_default_grid(self):
-  source=(ROOT/'src/effects/pukepreview.cpp').read_text()
+  source=(ROOT/'src/game/effects/legacy/pukepreview.cpp').read_text()
   policy=function(source,'static int RasterPolicy()')
   configure=function(source,'static void ConfigureRaster(SHelperMeshSubmit& draw,const State* s)')
   code=r'''
@@ -29,7 +29,7 @@ int main(){
    subprocess.run(['clang++','-std=c++17','-Wall','-Wextra','-Werror',str(p/'policy.cpp'),'-o',str(p/'policy')],check=True)
    subprocess.run([str(p/'policy')],check=True)
  def test_actual_advance_guards_birth_rng_and_owner_completion(self):
-  source=(ROOT/'src/effects/pukepreview.cpp').read_text();body=function(source,'void Advance(State* s,double seconds)');alive=function(source,'bool Alive(State* s)')
+  source=(ROOT/'src/game/effects/legacy/pukepreview.cpp').read_text();body=function(source,'void Advance(State* s,double seconds)');alive=function(source,'bool Alive(State* s)')
   marker='s->owner->Pulse();if(!Alive(s))return;';self.assertEqual(body.count(marker),1)
   prelude=r'''
 #include "pukecore.h"

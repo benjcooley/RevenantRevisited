@@ -5,7 +5,7 @@ from pathlib import Path
 from fizzle_probe import ROOT,span,sha,f32
 
 def run(reference,output):
- output.mkdir(parents=True,exist_ok=False);n=json.loads((reference/'manifest.json').read_text());s=(ROOT/'src/effect.cpp').read_text();h=(ROOT/'src/effect.h').read_text()
+ output.mkdir(parents=True,exist_ok=False);n=json.loads((reference/'manifest.json').read_text());s=(ROOT/'src/game/effects/effect.cpp').read_text();h=(ROOT/'src/game/effects/effect.h').read_text()
  types=span(h,'class THealEffect_Bespoke :','_CLASSDEF(TMistEffect_Bespoke)').replace('  private:','  public:')
  spawn=span(s,'THealEffect_Bespoke* THealEffect_Bespoke::SpawnForTest_BESPOKE','void THealEffect_Bespoke::Advance')
  init=span(spawn,'    heal->heal_num_','    log_info(')

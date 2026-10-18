@@ -1,0 +1,4652 @@
+// *************************************************************************
+// *                         Cinematix Revenant                            *
+// *                    Copyright (C) 1998 Cinematix                       *
+// *                  command.cpp - Command interpreter                    *
+// *************************************************************************
+
+#include <stdlib.h>
+#include <stdarg.h>
+#include <string.h>
+#include <ctype.h>
+
+#include <string>
+#include <vector>
+#include <unordered_set>
+
+// Local replacement for Win32 strlwr()
+static inline char *strlwr(char *s)
+{
+    for (char *p = s; *p; ++p)
+        *p = static_cast<char>(tolower(static_cast<unsigned char>(*p)));
+    return s;
+}
+
+#include "game/app/revenant.h"
+#include "game/world/3dscene.h"
+#include "game/world/mappane.h"
+#include "game/world/mapmanager.h"
+#include "game/object/object.h"
+#include "game/object/tile.h"
+#include "game/editor/editorstub.h"
+#include "engine/render/display.h"
+#include "engine/assets/font.h"
+#include "game/world/dls.h"
+#include "engine/assets/chunkcache.h"
+#include "game/ui/playscreen.h"
+#include "game/world/automap.h"
+#include "game/object/inventory.h"
+#include "game/ui/multictrl.h"
+#include "game/script/command.h"
+#include "game/ui/cursor.h"
+#include "game/app/gameflow.h"
+#include "game/script/script.h"
+#include "game/script/scriptvalue.h"
+#include "engine/assets/multi.h"
+#include "game/save/savegame.h"
+#include "game/object/player.h"
+#include "game/object/playerstats.h"
+#include "game/world/template.h"
+#include "game/object/scroll.h"
+#include "game/object/exit.h"
+#include "game/ui/textbar.h"
+#include "game/spells/spell.h"
+#include "engine/core/file.h"
+#include "game/imagery/3dimage.h"
+#include "game/audio/sound.h"
+#include "engine/audio/audio_backend.h"
+#include "game/script/dialog.h"
+#include "game/effects/effect.h"
+#include "engine/core/logging.h"
+#include "game/world/module.h"
+#include "game/object/monstergen.h"
+
+/* externs */
+extern TObjectClass TileClass;
+extern TObjectClass HelperClass;
+extern TConsolePane Console;
+extern bool BlitHardware;
+extern char buf[1024];          // editorstub.cpp
+
+/* Prototypes for command functions */
+// editor and general object manipulation
+COMMAND(CmdSelect);
+COMMAND(CmdDeselect);
+COMMAND(CmdAdd);
+COMMAND(CmdAddInv);
+COMMAND(CmdGive);
+COMMAND(CmdUndo);
+COMMAND(CmdMove);
+COMMAND(CmdPos);
+COMMAND(CmdRotate);
+COMMAND(CmdDelete);
+COMMAND(CmdDelInv);
+COMMAND(CmdTake);
+COMMAND(CmdStat);
+COMMAND(CmdScript);
+COMMAND(CmdCenterOn);
+COMMAND(CmdScrollTo);
+COMMAND(CmdMapPos);
+COMMAND(CmdShow);
+COMMAND(CmdAmbient);
+COMMAND(CmdAmbColor);
+COMMAND(CmdDirLight);
+COMMAND(CmdMono);
+COMMAND(CmdBaseLight);
+COMMAND(CmdReplace);
+COMMAND(CmdLight);
+COMMAND(CmdZOffset);
+COMMAND(CmdRegistration);
+COMMAND(CmdAnimRegistration);
+COMMAND(CmdAnimZ);
+COMMAND(CmdName);
+COMMAND(CmdFlip);
+COMMAND(CmdHelp);
+COMMAND(CmdLock);
+COMMAND(CmdUnlock);
+COMMAND(CmdLoad);
+COMMAND(CmdSave);
+COMMAND(CmdSaveTileBM);
+COMMAND(CmdDXStats);
+COMMAND(CmdMemory);
+COMMAND(CmdGenerate);
+COMMAND(CmdCalcWalkmap);
+COMMAND(CmdWalkmap);
+COMMAND(CmdState);
+COMMAND(CmdFrame);
+COMMAND(CmdTry);
+COMMAND(CmdForce);
+COMMAND(CmdReveal);
+COMMAND(CmdLevel);
+COMMAND(CmdTemplate);
+COMMAND(CmdTileWalkmap);
+COMMAND(CmdSmoothScroll);
+COMMAND(CmdDLight);
+COMMAND(CmdAddRC);
+COMMAND(CmdDeleteRC);
+COMMAND(CmdExit);
+COMMAND(CmdExtents);
+COMMAND(CmdBounds);
+COMMAND(CmdToggle);
+COMMAND(CmdGet);
+COMMAND(CmdSectorCommand);
+COMMAND(CmdSwap);
+COMMAND(CmdToFront);
+COMMAND(CmdToBack);
+COMMAND(CmdGroup);
+COMMAND(CmdPlay);
+COMMAND(CmdPlay3D);
+COMMAND(CmdTrigger);
+COMMAND(CmdNewGame);
+COMMAND(CmdCurPlayer);
+COMMAND(CmdGetState);
+
+// object-specific commands
+COMMAND(CmdText);
+COMMAND(CmdFollow);
+COMMAND(CmdRestore);
+
+
+// in-game control commands (for scripts)
+COMMAND(CmdSay);
+COMMAND(CmdGo);
+COMMAND(CmdGoto);
+COMMAND(CmdFace);
+COMMAND(CmdPivot);
+COMMAND(CmdUse);
+COMMAND(CmdActivate);
+COMMAND(CmdCombat);
+COMMAND(CmdAttack);
+COMMAND(CmdStop);
+COMMAND(CmdBlock);
+COMMAND(CmdControl);
+COMMAND(CmdPulp);
+COMMAND(CmdBurn);
+COMMAND(CmdDrip);
+COMMAND(CmdSetVisibility);
+COMMAND(CmdCast);
+COMMAND(CmdKnockBack);
+
+// character dialog commands
+COMMAND(CmdChoice);
+
+// script conditionals, loops, gamestate control
+COMMAND(CmdBegin);
+COMMAND(CmdEnd);
+COMMAND(CmdIf);
+COMMAND(CmdElse);
+COMMAND(CmdWhile);
+COMMAND(CmdSet);
+COMMAND(CmdWait);
+COMMAND(CmdJump);
+
+
+// Retail-table commands added by the retail-sync (bodies in the
+// "Retail commands awaiting port" section at the end of this file until
+// their owner ports them).
+COMMAND(CmdAddAt);
+COMMAND(CmdAddMonsterType);
+COMMAND(CmdAddNear);
+COMMAND(CmdAmbSoundGet);
+COMMAND(CmdAmbSoundSet);
+COMMAND(CmdBeginFighting);
+COMMAND(CmdBigGenerate);
+COMMAND(CmdBusyMsg);
+COMMAND(CmdBusySay);
+COMMAND(CmdBuySellAdd);
+COMMAND(CmdBuySellAddBuyCriteria);
+COMMAND(CmdBuySellAddBuyItem);
+COMMAND(CmdBuySellAddBuyItems);
+COMMAND(CmdBuySellAddCriteria);
+COMMAND(CmdBuySellInit);
+COMMAND(CmdBuySellNoGoldDialog);
+COMMAND(CmdBuySellPurchaseDialog);
+COMMAND(CmdBuySellRemove);
+COMMAND(CmdBuySellRemoveBuyCriteria);
+COMMAND(CmdBuySellRemoveCriteria);
+COMMAND(CmdBuySellSalesPerson);
+COMMAND(CmdBuySellScreen);
+COMMAND(CmdBuySellShopType);
+COMMAND(CmdCleanIds);
+COMMAND(CmdCreateModule);
+COMMAND(CmdDelMonsterType);
+COMMAND(CmdDispInv);
+COMMAND(CmdDrop);
+COMMAND(CmdDumpTagList);
+COMMAND(CmdDumpTagListErrors);
+COMMAND(CmdEndFighting);
+COMMAND(CmdEndGame);
+COMMAND(CmdEquip);
+COMMAND(CmdFaceObject);
+COMMAND(CmdFadeCharacterIn);
+COMMAND(CmdFadeCharacterOut);
+COMMAND(CmdFadeScreenIn);
+COMMAND(CmdFadeScreenOut);
+COMMAND(CmdForget);
+COMMAND(CmdFogOfWar);
+COMMAND(CmdGenAutoMapS);
+COMMAND(CmdGenAutoMapW);
+COMMAND(CmdGetItemAmount);
+COMMAND(CmdGetItemName);
+COMMAND(CmdGetItemValue);
+COMMAND(CmdGiveWeapons);
+COMMAND(CmdGotoRelativeDistance);
+COMMAND(CmdGotoRelativePosition);
+COMMAND(CmdGroupFace);
+COMMAND(CmdGroupGoto);
+COMMAND(CmdGroupInRange);
+COMMAND(CmdGroupPos);
+COMMAND(CmdHasFreeSlot);
+COMMAND(CmdHasLevel);
+COMMAND(CmdHasPlayer);
+COMMAND(CmdHideObjects);
+COMMAND(CmdHideResponse);
+COMMAND(CmdHasNumPlayers);
+COMMAND(CmdIncidentals);
+COMMAND(CmdJumpClass);
+COMMAND(CmdJumpName);
+COMMAND(CmdLoadGame);
+COMMAND(CmdMap);
+COMMAND(CmdMapIndex);
+COMMAND(CmdMaxMonsters);
+COMMAND(CmdMessage);
+COMMAND(CmdMonsterTypes);
+COMMAND(CmdOperate);
+COMMAND(CmdPivotObject);
+COMMAND(CmdPlayerLevel);
+COMMAND(CmdPlayMovie);
+COMMAND(CmdRandom);
+COMMAND(CmdReloadStates);
+COMMAND(CmdStopAutoMapGen);
+COMMAND(CmdSaveGame);
+COMMAND(CmdSaveLevelSectors);
+COMMAND(CmdSetCDVolume);
+COMMAND(CmdSetCurModule);
+COMMAND(CmdSetCurrent);
+COMMAND(CmdSetFromExit);
+COMMAND(CmdSetProtoVariable);
+COMMAND(CmdShort);
+COMMAND(CmdShowObjects);
+COMMAND(CmdSize);
+COMMAND(CmdSpecificAttack);
+COMMAND(CmdStatMod);
+COMMAND(CmdSwapCDTrack);
+COMMAND(CmdTest);
+COMMAND(CmdTextDump);
+COMMAND(CmdTimeLimit);
+COMMAND(CmdTimeOfDay);
+COMMAND(CmdUnequip);
+COMMAND(CmdWalkCopy);
+
+// Name of save slot `index`, the way the editor's "load/save game <n>"
+// address slots (retail 0x0048e5b0 / 0x0048df40). Empty if out of range.
+static std::string SaveSlotAt(int32_t index)
+{
+    ::SaveGame.RefreshSlots();
+    const std::vector<SSaveSlot>& slots = ::SaveGame.Slots();
+    return (index >= 0 && index < (int32_t)slots.size()) ? slots[index].name : std::string();
+}
+
+// Shared body for retail-table commands whose port hasn't landed yet. They
+// answer the way retail answers a command it doesn't have (ARCHITECTURE
+// §6.5): CMD_BADCOMMAND, so the interpreter offers the line to the target's
+// own parser, reports "Unrecognized command" and the script carries on with
+// the next line. Logged once per command with the retail address.
+static int32_t CmdNotPorted(const char *name, uint32_t retailaddr, TToken &t)
+{
+    static std::unordered_set<std::string> reported;
+    if (reported.insert(name).second)
+        log_warn("[cmd] '%s' not ported (retail @ 0x%08x); unrecognized", name, retailaddr);
+    else
+        log_debug("[cmd] '%s' not ported; unrecognized", name);
+    while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+        t.Get();
+    return CMD_BADCOMMAND;
+}
+
+// Master command list, evaluated top-to-bottom
+// --------------------------------------------
+//
+// "name", function, class1 (0 all, -1 none), class2, requiresparams, editoronly, "usage"
+
+SCommand Commands[] =
+{
+  { "activate", CmdActivate, OBJCLASS_EXIT, 0, false, false, "usage: <object>.activate\n" },
+  { "add", CmdAdd, -1, -1, true, false, "usage: add [<amt>] <typename>\n       add light [<intensity>]\n" },
+  { "addat", CmdAddAt, -1, -1, true, false, "usage: addat <x> <y> [<amt>] <typename>\n       addat <x> <y> light [<intensity>]\n" },
+  { "addmonstertype", CmdAddMonsterType, OBJCLASS_HELPER, -1, true, false, "usage: <monstergen>.addmonstertype <monster name> <frequency in frames> <treasure type>" },
+  { "addnear", CmdAddNear, 0, -1, true, false, "usage: addnear <object> [<xoffset> <yoffset>] [<amt>] <typename>\n       addnear <object> [<xoffset> <yoffset>] light [<intensity>]\n" },
+  { "addinv", CmdAddInv, 0, 0, true, false, "usage: <object>.addinv [<amt>] <obj>\n" },
+  { "addrc", CmdAddRC, -1, -1, false, true, "usage: addrc\n" },
+  { "amb", CmdAmbient, -1, -1, true, false, "usage: ambient <intensity>\n" },
+  { "ambcolor", CmdAmbColor, -1, -1, true, false, "usage: ambcolor <red> <green> <blue>\n" },
+  { "ambsoundget", CmdAmbSoundGet, 0, 0, false, true, "usage: <speaker object>.getsound\n" },
+  { "ambsoundset", CmdAmbSoundSet, 0, 0, true, false, "usage: <speaker object>.ambsoundset [<sound name> <vol> <min range> <max range>] [SOUND <sound name>] [VOLUME <vol>] [RANGES <min range> <max range>]\n" },
+  { "animreg", CmdAnimRegistration, 0, 0, false, true, "usage: <object>.animregistration <deltax> <deltay>\n" },
+  { "animz", CmdAnimZ, 0, 0, false, true, "usage: <object>.animz <zval>\n" },
+  { "attack", CmdAttack, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <object>.attack <target>\n" },
+  { "begin", CmdBegin, -1, -1, false, false, "usage: begin\n         <block>\n       end\n" },
+  { "beginfighting", CmdBeginFighting, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>begincombat <target>\n" },
+  { "biggenerate", CmdBigGenerate, -1, -1, false, true, "usage: generate [<startx> <starty> <sizex> <sizey>] \n  Size in sectors \n" },
+  { "block", CmdBlock, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, false, false, "usage: <object>.block\n" },
+  { "bounds", CmdBounds, 0, 0, true, true, "usage: <object>.bounds <regx> <regy> <width> <length>\n" },
+  { "burn", CmdBurn, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, false, false, "usage: <character>.burn\n" },
+  { "busymsg", CmdBusyMsg, -1, -1, true, false, "usage: busymessage <message>\n" },
+  { "busysay", CmdBusySay, -1, -1, true, false, "usage: busysay <message>\n" },
+  { "buyselladd", CmdBuySellAdd, -1, -1, true, false, "usage: buyselladd <item>\n" },
+  { "buyselladdbuycriteria", CmdBuySellAddBuyCriteria, -1, -1, true, false, "usage: buyselladdbuycriteria <stat name> <min> <max>\n" },
+  { "buyselladdbuyitem", CmdBuySellAddBuyItem, -1, -1, false, false, "usage: buyselladdbuyitem <name>\n" },
+  { "buyselladdbuyitems", CmdBuySellAddBuyItems, -1, -1, false, false, "usage: buyselladdbuyitems\n" },
+  { "buyselladdcriteria", CmdBuySellAddCriteria, -1, -1, true, false, "usage: buyselladdcriteria <stat name> <min> <max>\n" },
+  { "buysellinit", CmdBuySellInit, -1, -1, false, false, "usage: buysellinit\n" },
+  { "buysellnogolddialog", CmdBuySellNoGoldDialog, -1, -1, true, false, "usage: buysellnogolddialog <tag>\n" },
+  { "buysellpurchasedialog", CmdBuySellPurchaseDialog, -1, -1, true, false, "usage: buysellpurchasedialog <tag>\n" },
+  { "buysellremove", CmdBuySellRemove, -1, -1, true, false, "usage: buysellremove <item>\n" },
+  { "buysellremovebuycriteria", CmdBuySellRemoveBuyCriteria, -1, -1, true, false, "usage: buysellremovebuycriteria <stat name> <min> <max>\n" },
+  { "buysellremovecriteria", CmdBuySellRemoveCriteria, -1, -1, true, false, "usage: buysellremovecriteria <stat name> <min> <max>\n" },
+  { "buysellsalesperson", CmdBuySellSalesPerson, -1, -1, true, false, "usage: buysellsalesperson <character>\n" },
+  { "buysellscreen", CmdBuySellScreen, -1, -1, false, false, "usage: buysellscreen\n" },
+  { "buysellshoptype", CmdBuySellShopType, -1, -1, true, false, "usage: buysellscreen <mode> <type>\n" },
+  { "calcwalk", CmdCalcWalkmap, -1, -1, false, true, "usage: calcwalkmap\n" },
+  { "cast", CmdCast, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.cast <name or talisman list>\n" },
+  { "centeron", CmdCenterOn, 0, 0, false, false, "usage: <object>.centeron OR\n\t centeron <object> OR\n\t centeron <x> <y> <z> [<level>]\n" },
+  { "choice", CmdChoice, -1, -1, true, false, "usage: choice <label> <text string>\n" },
+  { "cleanids", CmdCleanIds, -1, -1, false, false, "usage: cleanids\n" },
+  { "combat", CmdCombat, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <object>.combat [off|on|<target>]\n" },
+  { "control", CmdControl, -1, -1, false, false, "usage: control <on|off>\n" },
+  { "createmodule", CmdCreateModule, -1, -1, true, true, "usage: createmodule <modulename> ['single'|'multi']\n" },
+  { "curplayer", CmdCurPlayer, OBJCLASS_PLAYER, -1, false, false, "usage: <player>.curplayer\n" },
+  { "delete", CmdDelete, 0, 0, false, false, "usage: <object>.delete\n" },
+  { "delinv", CmdDelInv, 0, 0, false, false, "usage: <object>.delinv [<amt>] <obj>\n" },
+  { "delmonstertype", CmdDelMonsterType, OBJCLASS_HELPER, -1, true, false, "usage: <monstergen>.delmonstertype <monster name>" },
+  { "delrc", CmdDeleteRC, -1, -1, false, true, "usage: deleterc\n" },
+  { "deselect", CmdDeselect, -1, -1, false, true, "usage: deselect [<selection number>]\n" },
+  { "dispinv", CmdDispInv, 0, 0, false, true, "usage: dispinv (shows inventory items in the selected object)\n" },
+  { "drop", CmdDrop, OBJCLASS_PLAYER, -1, true, false, "usage: <player>.drop <item>\n" },
+  { "dumptaglist", CmdDumpTagList, 0, 0, true, true, "usage: [object.]dumptaglist <filename> [tag name]" },
+  { "dumptaglisterrors", CmdDumpTagListErrors, 0, 0, true, true, "usage: [object.]dumptaglisterrors <filename> [tag name]" },
+  { "dxstats", CmdDXStats, -1, -1, false, false, "usage: dxstats\n" },
+  { "else", CmdElse, -1, -1, false, false, "usage: if <condition>\n          <command block>\n"
+                                  "         else <alternate command block>\n" },
+  { "end", CmdEnd, -1, -1, false, false, "usage: begin\n         <block>\n       end\n" },
+  { "endfighting", CmdEndFighting, OBJCLASS_CHARACTER, -1, false, false, "usage: <character>.endfighting\n" },
+  { "endgame", CmdEndGame, -1, -1, false, false, "usage: endgame\n" },
+  { "equip", CmdEquip, OBJCLASS_PLAYER, -1, true, false, "usage: <player>.equip <item>\n" },
+  { "exit", CmdExit, OBJCLASS_EXIT, -1, true, true, "usage: <object>.exit <name> [posonly]\n" },
+  { "extents", CmdExtents, 0, 0, false, true, "usage: <object>.extents [<state>] [FRONT]\n" },
+  { "face", CmdFace, 0, 0, true, false, "usage: <object>.face <angle>\n" },
+  { "faceobject", CmdFaceObject, 0, 0, true, false, "usage: <object>.face <object> <offset>\n" },
+  { "fadecharacterin", CmdFadeCharacterIn, -1, -1, true, false, "usage: fadecharacterin <character>\n" },
+  { "fadecharacterout", CmdFadeCharacterOut, -1, -1, true, false, "usage: fadecharacterout <character>\n" },
+  { "fadescreenin", CmdFadeScreenIn, -1, -1, false, false, "usage: fadescreenin\n" },
+  { "fadescreenout", CmdFadeScreenOut, -1, -1, false, false, "usage: fadescreenout\n" },
+  { "flip", CmdFlip, 0, 0, false, false, "usage: <object>.flip\n" },
+  { "follow", CmdFollow, OBJCLASS_EXIT, -1, false, true, "usage: <exit>.follow\n" },
+  { "force", CmdForce, 0, -1, true, false, "usage: force <state name>\n" },
+  { "forget", CmdForget, -1, -1, false, false, "usage: forget [<character>]\n" },
+  { "fow", CmdFogOfWar, -1, -1, false, false, "usage: toggles the fog of war on automap" },
+  { "frame", CmdFrame, 0, -1, true, false, "usage: frame <frame num>\n" },
+  { "gamaps", CmdGenAutoMapS, -1, -1, true, true, "usage: <upper left of level x y> <lower right of level x y> docomp" },
+  { "gamapw", CmdGenAutoMapW, -1, -1, true, true, "usage: <upper left of level x y z> <lower right of level x y z> docomp" },
+  { "generate", CmdGenerate, -1, -1, false, true, "usage: generate [<sizex> <sizey>] [from <startx> <starty>]\n" },
+  { "get", CmdGet, 0, 0, false, false, "usage: <character>.get <object>\n" },
+  { "getitemamount", CmdGetItemAmount, OBJCLASS_CHARACTER, 0, true, false, "usage: <character>.getitemamount <obj>\n" },
+  { "getitemname", CmdGetItemName, 0, 0, true, false, "usage: <object>.getitemname <item number> <variable>\n" },
+  { "getitemvalue", CmdGetItemValue, 0, 0, true, false, "usage: <object>.getitemvalue <item number> <variable>\n" },
+  { "getstate", CmdGetState, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, false, false, "usage: <character>.getstate\n" },
+  { "give", CmdGive, 0, 0, true, false, "usage: <object>.give <to> [<amt>] <obj>\n" },
+  { "giveweapons", CmdGiveWeapons, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <charobj>.giveweapons \"<character>\"\n" },
+  { "go", CmdGo, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.go <angle>\n" },
+  { "goto", CmdGoto, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.goto <x> <y>\n" },
+  { "gotorelativedistance", CmdGotoRelativeDistance, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.gotorelativedistance <object> <distance> [<offset>]\n" },
+  { "gotorelativeposition", CmdGotoRelativePosition, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.gotorelativeposition <object> <x> <y> [<x> <y>]\n" },
+  { "group", CmdGroup, 0, 0, false, true, "usage: group <groupnum>\n"},
+  { "groupface", CmdGroupFace, OBJCLASS_PLAYER, -1, true, false, "usage: <player>.groupface <face [<face2>...]\n" },
+  { "groupgoto", CmdGroupGoto, OBJCLASS_PLAYER, -1, true, false, "usage: <player>.groupgoto <x> <y> [<x2> <y2>...]\n" },
+  { "groupinrange", CmdGroupInRange, OBJCLASS_PLAYER, -1, false, false, "usage: <player>.groupinrange [<width> <height>]\n" },
+  { "grouppos", CmdGroupPos, OBJCLASS_PLAYER, -1, true, false, "usage: <player>.grouppos <level> <x> <y> [<x2> <y2>...]\n" },
+  { "hasfreeslot", CmdHasFreeSlot, OBJCLASS_CHARACTER, 0, true, false, "usage: <character>.hasfreeslot\n" },
+  { "haslevel", CmdHasLevel, OBJCLASS_PLAYER, 0, true, false, "usage: <player>.haslevel <minlev>\n" },
+  { "help", CmdHelp, -1, -1, false, true, "usage: help [<command>]\n" },
+  { "hasplayer", CmdHasPlayer, OBJCLASS_PLAYER, 0, true, false, "usage: <player>.hasplayer <name or classname>\n" },
+  { "hideobjects", CmdHideObjects, -1, -1, true, false, "usage: hideobjects <class>\n" },
+  { "hideresponse", CmdHideResponse, -1, -1, false, false, "usage: hideresponse\n" },
+  { "hasnumplayers", CmdHasNumPlayers, OBJCLASS_PLAYER, 0, true, false, "usage: <player>.hasnumplayers <min> <max>\n" },
+  { "if", CmdIf, -1, -1, true, false, "usage: if <condition>\n          <command block>\n"
+                                  "         else <alternate command block>\n" },
+  { "incidentals", CmdIncidentals, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: incidentals <on/off>\n" },
+  { "jump", CmdJump, -1, -1, true, false, "usage: jump <label>\n" },
+  { "jumpclass", CmdJumpClass, 0, -1, true, false, "usage: <this/context>.jump <object>\n" },
+  { "jumpname", CmdJumpName, 0, -1, true, false, "usage: <this/context>.jump <object>\n" },
+  { "knockback", CmdKnockBack, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.knockback <x> <y> <z>\n" },
+  { "level", CmdLevel, -1, -1, true, false, "usage: level <level number>\n" },
+  { "light", CmdLight, 0, 0, true, false, "usage: <object>.light <on/off>    <object>.light <intensity>\n"
+                "       <object>.light color <red> <green> <blue>\n"
+                "       <object>.light position <x> <y> <z>\n" },
+  { "load", CmdLoad, -1, -1, false, true, "usage: load [game <game number> | sectors]\n" },
+  { "loadgame", CmdLoadGame, -1, -1, true, false, "usage: loadgame.<game name>" },
+  { "lock", CmdLock, 0, 0, false, true, "usage: lock\n" },
+  { "map", CmdMap, -1, -1, true, true, "usage: map list [or] <name> [or] <x> <y> <z>\n" },
+  { "mappos",   CmdMapPos, -1, -1, true, true, "usage: mappos list [or] <name> [or] <x> <y> <z>\n" },  // port-only: editor map-position bookmarks (not in retail table)
+  { "mapindex", CmdMapIndex, 0, -1, false, true, "usage: <object>.mapindex\n" },
+  { "maxmonsters", CmdMaxMonsters, OBJCLASS_HELPER, -1, false, false, "usage: <monstergen>.maxmonsters [max number of monsters]" },
+  { "memory", CmdMemory, -1, -1, false, false, "usage: memory\n" },
+  { "message", CmdMessage, -1, -1, true, false, "usage: message <message>\n" },
+  { "mono", CmdMono, -1, -1, true, false, "usage: mono <percent>\n" },
+  { "monstertypes", CmdMonsterTypes, OBJCLASS_HELPER, -1, false, false, "usage: <monstergen>.monstertypes" },
+  { "move", CmdMove, 0, 0, true, false, "usage: <object>.move <dx> <dy> [<dz>]\n" },
+  { "name", CmdName, 0, 0, true, false, "usage: <object>.name [type/clear] <name>\n" },
+  { "newgame", CmdNewGame, -1, -1, false, false, "usage: newgame\n" },
+  { "operate", CmdOperate, OBJCLASS_EXIT, -1, true, false, "usage: <exit>.operate <object>\n" },
+  { "pivot", CmdPivot, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <object>.pivot <angle>\n" },
+  { "pivotobject", CmdPivotObject, 0, 0, true, false, "usage: <object>.pivotobject <object> <offset>\n" },
+  { "play", CmdPlay, -1, -1, true, false, "usage: play <sound>\n" },
+  { "play3d", CmdPlay3D, 0, 0, true, false, "usage: <object>.play3d <sound>\n" },
+  { "playerlevel", CmdPlayerLevel, OBJCLASS_PLAYER, -1, true, false, "usage: playerlevel <level 1-30>\n" },
+  { "playmovie", CmdPlayMovie, -1, -1, true, false, "usage: playmovie <smacker movie filename>\n" },
+  { "pos", CmdPos, 0, 0, false, false, "usage: <object>.pos [add] <x> <y> [<z> [<level>]]\n" },
+  { "pulp", CmdPulp, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.pulp <x> <y> <z>\n" },
+  { "random", CmdRandom, -1, -1, true, false, "usage: random <max>\n" },
+  { "reg", CmdRegistration, 0, 0, false, true, "usage: <object>.registration <deltax> <deltay>\n" },
+  { "reloadstates", CmdReloadStates, -1, -1, false, false, "usage: reloadstates\n" },
+  { "replace", CmdReplace, 0, 0, true, false, "usage: <object>.replace [<class>] [<newobjtype>]\n" },
+  { "restore", CmdRestore, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, false, false, "usage: <character>.restore\n" },
+  { "reveal", CmdReveal, 0, -1, false, false, "usage: reveal\n" },
+  { "rotate", CmdRotate, 0, 0, false, true, "usage: <object>.rotate <x> <y> <z>\n" },
+  { "samap", CmdStopAutoMapGen, -1, -1, false, false, "usage: toggles the pause on amap generation" },
+  { "save", CmdSave, -1, -1, false, true, "usage: save [game <game number> | map | headers | classes | exits]\n" },
+  { "savegame", CmdSaveGame, -1, -1, true, false, "usage: savegame.<game name>" },
+  { "savelevelsectors", CmdSaveLevelSectors, -1, -1, false, true, "usage: savelevelsectors\n" },
+  { "savetilebm", CmdSaveTileBM, -1, -1, false, true, "usage: savetilebm\n" },
+  { "say", CmdSay, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.say [<nowait>] [choice|\"string\"]\n" },
+  { "script", CmdScript, -1, -1, false, true, "usage: <object>.script\n" },
+  { "scrollto", CmdScrollTo, 0, 0, false, false, "usage: <object>.scrollto OR\n\t scrollto <object> OR\n\t scrollto <x> <y> <z> [<level>]\n" },
+  { "sectorcommand", CmdSectorCommand, -1, -1, true, true, "usage: sectorcommand <level> <command>\n" },
+  { "select", CmdSelect, -1, -1, true, true, "usage: select [#.]<object name>\n       select <#/next/prev>\n" },
+  { "set", CmdSet, -1, -1, true, false, "usage: set <state name> <new value>\n" },
+  { "setcdvolume", CmdSetCDVolume, -1, -1, true, false, "usage: setcdvolume <'half' or 'full'>\n" },
+  { "setcurmodule", CmdSetCurModule, -1, -1, true, true, "usage: setcurmodule <modulename>\n" },
+  { "setcurrent", CmdSetCurrent, -1, -1, true, false, "usage: setcurrent <class name>\n" },
+  { "setdrip", CmdDrip, 0, 0, true, false, "usage: <drip object>.setdrip <ripplesize> <height> <period>\n" },
+  { "setfromexit", CmdSetFromExit, OBJCLASS_EXIT, -1, false, false, "usage: <exit>.setfromexit\n" },
+  { "setprotovariable", CmdSetProtoVariable, -1, -1, true, false, "usage: set <variable name> <new value>\n" },
+  { "short", CmdShort, -1, -1, true, true, "usage: short <1 or 0>" },
+  { "show", CmdShow, -1, -1, true, false, "usage: show <class> [<type>]\n" },
+  { "showobjects", CmdShowObjects, -1, -1, true, false, "usage: showobjects <class>\n" },
+  { "size", CmdSize, 0, -1, true, false, "usage: size <primitive> <x1 y1 z1> <x2 y2 z2>\n" },
+  { "smoothscroll", CmdSmoothScroll, -1, -1, true, false, "usage: smoothscroll <on/off>\n" },
+  { "specificattack", CmdSpecificAttack, OBJCLASS_CHARACTER, -1, true, false, "usage: specificattack <attack number>\n" },
+  { "stat", CmdStat, 0, 0, false, false, "usage: <object>.stat [<amt>]<name> <value>]\n" },
+  { "state", CmdState, 0, -1, true, false, "usage: state <state number>\n" },
+  { "statmod", CmdStatMod, OBJCLASS_PLAYER, -1, true, false, "usage: <context>.statmod <statmod list>\n" },
+  { "stop", CmdStop, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, false, false, "usage: <object>.stop\n" },
+  { "swap", CmdSwap, 0, 0, true, true, "usage: swap <obj to swap with>\n" },
+  { "swapcdtrack", CmdSwapCDTrack, -1, -1, true, false, "usage: swapcdtrack <'-1' or track#>\nwhere: '-1' restores last swapped track,\n       track# is new track to play\n" },
+  { "take", CmdTake, 0, 0, true, false, "usage: <object>.take <from> [<amt>] <obj>\n" },
+  { "template", CmdTemplate, 0, -1, false, true, "usage: <object.>template\n" },
+  { "test", CmdTest, -1, -1, false, true, "usage: test\n" },
+  { "text", CmdText, OBJCLASS_SCROLL, -1, false, true, "usage: <scroll>.text\n" },
+  { "textdump", CmdTextDump, -1, -1, true, true, "usage: textdump <1 or 0>" },
+  { "tilewalk", CmdTileWalkmap, OBJCLASS_TILE, -1, false, true, "usage: tilewalkmap\n" },
+  { "timelimit", CmdTimeLimit, -1, -1, true, false, "usage: <object>.script edit\nscript pause <all>\nscript resume <all>\nscript end <all>\n" },
+  { "timeofday", CmdTimeOfDay, -1, -1, false, false, "usage: timeofday\n" },
+  { "toback", CmdToBack, 0, 0, false, true, "usage: toback\n" },
+  { "tofront", CmdToFront, 0, 0, false, true, "usage: tofront\n" },
+  { "toggle", CmdToggle, 0, 0, true, false, "usage: <object>.toggle <flagname>\n" },
+  { "trigger", CmdTrigger, 0, 0, true, false, "usage: trigger <trigname>\n" },
+  { "try", CmdTry, 0, -1, true, false, "usage: try <state name>\n" },
+  { "undo", CmdUndo, -1, -1, false, true, "usage: undo\n" },
+  { "unequip", CmdUnequip, OBJCLASS_PLAYER, -1, true, false, "usage: <player>.unequip <item>\n" },
+  { "unlock", CmdUnlock, 0, 0, false, true, "usage: unlock\n" },
+  { "use", CmdUse, 0, 0, false, false, "usage: <object>.use [<with object>]\n" },
+  { "visible", CmdSetVisibility, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, true, false, "usage: <character>.visible <state #>\n" },
+  { "wait", CmdWait, 0, 0, false, false, "usage: <object>.wait [<wait type>]\n" },  // retail 0x0041fe30: any object (doors and triggers wait too)
+  { "walkcopy", CmdWalkCopy, -1, -1, true, true, "usage: walkcopy <src tile name> <dest tile name>  <applied rotation>\n" },
+  { "walkmap", CmdWalkmap, 0, 0, true, true, "usage: walkmap <delta z>\n" },
+  { "while", CmdWhile, -1, -1, true, false, "usage: while <condition>\n         <command block>\n" },
+  { "zoffset", CmdZOffset, 0, 0, false, true, "usage: <object>.zoffset <zoffset>\n" },
+
+  { nullptr, nullptr }            // list terminator
+};
+
+
+inline bool CheckOneContext(TObjectInstance* context, int32_t classid)
+{
+    if (classid >= 0)
+    {
+        if (context == nullptr)
+            return false;
+    }
+    else
+    {
+        if (context != nullptr)
+            return false;
+    }
+
+    if (classid > 0 && context && context->ObjClass() != classid)
+        return false;
+
+    return true;
+}
+
+inline bool CheckContext(TObjectInstance* context, int32_t classid, int32_t classid2)
+{
+    if (classid < 0 && classid2 < 0)
+        return true;
+
+    return (CheckOneContext(context, classid) || (classid2 >= 0 && CheckOneContext(context, classid2)));
+}
+
+int32_t CommandInterpreter(TObjectInstance* context, TToken &t, int32_t abrevlen, TScript* script)
+{
+    bool skip = false;
+    bool nowait = false;
+
+    TObjectInstance* orgcontext = context; // Save original context
+
+    t.SkipBlanks();
+    if (t.Type() == TKN_EOF)
+        return 0;               // don't bother if there's nothing there
+
+    strcpy(buf, t.Text());
+
+    int32_t groupnum = -1; // Set to valid group number if we're doing groups
+
+    SetDialogContext(context); // Who's script is running?
+
+  // REVSYNC: CommandInterpreter @ 0x0041e8e0 -- [nowait] [<context>.]<command>,
+  // where the context is a name (quoted or not) the script resolver answers.
+    if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
+    {
+        if (t.Is("nowait"))
+        {
+            nowait = true;
+            t.WhiteGet();
+            strcpy(buf, t.Text());
+        }
+
+        t.Get();
+        if (t.Is(".")) // Houston we have a context...
+        {
+            if (!strnicmp(buf, "group", 5))
+            {
+                groupnum = atoi(buf + 5);
+                t.Get();
+                if (t.Type() == TKN_IDENT)
+                    strcpy(buf, t.Text());
+                else
+                {
+                    Output("Specify command following group context\n");
+                    return CMD_BADPARAMS;
+                }
+            }
+            else
+            {
+                context = ResolveScriptObject(buf, orgcontext, script);
+                if (!context)
+                {
+                    const std::string name = buf;   // Output formats into buf
+                    Output("%s: Context not found\n", name.c_str());
+                    return CMD_BADCOMMAND;
+                }
+                t.Get();
+                if (t.Type() != TKN_IDENT)
+                {
+                    Output("Specify command following object context\n");
+                    return CMD_BADPARAMS;
+                }
+                strcpy(buf, t.Text());
+            }
+        }
+    }
+
+    int32_t retval = CMD_BADCOMMAND;
+
+    int32_t cmd;
+    for (cmd = 0; Commands[cmd].name; cmd++)
+    {
+        if ((abrevlen && abbrevcmp(buf, Commands[cmd].name) >= abrevlen) ||
+            !stricmp(buf, Commands[cmd].name))
+        {
+            // check editor-only commands
+            if (Commands[cmd].editoronly && !Editor)
+            {
+                Output("Command can only be used in the editor\n");
+                skip = true;
+            }
+
+            // validate object context (we do it later if doing a command for a group though)
+            if (groupnum < 0 && !CheckContext(context, Commands[cmd].classcontext, Commands[cmd].classcontext2))
+            {
+                skip = true;
+
+                if (context == nullptr)
+                    Output("Object context required for command\n");
+                else
+                    Output("Command not availible for context's class\n");
+            }
+
+            // Save start of command for group stuff later      
+            uint32_t startpos = t.GetPos(); // Go through map, and do command for all objs which fit group#
+
+            // check params
+            if (t.Type() != TKN_RETURN)
+                t.WhiteGet();
+            if (Commands[cmd].requiresparams && (t.Type() == TKN_RETURN || t.Type() == TKN_EOF))
+            {
+                Output(Commands[cmd].usage);
+                skip = true;
+            }
+
+            // execute the command
+            if (skip)
+                t.SkipLine();           // Skip the command if 'skip' is true
+            else
+            {
+
+              // Group command
+                if (groupnum >= 0)      // If context is group, do command for all objects in group
+                {
+                    for (TMapIterator i; i; i++)
+                    {
+                        if (i.Item()->GetGroup() == groupnum)
+                        {
+                            t.SetPos(startpos);
+                            t.WhiteGet();
+
+                            context = i.Item();
+
+                          // Make sure this object is correct class for command 
+                            if (CheckContext(context, Commands[cmd].classcontext, Commands[cmd].classcontext2))
+                            {
+                                retval = (*(Commands[cmd].cmdfunc))(context, t, orgcontext, script); // Do it
+                                if (retval & CMD_ERROR)
+                                    break;
+                            }
+                        }
+                    }
+                }
+                else                    // Do command for current context
+                    retval = (*(Commands[cmd].cmdfunc))(context, t, orgcontext, script);
+            }
+
+            break;
+        }
+    }
+
+  // Command wasn't on list, try current context
+    if (retval == CMD_BADCOMMAND && context)
+    {
+        retval = context->ParseCommand(t);
+    }
+
+    if (retval & CMD_BADPARAMS)
+        Output("Bad parameters.\n");
+    if (retval & CMD_OUTOFMEM)
+        Output("Couldn't complete command due to low memory.\n");
+    if (retval & (CMD_USAGE | CMD_BADPARAMS))
+        Output(Commands[cmd].usage);
+    // REVSYNC: 0x0041ed34 -- the rest of the line is read and dropped, except
+    // after an ELSE (0x100): `ELSE IF …` leaves its IF for TScript::Continue,
+    // which runs it next (0x00493b06).
+    if (retval & CMD_BADCOMMAND)
+        Output("Unrecognized command.");
+    else if (t.Type() != TKN_RETURN && t.Type() != TKN_EOF && !(retval & CMD_ELSE))
+    {
+        if (!(retval & CMD_ERROR))
+            Output("(extra parameters ignored)\n");
+        while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+            t.Get();
+    }
+
+    if (nowait && retval == CMD_WAIT)
+        retval = 0;
+
+  // REVSYNC: CommandInterpreter @ 0x0041e8e0 — a command that keeps its
+  // target busy makes the calling object's script wait for it, unless that
+  // script already waits for something.
+    if (orgcontext && context && !orgcontext->IsScriptWaiting())
+    {
+        TScript* waiting = orgcontext->GetScript();
+        if (waiting && retval == CMD_WAIT)
+            waiting->WaitChar(context);
+        else if (waiting && retval == CMD_WAITSAY)
+            waiting->WaitSay(context);
+    }
+
+    return retval;
+}
+
+// Defined in editor.cpp (see extern declaration above)
+
+// Console output (retail 0x0041ee50). Outside the editor the console isn't
+// shown; the log keeps it at debug level (headless --exec runs read it there).
+void Output(const char *fmt,...)
+{
+    va_list marker;
+    va_start(marker, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, marker);
+    va_end(marker);
+
+    if (Editor && !Console.IsHidden())
+        Console.Output(buf);
+
+    size_t len = strlen(buf);
+    while (len > 0 && buf[len - 1] == '\n')
+        --len;
+    if (len > 0)
+        log_debug("[console] %.*s", (int)len, buf);
+}
+
+// Appends " NAME" to buf for each set bit, names[i] naming bit i, up to the
+// array's end or a null entry (OBJFLAGNAMES has none).
+template <size_t N>
+static void AppendBitNames(uint32_t bits, const char* const (&names)[N], char *buf)
+{
+    for (size_t i = 0; i < N && i < 32 && names[i]; i++)
+        if (bits & (1u << i))
+        {
+            strcat(buf, " ");
+            strcat(buf, names[i]);
+        }
+}
+
+COMMAND(CmdHelp)
+{
+    if (t.Type() == TKN_IDENT)
+    {
+        int32_t cmd;
+        for (cmd = 0; Commands[cmd].name; cmd++)
+            if (t.Is(Commands[cmd].name, MINCMDABREV))
+            {
+                Output(Commands[cmd].usage);
+                break;
+            }
+
+        if (Commands[cmd].name == nullptr)
+            Output("Command not found.\n");
+
+        t.WhiteGet();
+        return 0;
+    }
+
+    Output("The following commands are currently availible:\n");
+
+    int32_t cnt = 0;
+    char buf[256] = "";
+
+    for (int32_t cmd = 0; Commands[cmd].name; cmd++)
+    {
+        sprintf(buf, "%s %-10s", buf, Commands[cmd].name);
+        if (++cnt >= 5)
+        {
+            strcat(buf, "\n");
+            Output(buf);
+            buf[0] = 0;
+            cnt = 0;
+        }
+    }
+
+    if (cnt)
+    {
+        strcat(buf, "\n");
+        Output(buf);
+    }
+
+    return 0;
+}
+
+// *************************
+// * Map Generation System *
+// *************************
+
+// NOTE: This should be moved to its own separate file!!!
+
+extern PTTerrainTemplate TerrainTemplates;
+
+#define TERRAIN_NOTHING     0
+#define TERRAIN_GRASS       1
+#define TERRAIN_DIRT        2
+#define TERRAIN_MOUNTAIN    3
+#define TERRAIN_LAKE        4
+#define TERRAIN_RIVER       5
+#define TERRAIN_OCEAN       6
+#define TERRAIN_STREET      7
+
+#define NUMTERRAINTYPES     8
+#define TERRAINTYPESHIFT    4
+
+#define OVERLAY_NOTHING     0
+#define OVERLAY_PATH        1
+#define OVERLAY_ROAD        2
+#define OVERLAY_FORESTSTART 16
+#define OVERLAY_FORESTEND   32
+
+uint8_t GetTerrainType(uint8_t *map, int32_t x, int32_t y)
+{
+    if (x < 0 || x >= (MAXPLATESX-1) || y < 0 || y >= (MAXPLATESY-1))
+        return (TERRAIN_OCEAN << TERRAINTYPESHIFT);
+
+    return *(map + (y * MAXPLATESX) + x);
+}
+
+#define TERRAIN(dx, dy)     GetTerrainType(map, x + dx, y + dy)
+
+int32_t BaseTerrain(uint8_t *map, int32_t x, int32_t y)
+{
+    int32_t lowest = 1000000;
+
+    for (int32_t y0 = 0; y0 < 2; y0++)
+        for (int32_t x0 = 0; x0 < 2; x0++)
+            if ((TERRAIN(x0, y0) & 0x0F) < lowest)
+                lowest = TERRAIN(x0, y0) & 0x0F;
+
+    return lowest;
+}
+
+int32_t GetTileCode(uint8_t *map, int32_t x, int32_t y)
+{
+    int32_t base = BaseTerrain(map, x, y);
+
+    int32_t code = ((TERRAIN(0, 0) - base) << 24) | ((TERRAIN(1, 0) - base) << 16) |
+                ((TERRAIN(0, 1) - base)  << 8) | ((TERRAIN(1, 1) - base));
+
+    return code;
+}
+
+#define WORLD_ZSTART        64          // the minimum z coord for generated objects
+
+int32_t zstart[NUMTERRAINTYPES] = { WORLD_ZSTART, 16 + WORLD_ZSTART, 16 + WORLD_ZSTART, 16 + WORLD_ZSTART,
+                                WORLD_ZSTART, WORLD_ZSTART - 8, 18 + WORLD_ZSTART, 16 + WORLD_ZSTART };
+
+#define ELEVATIONCHANGE     46
+
+int32_t TerrainHeight(uint8_t *map, int32_t x, int32_t y)
+{
+    int32_t lowest = 1000000;
+    int32_t add;
+
+    for (int32_t y0 = 0; y0 < 2; y0++)
+        for (int32_t x0 = 0; x0 < 2; x0++)
+            if ((TERRAIN(x0, y0) & 0x0F) < lowest)
+            {
+                lowest = TERRAIN(x0, y0) & 0x0F;
+                add = zstart[TERRAIN(x0, y0) >> TERRAINTYPESHIFT];
+            }
+            else if ((TERRAIN(x0, y0) & 0x0F) == lowest)
+            {
+                add = min(add, zstart[TERRAIN(x0, y0) >> TERRAINTYPESHIFT]);
+            }
+
+    return (lowest * ELEVATIONCHANGE) + add;
+}
+
+struct { char ch; int32_t code; } TerrainCodes[] = {
+ { 'x', 0x00 }, { 'g', 0x10 }, { 'd', 0x20 }, { 'k', 0x11 },
+ { 'i', 0x14 }, { 'm', 0x30 }, { 'r', 0x50 }, { 'o', 0x60 },
+ { 0, 0 } // terminator
+};
+
+int32_t TerrainToCode(char ch)
+{
+    if (ch >= 'A' && ch <= 'Z')
+        ch += 'a' - 'A';
+
+    for (int32_t i = 0; TerrainCodes[i].ch != 0; i++)
+        if (ch == TerrainCodes[i].ch)
+            return TerrainCodes[i].code;
+
+    return -1;
+}
+
+int32_t FindSuperTile(uint8_t *map, int32_t x, int32_t y, uint8_t *filled, int32_t *flux)
+{
+    if (flux)
+        *flux = 0;
+
+    for (int32_t i = 0; i < TileClass.NumTypes(); i++)
+    {
+        if (TileClass.GetObjType(i) == nullptr || !TileClass.GetStat(i, "supertile"))
+            continue;
+
+        int32_t width = TileClass.GetStat(i, "width");
+        int32_t height = TileClass.GetStat(i, "height");
+        char *name = TileClass.GetObjType(i)->name + 3;   // Added 3 for the "FOR" (forest) prefix
+
+        if ((size_t)(width * height) != strlen(name))
+        {
+            Output("width*height != name length for supertile\n");
+            continue;
+        }
+
+        int32_t base = 1000;
+        for (int32_t y0 = 0; y0 < height; y0++)
+            for (int32_t x0 = 0; x0 < width; x0++)
+                if (BaseTerrain(map, x+x0, y+y0) < base)
+                    base = BaseTerrain(map, x+x0, y+y0);
+
+        bool qualifies = true;
+        for (int32_t h = 0; h < height && qualifies; h++)
+            for (int32_t w = 0; w < width && qualifies; w++)
+            {
+                int32_t code = TerrainToCode(*name++);
+                if (code < 0)
+                {
+                    Output("bad code character in supertile\n");
+                    continue;
+                }
+
+                if (code != (TERRAIN((w+1)/2, (h+1)/2) - base))
+                    qualifies = false;
+            }
+
+        if (qualifies)
+        {
+            for (int32_t h = 0; h < height/2; h++)
+                for (int32_t w = 0; w < width/2; w++)
+                    *(filled+((x+w)*MAXPLATESY)+(y+h)) = 1;
+
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+int32_t overlay(uint8_t *overmap, int32_t x, int32_t y)
+{
+    if (x < 0 || x >= MAXPLATESX || y < 0 || y >= MAXPLATESY)
+        return OVERLAY_NOTHING;
+
+    return *(overmap+(y*MAXPLATESX)+x);
+}
+
+#define OVERLAY(dx, dy) (overlay(overmap, x+(dx), y+(dy)))
+
+int32_t GetOverlayTile(uint8_t *overmap, int32_t x, int32_t y, int32_t code)
+{
+    if (OVERLAY(0, 0) == OVERLAY_PATH)
+    {
+        char pathname[80] = "path";
+
+        if (code == 0x10101010)
+        {
+            if (OVERLAY(0, -1) == OVERLAY_PATH)
+                strcat(pathname, "N");
+            if (OVERLAY(1, 0) == OVERLAY_PATH)
+                strcat(pathname, "E");
+            if (OVERLAY(0, 1) == OVERLAY_PATH)
+                strcat(pathname, "S");
+            if (OVERLAY(-1, 0) == OVERLAY_PATH)
+                strcat(pathname, "W");
+        }
+        else if (code == 0x20102010 && OVERLAY(1, 0) == OVERLAY_PATH)
+            strcat(pathname, "BE");
+        else if (code == 0x20201010 && OVERLAY(0, 1) == OVERLAY_PATH)
+            strcat(pathname, "BS");
+        else if (code == 0x10201020 && OVERLAY(-1, 0) == OVERLAY_PATH)
+            strcat(pathname, "BW");
+        else if (code == 0x10102020 && OVERLAY(0, -1) == OVERLAY_PATH)
+            strcat(pathname, "BN");
+
+        return TileClass.FindObjType(pathname);
+    }
+
+    return -1;
+}
+
+TObjectInstance* GenerateObj(TSector* sect, uint8_t *map, uint8_t *overmap, int32_t type, int32_t x, int32_t y, int32_t px, int32_t py, int32_t flux = 0)
+{
+    TObjectInstance* inst;
+    SObjectDef def;
+
+    memset(&def, 0, sizeof(SObjectDef));
+    def.objclass = OBJCLASS_TILE;
+
+    int32_t tx = (x * PLATESPERSECTX) + px;
+    int32_t ty = (y * PLATESPERSECTY) + py;
+    int32_t tmp = GetOverlayTile(overmap, tx, ty, TileClass.GetStat(type, "Code"));
+    if (tmp >= 0)
+        type = tmp;
+
+    def.objtype = type;
+    def.flags = OF_GENERATED;
+    def.pos.x = (x * SECTORWIDTH) + (px * PLATEWIDTH) + (PLATEWIDTH >> 1);
+    def.pos.y = (y * SECTORHEIGHT) + (py * PLATEHEIGHT) + (PLATEHEIGHT >> 1);
+    def.pos.z = TerrainHeight(map, (x * PLATESPERSECTX) + px, (y * PLATESPERSECTY) + py) - (flux * ELEVATIONCHANGE);
+    def.level = sect->SectorLevel();
+
+    inst = TObjectClass::GetClass(def.objclass)->NewObject(&def);
+    if (!inst)
+        return nullptr;
+
+    sect->AddObject(inst);
+
+    int32_t code = TileClass.GetStat(def.objtype, "Extra");
+
+    if (code != 0xFFFFFFFF)
+    {
+        int32_t nexttype = TileClass.FindRandStatVal(TileClass.FindStat("Code"), code);
+        def.pos.z += (flux * ELEVATIONCHANGE);
+        GenerateObj(sect, map, overmap, nexttype, x, y, px, py);
+    }
+
+    int32_t over = overlay(overmap, tx, ty);
+//  if (over >= OVERLAY_FORESTSTART && over < OVERLAY_FORESTEND)
+        TerrainTemplates->ApplyTemplate(inst, sect, random(0, 10));//over - OVERLAY_FORESTSTART + 1);
+
+    return inst;
+}
+
+#define QUAD(c, q)  (((c) >> ((q) * 8)) & 0xFF)
+
+void GenerateMap(int32_t startx, int32_t starty, int32_t sizex, int32_t sizey)
+{
+    TObjectImagery::PauseLoader(); // NOTE: if resume isn't called, program will lock
+
+    TSector* sect;
+    uint8_t filled[MAXPLATESX][MAXPLATESY];
+    int32_t x, y, px, py;
+    FILE *fp;
+
+    memset(filled, 0, MAXPLATESX*MAXPLATESY);
+
+    if ((fp = rev_fopen("map.bmp", "r")) == nullptr)
+    {
+        TObjectImagery::ResumeLoader();
+        return;
+    }
+
+    uint8_t *map = new uint8_t[MAXPLATESX*MAXPLATESY];
+    fread(map, 14, 1, fp);
+    x = *((int32_t *)(map + 10));
+    fseek(fp, x, SEEK_SET);
+    // fuckin' upsidedown bitmaps...
+    for (y = MAXPLATESY-1; y >= 0; y--)
+        fread(map+(y*MAXPLATESX), MAXPLATESX, 1, fp);
+    fclose(fp);
+
+    if ((fp = rev_fopen("overmap.bmp", "r")) == nullptr)
+    {
+        TObjectImagery::ResumeLoader();
+        return;
+    }
+
+    uint8_t *overmap = new uint8_t[MAXPLATESX*MAXPLATESY];
+    fread(overmap, 14, 1, fp);
+    x = *((int32_t *)(overmap + 10));
+    fseek(fp, x, SEEK_SET);
+    for (y = MAXPLATESY-1; y >= 0; y--)
+        fread(overmap+(y*MAXPLATESX), MAXPLATESX, 1, fp);
+    fclose(fp);
+
+    // The sector files are edited directly, so level 0 must be out of memory
+    // meanwhile (retail freed the loaded sectors first and reloaded them
+    // after: TMapPane::FreeAllSectors / ReloadSectors). The sectors' owner
+    // does both around the edit.
+    MapManager.ReloadLevel(0, [&] {
+        for (int32_t sy = starty; sy < (starty + sizey); sy++)
+            for (int32_t sx = startx; sx < (startx + sizex); sx++)
+            {
+                sect = new TSector(0, sx, sy);
+                static_cast<void>(sect->Load());    // a sector with no file is generated from empty
+
+                for (TObjectIterator i(sect->ObjectArray()); i; i++)
+                    if (i.Item() && i.Item()->GetFlags() & OF_GENERATED)
+                        sect->ObjectArray()->Remove(i);
+
+                for (py = 0; py < PLATESPERSECTY; py++)
+                    for (px = 0; px < PLATESPERSECTX; px++)
+                    {
+                        x = (sx * PLATESPERSECTX) + px;
+                        y = (sy * PLATESPERSECTY) + py;
+
+                        if (filled[x][y] != 0)
+                            continue;
+
+                        int32_t type, flux = 0;
+                        if ((type = FindSuperTile(map, x, y, &(filled[0][0]), &flux)) < 0)
+                        {
+                            uint32_t code = GetTileCode(map, x, y);
+
+                            // leave out the 'center' of the mountains
+                            if ((code & 0xF0F0F0F0) == 0x30303030)
+                                continue;
+
+                            // use solid street tile for anything containing street
+                            for (int32_t i = 0; i < 4; i++)
+                                if (QUAD(code, i) == 0x70)
+                                    code = 0x70707070;
+
+
+                            if ((type = TileClass.FindRandStatVal(TileClass.FindStat("Code"), code, nullptr)) < 0 &&
+                                (type = TileClass.FindRandStatVal(TileClass.FindStat("Code"), code, &flux)) < 0)
+                                continue;
+
+                            TObjectInstance* inst = GenerateObj(sect, map, overmap, type, sx, sy, px, py, flux);
+
+                            if (!inst)
+                                continue;
+
+                            uint32_t oldcode = TileClass.GetStat(inst->ObjType(), "Code");
+
+                            // build a mask based on the wildcards in the code
+                            uint32_t newcode = 0;
+                            if (!QUAD(oldcode, 3))
+                                newcode |= code & 0xFF000000;
+                            if (!QUAD(oldcode, 2))
+                                newcode |= code & 0xFF0000;
+                            if (!QUAD(oldcode, 1))
+                                newcode |= code & 0xFF00;
+                            if (!QUAD(oldcode, 0))
+                                newcode |= code & 0xFF;
+
+                            if (newcode != 0)
+                            {
+                                if (!QUAD(newcode, 0))
+                                    if (QUAD(newcode, 1))
+                                        newcode |= QUAD(newcode, 1);
+                                    else if (QUAD(newcode, 2))
+                                        newcode |= QUAD(newcode, 2);
+                                    else
+                                        newcode |= QUAD(newcode, 3);
+
+                                if (!QUAD(newcode, 1))
+                                    if (QUAD(newcode, 0))
+                                        newcode |= QUAD(newcode, 0) << 8;
+                                    else if (QUAD(newcode, 3))
+                                        newcode |= QUAD(newcode, 3) << 8;
+                                    else
+                                        newcode |= QUAD(newcode, 2) << 8;
+
+                                if (!QUAD(newcode, 2))
+                                    if (QUAD(newcode, 0))
+                                        newcode |= QUAD(newcode, 0) << 16;
+                                    else if (QUAD(newcode, 3))
+                                        newcode |= QUAD(newcode, 3) << 16;
+                                    else
+                                        newcode |= QUAD(newcode, 1) << 16;
+
+                                if (!QUAD(newcode, 3))
+                                    if (QUAD(newcode, 1))
+                                        newcode |= QUAD(newcode, 1) << 24;
+                                    else if (QUAD(newcode, 2))
+                                        newcode |= QUAD(newcode, 2) << 24;
+                                    else
+                                        newcode |= QUAD(newcode, 0) << 24;
+
+                                flux = 1000;
+                                int32_t i;
+                                for (i = 0; i < 4; i++)
+                                    if ((QUAD(newcode, i) & 0x0F) < (uint32_t)flux)
+                                        flux = QUAD(newcode, i) & 0x0F;
+
+                                for (i = 0; i < 4; i++)
+                                    newcode -= flux << (i * 8);
+
+                                if ((type = TileClass.FindRandStatVal(TileClass.FindStat("Code"), newcode)) < 0)
+                                    continue;
+
+                                flux *= -1;
+                            }
+                            else
+                                continue;
+                        }
+
+                        GenerateObj(sect, map, overmap, type, sx, sy, px, py, flux);
+                    }
+
+                delete sect;
+            }
+    });
+
+    delete map;
+    delete overmap;
+
+    TObjectImagery::ResumeLoader();
+}
+
+// ******************************
+// * Script Language Components *
+// ******************************
+
+COMMAND(CmdBegin)
+{
+    return CMD_BEGIN;
+}
+
+COMMAND(CmdEnd)
+{
+    return CMD_END;
+}
+
+// REVSYNC: if @ 0x0041fb70. An expression that can't be evaluated is false,
+// reported as bad parameters.
+COMMAND(CmdIf)
+{
+    const std::optional<int32_t> cond = EvaluateExpression(t, context, scriptcontext);
+    if (!cond)
+        return CMD_CONDFALSE | CMD_BADPARAMS;
+    return *cond ? CMD_CONDTRUE : CMD_CONDFALSE;
+}
+
+COMMAND(CmdElse)
+{
+    // The hideously complex algorithm contained in this function
+    // is enough to drive a programmer insane, so don't bother
+    // trying to comprehend its greatness.  Just accept the fact
+    // that it works.
+
+    return CMD_ELSE;
+}
+
+// REVSYNC: while @ 0x0041fbc0
+COMMAND(CmdWhile)
+{
+    const std::optional<int32_t> cond = EvaluateExpression(t, context, scriptcontext);
+    if (!cond)
+        return CMD_BADPARAMS;
+    return *cond ? CMD_LOOP : CMD_SKIPBLOCK;
+}
+
+// REVSYNC: set @ 0x0041fc00 -- `set <state> [= ] <number|on|true|off|false>`;
+// alone, prints the state. An unknown state is ignored (no message). After
+// storing the value it steps past it, so `set X = 1` leaves the line's end
+// and draws no "(extra parameters ignored)"; after on/off/true/false it has
+// already stepped once and so lands on the next line (no shipped script
+// writes those).
+COMMAND(CmdSet)
+{
+    char buf[40];
+
+    if (t.Type() != TKN_IDENT)
+        return CMD_BADPARAMS;
+
+    strcpy(buf, t.Text());
+    t.WhiteGet();
+
+    if (t.Type() == TKN_RETURN || t.Type() == TKN_EOF)
+    {
+        Output("%s = %d\n", buf,    ScriptManager.GameState(buf));
+        return 0;
+    }
+        
+    if (t.Is("="))
+        t.WhiteGet();
+
+    int32_t value;
+    if (t.Is("on") || t.Is("true"))
+    {
+        value = 1;
+        t.WhiteGet();
+    }
+    else if (t.Is("off") || t.Is("false"))
+    {
+        value = 0;
+        t.WhiteGet();
+    }
+    else if (t.Type() == TKN_NUMBER)
+        value = t.Index();
+    else
+        return CMD_BADPARAMS;
+
+    ScriptManager.SetGameState(buf, value);
+
+    t.WhiteGet();
+    return 0;
+}
+
+// REVSYNC: wait @ 0x0041fe30. The waiting script is the context's
+// (retail's object wait wrappers 0x004712b0..0x00471350); a response wait
+// opens the dialog choices (TScript::SetWait).
+COMMAND(CmdWait)
+{
+    TScript* waiting = context ? context->GetScript() : nullptr;
+
+    if (t.Type() == TKN_NUMBER)
+    {
+        if (waiting)
+            waiting->WaitFrames(t.Index());
+        t.WhiteGet();
+        return CMD_WAIT;
+    }
+
+    if (t.Is("char") || t.Is("obj") || t.Is("object"))
+    {
+        t.WhiteGet();
+        if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+            return CMD_BADPARAMS;
+        TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), context);
+        if (!inst)
+            Output("Couldn't find wait char\n");
+        if (waiting)
+            waiting->WaitChar(inst);
+        t.WhiteGet();
+        return CMD_WAIT;
+    }
+
+    if (t.Is("death"))
+    {
+        t.WhiteGet();
+        if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+            return CMD_BADPARAMS;
+        TObjectInstance* inst = ResolveScriptObject(t.Text(), scriptcontext, script);
+        t.WhiteGet();
+        if (!inst)
+            Output("Couldn't find wait char\n");
+        if (t.Is("."))
+        {
+            t.Get();
+            inst = ResolveScriptObject(t.Text(), inst, script);
+        }
+        if (waiting)
+            waiting->WaitDeath(inst);
+        return CMD_WAIT;
+    }
+
+    EScriptWait type = EScriptWait::None;
+    if (t.Is("screenfade"))
+        type = EScriptWait::ScreenFade;
+    else if (t.Is("buysell"))
+        type = EScriptWait::BuySell;
+    else if (t.Is("response") || t.Is("responsenohide") || t.Is("respnohide"))
+        type = EScriptWait::Response;
+    else if (t.Is("respctrlon"))
+        type = EScriptWait::ResponseControlOn;
+    else
+        return CMD_WAIT;    // plain "wait": until the context's action is done
+
+    if (waiting)
+        waiting->SetWait(type);         // a response wait opens the choices
+    t.WhiteGet();
+    return CMD_WAIT;
+}
+
+
+// *******************
+// * Object Commands *
+// *******************
+
+COMMAND(CmdUse)
+{
+    TObjectInstance* inst = nullptr;
+    TObjectInstance* with = nullptr;
+
+    if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
+    {
+        inst = MapPane.FindClosestObject((char *)t.Text(), context);
+        t.WhiteGet();
+    }
+
+    if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
+    {
+        with = MapPane.FindClosestObject((char *)t.Text(), context);
+        t.WhiteGet();
+    }
+
+    if (context && inst)
+    {
+        if (with)
+            inst->Use(context, with->GetMapIndex());
+        else
+            inst->Use(context, -1);
+    }
+    else
+        context->Use(context, -1);
+
+    return 0;
+}
+
+// REVSYNC: activate @ 0x00420100 -- forced: the running script's user, when
+// it is a player, else the main player, goes through the exit (no ACTIVATE
+// request, no AutoActivate test). Always 0. The table allows any context and
+// retail called vtable slot 0x248 on it, an exit's Activate; every shipped
+// use runs on an exit, and the port ignores other objects.
+COMMAND(CmdActivate)
+{
+    if (context->ObjClass() != OBJCLASS_EXIT)
+        return 0;
+
+    TObjectInstance* user = Player;
+    if (script)
+        if (TObjectInstance* scriptuser = script->User(); scriptuser && scriptuser->ObjClass() == OBJCLASS_PLAYER)
+            user = scriptuser;
+    static_cast<TExit*>(context)->Activate(user, true);
+    return 0;
+}
+
+// REVSYNC: say @ 0x00420140 (DIALOG.md §1.1):
+//   [<speaker>.]say [nowait] [<ticks>] {anim <state> | sound <name>}*
+//                   (choice | "<text>" | <TAG>) {<text-part>}*
+// A tag is said with its voice; quoted text with the `sound` given. The
+// calling script waits until the speaker is idle again (the speech wait) --
+// set here, so the interpreter's NOWAIT prefix doesn't lift it; only `say
+// nowait` does. Always 0.
+// A prototype variable named in a `say` line (0x00420140): a number as retail
+// writes it -- five digit places, leading zeros dropped, plain decimal for
+// 0..99999 -- or text as is. Any other name adds nothing.
+static void AppendVariable(std::string& text, const char *name, const TObjectInstance* obj)
+{
+    switch (ScriptManager.VariableType(name, obj))
+    {
+      case static_cast<int32_t>(SScriptVariable::EType::Number):
+      {
+        int32_t value = ScriptManager.VariableNumber(name, obj);
+        bool started = false;
+        for (int32_t place = 10000; place >= 10; place /= 10)
+        {
+            const int32_t digit = value / place;
+            value -= digit * place;
+            if (digit != 0 || started)
+            {
+                text += static_cast<char>('0' + digit);
+                started = true;
+            }
+        }
+        text += static_cast<char>('0' + value);
+        break;
+      }
+      case static_cast<int32_t>(SScriptVariable::EType::Text):
+        if (const char *value = ScriptManager.VariableText(name, obj))
+            text += value;
+        break;
+      default:
+        break;
+    }
+}
+
+COMMAND(CmdSay)
+{
+    TCharacter* speaker = static_cast<TCharacter*>(context);
+
+    bool nowait = false;
+    if (t.Is("nowait"))
+    {
+        nowait = true;
+        t.WhiteGet();
+    }
+
+    int32_t ticks = -1;
+    if (t.Type() == TKN_NUMBER)
+    {
+        ticks = t.Index();
+        t.WhiteGet();
+    }
+
+    std::string anim, sound;
+    while (t.Is("anim") || t.Is("sound"))
+    {
+        std::string& value = t.Is("anim") ? anim : sound;
+        t.WhiteGet();
+        value = std::string(t.Text()).substr(0, 31);
+        t.WhiteGet();
+    }
+    if (!sound.empty())
+        ticks = -1;                         // the voice's length wins
+    const char *animname = anim.empty() ? nullptr : anim.c_str();
+
+    int32_t tagid = -1;
+    std::string text;
+    bool speak = true;
+    if (t.Is("choice"))
+    {
+        // The last choice picked. DEVIATION: with none yet retail says a
+        // stale shared buffer; the port says nothing.
+        const char *chosen = DialogPane.ChosenText();
+        speak = chosen != nullptr;
+        if (chosen)
+        {
+            tagid = DialogList.FindLine(chosen);
+            text = chosen;
+        }
+        t.WhiteGet();
+    }
+    else if (t.Type() == TKN_TEXT)
+    {
+        text = t.Text();
+        t.WhiteGet();
+    }
+    else if (t.Type() == TKN_IDENT)
+    {
+        text = t.Text();                    // a tag, or plain text if it isn't one
+        tagid = DialogList.FindLine(text.c_str());
+        t.WhiteGet();
+    }
+    else
+        return CMD_BADPARAMS;
+
+    // Further parts: quoted text, and the speaker's prototype variables
+    // named here (a number in decimal, text as is), appended to plain text;
+    // other words are skipped.
+    while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+    {
+        if (t.Type() == TKN_TEXT)
+            text += t.Text();
+        else if (t.Type() == TKN_IDENT)
+            AppendVariable(text, t.Text(), context);
+        t.WhiteGet();
+    }
+
+    if (speak)
+    {
+        if (tagid >= 0)
+            speaker->SayTag(tagid, ticks, animname);
+        else
+            speaker->Say(text.c_str(), ticks, animname, sound.empty() ? nullptr : sound.c_str());
+    }
+
+    if (!nowait && scriptcontext)
+        if (TScript* waiting = scriptcontext->GetScript())
+            waiting->WaitSay(speaker);
+    return 0;
+}
+
+COMMAND(CmdGo)
+{
+    int32_t angle;
+    if (!Parse(t, "%d", &angle))
+        return CMD_BADPARAMS;
+
+    ((PTCharacter)context)->Go(angle);
+
+    return 0;
+}
+
+// A coordinate in `goto` (0x004204f0) and `addat` (0x00421770): a number, or a
+// number variable of the object's prototypes (0x00497800; an undeclared one
+// reads as retail's not-found value).
+static bool ReadCoordinate(TToken& t, const TObjectInstance* obj, int32_t& value)
+{
+    if (t.Type() == TKN_NUMBER)
+        value = t.Index();
+    else if (t.Type() == TKN_TEXT || t.Type() == TKN_IDENT)
+        value = ScriptManager.VariableNumber(t.Text(), obj);
+    else
+        return false;
+    t.WhiteGet();
+    return true;
+}
+
+// REVSYNC: goto @ 0x004204f0 -- `<character>.goto <x> <y>` or `goto <object>`
+// (keep.s: `goto Point2`): an object the first name finds (partial match,
+// near the character) is walked to (0x004cee50: Goto to its position);
+// otherwise each coordinate is a number or a number variable of the
+// character's prototypes (0x00497800). An undeclared variable reads as
+// retail's not-found value and the walk heads for it, as retail's did.
+COMMAND(CmdGoto)
+{
+    TCharacter* chr = static_cast<TCharacter*>(context);
+
+    if (t.Type() == TKN_TEXT || t.Type() == TKN_IDENT)
+        if (TObjectInstance* target = MapPane.FindClosestObject(t.Text(), context, true))
+        {
+            t.WhiteGet();
+            const S3DPoint at = IntPos(target);
+            chr->Goto(at.x, at.y);
+            return CMD_WAIT;
+        }
+
+    int32_t x = 0, y = 0;
+    if (!ReadCoordinate(t, context, x) || !ReadCoordinate(t, context, y))
+        return CMD_BADPARAMS;
+
+    chr->Goto(x, y);
+    return CMD_WAIT;
+}
+
+// REVSYNC: gotorelativeposition @ 0x004205c0 --
+// `<character>.gotorelativeposition <object> <dx> <dy> [<dx2> <dy2>]`: walk
+// to the object's position plus (dx, dy), or plus (dx2, dy2) when that spot
+// is nearer the walker (no shipped script gives the second pair). Unlike
+// pivotobject's, the name resolves from the calling object: in a door's
+// `player.gotorelativeposition THIS 0 -60`, `this` is the door. Waits for the
+// walk, even one that couldn't start.
+COMMAND(CmdGotoRelativePosition)
+{
+    const TObjectInstance* target = ResolveScriptObject(t.Text(), scriptcontext, script);
+    t.WhiteGet();
+
+    int32_t dx = 0, dy = 0;
+    if (!Parse(t, "%d %d", &dx, &dy))
+        return CMD_BADPARAMS;
+    if (!target)
+    {
+        Output("Can't find any object by that name.\n");
+        return CMD_BADPARAMS;
+    }
+
+    const S3DPoint at = IntPos(target);
+    S3DPoint spot = { at.x + dx, at.y + dy, at.z };
+    int32_t dx2 = 0, dy2 = 0;
+    if (Parse(t, "%d %d", &dx2, &dy2))
+    {
+        const S3DPoint from = IntPos(context);
+        const S3DPoint other = { at.x + dx2, at.y + dy2, at.z };
+        if (Distance(from, other) < Distance(from, spot))
+            spot = other;
+    }
+
+    TCharacter* chr = static_cast<TCharacter*>(context);   // the table admits characters only
+    log_debug("[cmd] %s at (%d, %d): gotorelativeposition %s at (%d, %d) -> (%d, %d)",
+              chr->GetName(), IntPos(chr).x, IntPos(chr).y, target->GetName(), at.x, at.y,
+              spot.x, spot.y);
+    chr->Goto(spot.x, spot.y);
+    return CMD_WAIT;
+}
+
+// REVSYNC: gotorelativedistance @ 0x00420710 --
+// `<character>.gotorelativedistance <object> <distance> [<angle>]`: walk to
+// the spot `distance` from the object, measured from its facing turned by
+// `angle` (RelativeDistanceSpot). The door prototypes in master.s walk the
+// player to the side of the door with it. The name resolves from the calling
+// object, as for gotorelativeposition. Waits for the walk, even one that
+// couldn't start.
+COMMAND(CmdGotoRelativeDistance)
+{
+    const TObjectInstance* target = ResolveScriptObject(t.Text(), scriptcontext, script);
+    t.WhiteGet();
+
+    int32_t distance = 0;
+    if (!Parse(t, "%d", &distance))
+        return CMD_BADPARAMS;
+    int32_t angle = 0;
+    if (!Parse(t, "%d", &angle))
+        angle = 0;
+    if (!target)
+    {
+        Output("Can't find any object by that name.\n");
+        return CMD_BADPARAMS;
+    }
+
+    const S3DPoint spot = RelativeDistanceSpot(*target, distance, angle);
+    TCharacter* chr = static_cast<TCharacter*>(context);   // the table admits characters only
+    log_debug("[cmd] %s at (%d, %d): gotorelativedistance %s at (%d, %d) facing %d, %d at %d -> (%d, %d)",
+              chr->GetName(), IntPos(chr).x, IntPos(chr).y, target->GetName(), IntPos(target).x,
+              IntPos(target).y, IntFacing(target), distance, angle, spot.x, spot.y);
+    chr->Goto(spot.x, spot.y);
+    return CMD_WAIT;
+}
+
+// REVSYNC: face @ 0x00420800 -- `[<object>.]face <angle>`: set the facing at
+// once (no turning animation; that is `pivot`) and wait. Retail writes the
+// facing byte and the move angle of whatever the context is, as Face does.
+COMMAND(CmdFace)
+{
+    int32_t angle;
+    if (!Parse(t, "%d", &angle))
+        return CMD_BADPARAMS;
+
+    if (context)
+        context->Face(angle);
+
+    return CMD_WAIT;
+}
+
+// REVSYNC: faceobject @ 0x00420840 -- `[<object>.]faceobject <object>
+// [<offset>]`: face the object, plus an optional offset, at once, like `face`.
+// Unlike pivotobject's, the name resolves from the calling object: in a
+// door's `USER.FACEOBJECT THIS 15`, `this` is the door.
+COMMAND(CmdFaceObject)
+{
+    const TObjectInstance* target = ResolveScriptObject(t.Text(), scriptcontext, script);
+    t.WhiteGet();
+    if (!target)
+        return CMD_BADPARAMS;
+
+    int32_t offset = 0;
+    if (!Parse(t, "%d", &offset))
+        offset = 0;
+
+    if (context)
+    {
+        context->Face(context->AngleTo(target) + offset);
+        log_debug("[cmd] %s: faceobject %s %d -> facing %d",
+                  context->GetName(), target->GetName(), offset, IntFacing(context));
+    }
+    return CMD_WAIT;
+}
+
+COMMAND(CmdPivot)
+{
+    int32_t angle;
+    if (!Parse(t, "%d", &angle))
+        return CMD_BADPARAMS;
+
+    if (context)
+        ((PTCharacter)context)->Pivot(angle);
+
+    return CMD_WAIT;
+}
+
+// REVSYNC: pivotobject @ 0x00420900 -- turn to face an object, plus an
+// optional angle offset, and wait for the turn. The name resolves from the
+// turning object (`this` is the context).
+COMMAND(CmdPivotObject)
+{
+    TObjectInstance* target = ResolveScriptObject(t.Text(), context, script);
+    if (!target)
+        return CMD_BADPARAMS;
+    t.WhiteGet();
+
+    int32_t offset = 0;
+    if (!Parse(t, "%d", &offset))
+        offset = 0;
+
+    // Retail pivots whatever the context is; only characters can.
+    if (context && context->IsCharacter())
+        static_cast<TCharacter*>(context)->Pivot(context->AngleTo(target) + offset);
+
+    return CMD_WAIT;
+}
+
+// REVSYNC: incidentals @ 0x00428250 -- `[<character>.]incidentals on|off`:
+// whether the character's root and idle animations may roll their random
+// "NN:" variants (TCharacter::SetIncidentals). Like retail, the word stays
+// for the interpreter to skip with the rest of the line.
+COMMAND(CmdIncidentals)
+{
+    TCharacter* chr = static_cast<TCharacter*>(context);   // the table admits characters only
+    if (t.Is("on"))
+        chr->SetIncidentals(true);
+    else if (t.Is("off"))
+        chr->SetIncidentals(false);
+    else
+    {
+        Output("State must be included\n");
+        return CMD_BADPARAMS;
+    }
+    log_debug("[cmd] %s: incidentals %s", chr->GetName(), t.Text());
+    return 0;
+}
+
+// REVSYNC: fadecharacterout @ 0x00428020, fadecharacterin @ 0x00428070 --
+// `fadecharacterout|fadecharacterin <character>`: fade a character out to
+// nothing or back in (TCharacter::Fade). The name resolves from the context.
+// Retail faded whatever object the name found; only characters fade here.
+// Retail also sent the fade to the other players of a network game. Like
+// retail, the name stays for the interpreter to skip.
+static int32_t FadeCharacter(TObjectInstance* context, TToken& t, TScript* script, int32_t direction)
+{
+    TObjectInstance* target = ResolveScriptObject(t.Text(), context, script);
+    if (!target || !target->IsCharacter())
+        return CMD_BADPARAMS;
+
+    TCharacter* chr = static_cast<TCharacter*>(target);
+    chr->Fade(direction);
+    log_debug("[cmd] %s: fade %s from %d", chr->GetName(), direction == 1 ? "in" : "out", chr->GetFade());
+    return 0;
+}
+
+COMMAND(CmdFadeCharacterOut) { return FadeCharacter(context, t, script, -1); }
+COMMAND(CmdFadeCharacterIn) { return FadeCharacter(context, t, script, 1); }
+
+// REVSYNC: beginfighting @ 0x00427cd0 -- `<character>.beginfighting <name>`:
+// the character squares up to the first character of that name
+// (FindObject 0x00451d70 over the characters; TCharacter::BeginFighting
+// 0x004d3b90). forest.s's trainer faces the practice dummy this way. An
+// unknown name answers bad parameters; one it can't fight says so too.
+COMMAND(CmdBeginFighting)
+{
+    TObjectInstance* found = MapPane.FindObject(t.Text(), 1, OBJSET_CHARACTER);
+    if (!found)
+        return CMD_BADPARAMS;
+
+    TCharacter* chr = static_cast<TCharacter*>(context);
+    if (!found->IsCharacter() || !chr->BeginFighting(static_cast<TCharacter*>(found), ACTION_COMBAT))
+    {
+        Output("Invalid Target %s\n", t.Text());
+        t.WhiteGet();
+        return CMD_BADPARAMS;
+    }
+    t.WhiteGet();
+    return 0;
+}
+
+// REVSYNC: endfighting @ 0x00427d30 -- despite the name, retail calls
+// BeginFighting with no target (0x004d3b90(0, 3)): the character squares up
+// to the closest enemy, if there is one. No shipped script uses it.
+COMMAND(CmdEndFighting)
+{
+    static_cast<TCharacter*>(context)->BeginFighting(nullptr, ACTION_COMBAT);
+    return 0;
+}
+
+// REVSYNC: specificattack @ 0x00427c80 -- `<character>.specificattack <n>`:
+// the character makes attack <n> of its combat moves (TCharacter::
+// SpecificAttack 0x004d2a60), as forest.s's trainer demonstrates each one.
+COMMAND(CmdSpecificAttack)
+{
+    if (t.Type() != TKN_NUMBER)
+        return CMD_BADPARAMS;
+
+    const int32_t attack = t.Index();
+    if (!static_cast<TCharacter*>(context)->SpecificAttack(attack))
+    {
+        Output("Invalid Attack %d\n", attack);
+        t.WhiteGet();
+        return CMD_BADPARAMS;
+    }
+    t.WhiteGet();
+    return 0;
+}
+
+// REVSYNC: giveweapons @ 0x00422150 -- `<character>.giveweapons "<name>"`:
+// the character's weapons and ammo go to the object of that name (the first
+// one, FindObject 0x00451d70; TObjectInstance::GiveWeapons 0x00477780).
+// forest.s: the chief takes Locke's weapons and later gives them back.
+COMMAND(CmdGiveWeapons)
+{
+    char name[RESNAMELEN];
+    static_assert(RESNAMELEN == 32, "the width below is the buffer's");
+    if (!Parse(t, "%32s", name))
+        return CMD_BADPARAMS;
+
+    TObjectInstance* to = MapPane.FindObject(name, 1, OBJSET_ALL);
+    if (!to)
+    {
+        log_warn("[cmd] giveweapons: no object named '%s'", name);
+        return 0;
+    }
+    context->GiveWeapons(to);
+    return 0;
+}
+
+// REVSYNC: playerlevel @ 0x00428640 -- `<player>.playerlevel <n>`: rebuild
+// the player as a fresh level-n character (TPlayer::SetPlayerLevel). The
+// table only lets a player be the context.
+COMMAND(CmdPlayerLevel)
+{
+    if (t.Type() != TKN_NUMBER)
+        return CMD_BADPARAMS;
+
+    static_cast<TPlayer*>(context)->SetPlayerLevel(static_cast<int32_t>(t.Number()));
+    t.Get();
+    return 0;
+}
+
+// REVSYNC: setprotovariable @ 0x0041fd70 -- `setprotovariable <name> [=] <value>`:
+// a number variable takes the rest of the line as an expression (as `if`
+// reads it), a text variable the next token's text; the write goes to every
+// prototype of the context (TScriptManager::SetVariableNumber/Text). An
+// undeclared name does nothing. DEVIATION: retail stored whatever its result
+// slot held when the expression failed; the port leaves the variable alone.
+COMMAND(CmdSetProtoVariable)
+{
+    const std::string name = std::string(t.Text()).substr(0, 39);   // retail's 40-byte copy
+    t.WhiteGet();
+    if (t.Is("="))
+        t.WhiteGet();
+
+    switch (ScriptManager.VariableType(name.c_str(), context))
+    {
+      case static_cast<int32_t>(SScriptVariable::EType::Number):
+        if (const std::optional<int32_t> value = EvaluateExpression(t, context, scriptcontext))
+            ScriptManager.SetVariableNumber(name.c_str(), *value, context);
+        break;
+      case static_cast<int32_t>(SScriptVariable::EType::Text):
+        ScriptManager.SetVariableText(name.c_str(), t.Text(), context);
+        break;
+      default:
+        break;
+    }
+    return 0;
+}
+
+// REVSYNC: statmod @ 0x00428200. The rest of the line is a STATLINE
+// (`<stat> <n>`, `<stat> % <n>`, `TIME <frames>`; PLAYER_STATS.md §3) that
+// becomes the player's stat effect, replacing any other (0x0051c550:
+// ReadStatLine, then AddStatEffect). The "list required" check repeats
+// the interpreter's (the table requires parameters), so it doesn't fire
+// from a script line. No shipped script uses the command.
+COMMAND(CmdStatMod)
+{
+    if (t.Type() == TKN_RETURN || t.Type() == TKN_EOF)
+    {
+        Output("Statmod list required\n");
+        return CMD_BADPARAMS;
+    }
+
+    static_cast<TPlayer*>(context)->AddStatEffect(PlayerStats::ReadStatLine(t).c_str());
+    return 0;
+}
+
+COMMAND(CmdCombat)
+{
+    int32_t index = -1;
+
+    if (t.Type() == TKN_IDENT)
+    {
+        if (t.Is("off"))
+            ((PTCharacter)context)->EndCombat();
+        else
+        {
+            TObjectInstance* inst = nullptr;
+            if (!t.Is("on"))
+            {
+                inst = MapPane.FindClosestObject((char *)t.Text(), context);
+                if (!inst)
+                    return CMD_BADPARAMS;
+            }
+            ((PTCharacter)context)->BeginCombat((PTCharacter)inst);
+        }
+        t.WhiteGet();
+    }
+
+    return 0;
+}
+
+COMMAND(CmdAttack)
+{
+    int32_t index = -1;
+
+    if (t.Type() == TKN_IDENT)
+    {
+        TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), context);
+        t.WhiteGet();
+    }
+
+    return 0;
+}
+
+COMMAND(CmdBlock)
+{
+    ((PTCharacter)context)->Block();
+    return CMD_WAIT;
+}
+
+COMMAND(CmdControl)
+{
+    if (t.Type() != TKN_IDENT)
+        return CMD_BADPARAMS;
+
+    if ((TPlayer*)context == Player)
+    {
+        if (t.Is("on"))
+            PlayScreen.SetDemoMode(false);
+        else if (t.Is("off"))
+            PlayScreen.SetDemoMode(true);
+        else
+            return CMD_BADPARAMS;
+    }
+    else
+    {
+        if (t.Is("on"))
+            PlayScreen.SetControlOn(true);
+        else if (t.Is("off"))
+            PlayScreen.SetControlOn(false);
+        else
+            return CMD_BADPARAMS;
+    }
+
+    // REVSYNC: 0x00420ab0 -- a block that turns control off holds it
+    // (taken bit 1) until `control on` or its end gives it back.
+    if (script)
+        script->SetControlHeld(!t.Is("on"));
+
+    t.WhiteGet();
+
+    return 0;
+}
+
+COMMAND(CmdStop)
+{
+    ((PTCharacter)context)->Stop();
+    return CMD_WAIT;
+}
+
+COMMAND(CmdJump)
+{
+    if (t.Type() != TKN_IDENT && t.Type() != TKN_KEYWORD)
+        return CMD_BADPARAMS;
+
+    if (context)
+        context->ScriptJump((char *)t.Text());
+
+    return CMD_JUMP;
+}
+
+// pulp a character
+COMMAND(CmdPulp)
+{
+    S3DPoint vel;
+    if (!Parse(t, "%d %d %d", &vel.x, &vel.y, &vel.z))
+        return CMD_BADPARAMS;
+
+    int32_t x = random(6, 16);
+
+    ((PTCharacter)context)->Pulp(vel, x, x * 30);
+    
+    return 0;
+}
+
+// pulp a character
+COMMAND(CmdKnockBack)
+{
+    S3DPoint pos;
+    if (!Parse(t, "%d %d %d", &pos.x, &pos.y, &pos.z))
+        return CMD_BADPARAMS;
+
+    ((PTCharacter)context)->KnockBack(pos);
+    
+    return 0;
+}
+
+// burn a character
+COMMAND(CmdBurn)
+{
+    ((PTCharacter)context)->Burn();
+    
+    return 0;
+}
+
+COMMAND(CmdDrip)
+{
+    int32_t ripplesize, height, period;
+    if (!Parse(t, "%d %d %d", &ripplesize, &height, &period))
+        return CMD_BADPARAMS;
+
+    ((PTDripEffect)context)->SetParams(ripplesize, height, period);
+    return 0;
+}
+
+// return state info
+COMMAND(CmdGetState)
+{
+    char buf[1024];
+    sprintf(buf, "state = \"%s\"", ((PTCharacter)context)->GetState());
+    if (((PTCharacter)context)->IsInRoot())
+        strcat(buf, " <root>");
+    Output(buf);
+
+    return 0;
+}
+
+COMMAND(CmdSetVisibility)
+{
+    int32_t state;
+    if (!Parse(t, "%d", &state))
+        return CMD_BADPARAMS;
+
+    if (!state)
+        ((PTCharacter)context)->MakeInvisible();
+    else
+        ((PTCharacter)context)->MakeVisible();
+
+    return 0;
+}
+
+COMMAND(CmdCast)
+{
+    char string[80];
+
+    if (!(t.Type() == TKN_IDENT || t.Type() == TKN_TEXT))
+        return CMD_BADPARAMS;
+
+    strcpy(string, t.Text());
+    t.WhiteGet();
+
+    bool cast = ((PTCharacter)context)->CastByName(string);
+    if (!cast)
+        cast = ((PTCharacter)context)->CastByTalismans(string);
+
+    if (!cast)
+        Output("Spell failed.");
+    else
+        Output("Spell cast.");
+
+    return 0;
+}
+
+// ***************************
+// * Various Editor Commands *
+// ***************************
+
+COMMAND(CmdSelect)
+{
+    if (t.Is("next"))
+    {
+        if (!StatusBar.Next())
+            Output("Already at end of selection list.\n");
+        return 0;
+    }
+    else if (t.Is("prev"))
+    {
+        if (!StatusBar.Prev())
+            Output("Already at start of selection list.\n");
+        return 0;
+    }
+    else if (t.Is("all"))
+    {
+        for (TMapIterator i; i; i++)
+        {
+            if (!StatusBar.Select(i.Item()->GetMapIndex(), true))
+            {
+                Output("Selection overflowed, max objects selected.\n");
+                break;
+            }
+        }
+
+        return 0;
+    }
+
+    if (t.Type() == TKN_NUMBER)
+    {
+        // make the index number specified the current object
+        int32_t index;
+        if (!Parse(t, "%d", &index))
+            return CMD_BADPARAMS;
+
+        if (!StatusBar.SetCurObj(index))
+            Output("Invalid selection index.\n");
+
+        return 0;
+    }
+
+    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context, true);
+
+    if (!inst)
+        Output("Can't find any object by that name.\n");
+    else if (!StatusBar.Select(inst->GetMapIndex()))
+        Output("Unable to select any more objects.\n");
+
+    t.WhiteGet();
+    return 0;
+}
+
+COMMAND(CmdDeselect)
+{
+    if (t.Is("all"))
+        while (StatusBar.Deselect());
+    else
+        if (!StatusBar.Deselect())
+            Output("Nothing to deselect.\n");
+
+    t.WhiteGet();
+    return 0;
+}
+
+// The shared tail of `add` (0x004213c0) and `addat` (0x00421770): after the
+// position and amount, `next`/`prev` step the editor's tile palette, `light`
+// adds an editor light, anything else names an object type to add at `pos`
+// on the map's level (selected in the editor's status bar; a player joins
+// the player list as the main player).
+static void AddWhat(TToken& t, S3DPoint pos, int32_t number)
+{
+    if (t.Is("next") || t.Is("prev"))
+    {
+        const int32_t step = t.Is("next") ? 1 : -1;
+        S3DPoint zero(0, 0, 0);
+        ClassPane.SelObjType(ClassPane.GetObjType() + step);
+        ClassPane.PutObject(zero);
+        t.WhiteGet();
+        return;
+    }
+
+    if (t.Is("light", 1))
+    {
+        SObjectDef def;
+        constexpr int32_t intensity = 220, mult = 12;
+        memset(&def, 0, sizeof(SObjectDef));
+
+        def.objclass = OBJCLASS_TILE;
+        def.objtype = TileClass.FindObjType("light");
+        def.flags = OF_LIGHT | OF_EDITOR;
+
+        def.pos = pos;
+        def.pos.z = 60;
+        def.level = MapPane.GetMapLevel();
+
+        const int32_t index = MapPane.NewObject(&def);
+        if (index < 0)
+            Output("ERROR: Unable to add light\n");
+        else
+        {
+            SColor color = { 255, 255, 255 };
+            MapPane.GetInstance(index)->SetLightIntensity(intensity);
+            MapPane.GetInstance(index)->SetLightColor(color);
+            MapPane.GetInstance(index)->SetLightMultiplier(mult);
+
+            S3DPoint lightpos(0, 0, 0);
+            MapPane.GetInstance(index)->SetLightPos(lightpos);
+            StatusBar.Select(index);
+        }
+        return;
+    }
+
+    TObjectClass* cl = nullptr;
+    int32_t objtype = -1;
+    for (int32_t i = 0; i < MAXOBJECTCLASSES && objtype < 0; i++)
+    {
+        cl = TObjectClass::GetClass(i);
+        objtype = cl ? cl->FindObjType(t.Text()) : -1;
+    }
+    if (objtype < 0)
+    {
+        Output("No object type named '%s'.\n", t.Text());
+        return;
+    }
+
+    SObjectDef def;
+    memset(&def, 0, sizeof(SObjectDef));
+    def.objclass = cl->ClassId();
+    def.objtype = objtype;
+    def.flags = 0;
+    def.level = MapPane.GetMapLevel();
+    def.pos = pos;
+
+    const int32_t index = MapPane.NewObject(&def);
+    if (index < 0)
+    {
+        Output("ERROR: Creating object\n");
+        t.WhiteGet();
+        return;
+    }
+
+    StatusBar.Select(index);
+    Output("%s:%s added at (%d, %d, %d).\n", cl->ClassName(),
+        cl->GetObjType(objtype)->name, def.pos.x, def.pos.y, def.pos.z);
+
+    if (number != 1)
+        MapPane.GetInstance(index)->SetAmount(number);
+
+    // If we added a player, add him to the player manager
+    if (def.objclass == OBJCLASS_PLAYER)
+    {
+        TObjectInstance* oi = MapPane.GetInstance(index);
+        if (oi)
+        {
+            PlayerManager.AddPlayer((TPlayer*)oi);
+            PlayerManager.SetMainPlayer((TPlayer*)oi);
+        }
+    }
+
+    t.WhiteGet();
+}
+
+// REVSYNC: add @ 0x004213c0 -- `add [<amount>] <type>|light|next|prev` at the
+// camera's position.
+COMMAND(CmdAdd)
+{
+    S3DPoint pos;
+    MapPane.GetMapPos(pos);
+
+    int32_t number = 1;
+    if (t.Type() == TKN_NUMBER)
+    {
+        number = t.Index();
+        t.WhiteGet();
+    }
+
+    AddWhat(t, pos, number);
+    return 0;
+}
+
+// REVSYNC: addat @ 0x00421770 -- `addat <x> <y> [<amount>] <type>|light|next|prev`:
+// as `add`, at (x, y) and the camera's height. forest.s's fire training:
+// `ADDAT MUDOX1 MUDOY1 FIREFLASH`.
+COMMAND(CmdAddAt)
+{
+    S3DPoint pos;
+    MapPane.GetMapPos(pos);
+    if (!ReadCoordinate(t, context, pos.x) || !ReadCoordinate(t, context, pos.y))
+        return CMD_BADPARAMS;
+
+    int32_t number = 1;
+    if (t.Type() == TKN_NUMBER)
+    {
+        number = t.Index();
+        t.WhiteGet();
+    }
+
+    AddWhat(t, pos, number);
+    return 0;
+}
+
+COMMAND(CmdAddInv)
+{
+    int32_t objtype = -1;
+    int32_t number = 1;
+
+    if (t.Type() == TKN_NUMBER)
+    {
+        number = t.Index();
+        t.WhiteGet();
+    }
+    
+    if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+        return CMD_BADPARAMS;
+
+    if (!context->AddToInventory(t.Text(), number))
+    {
+        Output("Unable to add %s", t.Text());
+        t.SkipLine();
+        return 0;
+    }
+
+    t.WhiteGet();
+
+    return 0;
+}
+
+COMMAND(CmdDelInv)
+{
+    int32_t number = 1;
+
+    if (t.Type() == TKN_NUMBER)
+    {
+        number = t.Index();
+        t.WhiteGet();
+    }
+    
+    if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+        return CMD_BADPARAMS;
+
+    int32_t count = context->DeleteFromInventory(t.Text(), number);
+    Output("%d %s deleted", count, t.Text());
+
+    t.WhiteGet();
+    
+    return 0;
+}
+
+// REVSYNC: retail 0x00428140 -> TPlayer 0x00519ea0. "<player>.equip <item>":
+// the player's item of that name goes to its equipment slot (EqSlot).
+COMMAND(CmdEquip)
+{
+    if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+        return CMD_BADPARAMS;
+
+    TObjectInstance* item = context->FindObjInventory(t.Text());
+    if (!item || !static_cast<TPlayer*>(context)->Equip(item, -1))
+        Output("Unable to equip %s", t.Text());
+
+    t.WhiteGet();
+    return 0;
+}
+
+// REVSYNC: retail 0x00428180 -> TPlayer 0x00519ff0. "<player>.unequip <item>":
+// the equipped item of that name goes back to a free carried slot.
+COMMAND(CmdUnequip)
+{
+    if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+        return CMD_BADPARAMS;
+
+    auto* player = static_cast<TPlayer*>(context);
+    int32_t slot = 0;
+    while (slot < NUM_EQ_SLOTS &&
+           !(player->GetEquip(slot) && stricmp(player->GetEquip(slot)->GetName(), t.Text()) == 0))
+        ++slot;
+    if (slot == NUM_EQ_SLOTS || player->FindFreeInventorySlot() > kInvSlotLastCarried)
+        Output("Unable to unequip %s", t.Text());
+    else
+        player->Equip(nullptr, slot);
+
+    t.WhiteGet();
+    return 0;
+}
+
+COMMAND(CmdGive)
+{
+    int32_t number = 1;
+
+    if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+        return CMD_BADPARAMS;
+
+    TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), context);
+    if (inst == nullptr)
+    {
+        Output("Unable to find object %s\n", t.Text());
+        t.SkipLine();
+        return 0;
+    }
+
+    t.WhiteGet();
+
+    if (t.Type() == TKN_NUMBER)
+    {
+        number = t.Index();
+        t.WhiteGet();
+    }
+    
+    if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+        return CMD_BADPARAMS;
+
+    int32_t count = context->GiveInventoryTo(inst, t.Text(), number);
+    Output("%d %s given", count, t.Text());
+
+    t.WhiteGet();
+    
+    return 0;
+}
+
+COMMAND(CmdTake)
+{
+    int32_t number = 1;
+
+    if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+        return CMD_BADPARAMS;
+
+    TObjectInstance* inst = MapPane.FindClosestObject((char *)t.Text(), context);
+    if (!inst)
+    {
+        Output("Unable to find object %s\n", t.Text());
+        t.SkipLine();
+        return 0;
+    }
+
+    t.WhiteGet();
+
+    if (t.Type() == TKN_NUMBER)
+    {
+        number = t.Index();
+        t.WhiteGet();
+    }
+    
+    if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+        return CMD_BADPARAMS;
+
+    int32_t count = inst->GiveInventoryTo(context, t.Text(), number);
+    Output("%d %s taken", count, t.Text());
+
+    t.WhiteGet();
+    
+    return 0;
+}
+
+COMMAND(CmdCalcWalkmap)
+{
+    MapPane.CalculateWalkmap();
+    return 0;
+}
+
+COMMAND(CmdWalkmap)
+{
+    int32_t deltaz;
+    bool nonzero = false, absolute = false;
+
+    while (t.Type() == TKN_IDENT)
+    {
+        if (t.Is("nonzero", 1))
+            nonzero = true;
+        else if (t.Is("absolute", 1))
+            absolute = true;
+        else if (t.Is("reset", 1))
+        {
+            MapPane.SetWalkmapReveal(0, 0, SECTORWIDTH >> WALKMAPSHIFT, SECTORHEIGHT >> WALKMAPSHIFT);
+            t.WhiteGet();
+            return 0;
+        }
+        else
+            return CMD_BADPARAMS;
+
+        t.WhiteGet();
+    }
+
+    if (!Parse(t, "%d", &deltaz))
+        return CMD_BADPARAMS;
+
+    MapPane.AdjustWalkmap(deltaz, nonzero);
+
+    if (context)
+        MapPane.SaveWalkmap(context);
+
+    return 0;
+}
+
+COMMAND(CmdTileWalkmap)
+{
+    context->GetImagery()->SetWorldReg(context->GetState(), PLATEWIDTH >> (WALKMAPSHIFT+1), PLATEHEIGHT >> (WALKMAPSHIFT+1), 0);
+    context->GetImagery()->SetWorldBoundBox(context->GetState(), PLATEWIDTH >> WALKMAPSHIFT, PLATEHEIGHT >> WALKMAPSHIFT, 0);
+    return 0;
+}
+
+static void OutputState(TObjectInstance* context, int32_t state)
+{
+    char flstr[32];
+    int32_t flags = context->GetImagery()->GetAniFlags(state);
+    flstr[0] = '\0';
+    if (flags & AF_LOOPING)
+        strcat(flstr, "l");
+    if (flags & AF_SYNCHRONIZE)
+        strcat(flstr, "s");
+    if (flags & AF_NOINTERPOLATION)
+        strcat(flstr, "i");
+    if (flags & AF_PINGPONG)
+        strcat(flstr, "p");
+    if (flags & AF_REVERSE)
+        strcat(flstr, "r");
+    if (flags & AF_ROOT)
+        strcat(flstr, "r");
+    if (flags & AF_FLY)
+        strcat(flstr, "f");
+    if (flags & AF_NOMOTION)
+        strcat(flstr, "n");
+    if (flags & AF_ACCURATEKEYS)
+        strcat(flstr, "a");
+    if (flags & AF_ROOT2ROOT)
+        strcat(flstr, "o");
+
+    Output("%d \"%s\" Len: %d Flags: %s\n", state, context->GetImagery()->GetAniName(state), 
+        context->GetImagery()->GetAniLength(state), flstr);
+}
+
+COMMAND(CmdState)
+{
+    int32_t st = -1;
+
+    if (t.Type() == TKN_IDENT && (t.Is("list") || t.Is("find")))
+    {
+        bool find = t.Is("find");
+        t.WhiteGet();
+
+        bool match = false;
+        int32_t matchlen = -1;
+        char matchbuf[80];
+        if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
+        {
+            strcpy(matchbuf, t.Text());
+            t.Get();
+            if (t.Is("*"))
+            {
+                strcat(matchbuf, "*"); 
+                t.WhiteGet();
+            }
+            strlwr(matchbuf);
+            matchlen = strlen(matchbuf);
+            if (matchlen > 0 && matchbuf[matchlen - 1] == '*')
+            {
+                matchlen--;
+                matchbuf[matchlen] = '\0'; 
+            }
+            else
+                matchlen = -1;
+            match = true;
+        }
+        else
+        {
+            if (find)
+                return CMD_BADPARAMS;
+        }
+
+        for (int32_t c = 0; c < context->GetImagery()->NumStates(); c++)
+        {
+            const char *name = context->GetImagery()->GetAniName(c);
+
+            if (find)       // Find the word in the state name for 'find'
+            {
+                strcpy(buf, name);
+                strlwr(buf);
+                if (!strstr(buf, matchbuf))
+                    continue;
+            }
+            else if (match)     // Do pattern match for 'list'
+            {
+                if (matchlen > 0)
+                {
+                    if (strnicmp(name, matchbuf, matchlen))
+                        continue;
+                }
+                else
+                {
+                    if (!stricmp(name, matchbuf))
+                        continue;
+                }
+            }
+
+            OutputState(context, c);
+        }
+    }
+    else
+    {
+        if (t.Type() == TKN_RETURN)
+        {
+            st = context->GetState();
+        }
+        else
+        {
+            if (t.Type() == TKN_IDENT || t.Type() == TKN_TEXT)
+            {
+                st = context->FindState(t.Text());
+                t.WhiteGet();
+            }
+            else if (t.Type() == TKN_NUMBER)
+            {
+                st = t.Index();
+                t.WhiteGet();
+            }
+            else
+                return CMD_BADPARAMS;
+
+            if (st < 0 || st >= context->GetImagery()->NumStates())
+            {
+                Output("Invalid state\n");
+                return 0;
+            }
+
+            context->SetState(st);
+        }
+
+        OutputState(context, st);
+    }
+
+    return CMD_WAIT;
+}
+
+COMMAND(CmdFrame)
+{
+    int32_t frame;
+
+    if (!Parse(t, "%d", &frame))
+        return CMD_BADPARAMS;
+
+    context->SetFrame(frame);
+
+    return 0;
+}
+
+// REVSYNC: try @ 0x00422c30 -- `<object>.try <state>`: the state as a bare
+// word or quoted ("%t", else "%s"; the door prototypes quote theirs:
+// TRY "WOPENDOORIN"). Waits for the character.
+COMMAND(CmdTry)
+{
+    char newstate[MAXTOKENTEXT];
+
+    if (!context->IsComplex())
+        return 0;
+
+    if (!Parse(t, "%t", newstate) && !Parse(t, "%s", newstate))
+        return CMD_BADPARAMS;
+
+    static_cast<TComplexObject*>(context)->Try(newstate);
+
+    return CMD_WAIT;
+}
+
+COMMAND(CmdForce)
+{
+    char newstate[80];
+
+    if (!context->IsComplex())
+        return 0;
+
+    if (!Parse(t, "%t", &newstate))
+        return CMD_BADPARAMS;
+
+    ((PTComplexObject)context)->Force(newstate);
+
+    return CMD_WAIT;
+}
+
+COMMAND(CmdReveal)
+{
+    if (context && context->GetFlags() & OF_REVEAL)
+        context->ResetFlags(context->GetFlags() & ~OF_REVEAL);
+
+    else if (context)
+        context->SetFlags(OF_REVEAL);
+
+    return 0;
+}
+
+COMMAND(CmdLevel)
+{
+    int32_t level;
+    if (!Parse(t, "%d", &level))
+        return CMD_BADPARAMS;
+
+    MapPane.SetMapLevel(level);
+    return 0;
+}
+
+COMMAND(CmdTemplate)
+{
+    int32_t index = TerrainTemplates->NewTemplate((char *)context->GetTypeName());
+    if (index < 0)
+    {
+        Output("Max number of templates reached\n");
+        return 0;
+    }
+
+    S3DPoint pos;
+    pos = IntPos(context);
+
+    int32_t objlist[MAXOBJECTREFS];
+    int32_t numfound = MapPane.FindObjectsInRange(pos, objlist, PLATEWIDTH, PLATEHEIGHT, OBJCLASS_TILE, MAXOBJECTREFS);
+    int32_t numadded = 0;
+
+    for (int32_t i = 0; i < numfound; i++)
+    {
+        TObjectInstance* inst = MapPane.GetInstance(objlist[i]);
+        if (inst && inst != context)
+        {
+            S3DPoint ipos;
+            ipos = IntPos(inst);
+            ipos.x -= pos.x;
+            ipos.y -= pos.y;
+            ipos.z -= pos.z;
+
+            if (TerrainTemplates->AddObject(index, inst, ipos) < 0)
+            {
+                Output("Too many objects nearby, the last %d were left out.\n", numfound - i);
+                break;
+            }
+
+            numadded++;
+        }
+    }
+
+    Output("%d objects added to template for '%s'.\n", numadded, context->GetTypeName());
+
+    return 0;
+}
+
+COMMAND(CmdSmoothScroll)
+{
+    int32_t retval = 0;
+
+    if (t.Is("on"))
+    {
+        if (!SmoothScroll)
+        {
+            SmoothScroll = true;
+            MapPane.RedrawAll();
+        }
+    }
+    else if (t.Is("off"))
+    {
+        if (SmoothScroll)
+        {
+            SmoothScroll = false;
+            MapPane.RedrawAll();
+        }
+    }
+    else
+        retval = CMD_BADPARAMS;
+
+    t.Get();
+
+    return retval;
+}
+
+COMMAND(CmdDLight)
+{
+    int32_t intensity;
+
+    if (!Parse(t, "%d", &intensity))
+        return CMD_BADPARAMS;
+
+    MapPane.SetDLightIntensity(intensity);
+    return 0;
+}
+
+
+COMMAND(CmdText)
+{
+    Console.Hide();
+    ScrollEditor.Show();
+    // TODO(editor-imgui): re-route to the ImGui scroll editor surface.
+    // PlayScreen.SetExclusivePane(&ScrollEditor);
+    ScrollEditor.SetScroll(context);
+
+    return 0;
+}
+
+COMMAND(CmdExit)
+{
+    if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+        return CMD_BADPARAMS;
+
+    strcpy(buf, t.Text());
+    t.WhiteGet();
+
+    bool getamb = true;
+    if (t.Type() == TKN_IDENT && t.Is("noambient", 1))
+    {
+        getamb = false;
+        t.WhiteGet();
+    }
+
+    TExit::AddExit(buf, context, getamb);
+
+    Output("Exit from '%s' added.\n", buf);
+
+    TExit::WriteExitList();     // write immediately just to be safe
+
+    return 0;
+}
+
+// REVSYNC: follow @ 0x004230e0 (editor) -- as if the main player walked on.
+COMMAND(CmdFollow)
+{
+    if (!static_cast<TExit*>(context)->Activate(nullptr, false))
+        Output("Nothing defined for this exit, can't follow\n");
+
+    return 0;
+}
+
+// REVSYNC: operate @ 0x00426cd0 -- `<exit>.operate <object>`: the exit opens
+// or closes away from the object (any name the resolver knows: player,
+// user, ...). An unknown name operates as seen from nowhere (inside).
+COMMAND(CmdOperate)
+{
+    if (t.Type() != TKN_TEXT && t.Type() != TKN_IDENT)
+        return CMD_BADPARAMS;
+
+    TObjectInstance* from = ResolveScriptObject(t.Text(), context, script);
+    t.WhiteGet();
+    static_cast<TExit*>(context)->Operate(from);
+    return 0;
+}
+
+// REVSYNC: setfromexit @ 0x00428a40 (TExit::SetFromExit).
+COMMAND(CmdSetFromExit)
+{
+    static_cast<TExit*>(context)->SetFromExit();
+    return 0;
+}
+
+COMMAND(CmdRestore)
+{
+    ((PTCharacter)context)->RestoreHealth();
+    return 0;
+}
+
+COMMAND(CmdGet)
+{
+    if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+        return CMD_BADPARAMS;
+
+    int32_t index = -1;
+    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context, true);
+
+    if (inst == nullptr)
+        Output("Can't find any object by that name.\n");
+    else
+    {
+        if (inst->IsInInventory())
+            inst->RemoveFromInventory();
+        else
+            inst->RemoveFromMap();
+
+        context->AddToInventory(inst);
+    }
+
+    t.WhiteGet();
+
+    return 0;
+}
+
+bool IsSectorCommand = false;
+
+COMMAND(CmdSectorCommand)
+{
+    char command[512];
+    int32_t level;
+
+    strcpy(command, (char *)t.GetPos());
+
+    if (!Parse(t, "%d", &level))
+        return CMD_BADPARAMS;
+
+    if (t.Type() == TKN_EOF || t.Type() == TKN_RETURN)
+        return CMD_BADPARAMS;
+
+    sprintf(buf, "Processing command \"%s\" on level %d...\n", command, level);
+    Output(buf);
+
+    IsSectorCommand = true;
+
+    // The command runs on the level's sector files, so the level must be out
+    // of memory meanwhile. Retail freed the loaded sectors when the level was
+    // the one on screen (TMapPane::FreeAllSectors) and reloaded them on the
+    // next sector update; the port's owner does both around the edit, for
+    // any loaded level (a cached copy would overwrite the edit when saved).
+    MapManager.ReloadLevel(level, [&] {
+        for (int32_t sy = 0; sy < MAXSECTORY; sy++)
+            for (int32_t sx = 0; sx < MAXSECTORX; sx++)
+            {
+                // REVSYNC-DIVERGENCE: retail (0x004231b0) ignored the load
+                // and saved every sector of the level, writing an empty file
+                // for each one that has none and the half-read contents over
+                // one it couldn't read. Sectors that don't load are skipped.
+                TSector* sector = new TSector(level, sx, sy);
+                if (!sector->Load(false))
+                {
+                    delete sector;
+                    continue;
+                }
+
+                for (int32_t i = 0; i < sector->NumItems(); i++)
+                {
+                    TObjectInstance* inst = sector->GetInstance(i);
+                    if (inst)
+                    {
+                        TStringParseStream s(command, strlen(command));
+                        TToken t0(s);
+                        t0.Get();
+                        CommandInterpreter(inst, t0, MINCMDABREV);
+                    }
+                }
+
+                sector->Save();
+                delete sector;
+            }
+    });
+
+    while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+        t.WhiteGet();
+
+    IsSectorCommand = false;
+
+    return 0;
+}
+
+COMMAND(CmdSwap)
+{
+    if (t.Type() != TKN_IDENT && t.Type() != TKN_TEXT)
+        return CMD_BADPARAMS;
+
+    TObjectInstance* inst = MapPane.FindClosestObject(t.Text(), context, true);
+
+    if (inst == nullptr)
+        Output("Can't find any object by that name.\n");
+    else
+        if (!MapPane.SwapDrawOrder(context, inst))
+            Output("Hrm...the objects are in different sectors.  I guess you're screwed.\n");
+
+    t.WhiteGet();
+
+    return 0;
+}
+
+COMMAND(CmdToFront)
+{
+    MapPane.PushToFront(context);
+    return 0;
+}
+
+COMMAND(CmdToBack)
+{
+    MapPane.PushToBack(context);
+    return 0;
+}
+
+/*COMMAND(CmdAlias)
+{
+    if (t.Type() == TKN_IDENT)
+    {
+        // Get a list of aliases
+        if (t.Is("list"))
+        {
+            t.WhiteGet();
+            for (int32_t c = 0; c < NumAliases(); c++)
+            {
+                sprintf(buf, "%s = %s\n", GetAliasName(c), GetAlias(c));
+                Output(buf);
+            }
+            return 0;
+        }
+    
+        // Set a new alias
+        char aliasname[30], alias[30];
+        if (!Parse(t, "%29s", aliasname))
+            return CMD_BADPARAMS;
+
+        if (t.Type() == TKN_IDENT)
+            if (!Parse(t, "%30s", aliasname))
+                return CMD_BADPARAMS;
+        if (t.Type() == TKN_TEXT)
+            if (!Parse(t, "%30t", aliasname))
+                return CMD_BADPARAMS;
+            
+        if (SetAlias(aliasname, alias) >= 0)
+            Output("Alias set");
+        else
+            Output("Too many aliases");
+    }
+
+    return 0;
+}
+*/
+COMMAND(CmdGroup)
+{
+    int32_t group;
+
+    if (t.Type() == TKN_NUMBER)         // Set our group
+    {
+        if (!Parse(t, "%d", &group))
+            return CMD_BADPARAMS;
+
+        if (context)
+            context->SetGroup(group);
+    }
+    else                                // Show what group we're in
+    {
+        if (context)
+        {
+            sprintf(buf, "Group: %d\n", context->GetGroup());
+            Output(buf);
+        }
+    }
+    return 0;
+}
+
+COMMAND(CmdPlay)
+{
+    if (t.Type() == TKN_TEXT || t.Type() == TKN_IDENT)
+    {
+        strcpy(buf, t.Text());
+        t.WhiteGet();
+    }
+    else
+        return CMD_BADPARAMS;
+
+    PLAY(buf);
+
+    return 0;
+}
+
+COMMAND(CmdPlay3D)
+{
+    if (t.Type() == TKN_TEXT || t.Type() == TKN_IDENT)
+    {
+        strcpy(buf, t.Text());
+        t.WhiteGet();
+    }
+    else
+        return CMD_BADPARAMS;
+
+    if (!context)
+        return CMD_BADPARAMS;
+
+    context->PlayWave(buf);
+
+    return 0;
+}
+
+// REVSYNC: setcdvolume @ 0x00428b20 -- `setcdvolume half|full`: the music
+// drops to half the player's music volume, or back to all of it. Retail sets
+// the CD's current volume (0x0049a610) to its base volume (CD object
+// 0x0065abc8 +4, the player's music setting) or half of it. The port keeps
+// the player's setting as the music group volume, so the script's part is a
+// scale of 1/2 or 1 on top (audio::MusicSetVolume).
+COMMAND(CmdSetCDVolume)
+{
+    float scale;
+    if (t.Is("half"))
+        scale = 0.5f;
+    else if (t.Is("full"))
+        scale = 1.0f;
+    else
+        return CMD_BADPARAMS;
+
+    audio::MusicSetVolume(scale);
+    log_debug("[cmd] setcdvolume %s: music at %.2f of the music volume", t.Text(), scale);
+    t.WhiteGet();
+    return 0;
+}
+
+COMMAND(CmdTrigger)
+{
+    if (t.Type() != TKN_TEXT && t.Type() != TKN_IDENT)
+        return CMD_BADPARAMS;
+
+    if (context->GetScript())
+        context->GetScript()->Trigger(TRIGGER_TRIGGER, t.Text());
+
+    t.WhiteGet();
+
+    return 0;
+}
+
+// REVSYNC: retail newgame (0x00423760) requests loading save slot 0; it
+// joins the command-system port (docs/gameflow/ARCHITECTURE.md §6).
+COMMAND(CmdNewGame) { return CmdNotPorted("newgame", 0x00423760, t); }
+
+COMMAND(CmdCurPlayer)
+{
+    PlayerManager.SetMainPlayer((TPlayer*)context);
+    
+    Output("%s is now current player\n", context->GetName());
+
+    return 0;
+}
+
+COMMAND(CmdUndo)
+{
+    StatusBar.Undo();
+    return 0;
+}
+
+COMMAND(CmdExtents)
+{
+    if (!context->GetAnimator())
+    {
+        Output("Context has no animator\n");
+        return 0;
+    }
+
+    int32_t showstate = -1;
+    if (t.Is("RESET"))
+    {
+        Output("Resetting state screen extents\n");
+
+        t.WhiteGet();
+
+        bool front = false;
+        int32_t state = -1;
+
+        if (t.Type() == TKN_NUMBER)
+            Parse(t, "%d", &state);
+
+        if (t.Is("FRONT"))
+        {
+            front = true;
+            t.WhiteGet();
+        }
+            
+        ((PT3DAnimator)context->GetAnimator())->RecordNewExtents(context, state, front);
+    }
+    else if (t.Type() == TKN_NUMBER)
+    {
+        int32_t snum, x, y, w, h;
+
+        snum = context->GetState();
+
+        if (!Parse(t, "%i %i %i %i", &x, &y, &w, &h))
+            return CMD_BADPARAMS;
+        
+        PSImageryStateHeader st = context->GetImagery()->GetState(snum);
+        st->regx = x; st->regy = y;
+        st->width = w; st->height = h;
+
+        showstate = snum;
+    }
+    else
+    {
+        showstate = context->GetState();
+    }
+
+    if (showstate >= 0)
+    {
+        PSImageryStateHeader st = context->GetImagery()->GetState(showstate);
+
+        Output("Screen extents state %d: regx %d regy %d width %d height %d\n",
+            showstate, st->regx, st->regy, st->width, st->height);
+    }
+
+    return 0;
+}
+
+COMMAND(CmdBounds)
+{
+    int32_t regx, regy, width, length;
+
+    if (!Parse(t, "%d %d %d %d", &regx, &regy, &width, &length))
+        return CMD_BADPARAMS;
+
+    int32_t state = context->GetState();
+    if (t.Type() == TKN_NUMBER)
+        Parse(t, "%d", &state);
+
+    if (!context->GetImagery())
+        Output("Sorry, context has no imagery\n");
+    else
+    {
+        context->GetImagery()->SetWorldBoundBox(state, 0, 0, 1);
+        context->GetImagery()->SetWorldReg(state, 0, 0, 0);
+        context->GetImagery()->SetWorldBoundBox(state, width, length, 1);
+        context->GetImagery()->SetWorldReg(state, regx, regy, 0);
+        if (StatusBar.EditWalkmap() && state == context->GetState())
+            MapPane.SnapWalkDisplay(context->GetMapIndex());
+    }
+
+    return 0;
+}
+
+COMMAND(CmdToggle)
+{
+    if (t.Type() != TKN_IDENT)
+        return CMD_BADPARAMS;
+
+    const char *flagname = nullptr;
+
+    for (int32_t i = 0; i < context->GetNumFlags(); i++)
+    {
+        flagname = context->GetFlagName(i);
+        if (t.Is((char *)flagname, 3))
+            break;
+    }
+
+    if (!flagname)
+    {
+        Output("No object flag by that name\n");
+        while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+            t.Get();
+        return 0;
+    }
+    else
+    {
+        t.WhiteGet();
+        
+        if (t.Is("="))
+            t.WhiteGet();
+
+        bool value;
+        if (t.Is("on") || t.Is("1") || t.Is("true"))
+        {
+            value = 1;
+            t.WhiteGet();
+        }
+        else if (t.Is("off") || t.Is("0") || t.Is("false"))
+        {
+            value = 0;
+            t.WhiteGet();
+        }
+        else
+        {
+            value = !context->IsFlagSet(flagname);
+        }
+
+        context->SetFlag(flagname, value);
+    }
+
+    return 0;
+}
+
+COMMAND(CmdMove)
+{
+    int32_t newx = 0, newy = 0, newz = 0;
+
+    if (!Parse(t, "%i %i", &newx, &newy))
+        return CMD_BADPARAMS;
+
+    if (t.Type() == TKN_NUMBER)
+        if (!Parse(t, "%i", &newz))
+            return CMD_BADPARAMS;
+
+    S3DPoint oldpos;
+    oldpos = IntPos(context);
+    S3DPoint newpos = oldpos;
+
+    newpos.x += newx;
+    newpos.y += newy;
+    newpos.z += newz;
+
+    MapPane.AddObjectUpdateRect(context->GetMapIndex());
+    context->SetPos(newpos, -1, IsSectorCommand);
+    MapPane.AddObjectUpdateRect(context->GetMapIndex());
+
+    return 0;
+}
+
+// REVSYNC: pos @ 0x00423d40 -- `<obj>.pos [add] <x> <y> [<z> [<level>]]`,
+// or no arguments for the camera's position and level; then the teleport
+// (TObjectInstance::Teleport). With `add` and no z, retail adds the object's
+// z to itself; kept.
+COMMAND(CmdPos)
+{
+    S3DPoint newpos = IntPos(context);
+    int32_t newlevel = -1;
+
+    if (t.Type() == TKN_RETURN || t.Type() == TKN_EOF)
+    {
+        MapPane.GetMapPos(newpos);
+        newlevel = MapPane.GetMapLevel();
+    }
+    else
+    {
+        bool add = false;
+        if (t.Is("add"))
+        {
+            add = true;
+            t.WhiteGet();
+        }
+
+        if (!Parse(t, "%i %i", &newpos.x, &newpos.y))
+            return CMD_BADPARAMS;
+
+        if (t.Type() == TKN_NUMBER)
+        {
+            if (!Parse(t, "%i", &newpos.z))
+                return CMD_BADPARAMS;
+            if (t.Type() == TKN_NUMBER && !Parse(t, "%i", &newlevel))
+                return CMD_BADPARAMS;
+        }
+
+        if (add)
+            newpos += IntPos(context);
+    }
+
+    MapPane.AddObjectUpdateRect(context->GetMapIndex());
+    context->Teleport(newpos, newlevel, IsSectorCommand);
+    MapPane.AddObjectUpdateRect(context->GetMapIndex());
+
+    return 0;
+}
+
+COMMAND(CmdRotate)
+{
+    int32_t x, y, z;
+
+    bool add = false;
+    if (t.Is("add"))
+    {
+        add = true;
+        t.WhiteGet();
+    }
+
+    if (!Parse(t, "%i %i %i", &x, &y, &z))
+        return CMD_BADPARAMS;
+
+    if (add)
+    {
+        SetIntRotateX(context, x + IntRotateX(context));
+        SetIntRotateY(context, y + IntRotateY(context));
+        SetIntFacing(context, z + IntFacing(context));
+    }
+    else
+    {
+        SetIntRotateX(context, x);
+        SetIntRotateY(context, y);
+        SetIntFacing(context, z);
+    }
+
+    return 0;
+}
+
+COMMAND(CmdDelete)
+{
+    MapPane.DeleteObject(context);
+    return CMD_DELETED;
+}
+
+COMMAND(CmdStat)
+{
+    /* enumeration of object flags */
+    static const char* const objflags[] = OBJFLAGNAMES;
+    /* enumeration of light flags */
+    static const char* const lightflags[] = { "DIR", "SUN", "MOON" };
+
+    TObjectClass* cl = TObjectClass::GetClass(context->ObjClass());
+
+    if (t.Type() == TKN_IDENT)
+    {
+        if (t.Is("list"))
+        {
+            int32_t c;
+            t.WhiteGet();
+            Output("Class stats\n");
+            for (c = 0; c < cl->NumStats(); c++)
+            {
+                Output("%s = %d\n", cl->GetStatDefString(c, buf), cl->GetStat(context->ObjType(), c));
+                if (c != 0 && (c % 5) == 0)
+                {
+                    Output("Press any key");
+                    Console.GetChar();
+                }
+            } 
+            Output("Object stats\n");
+            Console.GetChar();
+            for (c = 0; c < cl->NumObjStats(); c++)
+            {
+                Output("%s (%d) = %d\n", cl->GetObjStatDefString(c, buf), cl->GetObjStat(context->ObjType(), c), context->GetObjStat(c));
+                if (c != 0 && (c % 5) == 0)
+                {
+                    Output("Press any key");
+                    Console.GetChar();
+                }
+            } 
+            return 0;
+        }
+
+        strcpy(buf, t.Text());
+        t.WhiteGet();
+
+        int32_t statid = cl->FindStat(buf);
+        int32_t objstatid = cl->FindObjStat(buf);
+        if (statid < 0 && objstatid < 0)
+        {
+            Output("No stat by that name in that object's class\n");
+            return 0;
+        }
+
+        if (t.Is("delete"))
+        {
+            t.WhiteGet();
+
+            if (statid >= 0)
+                cl->DeleteStat(statid);
+            if (objstatid >= 0)
+                cl->DeleteObjStat(objstatid);
+
+            Output("Stat Deleted\n");
+            return 0;
+        }
+
+        if (t.Is("="))
+        {
+            t.WhiteGet();
+
+            // REVSYNC: 0x00424010 -- a number, else a number variable of the
+            // caller's prototypes (0x00497800); neither is bad parameters.
+            int32_t val;
+            if (!Parse(t, "%i", &val))
+            {
+                val = ScriptManager.VariableNumber(t.Text(), scriptcontext);
+                if (val == STATE_INVALID)
+                    return CMD_BADPARAMS;
+            }
+    
+            context->SetStat(buf, val);
+
+            Output("Stat Set: ");
+        }
+
+        if (t.Is("reset"))
+        {
+            t.WhiteGet();
+
+            if (statid >= 0)
+                cl->ResetStat(context->ObjType(), statid);
+            else if (objstatid >= 0)
+                context->ResetStat(objstatid);
+
+            Output("Stat Reset: ");
+        }
+
+        if (t.Type() != TKN_EOF)
+            return CMD_BADPARAMS;
+
+        if (statid >= 0)
+            Output("%s = %d\n", cl->GetStatDefString(statid, buf), cl->GetStat(context->ObjType(), statid));
+        else if (objstatid >= 0)
+            Output("%s (%d) = %d\n", cl->GetObjStatDefString(objstatid, buf), cl->GetObjStat(context->ObjType(), objstatid), context->GetObjStat(objstatid));
+        return 0;
+    }
+
+    // if no params, just display the object's stats
+    S3DPoint pos;
+    pos = IntPos(context);
+    sprintf(buf, "\"%s\" %s:%s (%d, %d, %d)\n", context->GetName(),
+            context->GetTypeName(), context->GetClassName(), pos.x, pos.y, pos.z);
+    Output(buf);
+
+    strcpy(buf, "Flags:");
+    if (context->GetFlags())
+        AppendBitNames(context->GetFlags(), objflags, buf);
+    else
+        strcat(buf, " (none)");
+    strcat(buf, "\n");
+    Output(buf);
+
+    TObjectImagery* i = context->GetImagery();
+    int32_t s = context->GetState();
+    sprintf(buf, "Registration (%d, %d, %d)  AnimReg (%d, %d, %d)\n",
+            i->GetRegX(s), i->GetRegY(s), i->GetRegZ(s),
+            i->GetAnimRegX(s), i->GetAnimRegY(s), i->GetAnimRegZ(s));
+    Output(buf);
+
+    if (context->GetFlags() & OF_LIGHT)
+    {
+        PSLightDef def;
+        def = context->GetLightDef();
+
+        sprintf(buf, "Light: intensity %d, multiplier %d, flags [", def->intensity, def->multiplier);
+
+        if (context->GetLightFlags())
+            AppendBitNames(context->GetLightFlags(), lightflags, buf);
+        else
+            strcat(buf, "--");
+
+        const size_t used = strlen(buf);
+        snprintf(buf + used, sizeof(buf) - used, "]\n       color (%d, %d, %d), pos (%d, %d, %d)\n"
+                     "       3d index: %d lightid: %d\n",
+                def->color.red, def->color.green, def->color.blue,
+                def->pos.x, def->pos.y, def->pos.z,
+                def->lightindex, def->lightid);
+        Output(buf);
+    }
+
+    return 0;
+}
+
+COMMAND(CmdScript)
+{
+    if (context->GetScript())
+    {
+        Console.Hide();
+        ScriptEditor.Show();
+        // TODO(editor-imgui): re-route to the ImGui script editor surface.
+        // PlayScreen.SetExclusivePane(&ScriptEditor);
+        ScriptEditor.LoadScript(context);
+    }
+
+    return 0;
+}
+
+// REVSYNC: 0x004249b0 (single player), shared by centeron (0x00424db0) and
+// scrollto (0x00424dd0): `<name>` -- anything the script resolver knows,
+// `player` and `user` included -- or `<x> <y> <z> [<level>]`. On an object
+// the camera snaps then follows it (centeron) or scrolls to it (scrollto);
+// on a point it jumps either way (retail masks the scroll bit). A block
+// that moves the camera off the player holds it (taken bit 8) until it
+// ends. In the editor the map just moves there.
+int32_t CenterOnFunc(TObjectInstance* context, TToken &t, TScript* script, bool scroll)
+{
+    // Editor, no target: the map moves to the context object and its level.
+    if (Editor && context && t.Type() != TKN_IDENT && t.Type() != TKN_NUMBER)
+    {
+        S3DPoint pos = IntPos(context);
+        MapPane.SetMapPos(pos);
+        MapPane.SetMapLevel(context->GetLevel());
+        return 0;
+    }
+
+    if (t.Type() == TKN_IDENT)
+    {
+        TObjectInstance* inst = ResolveScriptObject(t.Text(), context, script);
+        if (!inst)
+        {
+            Output("Object not found\n");
+            return 0;
+        }
+        if (Editor)
+        {
+            S3DPoint pos = IntPos(inst);
+            MapPane.SetMapPos(pos);
+        }
+        else
+        {
+            MapPane.CenterOnObj(inst, scroll ? CENTERON_SCROLL : CENTERON_SCROLL | CENTERON_SNAP);
+            if (inst != Player && script)
+                script->SetCameraHeld(true);
+        }
+        t.WhiteGet();
+        return 0;
+    }
+
+    if (t.Type() != TKN_NUMBER)
+        return CMD_BADPARAMS;
+
+    S3DPoint pos;
+    if (!Parse(t, "%i %i %i", &pos.x, &pos.y, &pos.z))
+        return CMD_BADPARAMS;
+    int32_t level = MapPane.GetMapLevel();
+    if (t.Type() == TKN_NUMBER && !Parse(t, "%i", &level))
+        return CMD_BADPARAMS;
+
+    if (Editor)
+        MapPane.SetMapPos(pos);
+    else
+        MapPane.CenterOnPos(pos, level);
+    if (script)
+        script->SetCameraHeld(true);
+    return 0;
+}
+
+COMMAND(CmdCenterOn)
+{
+    return CenterOnFunc(context, t, script, false);
+}
+
+COMMAND(CmdScrollTo)
+{
+    return CenterOnFunc(context, t, script, true);
+}
+
+#define MAX_MAP_LOCATIONS       32
+
+struct { char name[RESNAMELEN]; struct { int32_t x, y, z; } pos; int32_t level; } MapLocations[MAX_MAP_LOCATIONS];
+int32_t numlocations = 0;
+
+// REVSYNC: ReadMapLocationList @ 0x00424e10 — the active module's
+// location.def, else the shared one.
+bool ReadMapLocationList()
+{
+    const std::string fname = ModuleManager.DataFilePath("location.def");
+
+    FILE *fp = TryOpen(fname.c_str(), "rb");
+    if (!fp)
+        return false;
+
+    TFileParseStream s(fp);
+    TToken t(s);
+
+    t.Get();
+
+    numlocations = 0;
+
+    do
+    {
+        if (numlocations >= MAX_MAP_LOCATIONS)
+            break;
+
+        if (t.Type() == TKN_RETURN || t.Type() == TKN_WHITESPACE)
+            t.LineGet();
+
+        if (t.Type() == TKN_EOF)
+            break;
+
+        if (!Parse(t, "%t (%d, %d, %d) level %d", MapLocations[numlocations].name, &MapLocations[numlocations].pos.x, &MapLocations[numlocations].pos.y, &MapLocations[numlocations].pos.z, &MapLocations[numlocations].level))
+            return false;
+
+        t.SkipLine();       // skip past any other garbage on the line, including the newline
+
+        numlocations++;
+    } while (t.Type() != TKN_EOF);
+
+    fclose(fp);
+    return true;
+}
+
+COMMAND(CmdMapPos)
+{
+    S3DPoint pos;
+    int32_t level = MapPane.GetMapLevel();
+
+    if (t.Type() == TKN_IDENT)
+    {
+        if (t.Is("list"))
+        {
+            Output("The following map locations are availible:\n");
+
+            for (int32_t i = 0; i < numlocations; i++)
+            {
+                sprintf(buf, "%20s (%5d, %5d, %3d) level %2d\n", MapLocations[i].name, MapLocations[i].pos.x, MapLocations[i].pos.y, MapLocations[i].pos.z, MapLocations[i].level);
+                Output(buf);
+            }
+
+            t.WhiteGet();
+            return 0;
+        }
+
+        int32_t i;
+        for (i = 0; i < numlocations; i++)
+            if (t.Is(MapLocations[i].name, 3))
+            {
+                pos.x = MapLocations[i].pos.x;
+                pos.y = MapLocations[i].pos.y;
+                pos.z = MapLocations[i].pos.z;
+                level = MapLocations[i].level;
+                break;
+            }
+
+        t.WhiteGet();
+
+        if (i >= numlocations)
+        {
+            Output("No map location by that name exists.  Try 'map list' for a listing.\n");
+            return CMD_BADPARAMS;
+        }
+    }
+    else if (!Parse(t, "%d %d %d", &pos.x, &pos.y, &pos.z))
+        return CMD_BADPARAMS;
+
+    MapPane.SetMapPos(pos);
+    MapPane.SetMapLevel(level);
+    return 0;
+}
+
+bool ShowObjList(TObjectClass* cl, char *match)
+{
+    bool ismatch = false;
+    int32_t cnt = 0;
+
+    for (int32_t i = 0; i < cl->NumTypes(); i++)
+    {
+        if (cl->GetObjType(i) == nullptr || (match != nullptr && abbrevcmp(match, cl->GetObjType(i)->name) < 1))
+            continue;
+
+        ismatch = true;
+
+        sprintf(buf, "%s %-19s", buf, cl->GetObjType(i)->name);
+        if (++cnt >= 3)
+        {
+            strcat(buf, "\n");
+            Output(buf);
+            buf[0] = 0;
+            cnt = 0;
+        }
+    }
+
+    if (cnt)
+    {
+        strcat(buf, "\n");
+        Console.Output(buf);
+    }
+
+    return ismatch;
+}
+
+void ShowObjTypeInfo(TObjectClass* cl, int32_t objtype)
+{
+    SObjectInfo* inf = cl->GetObjType(objtype);
+
+    if (!cl || !inf)
+        return;
+/*
+    sprintf(buf, "Name: %s, Class: %s, Imagery: %s, Usecount: %d\n",
+            inf->name, cl->ClassName(), img->GetUseCount(), img->Get);
+    Output(buf);
+  */
+    if (cl->NumStats())
+    {
+        Output("Statistics:\n");
+
+        int32_t len = 0, add;
+
+        for (int32_t i = 0; i < cl->NumStats(); i++)
+        {
+            sprintf(buf+len, "%s = %d, ", cl->StatName(i), cl->GetStat(objtype, i));
+            add = strlen(buf) - len;
+            if ((len+add) >= Console.winwidth && len != 0)
+            {
+                if (i == (cl->NumStats() - 1))
+                    len -= 2;
+                buf[len] = '\n';
+                buf[len+1] = 0;
+                Output(buf);
+                strcpy(buf, buf+len+2);
+                len = add;
+            }
+            else
+                len += add;
+        }
+
+        if (len > 0)
+        {
+            len -= 2;
+            buf[len] = '\n';
+            buf[len+1] = 0;
+            Output(buf);
+        }
+    }
+}
+
+COMMAND(CmdShow)
+{
+    TObjectClass* cl;
+    buf[0] = 0;
+
+    if (t.Is("classes"))
+    {
+        Output("Object Classes:\n");
+        int32_t cnt = 0;
+        for (int32_t i = 0; i < TObjectClass::NumClasses(); i++)
+        {
+            cl = TObjectClass::GetClass(i);
+            if (cl == nullptr)
+                continue;
+
+            sprintf(buf, "%s %-19s", buf, cl->ClassName());
+            if (++cnt >= 3)
+            {
+                strcat(buf, "\n");
+                Output(buf);
+                buf[0] = 0;
+                cnt = 0;
+            }
+        }
+
+        if (cnt)
+        {
+            strcat(buf, "\n");
+            Output(buf);
+        }
+    }
+    else
+    {
+        if ((cl = TObjectClass::GetClass(TObjectClass::FindClass((char *)t.Text()))))
+        {
+            t.WhiteGet();
+            if (t.Type() == TKN_IDENT)
+            {
+                int32_t objtype = cl->FindObjType(t.Text());
+                if (objtype < 0)
+                {
+                    if (!ShowObjList(cl, (char *)t.Text()))
+                    {
+                        sprintf(buf, "%s contains no type named '%s'.\n", cl->ClassName(), t.Text());
+                        Output(buf);
+                    }
+                }
+                else
+                    ShowObjTypeInfo(cl, objtype);
+            }
+            else
+                ShowObjList(cl, nullptr);
+        }
+        else
+            Output("No class by that name.\n");
+    }
+
+    t.WhiteGet();
+    return 0;
+}
+
+COMMAND(CmdAmbient)
+{
+    int32_t amb;
+    if (!Parse(t, "%d", &amb))
+        return CMD_BADPARAMS;
+
+    MapPane.SetAmbientLight(amb);
+    MapPane.RedrawAll();
+
+    return 0;
+}
+
+COMMAND(CmdAmbColor)
+{
+    SColor color;
+    if (!Parse(t, "%b %b %b", &color.red, &color.green, &color.blue))
+        return CMD_BADPARAMS;
+
+    MapPane.SetAmbientColor(color);
+    MapPane.RedrawAll();
+
+    return 0;
+}
+
+void Mono(int32_t percent, int32_t dummy = -1)
+{
+    SetMonoPercent(percent);
+    MapPane.RedrawAll();
+}
+
+COMMAND(CmdMono)
+{
+    int32_t percent;
+    if (!Parse(t, "%d", &percent))
+        return CMD_BADPARAMS;
+
+    Mono(percent);
+    return 0;
+}
+
+COMMAND(CmdDirLight)
+{
+    return 0;
+}
+
+COMMAND(CmdBaseLight)
+{
+    SColor color;
+    int32_t id, mult = -1;
+
+    if (!Parse(t, "%d %b %b %b <%d>", &id, &color.red, &color.green, &color.blue, &mult))
+        return CMD_BADPARAMS;
+
+    SetLightColor(id, color, mult);
+    return 0;
+}
+
+COMMAND(CmdReplace)
+{
+    TObjectClass* cl = TObjectClass::GetClass(TObjectClass::FindClass((char *)t.Text()));
+    if (cl)
+        t.WhiteGet();
+    else
+        cl = TObjectClass::GetClass(context->ObjClass());
+
+    if (cl)
+    {
+        // Add a new instance of a given object type in the map pane
+        int32_t objtype = cl->FindObjType(t.Text());
+        if (objtype < 0)
+        {
+            sprintf(buf, "%s has no object named '%s'.\n", cl->ClassName(), t.Text());
+            Output(buf);
+        }
+        else
+        {
+            SObjectDef def;
+            memset(&def, 0, sizeof(SObjectDef));
+
+            def.objclass = cl->ClassId();
+            def.objtype = objtype;
+            def.level = MapPane.GetMapLevel();
+
+            def.pos = IntPos(context);
+            int32_t index = MapPane.NewObject(&def);
+            if (index < 0)
+                Console.Output("ERROR: Creating object\n");
+            else
+            {
+                int32_t oldindex = context->GetMapIndex();
+                StatusBar.Deselect(oldindex);
+                TObjectInstance* oi = MapPane.GetInstance(oldindex);
+                MapPane.DeleteObject(oi);
+                StatusBar.Select(index, true);
+            }
+        }
+    }
+    else
+    {
+        sprintf(buf, "No class named '%s'.\n", t.Text());
+        Output(buf);
+    }
+
+    return 0;
+}
+
+COMMAND(CmdLight)
+{
+    if (t.Is("on"))
+    {
+        if (!(context->GetFlags() & OF_LIGHT))
+        {
+            context->SetFlags(OF_LIGHT);
+            MapPane.AddObjectUpdateRect(context->GetMapIndex());
+        }
+        t.WhiteGet();
+        return 0;
+    }
+
+    if (t.Is("off"))
+    {
+        if (context->GetFlags() & OF_LIGHT)
+        {
+            context->ResetFlags(context->GetFlags() & (~OF_LIGHT));
+            MapPane.AddObjectUpdateRect(context->GetMapIndex());
+        }
+        t.WhiteGet();
+        return 0;
+    }
+
+    if (t.Type() == TKN_NUMBER)
+    {
+        t.WhiteGet();
+        int32_t intensity;
+        if (!Parse(t, "%d", &intensity))
+            return CMD_BADPARAMS;
+
+        context->SetLightIntensity(intensity);
+        return 0;
+    }
+
+    if (t.Is("directional", MINCMDABREV))
+    {
+        t.WhiteGet();
+        uint32_t oldflags = context->GetFlags();
+
+        if (t.Is("on"))
+            context->SetLightFlags(LIGHT_DIR);
+        else if (t.Is("off"))
+            context->ResetLightFlags(context->GetLightFlags() & (~LIGHT_DIR));
+        else
+        {
+            t.WhiteGet();
+            return CMD_BADPARAMS;
+        }
+
+        if (oldflags != context->GetFlags())
+            MapPane.AddObjectUpdateRect(context->GetMapIndex());
+
+        t.WhiteGet();
+        return 0;
+    }
+
+    if (t.Is("intensity", MINCMDABREV))
+    {
+        t.WhiteGet();
+        int32_t intensity;
+        if (!Parse(t, "%d", &intensity))
+            return CMD_BADPARAMS;
+
+        context->SetLightIntensity(intensity);
+        return 0;
+    }
+
+    if (t.Is("color", MINCMDABREV))
+    {
+        t.WhiteGet();
+        SColor color;
+        if (!Parse(t, "%b %b %b", &color.red, &color.green, &color.blue))
+            return CMD_BADPARAMS;
+
+        context->SetLightColor(color);
+        return 0;
+    }
+
+    if (t.Is("position", MINCMDABREV))
+    {
+        t.WhiteGet();
+        S3DPoint lightpos;
+        if (!Parse(t, "%d %d %d", &lightpos.x, &lightpos.y, &lightpos.z))
+            return CMD_BADPARAMS;
+
+        context->SetLightPos(lightpos);
+        return 0;
+    }
+
+    if (t.Is("multiplier", MINCMDABREV))
+    {
+        t.WhiteGet();
+        int32_t mult;
+        if (!Parse(t, "%d", &mult))
+            return CMD_BADPARAMS;
+
+        context->SetLightMultiplier(mult);
+        return 0;
+    }
+
+    return CMD_BADPARAMS;
+}
+
+void ZOffset(int32_t zoffset, int32_t dummy = -1)
+{
+    TObjectInstance* oi = MapPane.GetInstance(StatusBar.GetSelectedObj());
+
+    if (oi)
+    {
+        TObjectImagery* img = oi->GetImagery();
+
+        if (img)
+        {
+            int32_t x = img->GetRegX(oi->GetState());
+            int32_t y = img->GetRegY(oi->GetState());
+            img->SetReg(oi->GetState(), x, y, zoffset);
+        }
+    }
+}
+
+COMMAND(CmdZOffset)
+{
+    if (t.Type() == TKN_RETURN || t.Type() == TKN_EOF)
+    {
+        sprintf(buf, "Current zoffset: %d\n", context->GetImagery()->GetRegZ(context->GetState()));
+        Output(buf);
+        t.WhiteGet();
+        return 0;
+    }
+
+    int32_t zoff;
+    if (!Parse(t, "%d", &zoff))
+        return CMD_BADPARAMS;
+
+    TObjectImagery* img = context->GetImagery();
+
+    if (img)
+    {
+        int32_t x = img->GetRegX(context->GetState());
+        int32_t y = img->GetRegY(context->GetState());
+        img->SetReg(context->GetState(), x, y, zoff);
+    }
+
+    MapPane.AddObjectUpdateRect(context->GetMapIndex());
+    return 0;
+}
+
+COMMAND(CmdRegistration)
+{
+    int32_t dx, dy;
+    if (!Parse(t, "%d %d", &dx, &dy))
+        return CMD_BADPARAMS;
+
+    TObjectImagery* img = context->GetImagery();
+    if (!img)
+        return 0;
+
+    int32_t x = img->GetRegX(context->GetState());
+    int32_t y = img->GetRegY(context->GetState());
+    int32_t z = img->GetRegZ(context->GetState());
+    img->SetReg(context->GetState(), x - dx, y - dy, z);
+    MapPane.AddObjectUpdateRect(context->GetMapIndex());
+    return 0;
+}
+
+COMMAND(CmdAnimRegistration)
+{
+    int32_t dx, dy;
+    if (!Parse(t, "%d %d", &dx, &dy))
+        return CMD_BADPARAMS;
+
+    TObjectImagery* img = context->GetImagery();
+    if (!img)
+        return 0;
+
+    int32_t x = img->GetAnimRegX(context->GetState());
+    int32_t y = img->GetAnimRegY(context->GetState());
+    int32_t z = img->GetAnimRegZ(context->GetState());
+    img->SetAnimReg(context->GetState(), x - dx, y - dy, z);
+    return 0;
+}
+
+COMMAND(CmdAnimZ)
+{
+    int32_t dz;
+    if (!Parse(t, "%d", &dz))
+        return CMD_BADPARAMS;
+
+    TObjectImagery* img = context->GetImagery();
+    if (!img)
+        return 0;
+
+    int32_t x = img->GetAnimRegX(context->GetState());
+    int32_t y = img->GetAnimRegY(context->GetState());
+    img->SetAnimReg(context->GetState(), x, y, dz);
+    return 0;
+}
+
+COMMAND(CmdName)
+{
+    if (t.Type() != TKN_IDENT)
+        return CMD_BADPARAMS;
+
+    if (t.Is("type"))
+    {
+        t.WhiteGet();
+        if (t.Type() != TKN_IDENT)
+            return CMD_BADPARAMS;
+
+        context->SetTypeName((char *)t.Text());
+    }
+    else if (t.Is("clear"))
+        context->SetName((char *)"");
+    else
+        context->SetName((char *)t.Text());
+
+    t.WhiteGet();
+    return 0;
+}
+
+COMMAND(CmdFlip)
+{
+    MapPane.AddObjectUpdateRect(context->GetMapIndex());
+
+    if (context->GetFlags() & OF_DRAWFLIP)
+        context->ResetFlags(context->GetFlags() & ~(OF_DRAWFLIP));
+    else
+        context->SetFlags(OF_DRAWFLIP);
+
+    MapPane.AddObjectUpdateRect(context->GetMapIndex());
+    return 0;
+}
+
+COMMAND(CmdLock)
+{
+    context->SetFlags(OF_EDITORLOCK);
+    return 0;
+}
+
+COMMAND(CmdUnlock)
+{
+    context->ResetFlags(context->GetFlags() & (~OF_EDITORLOCK));
+    return 0;
+}
+
+COMMAND(CmdLoad)
+{
+    bool loadsector, loadgame;
+
+    loadsector = loadgame = false;
+    if (t.Type() != TKN_IDENT)
+        loadsector = true;
+    else
+    {
+        while (t.Type() == TKN_IDENT)
+        {
+            if (t.Is("game"))
+                loadgame = true;
+            if (t.Is("sector"))
+                loadsector = true;
+            t.WhiteGet();
+        }
+    }
+
+    if (loadgame)
+    {
+        int32_t gamenum = 0;
+        if (t.Type() == TKN_NUMBER)
+        {
+            gamenum = t.Index();
+            t.WhiteGet();
+        }
+        const std::string slot = SaveSlotAt(gamenum);
+        if (slot.empty())
+            Output("Invalid Game\n");
+        else
+        {
+            Output("Loading game...\n");
+            GameFlow.Session().RequestLoad(slot);
+        }
+    }
+            
+    if (loadsector)
+    {
+        Output("Reloading...\n");
+        MapManager.ReloadSectors();
+    }
+
+    return 0;
+}
+
+COMMAND(CmdSave)
+{
+    // suspend all activity while saving to avoid any nastiness
+    TObjectImagery::PauseLoader();
+
+    bool savegame, savemap, saveheaders, saveclasses, saveexits;
+
+    savegame = false; // This must be set specifically
+
+    if (t.Type() != TKN_IDENT)
+        savemap = saveheaders = saveclasses = saveexits = true;
+    else
+    {
+        savemap = saveheaders = saveclasses = saveexits = false;
+
+        while (t.Type() == TKN_IDENT)
+        {
+            if (t.Is("game"))
+                savegame = true;
+            if (t.Is("map"))
+                savemap = true;
+            if (t.Is("headers"))
+                saveheaders = true;
+            if (t.Is("classes"))
+                saveclasses = true;
+            if (t.Is("exits"))
+                saveexits = true;
+            t.WhiteGet();
+        }
+    }
+
+    if (saveheaders)
+    {
+        if (!Console.AdjustingBounds())
+        {
+            TObjectImagery::SaveAllHeaders();
+            Output("Saving object headers...\n");
+        }
+        else
+            Output(" (imagery headers not saved - currently being edited)\n");
+    }
+
+    if (saveclasses)
+    {
+        Output("Saving classes..\n");
+        TObjectClass::SetClassesDirty(); // Force class def to save
+        TObjectClass::SaveClasses();
+        TerrainTemplates->Save();
+    }
+
+    if (saveexits)
+    {
+        Output("Saving exits...\n");
+        TExit::WriteExitList();
+    }
+    
+    if (savegame)
+    {
+        int32_t gamenum = 0;
+        if (t.Type() == TKN_NUMBER)
+        {
+            gamenum = t.Index();
+            t.WhiteGet();
+        }
+        // An index past the slot list saves to "Default Save" (retail
+        // SaveGame with no name).
+        const std::string slot = SaveSlotAt(gamenum);
+        Output("Saving game...\n");
+        GameFlow.Session().RequestSave(slot.empty() ? "Default Save" : slot);
+    }
+
+    if (savemap)
+    {
+        Output("Saving map sectors...\n");
+        // Publish the edited sectors to the base map (every loaded sector is
+        // written first, as retail's SaveAllSectors did).
+        MapManager.PublishCurMap();
+    }
+
+    TObjectImagery::ResumeLoader();
+
+    return 0;
+}
+
+COMMAND(CmdDXStats)
+{
+    // TODO: port Win32/DirectX diagnostics to sokol + macOS equivalents.
+    Output("Graphics stats not yet available in the sokol port.\n");
+    return 0;
+}
+
+COMMAND(CmdMemory)
+{
+    // TODO: port MEMORYSTATUS/GlobalMemoryStatus diagnostics to a
+    // macOS-friendly mach/sysctl equivalent.
+    Output("Memory stats not yet available in the sokol port.\n");
+    return 0;
+}
+
+COMMAND(CmdGenerate)
+{
+    int32_t sizex = 2;
+    int32_t sizey = 2;
+
+    S3DPoint pos;
+    MapPane.GetMapPos(pos);
+
+    if (!Parse(t, "%d %d", &sizex, &sizey))
+    {
+        int32_t x = pos.x & (SECTORWIDTH - 1);
+        int32_t y = pos.y & (SECTORHEIGHT - 1);
+
+        if (x < 256)
+            pos.x -= 256;
+        else if (x >= (SECTORWIDTH - 256))
+            pos.x += 256;
+        else
+            sizex = 1;
+
+        if (y < 256)
+            pos.y -= 256;
+        else if (y >= (SECTORHEIGHT - 256))
+            pos.y += 256;
+        else
+            sizey = 1;
+
+    }
+
+    pos.x >>= SECTORWSHIFT;
+    pos.y >>= SECTORHSHIFT;
+
+    GenerateMap(pos.x, pos.y, sizex, sizey);
+
+    return 0;
+}
+
+// *************************************************************************
+// * Retail commands awaiting port                                         *
+// *************************************************************************
+//
+// Every entry of the retail command table (SCommand[189] @ 0x005c6e88) is
+// registered above. Commands the pre-release snapshot never had start here
+// as stubs: they consume their parameters, log once that a script reached
+// them, and answer "unrecognized" (CmdNotPorted) -- the script skips the
+// line and keeps running, as retail does for a command it doesn't know.
+// The retail body for each lives in recon/discovered/commands/cmd_<name>_<addr>.cpp.
+// When a command is ported, replace its stub with the real body (and move
+// the body next to its siblings if that reads better).
+
+// ----- owner: script engine (flow control / variables) -----
+
+COMMAND(CmdCleanIds) { return CmdNotPorted("cleanids", 0x00428a30, t); }
+COMMAND(CmdForget) { return CmdNotPorted("forget", 0x004282e0, t); }
+COMMAND(CmdJumpClass) { return CmdNotPorted("jumpclass", 0x004296c0, t); }
+COMMAND(CmdJumpName) { return CmdNotPorted("jumpname", 0x00429770, t); }
+COMMAND(CmdRandom) { return CmdNotPorted("random", 0x00427d40, t); }
+COMMAND(CmdReloadStates) { return CmdNotPorted("reloadstates", 0x00428a20, t); }
+COMMAND(CmdSetCurrent) { return CmdNotPorted("setcurrent", 0x00428e50, t); }
+COMMAND(CmdTimeLimit) { return CmdNotPorted("timelimit", 0x00429820, t); }
+
+// ----- owner: dialog (speech, messages, responses) -----
+
+// REVSYNC: hideresponse @ 0x00426d40 -> 0x0047ecc0: close PlayScreen's
+// bottom drawer when it is open (DIALOG.md §1.4). No shipped script uses it.
+COMMAND(CmdHideResponse)
+{
+    PlayScreen.CloseDrawer();
+    return 0;
+}
+
+// ----- owner: savegame (load/save orchestration) -----
+
+// A save slot's name for loadgame / savegame: the token's text, quoted or
+// not, at most 127 characters (retail copies the token's text, then
+// WhiteGet 0x00479580). False without one.
+static bool SlotNameParam(TToken &t, char (&name)[128])
+{
+    if (t.Type() != TKN_TEXT && t.Type() != TKN_IDENT && t.Type() != TKN_NUMBER)
+        return false;
+    strncpyz(name, t.Text(), sizeof(name));
+    t.WhiteGet();
+    return name[0] != '\0';
+}
+
+// REVSYNC: loadgame @ 0x00428540 -- the slots rescanned (0x0048d260), the
+// named one found (0x0048d6d0); a name no slot has says "Invalid Game",
+// else "Loading game..." and the play screen loads it at the start of its
+// next frame (RequestLoad 0x0047e770, announced on the text bar).
+COMMAND(CmdLoadGame)
+{
+    char name[128];
+    if (!SlotNameParam(t, name))
+        return CMD_BADPARAMS;
+    ::SaveGame.RefreshSlots();
+    if (::SaveGame.FindSlot(name) < 0)
+    {
+        Output("Invalid Game\n");
+        return 0;
+    }
+    Output("Loading game...\n");
+    GameFlow.Session().RequestLoad(name);
+    return 0;
+}
+
+// REVSYNC: savegame @ 0x004285b0 -- the name (127 characters at most) is
+// saved to at the start of the play screen's next frame (RequestSave
+// 0x0047e810). Retail's editor wrote the module's newgame.sav for the name
+// "newgame"; the port has no such save and writes a slot of that name.
+COMMAND(CmdSaveGame)
+{
+    char name[128];
+    if (!SlotNameParam(t, name))
+        return CMD_BADPARAMS;
+    Output(stricmp(name, "newgame") == 0 ? "Saving \"newgame.sav\" file to current module\n"
+                                          : "Saving game...\n");
+    GameFlow.Session().RequestSave(name);
+    return 0;
+}
+
+// ----- owner: world + character (movement, combat, inventory, objects) -----
+
+// ----- monster generators (TMonsterGen, docs/playtest/GRIND.md §3.1) -----
+
+// The generator a monster generator command addresses. Retail's handlers took
+// any HELPER for one (and wrote past the end of the others); the port answers
+// for another helper as for a command it doesn't know.
+static TMonsterGen* GeneratorContext(TObjectInstance* context, TToken &t)
+{
+    auto* const gen = dynamic_cast<TMonsterGen*>(context);
+    if (!gen)
+        while (t.Type() != TKN_RETURN && t.Type() != TKN_EOF)
+            t.Get();
+    return gen;
+}
+
+// REVSYNC: addmonstertype @ 0x00427ac0 -- <type> <frequency> <treasure tier>
+// (TMonsterGen::AddType). The message gives the frequency in seconds the way
+// the editor's usage line reads it, as frames (frequency / 24); the generator
+// counts it in hundredths of a second.
+COMMAND(CmdAddMonsterType)
+{
+    TMonsterGen* const gen = GeneratorContext(context, t);
+    if (!gen)
+        return CMD_BADCOMMAND;
+
+    char type[60];
+    int32_t frequency = 0, treasure = 0;
+    if (!Parse(t, "%60s %d %d", type, &frequency, &treasure))
+        return CMD_BADPARAMS;
+    if (gen->AddType(type, frequency, treasure))
+        Output("%s [freq: %ds] [tt: %d]: added successfully\n", type, frequency / 24, treasure);
+    else
+        Output("Could not add '%s' to the monster list\n", type);
+    return 0;
+}
+
+// REVSYNC: delmonstertype @ 0x00427b60 -- <type> (TMonsterGen::DelType).
+COMMAND(CmdDelMonsterType)
+{
+    TMonsterGen* const gen = GeneratorContext(context, t);
+    if (!gen)
+        return CMD_BADCOMMAND;
+
+    char type[60];
+    if (!Parse(t, "%60s", type))
+        return CMD_BADPARAMS;
+    if (gen->DelType(type))
+        Output("Removed '%s' from the monster list\n", type);
+    else
+        Output("'%s' not found in monster list\n", type);
+    return 0;
+}
+
+// REVSYNC: monstertypes @ 0x00427bd0 -- the count and each used slot's type.
+COMMAND(CmdMonsterTypes)
+{
+    TMonsterGen* const gen = GeneratorContext(context, t);
+    if (!gen)
+        return CMD_BADCOMMAND;
+
+    Output("%d Monster types for %s:\n", gen->NumTypes(), gen->GetName());
+    for (int32_t i = 0; i < TMonsterGen::kMaxTypes; i++)
+        if (const char* type = gen->TypeName(i); *type)
+            Output("%s\n", type);
+    return 0;
+}
+
+// REVSYNC: maxmonsters @ 0x00427c30 -- [<count>]: sets the cap, or shows it.
+COMMAND(CmdMaxMonsters)
+{
+    TMonsterGen* const gen = GeneratorContext(context, t);
+    if (!gen)
+        return CMD_BADCOMMAND;
+
+    int32_t count = 0;
+    if (!Parse(t, "%d", &count))
+    {
+        Output("%d\n", gen->MaxMonsters());
+        return 0;
+    }
+    gen->SetMaxMonsters(count);
+    return 0;
+}
+
+COMMAND(CmdAddNear) { return CmdNotPorted("addnear", 0x00421bc0, t); }
+COMMAND(CmdAmbSoundGet) { return CmdNotPorted("ambsoundget", 0x00420fe0, t); }
+COMMAND(CmdAmbSoundSet) { return CmdNotPorted("ambsoundset", 0x00420dc0, t); }
+COMMAND(CmdDispInv) { return CmdNotPorted("dispinv", 0x00422070, t); }
+COMMAND(CmdDrop) { return CmdNotPorted("drop", 0x004281c0, t); }
+COMMAND(CmdGetItemAmount) { return CmdNotPorted("getitemamount", 0x00426be0, t); }
+COMMAND(CmdGetItemName) { return CmdNotPorted("getitemname", 0x00426d60, t); }
+COMMAND(CmdGetItemValue) { return CmdNotPorted("getitemvalue", 0x00426e20, t); }
+COMMAND(CmdHasFreeSlot) { return CmdNotPorted("hasfreeslot", 0x00426c60, t); }
+COMMAND(CmdHideObjects) { return CmdNotPorted("hideobjects", 0x00427010, t); }
+COMMAND(CmdMapIndex) { return CmdNotPorted("mapindex", 0x00426ed0, t); }
+COMMAND(CmdShowObjects) { return CmdNotPorted("showobjects", 0x00426fc0, t); }
+COMMAND(CmdSize) { return CmdNotPorted("size", 0x00426f30, t); }
+
+// ----- owner: presentation (fades, music, movies, end game) -----
+
+// REVSYNC: endgame @ 0x00427060 -- the PlayScreen's next screen is the title
+// and it closes: the game ends (labyrinth.s, after the closing movie and the
+// credits).
+COMMAND(CmdEndGame)
+{
+    GameFlow.ReturnToTitle();
+    return 0;
+}
+
+// REVSYNC: fadescreenout @ 0x00427e80 (single player). Fades the play screen
+// to black and clears the speech on screen; the block holds the fade (taken
+// bit 2) until `fadescreenin`. Both fade commands answer like a character
+// action (retail result 1): the calling script waits on the command's object
+// until its action is done, unless the line says `nowait`. `wait screenfade`
+// waits for the fade itself. With the fade it closes the play screen's
+// drawer when that holds the shop (mode 3, `0x0047ed20` / `0x0047ecc0`). Not
+// ported: the multiplayer branch, which fades through the player's state
+// bit 8 (`0x0051d680`).
+COMMAND(CmdFadeScreenOut)
+{
+    if (TScreenFade* fade = PlayScreen.Fade())
+    {
+        fade->FadeOut();
+        DialogPane.ClearSpeech(false);
+        if (PlayScreen.Drawer() == TPlayScreen::EDrawer::BuySell)
+            PlayScreen.CloseDrawer();
+    }
+    if (script)
+        script->SetFadeHeld(true);
+    return CMD_WAIT;
+}
+
+// REVSYNC: fadescreenin @ 0x00427f60 (single player).
+COMMAND(CmdFadeScreenIn)
+{
+    if (TScreenFade* fade = PlayScreen.Fade())
+        fade->FadeIn();
+    if (script)
+        script->SetFadeHeld(false);
+    return CMD_WAIT;
+}
+
+// REVSYNC: 0x00425440 -- the automap's fog of war, and with it its markers,
+// on or off.
+COMMAND(CmdFogOfWar)
+{
+    AutoMap.ToggleFogOfWar();
+    return 0;
+}
+// REVSYNC: playmovie @ 0x00427d80 -- `playmovie "<file>"`: MoviePath and the
+// name (a backslash between them when MoviePath lacks one), played on the
+// PlayScreen (TPlayScreen::PlayMovie). Not in the editor. Retail returned 0
+// from inside its blocking player, so the next line ran after the movie;
+// the port answers CMD_WAIT so this pass ends here, and the world (the
+// script with it) holds until the movie is over -- labyrinth.s's ENDGAME
+// follows its credits movie.
+COMMAND(CmdPlayMovie)
+{
+    if (Editor)
+    {
+        Output("This command is only available in scripts!\n");
+        return CMD_BADPARAMS;
+    }
+
+    char name[MAXPATHLEN];
+    if (!Parse(t, "%s", name))
+        return CMD_BADPARAMS;
+
+    std::string path = MoviePath;
+    if (path.empty() || path.back() != '\\')
+        path += '\\';
+    path += name;
+    PlayScreen.PlayMovie(path.c_str());
+    return CMD_WAIT;
+}
+COMMAND(CmdStopAutoMapGen) { return CmdNotPorted("samap", 0x00425420, t); }
+COMMAND(CmdSwapCDTrack) { return CmdNotPorted("swapcdtrack", 0x00428b90, t); }
+// REVSYNC: CmdTimeOfDay @ 0x00427a80 -- prints the minute of the day.
+COMMAND(CmdTimeOfDay)
+{
+    Output("At the tone, the time will be %d\n", PlayScreen.TimeOfDay());
+    t.WhiteGet();
+    return 0;
+}
+
+// ----- owner: deferred (multiplayer, editor tooling) -----
+// (The buy/sell family is in cmd_buysell.cpp.)
+
+COMMAND(CmdBigGenerate) { return CmdNotPorted("biggenerate", 0x00426d50, t); }
+COMMAND(CmdCreateModule) { return CmdNotPorted("createmodule", 0x00428c30, t); }
+COMMAND(CmdDumpTagList) { return CmdNotPorted("dumptaglist", 0x004287c0, t); }
+COMMAND(CmdDumpTagListErrors) { return CmdNotPorted("dumptaglisterrors", 0x004288f0, t); }
+COMMAND(CmdGenAutoMapS) { return CmdNotPorted("gamaps", 0x00425390, t); }
+COMMAND(CmdGenAutoMapW) { return CmdNotPorted("gamapw", 0x004252f0, t); }
+COMMAND(CmdGroupFace) { return CmdNotPorted("groupface", 0x00429390, t); }
+COMMAND(CmdGroupGoto) { return CmdNotPorted("groupgoto", 0x00429480, t); }
+COMMAND(CmdGroupInRange) { return CmdNotPorted("groupinrange", 0x00428f50, t); }
+COMMAND(CmdGroupPos) { return CmdNotPorted("grouppos", 0x00429590, t); }
+COMMAND(CmdHasLevel) { return CmdNotPorted("haslevel", 0x00429180, t); }
+COMMAND(CmdHasPlayer) { return CmdNotPorted("hasplayer", 0x00429060, t); }
+COMMAND(CmdHasNumPlayers) { return CmdNotPorted("hasnumplayers", 0x00429290, t); }
+COMMAND(CmdMap) { return CmdNotPorted("map", 0x00425170, t); }
+COMMAND(CmdSaveLevelSectors) { return CmdNotPorted("savelevelsectors", 0x00426350, t); }
+COMMAND(CmdSetCurModule) { return CmdNotPorted("setcurmodule", 0x00428d40, t); }
+COMMAND(CmdShort) { return CmdNotPorted("short", 0x00428ab0, t); }
+COMMAND(CmdTest) { return CmdNotPorted("test", 0x00428690, t); }
+COMMAND(CmdTextDump) { return CmdNotPorted("textdump", 0x00428a70, t); }
+COMMAND(CmdWalkCopy) { return CmdNotPorted("walkcopy", 0x004223c0, t); }

@@ -5,7 +5,7 @@ from speed_profile_contract import function
 ROOT=Path(__file__).resolve().parents[2]
 class WindLifecycle(unittest.TestCase):
  def test_actual_advance_order_external_kill_and_native_completion(self):
-  source=(ROOT/'src/effects/windstrippreview.cpp').read_text();body=function(source,'void Advance(State* s,double seconds)');alive=function(source,'bool Alive(State* s)');marker='s->owner->Pulse();if(!Alive(s))return;s->owner->NextFrame();';self.assertEqual(body.count(marker),1)
+  source=(ROOT/'src/game/effects/legacy/windstrippreview.cpp').read_text();body=function(source,'void Advance(State* s,double seconds)');alive=function(source,'bool Alive(State* s)');marker='s->owner->Pulse();if(!Alive(s))return;s->owner->NextFrame();';self.assertEqual(body.count(marker),1)
   pre=r'''
 #include "windstripcore.h"
 #include <cassert>
