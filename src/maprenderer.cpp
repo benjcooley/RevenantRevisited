@@ -644,10 +644,10 @@ static void BuildRootMatrixSource(const TObjectInstance* oi, hmm_mat4* out)
     if (!oi) return;
 
     const float kTurn = (float)(M_PI * 2.0 / 256.0);
-    MtxRotateZ(out, oi->GetFace() * kTurn);
+    MtxRotateZ(out, IntFacing(oi) * kTurn);
     hmm_mat4 temp = {};
-    MtxClear(&temp); MtxRotateX(&temp, oi->GetRotateX() * kTurn); MtxMultiply(out, out, &temp);
-    MtxClear(&temp); MtxRotateY(&temp, oi->GetRotateY() * kTurn); MtxMultiply(out, out, &temp);
+    MtxClear(&temp); MtxRotateX(&temp, IntRotateX(oi) * kTurn); MtxMultiply(out, out, &temp);
+    MtxClear(&temp); MtxRotateY(&temp, IntRotateY(oi) * kTurn); MtxMultiply(out, out, &temp);
 
     // 3D-mesh object positions are in the common world space (pos.z
     // pre-scaled by WORLD3D_Z_SCALE at sector load), so translate by
@@ -655,9 +655,9 @@ static void BuildRootMatrixSource(const TObjectInstance* oi, hmm_mat4* out)
     // local scale that compensates for the dropped post-transform is
     // applied to the local matrix before this root multiplies it.
     hmm_vec3 pos = {
-        (float)oi->Pos().x,
-        (float)oi->Pos().y,
-        (float)oi->Pos().z
+        (float)IntPos(oi).x,
+        (float)IntPos(oi).y,
+        (float)IntPos(oi).z
     };
     MtxClear(&temp); MtxTranslate(&temp, &pos); MtxMultiply(out, out, &temp);
 }
@@ -916,7 +916,7 @@ static int32_t CacheSectorBitmap(std::vector<SSectorTileTex>& cache,
     tex.bm_key = bm;
     tex.debug_classname = oi ? oi->GetClassName() : nullptr;
     tex.debug_typename = oi ? oi->GetTypeName() : nullptr;
-    tex.debug_world_pos = oi ? oi->Pos() : S3DPoint{0,0,0};
+    tex.debug_world_pos = oi ? IntPos(oi) : S3DPoint{0,0,0};
     tex.debug_regx = img ? img->GetRegX(state) : 0;
     tex.debug_regy = img ? img->GetRegY(state) : 0;
     tex.debug_regz = img ? img->GetRegZ(state) : 0;
@@ -1035,7 +1035,7 @@ void SSectorDrawableInst::UpdateFromInstance()
 {
     TObjectInstance* oi = src.Get();
     if (!oi) return;
-    world_pos = oi->Pos();
+    world_pos = IntPos(oi);
     // Preserve the sampled tile state/frame until RenderFrame refreshes
     // its bitmap. Transfer-only bin refreshes must not mark stale textures current.
     if (kind == ESectorDrawableKind::Tile) return;
@@ -1613,7 +1613,7 @@ void TMapRenderer::Impl::submitEquipment(const SMapRenderContext& ctx, SMapRende
     const float draw_alpha = animator->DrawAlpha();
     if (draw_alpha <= 0.0f)
         return;
-    const S3DPoint world_pos = oi.Pos();
+    const S3DPoint world_pos = IntPos(oi);
     if (!MeshAnchorInView(ctx, world_pos))
         return;
 
@@ -2338,7 +2338,7 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
                 sample.objclass = oi->ObjClass();
                 sample.state = oi->GetState();
                 sample.frame = oi->GetFrame();
-                sample.pos = oi->Pos();
+                sample.pos = IntPos(oi);
                 sample.cls = oi->GetClassName();
                 sample.type = oi->GetTypeName();
                 sample.name = oi->GetName();
@@ -2581,7 +2581,7 @@ void TMapRenderer::RebuildForCurrentMap()
     if (Player && Player->GetLevel() == map->Level())
     {
         S3DPoint p;
-        Player->GetPos(p);
+        p = IntPos(Player);
         focus_sx = p.x >> SECTORWSHIFT;
         focus_sy = p.y >> SECTORHSHIFT;
         cull_camera_world = p;
@@ -2658,7 +2658,7 @@ void TMapRenderer::RebuildForCurrentMap()
                 }
                 SSectorDrawableInst billboard = {};
                 billboard.kind = ESectorDrawableKind::Billboard;
-                billboard.world_pos = oi->Pos();
+                billboard.world_pos = IntPos(oi);
                 billboard.state = st;
                 billboard.frame = oi->GetFrame();
                 billboard.src = TSafeRef<>(oi);
@@ -2762,7 +2762,7 @@ void TMapRenderer::RebuildForCurrentMap()
                             SSectorDrawableInst minst = {};
                             minst.kind = ESectorDrawableKind::Mesh;
                             minst.asset_idx = asset_idx;
-                            minst.world_pos = oi->Pos();
+                            minst.world_pos = IntPos(oi);
                             minst.state = st;
                             minst.frame = oi->GetFrame();
                             minst.src = TSafeRef<>(oi);
@@ -2801,7 +2801,7 @@ void TMapRenderer::RebuildForCurrentMap()
                             SSectorDrawableInst minst = {};
                             minst.kind = ESectorDrawableKind::Mesh;
                             minst.asset_idx = asset_idx;
-                            minst.world_pos = oi->Pos();
+                            minst.world_pos = IntPos(oi);
                             minst.state = st;
                             minst.frame = oi->GetFrame();
                             minst.src = TSafeRef<>(oi);
@@ -2865,7 +2865,7 @@ void TMapRenderer::RebuildForCurrentMap()
                     einst.state = st;
                     einst.frame = oi->GetFrame();
                     einst.asset_idx = tex_idx;
-                    einst.world_pos = oi->Pos();
+                    einst.world_pos = IntPos(oi);
                     // TAnimAnimator draws at WorldToScreen(pos) + animreg,
                     // with DM_USEREG subtracting each frame bitmap reg.
                     if (bm)
@@ -2905,7 +2905,7 @@ void TMapRenderer::RebuildForCurrentMap()
                 t.bm_key = bm;
                 t.debug_classname = oi->GetClassName();
                 t.debug_typename = oi->GetTypeName();
-                t.debug_world_pos = oi->Pos();
+                t.debug_world_pos = IntPos(oi);
                 t.debug_regx = img->GetRegX(st);
                 t.debug_regy = img->GetRegY(st);
                 t.debug_regz = img->GetRegZ(st);
@@ -2927,7 +2927,7 @@ void TMapRenderer::RebuildForCurrentMap()
             SSectorDrawableInst winst = {};
             winst.kind = ESectorDrawableKind::Tile;
             winst.asset_idx = tex_idx;
-            winst.world_pos = oi->Pos();
+            winst.world_pos = IntPos(oi);
             winst.regx = img->GetRegX(st);
             winst.regy = img->GetRegY(st);
             winst.regz = img->GetRegZ(st);
@@ -3185,7 +3185,7 @@ static int32_t SubmitRetailDrawLights(int32_t cam_ox, int32_t cam_oy, int32_t vw
             break;
         const SLightDef& ld = *inst->GetLightDef();
         S3DPoint at;
-        inst->GetPos(at);
+        at = IntPos(inst);
         at += ld.pos;
         SColor color;
         int32_t multiplier = 0;
@@ -3259,7 +3259,7 @@ void TMapRenderer::RenderFrame()
         if (!oi) return;
         const int32_t old_state = inst.state;
         const int32_t old_frame = inst.frame;
-        inst.world_pos = oi->Pos();
+        inst.world_pos = IntPos(oi);
         inst.state = oi->GetState();
         inst.frame = oi->GetFrame();
         if (inst.animation_layer &&
@@ -3865,7 +3865,7 @@ void TMapRenderer::HandleMouseClick(int32_t button, int32_t x, int32_t y)
                 s.lightDragIdx = picked;
                 s.lightDragStartSX = x;
                 s.lightDragStartSY = y;
-                s.lightDragStartOiPos = pi->Pos();
+                s.lightDragStartOiPos = IntPos(pi);
             }
             else
             {
@@ -3930,7 +3930,7 @@ void TMapRenderer::HandleMouseMove(int32_t button, int32_t x, int32_t y)
             newpos.z = s.lightDragStartOiPos.z;
         }
         oi->SetPos(newpos, -1, true);
-        const S3DPoint now = oi->Pos();
+        const S3DPoint now = IntPos(oi);
         for (auto& di : s.sectorDrawInst)
             if (di.src.Get() == oi) di.world_pos = now;
         s.rebuildBins();

@@ -350,7 +350,7 @@ struct State
 // Initialize — transcribed from snapshot effect_old.cpp:8015-8135.
 //
 // In the test harness:
-//   - angle = 192 (byte-angle for +X world direction: GetFace()*360/256 = 270°,
+//   - angle = 192 (byte-angle for +X world direction: IntFacing(*this)*360/256 = 270°,
 //     sin(270°)=−1, cos(270°)=0, but facing along +X in iso = angle ~192 wraps
 //     into roughly (sin≈1, cos≈0) for local-y beam direction). We use a fixed
 //     test angle representing "beam runs along world +X", which in the local

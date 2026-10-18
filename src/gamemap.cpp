@@ -349,20 +349,20 @@ bool TGameMap::StampWalkmap(TObjectInstance* oi, int32_t mode, const FindSectorF
     // Apply facing rotation to the walkmap stamp data; same logic as
     // the legacy TMapPane::WalkmapHandler.
     uint8_t* appliedwalk = nullptr;
-    if (oi->GetFace() != 0)
+    if (IntFacing(oi) != 0)
     {
         appliedwalk = (uint8_t*)malloc(width * length);
 
         int32_t nx, ny, nsx, nsy;
         oi->GetFacingBoundBox(nx, ny, nsx, nsy);
 
-        if (oi->GetFace() < 128)
+        if (IntFacing(oi) < 128)
         {
             for (int32_t y = 0; y < nsy; y++)
                 for (int32_t x = 0; x < nsx; x++)
                     *(appliedwalk + (y * nsx) + x) = *(walk + ((length - x - 1) * width) + y);
         }
-        else if (oi->GetFace() < 192)
+        else if (IntFacing(oi) < 192)
         {
             for (int32_t y = 0; y < nsy; y++)
                 for (int32_t x = 0; x < nsx; x++)
@@ -382,7 +382,7 @@ bool TGameMap::StampWalkmap(TObjectInstance* oi, int32_t mode, const FindSectorF
     }
 
     S3DPoint pos;
-    oi->GetPos(pos);
+    pos = IntPos(oi);
 
     const bool override = (oi->ObjClass() == OBJCLASS_EXIT);
 

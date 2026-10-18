@@ -395,8 +395,8 @@ class TFixtureChar : public Base, public IFixtureChar
         this->name = strdup(who.c_str());
         this->mapindex = (int32_t)spec["id"].Int(0);
         const JsonValue& p = spec["pos"];
-        this->ForcePos(S3DPoint((int32_t)p[0].Int(), (int32_t)p[1].Int(), (int32_t)p[2].Int()));
-        this->SetRotateZ((int32_t)spec["facing"].Int());
+        SetIntPos(this, S3DPoint((int32_t)p[0].Int(), (int32_t)p[1].Int(), (int32_t)p[2].Int()));
+        SetIntFacing(this, (int32_t)spec["facing"].Int());
         this->SetMoveAngle((int32_t)spec["moveangle"].Int(spec["facing"].Int()));
         this->state = (uint16_t)spec["state"].Int(0);
         this->charflags = (uint32_t)spec["charflags"].Int();
@@ -580,7 +580,7 @@ class TFixtureChar : public Base, public IFixtureChar
         j.Begin('{').FieldString("seam", "SetPos").FieldString("who", who);
         j.Key("pos").Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']').End('}');
         Seam(j.str());
-        this->ForcePos(p);
+        SetIntPos(this, p);
         return 1;
     }
 
@@ -1145,8 +1145,8 @@ class TFixtureWorld
         std::vector<TActionBlock*> made;
         j.Key(key).Begin('{');
         j.Field("state", (int16_t)c->TObjectInstance::GetState()).Field("frame", (int32_t)c->GetFrame());
-        j.Field("facing", c->GetFace()).Field("moveangle", c->GetMoveAngle());
-        const S3DPoint p = c->Pos();
+        j.Field("facing", IntFacing(c)).Field("moveangle", c->GetMoveAngle());
+        const S3DPoint p = IntPos(c);
         j.Key("pos").Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']');
         IFixtureChar* fx = fixtures.at(c);
         WriteBlock(j, "root", fx->Root(), made);

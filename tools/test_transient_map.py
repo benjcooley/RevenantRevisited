@@ -41,7 +41,8 @@ void TSector::WalkmapHandler(int32_t, uint8_t*, int32_t, int32_t, int32_t,
 int32_t TSector::AddObject(TObjectInstance*, int32_t) { return 0; }
 void TObjectInstance::GetFacingBoundBox(int32_t&, int32_t&, int32_t&, int32_t&) {}
 TObjectImagery* TObjectInstance::GetImagery() const { return nullptr; }
-S3DPoint TObjectInstance::Pos() const { return {}; }
+hmm_vec3 TTransform::Pos() const { return {}; }
+hmm_vec3 TTransform::LocalRotEuler() const { return {}; }
 TObjectInstance* LookupMapIndex(int32_t) { return nullptr; }
 int stricmp(const char* a, const char* b) { return strcasecmp(a, b); }
 extern "C" void log_log(int, const char*, int, const char*, ...) {}

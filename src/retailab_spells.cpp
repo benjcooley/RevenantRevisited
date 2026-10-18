@@ -1169,7 +1169,7 @@ std::string MissileArrow(const Case& c, std::string& error)
         auto* arrow = new TCaseArrow(&def, new TFixtureImagery(TFixtureImagery::Register({}), "arrow", {}, false), a);
         std::unique_ptr<TCaseArrow> owned(arrow);
         arrow->SetMapIndex(-1);
-        arrow->ForcePos(def.pos);
+        SetIntPos(arrow, def.pos);
         if (a.Has("shooter") && !a["shooter"].IsNull())
             arrow->SetShooter(world.Get(a["shooter"].Str()));
         if (a.Has("owner") && !a["owner"].IsNull())
@@ -1445,7 +1445,7 @@ void WriteMissileTick(JsonOut& j, int32_t tick, TFireBallEffect& fb)
         if (fb.GetFlags() & bit)
             set.emplace_back(name);
     std::sort(set.begin(), set.end());
-    const S3DPoint p = fb.Pos();
+    const S3DPoint p = IntPos(fb);
     j.Begin('{').Field("tick", tick).Field("state", m.state);
     j.Key("pos").Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']');
     j.Key("vel").Begin('[').Value(m.velocity_fixed.x).Value(m.velocity_fixed.y).Value(m.velocity_fixed.z).End(']');
@@ -1522,7 +1522,7 @@ std::string MissileFireball(const Case& c, std::string& error)
         const std::vector<SFixtureState> states = ReadStates(JsonValue::Parse(R"(["launch", "fly", "explode"])"));
         TFireBallEffect fb(&def, new TQuietImagery(TFixtureImagery::Register(states), "fireball", states, false));
         fb.SetMapIndex(-1);
-        fb.ForcePos(def.pos);
+        SetIntPos(fb, def.pos);
         if (cs["spell"].Bool(true))
             fb.SetSpell(spell.get());
         ClearSeams();
@@ -1575,7 +1575,7 @@ class TCaseEffect : public Base
         j.Begin('{').FieldString("seam", "SetPos").FieldString("who", who);
         j.Key("pos").Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']').End('}');
         Seam(j.str());
-        this->ForcePos(p);
+        SetIntPos(this, p);
         return 1;
     }
 
@@ -1683,7 +1683,7 @@ void WriteEffect(JsonOut& j, TObjectInstance* o)
         if (o->GetFlags() & bit)
             set.emplace_back(name);
     std::sort(set.begin(), set.end());
-    const S3DPoint p = o->Pos();
+    const S3DPoint p = IntPos(o);
     j.Begin('{').FieldString("name", g_life->NameOf(o));
     j.Key("pos").Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']');
     j.Key("flags").Begin('[');

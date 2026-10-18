@@ -35,11 +35,6 @@ class TMoney : public TObjectInstance
     int32_t CursorType(TObjectInstance* with = nullptr) override;
         // Returns type of cursor that should appear when mouse arrow is over the object
 
-    virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
-        // Loads data from the sector
-    virtual void Save(RTOutputStream os);
-        // Saves data to the sector
-
     bool AddToMap() override;
         // REVSYNC: 0x00516660 (vtable 0x8c). The pile's size in its state first
     bool MergeInto(TObjectInstance* newowner) override;

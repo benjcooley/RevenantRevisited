@@ -67,7 +67,7 @@ void T3DEquipAnimator::PoseParts()
         const SToss::SVec& p1 = tossed->pos[0];
         const SToss::SVec& a0 = tossed->angle[1];
         const SToss::SVec& a1 = tossed->angle[0];
-        const S3DPoint at = inst->Pos();
+        const S3DPoint at = IntPos(inst);
         offset = { float(Between(p0.x, p1.x, frac) - at.x),
                    float(Between(p0.y, p1.y, frac) - at.y),
                    float(Between(p0.z, p1.z, frac) - at.z) };

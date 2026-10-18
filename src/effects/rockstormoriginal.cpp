@@ -43,7 +43,7 @@ State* Spawn(const S3DPoint& source) {
     if(!Renderer)return nullptr;auto c=std::make_unique<State>();const uint32_t id=0xad92bd22u;auto* cls=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cls?cls->FindObjType(id):-1;if(type<0)return nullptr;
     SObjectDef def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;c->owner.reset(cls->NewObject(&def));
     auto* owner=c->owner.get();if(!owner || owner->ObjId()!=id)return nullptr;
-    owner->ForcePos(source);owner->Face(0);owner->OnScreen();auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());
+    SetIntPos(owner, source);owner->Face(0);owner->OnScreen();auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());
     if(!image || !ValidateRockStorm(*image)){log_warn("[rockstorm-original] exact profile rejected");return nullptr;}
     constexpr int slots[]={1,1,1,2,3};
     for(int i:{0,3}){auto& p=c->parts[i];if(!ExtractSubMeshTextureSlot(image,i,slots[i],p.vertices,p.indices))return nullptr;
@@ -68,7 +68,7 @@ void Advance(State* c,double seconds) {
 }
 void SubmitWorld(State* c,EFxDebugMode) {
     if(!IsAlive(c) || !Renderer)return;
-    const auto source=c->owner->Pos();
+    const auto source=IntPos(c->owner);
     rockstorm_core::ForEachDraw(c->core,[&](const rockstorm_core::Draw& d){
         if(d.scale.X<=1e-5f || d.scale.Y<=1e-5f || d.scale.Z<=1e-5f)return;const auto& p=c->parts[d.object];hmm_mat4 world;rockstorm_core::Matrix(world,d);
         if(!StartupVfxNativeDomain)for(int col=0;col<4;++col)world.Elements[col][2]*=WORLD3D_Z_SCALE;

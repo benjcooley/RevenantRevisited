@@ -787,7 +787,7 @@ void TCharAnimator::RenderShadow()
   // Add in char's position
     hmm_vec3 v;
     S3DPoint charpos;
-    inst->GetPos(charpos);
+    charpos = IntPos(inst);
 
 #define SHADOW_OFFSET   5.0f
     v.X = (float)(charpos.x + SHADOW_OFFSET * 2);
@@ -835,7 +835,7 @@ void TCharAnimator::RenderCombatFlashes()
         
     hmm_vec3 v;
     S3DPoint charpos;
-    inst->GetPos(charpos);
+    charpos = IntPos(inst);
 
 #define CF_OFFSET   25.0f
 #define CF_HEIGHT   50.0f
@@ -896,10 +896,10 @@ void TCharAnimator::RenderVisionIndicator()
         MtxClear(&obj->matrix);
         MtxClear(&pos);
 
-        inst->GetPos(charpos);
+        charpos = IntPos(inst);
 
         // get the angle that the character is facing in radians, converted from a 255-degree range
-        facing_angle = ((float)inst->GetFace()) * ((float)M_PI / 127.0f);
+        facing_angle = ((float)IntFacing(inst)) * ((float)M_PI / 127.0f);
 
         // scale first: base it on the character's maximum sight range
         scl.Y = 128.0f / (float)(((TCharacter*)inst)->GetCharData())->sightangle;

@@ -40,7 +40,7 @@ void Advance(State* s,double seconds){
 }
 void SubmitWorld(State* s){
  if(!Alive(s) || !Renderer || s->rendered==TTime::FrameCount())return;s->rendered=TTime::FrameCount();if(s->core.counter<=15)return;
- auto* img=static_cast<T3DImagery*>(s->owner->GetImagery());hmm_mat4 root;const auto& origin=s->owner->Pos();if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,origin.x,origin.y,origin.z,uint8_t(s->owner->GetFace()));else root=s->owner->Transform().Matrix();int draws=0;
+ auto* img=static_cast<T3DImagery*>(s->owner->GetImagery());hmm_mat4 root;const auto& origin=IntPos(s->owner);if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,origin.x,origin.y,origin.z,uint8_t(IntFacing(s->owner)));else root=s->owner->Transform().Matrix();int draws=0;
  // Original ring-index order, cycling through the four authored meshes.
  for(int i=0;i<8;++i){const int part=i%4;S3DAnimObj o={};o.objnum=part;o.flags=0x48;o.scl={s->core.scale[i],s->core.scale[i],s->core.scale[i]};o.pos={-s->core.scale[i],-s->core.scale[i]-s->core.position[i],0};
   if(!img->CalcObjectMatrix(&o,0,s->owner->GetFrame(),&root,false))continue;hmm_mat4 world;MtxMultiply(&world,&o.matrix,&root);

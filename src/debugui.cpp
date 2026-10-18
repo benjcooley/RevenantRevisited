@@ -664,7 +664,7 @@ void TMapRenderer::DrawDebugTab()
                     s.sectorCharacterFocusIdx = (s.sectorCharacterFocusIdx + 1) % int32_t(character_list.size());
                     if (TObjectInstance* focus = character_list[s.sectorCharacterFocusIdx])
                     {
-                        const S3DPoint p = focus->Pos();
+                        const S3DPoint p = IntPos(focus);
                         s.sectorCameraWorld.x = p.x;
                         s.sectorCameraWorld.y = p.y;
                         s.sectorCameraWorld.z = 0;
@@ -808,7 +808,7 @@ void TMapRenderer::DrawDebugTab()
                 dl->AddText(ImVec2(a.x + 8.0f, a.y - 7.0f), label_color, label);
             {
                 char posbuf[128];
-                const S3DPoint p = oi->Pos();
+                const S3DPoint p = IntPos(oi);
                 if (inst.kind == ESectorDrawableKind::Mesh)
                 {
                     const float render_z = FIX_Z_VALUE(p.z);
@@ -920,7 +920,7 @@ void TMapRenderer::DrawDebugTab()
                 if (!s.sectorShowGizmos && (oi->IsLight() || oi->ObjClass() == OBJCLASS_HELPER))
                     continue;
 
-                const S3DPoint root = oi->Pos();
+                const S3DPoint root = IntPos(oi);
                 S3DPoint sr;
                 s.sectorProjectWorld(root, sr);
                 const ImVec2 a(float(sr.x + cam_ox), float(sr.y + cam_oy));

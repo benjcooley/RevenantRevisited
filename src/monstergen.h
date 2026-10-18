@@ -42,6 +42,8 @@ struct SMonsterGenSlot
 _CLASSDEF(TMonsterGen)
 class TMonsterGen : public THelper
 {
+    friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
+    friend class TLegacySerialize;
   public:
     // REVSYNC: Build @ 0x005176a0 -- a generator is an editor object that
     // never moves and always pulses (flags 0x8101).
@@ -50,12 +52,7 @@ class TMonsterGen : public THelper
 
     static constexpr int32_t kMaxTypes = 5;     // slots (+0xd8..+0xe8)
 
-    // REVSYNC: 0x00516e00 (vtable 0x160) -- base fields, then uint8 slot
-    // count; per slot the type name (NUL-terminated), int32 treasure, int32
-    // frequency, and from stream version 15 int32 clock start; int32 cap.
-    void Load(TInputStream& is, int32_t version, int32_t objversion) override;
-    // REVSYNC: 0x00516eb0 (vtable 0x164) -- the same, the used slots only.
-    void Save(TOutputStream& os) override;
+    // Its sector layout (slots, cap) is TLegacyDeserialize::ReadMonsterGen.
 
     // REVSYNC: 0x00516c30 (vtable 0x110) -- run the slots' clocks and make
     // the monsters that are due. No script runs: the base Pulse isn't called.

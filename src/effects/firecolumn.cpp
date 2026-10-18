@@ -587,7 +587,7 @@ State* Spawn(const S3DPoint& origin, float facing_byte)
     //   vctr.x = speed * cos(angle_rad)
     //   vctr.y = speed * sin(angle_rad)
     //   (positive Y = south in Revenant's world-space conventions)
-    // missileeffect.cpp:1221: ConvertToVector(inst->GetFace(), 10, vctr)
+    // missileeffect.cpp:1221: ConvertToVector(IntFacing(inst), 10, vctr)
     {
         const float angle_rad = (facing_byte / 256.0f) * (2.0f * 3.14159265358979323846f);
         st->vctr_x = kVctrSpeed * std::cos(angle_rad);

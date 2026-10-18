@@ -24,7 +24,7 @@ struct MapFixture {
   if(auto*o=owner.Get())o->SetSpell(nullptr);
   if(auto*c=caster.Get())if(auto*t=target.Get()){
    log_info("[sandswirl-map-cleanup] tick=%d health=%d/%d flags=%x/%x spell_timer=%d",ticks,c->Health(),t->Health(),c->Flags(),t->Flags(),spell?spell->TimerValue():-1);
-   log_info("[sandswirl-map-actors] source=%d,%d,%d target=%d,%d,%d",c->Pos().x,c->Pos().y,c->Pos().z,t->Pos().x,t->Pos().y,t->Pos().z);
+   log_info("[sandswirl-map-actors] source=%d,%d,%d target=%d,%d,%d",IntPos(c).x,IntPos(c).y,IntPos(c).z,IntPos(t).x,IntPos(t).y,IntPos(t).z);
   }
   spell.reset();
   if(window)MapPane.ReleaseCommandMapWindow();
@@ -78,8 +78,8 @@ void AdvanceMapFixture(MapFixture*s,double dt){
  if(!s || !std::isfinite(dt) || dt<=0)return;s->accumulator+=dt;
  while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;++s->ticks;auto*owner=s->owner.Get();if(!owner)return;
   if(s->move_target && (s->ticks==60 || s->ticks==85))if(auto*target=s->target.Get()){
-   const auto&p=owner->Pos();const S3DPoint destination=s->ticks==60?S3DPoint{p.x+80,p.y+48,p.z}:S3DPoint{p.x+64,p.y+80,p.z};
-   const auto before=RandomDraws();const int result=target->SetPos(destination,-1,false);const auto&actual=target->Pos();
+   const auto&p=IntPos(owner);const S3DPoint destination=s->ticks==60?S3DPoint{p.x+80,p.y+48,p.z}:S3DPoint{p.x+64,p.y+80,p.z};
+   const auto before=RandomDraws();const int result=target->SetPos(destination,-1,false);const auto&actual=IntPos(target);
    log_info("[sandswirl-target-move] tick=%d position=%d,%d,%d result=%d rng_before=%llu rng_after=%llu",s->ticks,actual.x,actual.y,actual.z,result,static_cast<unsigned long long>(before),static_cast<unsigned long long>(RandomDraws()));
   }
   // Same declared snapshot ordering as the original diagnostic: children born

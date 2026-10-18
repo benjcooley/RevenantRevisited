@@ -401,7 +401,7 @@ void TPlaytest::Boundary()
 
     if (Player)
     {
-        const S3DPoint pos = Player->Pos();
+        const S3DPoint pos = IntPos(Player);
         log_debug("[playtest] t=%lld frame=%lld gameframes=%d draws=%llu screen=%s pos=(%d,%d,%d) health=%d",
                   (long long)t, (long long)frame, PlayScreen.GameFrame(),
                   (unsigned long long)(RandomDraws() - drawsBase), Observation::ScreenName(),

@@ -30,9 +30,6 @@ class TContainer : public TObjectInstance
         // REVSYNC: 0x004dd3a0 -- every container, whatever its Value, but the
         // multiplayer Swag Bag
 
-    virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
-    virtual void Save(RTOutputStream os);
-
     int32_t NumObjects();
         // Count the number of objects in the container
     [[nodiscard]] bool IsOpen() const;
@@ -76,5 +73,15 @@ class TContainer : public TObjectInstance
 
 DEFINE_BUILDER("CONTAINER", TContainer)
 
-#endif
+// A rack of vials: a container whose contents are never saved.
+class TVialRack : public TContainer
+{
+  public:
+    TVialRack(TObjectImagery* newim) : TContainer(newim) {}
+    TVialRack(SObjectDef* def, TObjectImagery* newim) : TContainer(def, newim) {}
 
+    bool Use(TObjectInstance* user, int32_t with = -1) override;
+    int32_t CursorType(TObjectInstance* inst = nullptr) override;
+};
+
+#endif

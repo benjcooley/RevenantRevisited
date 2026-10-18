@@ -7,6 +7,7 @@
 #pragma once
 
 #include "revenant.h"
+#include "intworld.h"
 #include "node.h"
 #include "objectcomponent.h"
 #include "imagery.h"
@@ -585,15 +586,6 @@ constexpr uint32_t OF_FIXEDFLAGS = OF_COMPLEX | OF_NOTIFY | OF_NONMAP | OF_AI | 
             "PAUSE", "NOWALK", "PARALIZE", "NOCOLLISION", "ICED", "VIRGIN", "LOADING",\
             "INVULNERABLE", "BACKGROUND", "INVENTORY", "CALLEDPREDEL"}
 
-// Object stream options, threaded through SaveObject/LoadObject and the
-// Save/Load overrides that write sub-objects. Retail kept them in globals
-// (DAT_0065a250 while saving, DAT_0065a254 while loading).
-enum EObjectStream : uint32_t
-{
-    OSTREAM_MAP         = 1u << 0,  // a sector file: NONMAP objects are left out
-    OSTREAM_NOINVENTORY = 1u << 1,  // inventories are left out (the sector hash)
-};
-
 // NOTE: OF_NONMAP
 // ----------------
 //
@@ -649,35 +641,32 @@ enum EObjectStream : uint32_t
 #define MOVE_FALLING    (1 << 2)    // Object is falling due to gravity
 #define MOVE_NOTMOVING  (1 << 3)    // This object has no current velocity
 
-// This structure is passed to the NewObject function in MapPane()
-// Items placed in this structure should describe the initial state of the object
-// and not values that will be automatically set by the object class once the object
-// has been created.
-
-_CLASSDEF(SObjectDef)
-class SObjectDef
+// The spawn record: what a caller fills before NewObject builds an object
+// from it. It describes the object's initial state and nothing the class
+// sets up itself. It is not part of the object; the constructor applies it
+// and lets it go (docs/OBJECT_MODEL_PLAN.md).
+struct SObjectDef
 {
-  public:
-    short       objclass;   // Class of item (-1 if no object)
-    short       objtype;    // Type of item in class (-1 if no object)
-    uint32_t    flags;      // Flags for object
+    short       objclass = -1;      // Class of item (-1 if no object)
+    short       objtype  = -1;      // Type of item in class (-1 if no object)
+    uint32_t    flags    = 0;       // Flags for object
 
-    uint16_t    state;      // State of object
-    uint16_t    level;      // Level of object
+    uint16_t    state    = 0;       // State of object
+    uint16_t    level    = 0;       // Level of object
 
-    S3DPoint    pos;        // Position of object relative in the map (pos is the exact center of the object)
-    S3DPoint    vel;        // Movement velocity vector (divide by 0x100 to get world position units)
-    S3DPoint    accum;      // Accumulator for movement
-    
-    uint8_t     rotatex;    // Rotation around the x axis (0 - 255)
-    uint8_t     rotatey;    // Rotation around the y axis (0 - 255)
+    S3DPoint    pos{0, 0, 0};       // Position of object in the map (the exact center of the object)
+    S3DPoint    vel{0, 0, 0};       // Movement velocity vector (divide by 0x100 to get world position units)
+    S3DPoint    accum{0, 0, 0};     // Accumulator for movement
+
+    uint8_t     rotatex = 0;        // Rotation around the x axis (0 - 255)
+    uint8_t     rotatey = 0;        // Rotation around the y axis (0 - 255)
     union
     {
-        uint8_t     rotatez;    // Rotation around the z axis (0 - 255)
-        uint8_t     facing;     // Direction object is facing (0 to 255 on x-y plane)
+        uint8_t     rotatez = 0;    // Rotation around the z axis (0 - 255)
+        uint8_t     facing;         // Direction object is facing (0 to 255 on x-y plane)
     };
 
-    uint8_t     group;      // Group of object
+    uint8_t     group = 0;          // Group of object
 };
 
 // Instance-specific names - keep this number smallish
@@ -698,8 +687,12 @@ class SObjectDef
 #define DAMAGE_POISON       20      // taking poison damage
 
 _CLASSDEF(TObjectInstance)
-class TObjectInstance : public TNode, protected SObjectDef
+class TObjectInstance : public TNode
 {
+    REFL_FRIEND(TObjectInstance)
+    friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
+    friend class TLegacySerialize;
+
   // Function Members
 
   public:
@@ -737,12 +730,13 @@ class TObjectInstance : public TNode, protected SObjectDef
     PROP_FN(12, int32_t,     state,    GetState,     SetState, "Animation state");
     PROP_FN(13, int32_t,     frame,    GetFrame,     );
     PROP_FN(14, int32_t,     mapindex, GetMapIndex,  );
+    PROP_FN(15, int32_t,     flags,    Flags,        ResetFlags, "OF_* flags");
+    PROP_FN(16, int32_t,     level,    GetLevel,     ForceLevel, "Map level");
+    PROP_FN(17, int32_t,     group,    GetGroup,     SetGroup);
 
-  // Node transform setters routed through the legacy fields so `pos` and
-  // rotatex / y / z stay in lockstep with the transform.
+  // A map object's position goes through SetPos (sector bookkeeping),
+  // whoever sets it: a track, the inspector, a prefab.
     void     SetLocalPos(const hmm_vec3& p) override;
-    hmm_vec3 LocalRotDeg() const override;
-    void     SetLocalRotDeg(const hmm_vec3& deg) override;
     void SetName(char *newname);
         // Set context name
     uint32_t ObjId() const { return inf->uniqueid; }
@@ -755,19 +749,11 @@ class TObjectInstance : public TNode, protected SObjectDef
         // Returns group number of object
     void SetGroup(int32_t newgroup) { group = newgroup; }
         // Sets the group number of the object
-    void GetPos(S3DPoint& getpos) const { getpos = Pos(); }
-        // Gets current object position (world space).
-    S3DPoint Pos() const;
-        // World-space position. Reads from the transform's global
-        // matrix, so the cost is at worst a parent-chain recompute
-        // (cached afterwards). Returns by value -- the const-ref
-        // overload is gone because the value is computed, not a
-        // direct member reference.
     virtual int32_t Distance(const TObjectInstance* inst) const;
       // Retail slot 4 (0x0046ea20): centre to centre; characters measure
       // edge to edge (TCharacter::Distance)
         // Returns the distance on the x-y plane between this and inst
-    int32_t SqrDist(const TObjectInstance* inst) const { return SQRDIST(pos, inst->pos); }
+    int32_t SqrDist(const TObjectInstance* inst) const { return SQRDIST(IntPos(*this), IntPos(*inst)); }
         // Returns the square of the distance between this and inst
     int32_t AngleTo(const TObjectInstance* inst) const;
         // Returns the angle to the other instance
@@ -778,11 +764,8 @@ class TObjectInstance : public TNode, protected SObjectDef
     void GetScreenPos(S3DPoint &s) const;
         // Converts tile pos z to screen zbuffer z
     virtual int32_t SetPos(const S3DPoint& newpos, int32_t newlevel = -1, bool override = false);
-        // Sets current object position, returns object's sector number (override to ignore bounds checking)
-    void ForcePos(const S3DPoint& newpos);
-        // Forces current position to new postion with NO validity checking, sector transfer, etc.
-        // Same single setter as SetPos -- routes through transform_ so the world matrix stays
-        // coherent -- but skips the side effects.
+        // Sets current object position, returns object's sector number (override to ignore bounds checking).
+        // SetIntPos (intworld.h) is the raw write with none of the side effects.
     virtual void MoveTo(const S3DPoint& newpos) { SetPos(newpos, -1, false); }
         // Moves object to new position (does walk checking for characters).
     void Teleport(const S3DPoint& to, int32_t tolevel = -1, bool override = false);
@@ -796,12 +779,12 @@ class TObjectInstance : public TNode, protected SObjectDef
         // keeping the angle between them the same.
     int32_t GetLevel() const { return level; }
         // Returns level of object
-    int32_t SetLevel(int32_t newlevel) { return SetPos(pos, newlevel, false); }
+    int32_t SetLevel(int32_t newlevel) { return SetPos(IntPos(*this), newlevel, false); }
         // Sets the level of the object
         // Note: Only OF_NONMAP objects can move between levels!
     void ForceLevel(int32_t newlevel) { level = newlevel; }
         // Sets the level variable of an object directly (useful for various load/save functions)
-    void ClearAccum() { memset(&accum, 0, sizeof(S3DPoint)); }
+    void ClearAccum() { accum = S3DPoint{0, 0, 0}; }
         // Clear out object's movement accumulator
     uint32_t GetNotify() const { return notifyflags; }
         // Gets object notify flags
@@ -868,12 +851,10 @@ class TObjectInstance : public TNode, protected SObjectDef
     virtual bool DrawShadow() { return false; }
         // Returns true of the object wants a simple alpha-channel circle shadow to follow it
 
-  // Transform / hierarchy / components are inherited from TNode.
-  // Phase A: position is the only field driven through transform_;
-  // rotation continues to live on the legacy rotatex / rotatey /
-  // rotatez fields and is mirrored by SyncTransformRot(). Components
-  // activate when the instance gets a map index (SetMapIndex), not on
-  // AddComponent; standalone instances (--test=vfx harness) call
+  // Transform / hierarchy / components are inherited from TNode; the
+  // transform is the only spatial store (integer views: intworld.h).
+  // Components activate when the instance gets a map index (SetMapIndex),
+  // not on AddComponent; standalone instances (--test=vfx harness) call
   // ActivateComponents() themselves.
 
   // Object flag functions  
@@ -1020,24 +1001,10 @@ class TObjectInstance : public TNode, protected SObjectDef
         { mindist = 20; maxdist = 50; minang = 0; maxang = 255; }
         // Valid locations character can be standing in order to use the object
 
-  // Rotation and velocity and scale functions
-    void SetRotateX(int32_t ang) { rotatex = uint8_t(ang); SyncTransformRot(); }
-    int32_t GetRotateX() const { return rotatex; }
-    void SetRotateY(int32_t ang) { rotatey = uint8_t(ang); SyncTransformRot(); }
-    int32_t GetRotateY() const { return rotatey; }
-    void SetRotateZ(int32_t ang) { rotatez = uint8_t(ang); SyncTransformRot(); }
-    int32_t GetRotateZ() const { return rotatez; }
-        // All of the above set or get rotations about the given axis. Setters
-        // re-sync transform_ from the full triple after every legacy field
-        // write so transform_.LocalRot() / .Matrix() always reflect the
-        // current object orientation. The composition order matches the
-        // legacy renderer's Rz * Rx * Ry (see SyncTransformRot impl).
-    void Face(int32_t newfacing) { SetRotateZ(newfacing); SetMoveAngle(newfacing); }
+  // Facing and velocity. Orientation is read and written through the
+  // integer views (IntFacing / SetIntFacing, intworld.h).
+    void Face(int32_t newfacing) { SetIntFacing(*this, newfacing); SetMoveAngle(newfacing); }
         // Faces object towards the given direction and sets motion to go in that direction
-    void FaceOnly(int32_t newfacing) { SetRotateZ(newfacing); }
-        // Faces object towards the given direction, but does not set movement angle to that dir
-    int32_t GetFace() const { return GetRotateZ(); }
-      // Returns current facing
     void SetVel(S3DPoint &v) { vel = v; }
         // Set object's movement speed
     void GetVel(S3DPoint &v) const { v = vel; }
@@ -1239,28 +1206,8 @@ class TObjectInstance : public TNode, protected SObjectDef
     virtual bool CommandDone() { if (!HasAnimator()) return true; return commanddone; }
     virtual void SetCommandDone(bool newcmd);
 
-  // Streaming functions
-    static TObjectInstance* LoadObject(RTInputStream is, int32_t version, uint32_t streamflags = 0);
-        // Loads and creates a new object from stream (EObjectStream flags;
-        // with OSTREAM_MAP, NONMAP objects i.e. players are discarded)
-    static void SaveObject(TObjectInstance* inst, RTOutputStream os, uint32_t streamflags = 0);
-        // Saves object to stream (includes header and block information;
-        // with OSTREAM_MAP, NONMAP objects i.e. players become a placeholder)
-    virtual int32_t ObjVersion() { return 0; }
-        // The version id of the object for the Load()/Save() functions.
-        // This version number allows objects to change what they stream to the map
-        // while still being able to load previous versions of the object.
-        // A class that overrides it streams its base class with a one-byte
-        // version prefix: Save writes Base::ObjVersion() then Base::Save,
-        // Load reads the byte and passes it to Base::Load.
-    virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
-        // Loads object data from the sector
-    virtual void Save(RTOutputStream os);
-        // Saves object data to the sector
-    virtual void LoadInventory(RTInputStream is, int32_t version, uint32_t streamflags);
-        // Load inventory recursively
-    virtual void SaveInventory(RTOutputStream os, uint32_t streamflags);
-        // Save inventory recursively
+  // Streaming: the retail sector / save layout is TLegacyDeserialize and
+  // TLegacySerialize (legacystream.h); the object has no stream methods.
 
   // Inventory access functions
     TObjectInstance* GetInventory(int32_t index) const;
@@ -1361,6 +1308,18 @@ class TObjectInstance : public TNode, protected SObjectDef
     // **** !!!WARNING!!! *** !!!WARNING!!! *** !!!WARNING!!! *** !!!WARNING!!! ***
     // ****************************************************************************
 
+  // Identity in the class system
+    short objclass = -1;        // Class of object (index into the object classes)
+    short objtype  = -1;        // Type within the class
+
+  // State retail kept in the object header (SObjectDef applies the initial values)
+    uint32_t flags = 0;         // OF_* flags
+    uint16_t state = 0;         // Animation state
+    uint16_t level = 0;         // Level of the object (a NONMAP object carries its own)
+    PROP(18, "Movement velocity, 1/256 wu per tick")   S3DPoint vel   = {0, 0, 0};
+    PROP(19, "Movement integrator carry")               S3DPoint accum = {0, 0, 0};
+    uint8_t  group = 0;         // Object group
+
   // Identifier
     char *name;                 // What is my name
     uint32_t notifyflags;       // Notify Objects of changes
@@ -1396,19 +1355,9 @@ class TObjectInstance : public TNode, protected SObjectDef
 
     // The animator and visual components live in TNode's component
     // slots (GetAnimator() / GetComponent<TObjectAnimator>()). The
-    // spatial transform is TNode::transform_; the legacy `pos` field
-    // is kept in lockstep with it by SyncTransformPos() so the 349-odd
-    // direct `oi->pos.x` reads scattered across the codebase don't have
-    // to change in lockstep.
+    // spatial transform is TNode::transform_.
 
     [[nodiscard]] bool ActivatesComponentsOnAdd() const override { return GetMapIndex() >= 0; }
-
-    void SyncTransformRot();
-        // Rebuild transform_'s rotation from the current rotatex /
-        // rotatey / rotatez triple. Called after any legacy-side
-        // rotation write. Composition matches BuildRootMatrixSource:
-        // Rz * Rx * Ry, applied to a row vector as v * Rz * Rx * Ry,
-        // i.e. rotation order is Z, then X, then Y.
 
   // Inventory
     TObjectInstance* owner;     // What container it is in
@@ -1427,8 +1376,6 @@ class TObjectInstance : public TNode, protected SObjectDef
     TStatisticList stats;       // Stats for object
 
   // Stream
-    void KeepUnreadClassData(RTInputStream is, int32_t from, int32_t to);
-    void SaveUnreadClassData(RTOutputStream os) const;
     std::unique_ptr<std::vector<uint8_t>> unreadClassData;
         // Class data in the object's file block that its port class doesn't
         // read (a retail class not ported yet); written back unchanged

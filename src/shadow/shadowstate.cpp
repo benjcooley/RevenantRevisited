@@ -42,7 +42,7 @@ std::string ShadowStateJson(TPlayer& locke)
     JsonOut out;
     out.Begin('{');
     out.Field("maplevel", locke.GetLevel());
-    out.Key("pos").Begin('[').Value(locke.Pos().x).Value(locke.Pos().y).Value(locke.Pos().z).End(']');
+    out.Key("pos").Begin('[').Value(IntPos(locke).x).Value(IntPos(locke).y).Value(IntPos(locke).z).End(']');
     out.Key("health").Begin('[').Value(locke.Health()).Value(locke.MaxHealth()).End(']');
     out.Key("mana").Begin('[').Value(locke.Mana()).Value(locke.MaxMana()).End(']');
     out.Key("fatigue").Begin('[').Value(locke.Fatigue()).Value(locke.MaxFatigue()).End(']');

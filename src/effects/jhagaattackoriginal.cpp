@@ -35,7 +35,7 @@ State* Spawn(const S3DPoint& source)
     if(!owner || owner->ObjId()!=0xaeaeeb32u || !dynamic_cast<TEffect*>(owner))return nullptr;
     // Controlled coordinates can lie outside loaded map sectors. Establish
     // the explicit fixture transform before creating the animator/controllers.
-    owner->ForcePos(source);owner->Face(0);owner->OnScreen();
+    SetIntPos(owner, source);owner->Face(0);owner->OnScreen();
     auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());auto* animator=dynamic_cast<T3DAnimator*>(owner->GetAnimator());
     if(!image || !animator || !image->HasRetailJhagaAttackProfile() || animator->PartSysUnsupported())return nullptr;
     animator->SetJhagaAttackGround([](int,int,int){return 1;});
@@ -61,7 +61,7 @@ void Advance(State* c,double seconds)
     while(c->accumulated+1e-10>=TTime::LegacyFrameSeconds && !(o->GetFlags()&OF_KILL)){
         c->accumulated-=TTime::LegacyFrameSeconds;o->NextFrame();++c->ticks;const int previous=c->simulation.phase;c->simulation.Pulse();
         if(c->simulation.phase!=previous)o->SetState(c->simulation.phase);
-        o->ForcePos({c->simulation.x,c->simulation.y,c->simulation.z});
+        SetIntPos(o, {c->simulation.x,c->simulation.y,c->simulation.z});
         if(!c->simulation.alive)o->SetFlags(o->GetFlags()|OF_KILL|OF_PULSE);
         o->Pulse();
     }
@@ -79,8 +79,8 @@ void SubmitWorld(State* c,EFxDebugMode)
     a->SubmitPartSys(*Renderer,0,1,{1,1,1},StartupVfxNativeDomain);
     a->SubmitPartSys(*Renderer,3,1,{1,1,1},StartupVfxNativeDomain);
     const auto stats=a->PartSysStats();
-    log_info("[jhagaattack-phase] tick=%d state=%d frame=%d position=%d,%d,%d alive=%zu random=%llu",c->ticks,o->GetState(),o->GetFrame(),o->Pos().x,o->Pos().y,o->Pos().z,size_t(stats.alive),static_cast<unsigned long long>(RandomDraws()));
-    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=o->Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(o->GetFace()));}
+    log_info("[jhagaattack-phase] tick=%d state=%d frame=%d position=%d,%d,%d alive=%zu random=%llu",c->ticks,o->GetState(),o->GetFrame(),IntPos(o).x,IntPos(o).y,IntPos(o).z,size_t(stats.alive),static_cast<unsigned long long>(RandomDraws()));
+    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=IntPos(o);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(o)));}
     for(const auto& part:c->parts){
         hmm_vec3 p{},r{},s{};if(!image->GetUninterpolatedAniKey(part.object,o->GetState(),o->GetFrame(),p,r,s,true) || s.X<=1e-5f || s.Y<=1e-5f || s.Z<=1e-5f)continue;
         hmm_mat4 local;BuildRetailJhagaAttackMatrix(local,part.object,p,r,s);

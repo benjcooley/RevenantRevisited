@@ -3287,7 +3287,7 @@ TObjectInstance* SceneCommandContext(const std::string& selector) {
 }
 void SceneCommandLogObject(const char* phase, const std::string& selector, TObjectInstance* object) {
     if (!object) { log_info("[scene-command] %s context=%s alive=0", phase, selector.c_str()); return; }
-    const S3DPoint pos = object->Pos();
+    const S3DPoint pos = IntPos(object);
     log_info("[scene-command] %s context=%s alive=1 id=%08x map_index=%d pos=%d,%d,%d amount=%d components=%d state=%d frame=%d",
         phase, selector.c_str(), object->ObjId(), object->GetMapIndex(), pos.x, pos.y, pos.z,
         object->Amount(), object->NumComponents(), object->GetState(), object->GetFrame());
@@ -3350,7 +3350,7 @@ void SceneCommandsTick() {
             ok = sscanf(event.command.c_str(), "@expect %x %d %d %d %127s %d %c", &id, &x, &y, &z,
                         component, &count, &extra) == 6 && object;
             if (ok) {
-                const S3DPoint pos = object->Pos(); int actual = 0;
+                const S3DPoint pos = IntPos(object); int actual = 0;
                 for (int32_t slot = 0; slot < object->NumComponents(); ++slot)
                     if (TObjectComponent* c = object->GetComponent(slot))
                         if (strcmp(c->ComponentName(), component) == 0) ++actual;

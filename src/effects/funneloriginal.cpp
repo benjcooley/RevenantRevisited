@@ -37,7 +37,7 @@ State* Spawn(const S3DPoint& source,const S3DPoint& target)
     if(!owner || owner->ObjId()!=0xad92bc17u || !dynamic_cast<TEffect*>(owner))return nullptr;
     // Controlled coordinates can lie outside loaded map sectors. Establish
     // the explicit fixture transform before creating the animator/controllers.
-    owner->ForcePos(source);owner->Face(ConvertToFacing(source,target));owner->OnScreen();
+    SetIntPos(owner, source);owner->Face(ConvertToFacing(source,target));owner->OnScreen();
     auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());auto* animator=dynamic_cast<T3DAnimator*>(owner->GetAnimator());
     if(!image || !animator || !image->HasRetailFunnelProfile() || animator->PartSysUnsupported() || animator->PartSysControllerCount()!=2)return nullptr;
     auto* context=c.get();animator->SetFunnelGround([context](int x,int y,int z){return context->Ground(x,y,z);});
@@ -62,17 +62,17 @@ void Advance(State* c,double seconds)
     c->accumulated+=seconds;auto* o=c->owner.get();
     while(c->accumulated+1e-10>=TTime::LegacyFrameSeconds && !(o->GetFlags()&OF_KILL)){
         c->accumulated-=TTime::LegacyFrameSeconds;o->NextFrame();++c->counter;
-        if(c->counter==1){ConvertToVector(o->GetFace(),4,c->velocity);o->Face(0);}
+        if(c->counter==1){ConvertToVector(IntFacing(o),4,c->velocity);o->Face(0);}
         switch(o->GetState()){
         case 0:if(o->CommandDone())o->SetState(1);break;
-        case 1:{auto p=o->Pos();
+        case 1:{auto p=IntPos(o);
             if(c->counter<=300){const int h=c->Ground(p.x,p.y,p.z);if(h>p.z+16 || !h)c->counter=300;}
             if(o->CommandDone() && c->counter>=300){o->SetState(2);break;}
             const bool wrapped=o->CommandDone();
             if(wrapped){o->SetFrame(0);o->SetCommandDone(false);}
             p.x+=c->velocity.x;p.y+=c->velocity.y;
             const int h=c->Ground(p.x,p.y,p.z);if(!wrapped || h<p.z+16)p.z=h;
-            o->ForcePos(p);break;}
+            SetIntPos(o, p);break;}
         case 2:if(o->CommandDone())o->SetFlags(o->GetFlags()|OF_KILL|OF_PULSE);break;
         }
         o->Pulse();
@@ -84,7 +84,7 @@ void SubmitWorld(State* c,EFxDebugMode)
     auto* o=c->owner.get();o->Animate(false);auto* a=dynamic_cast<T3DAnimator*>(o->GetAnimator());auto* image=a->Get3DImagery();
     a->SubmitPartSys(*Renderer,4,4,{1,1,1},StartupVfxNativeDomain);
     a->SubmitPartSys(*Renderer,6,5,{1,1,1},StartupVfxNativeDomain);
-    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=o->Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(o->GetFace()));}
+    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=IntPos(o);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(o)));}
     for(const auto& part:c->parts){
         hmm_vec3 p{},r{},s{};if(!image->GetUninterpolatedAniKey(part.object,o->GetState(),o->GetFrame(),p,r,s,true) || s.X<=1e-5f || s.Y<=1e-5f || s.Z<=1e-5f)continue;
         hmm_mat4 local;BuildRetailFunnelMatrix(local,part.object,p,r,s);

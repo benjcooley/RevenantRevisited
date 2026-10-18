@@ -52,7 +52,7 @@ void Advance(State* s,double seconds){
 }
 void SubmitWorld(State* s){
  if(!Alive(s) || !Renderer || s->rendered==TTime::FrameCount())return;s->rendered=TTime::FrameCount();if(s->core.life>=30)return;
- auto* img=static_cast<T3DImagery*>(s->owner->GetImagery());hmm_mat4 root;const auto& origin=s->owner->Pos();if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,origin.x,origin.y,origin.z,uint8_t(s->owner->GetFace()));else root=s->owner->Transform().Matrix();int draws=0;
+ auto* img=static_cast<T3DImagery*>(s->owner->GetImagery());hmm_mat4 root;const auto& origin=IntPos(s->owner);if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,origin.x,origin.y,origin.z,uint8_t(IntFacing(s->owner)));else root=s->owner->Transform().Matrix();int draws=0;
  // Original three object groups, not particle-index interleaving.
  for(int part=0;part<3;++part)for(int i=part;i<25;i+=3){if(s->core.starts[i]>0)continue;S3DAnimObj o={};o.objnum=part;o.flags=0x48;o.scl={s->core.scale,s->core.scale,s->core.scale};const auto& p=s->core.position[i];o.pos={p[0],p[1],p[2]};
   if(!img->CalcObjectMatrix(&o,0,s->owner->GetFrame(),&root,false))continue;hmm_mat4 world;MtxMultiply(&world,&o.matrix,&root);

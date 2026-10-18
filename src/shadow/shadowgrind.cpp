@@ -177,7 +177,7 @@ class TGrindRunner final : public TShadowStepRunner
         if (!ShadowGameIdle())
             return EShadowStatus::Running;
         if (home.z == INT32_MIN)
-            home = Player->Pos();
+            home = IntPos(Player);
         std::string why;
         if (Reached(why))
         {
@@ -329,7 +329,7 @@ class TGrindRunner final : public TShadowStepRunner
                 auto* monster = static_cast<TCharacter*>(i.Item());
                 if (!Hostile(*monster))
                     continue;
-                SSite& s = siteFor(monster->Pos());
+                SSite& s = siteFor(IntPos(monster));
                 s.monsters.push_back(monster);
                 const int32_t value = monster->GetStat("Value");
                 s.score += Fit(value, level);
@@ -338,7 +338,7 @@ class TGrindRunner final : public TShadowStepRunner
             }
             else if (auto* generator = dynamic_cast<TMonsterGen*>(i.Item()); generator && generator->NumTypes() > 0)
             {
-                SSite& s = siteFor(generator->Pos());
+                SSite& s = siteFor(IntPos(generator));
                 s.generators.push_back(generator);
                 for (int32_t k = 0; k < TMonsterGen::kMaxTypes; ++k)
                     if (generator->TypeName(k)[0])
@@ -347,7 +347,7 @@ class TGrindRunner final : public TShadowStepRunner
         }
         // Nearer is better: a site twice as far scores two thirds as well.
         for (SSite& s : sites)
-            s.score /= 1.0 + Distance2D(s.centre, Player->Pos()) / 4000.0;
+            s.score /= 1.0 + Distance2D(s.centre, IntPos(Player)) / 4000.0;
         return sites;
     }
 
@@ -406,7 +406,7 @@ class TGrindRunner final : public TShadowStepRunner
             TCharacter* monster = ref.Get();
             if (!monster || !Hostile(*monster) || hard.count(monster->GetMapIndex()))
                 continue;
-            if (!next || Distance2D(monster->Pos(), Player->Pos()) < Distance2D(next->Pos(), Player->Pos()))
+            if (!next || Distance2D(IntPos(monster), IntPos(Player)) < Distance2D(IntPos(next), IntPos(Player)))
                 next = monster;
         }
         if (!next)
@@ -465,7 +465,7 @@ class TGrindRunner final : public TShadowStepRunner
         // A spot in reach of the generators' sector window but out of sight
         // of them: the first standable one he can walk to, around the site.
         const TShadowWalkField* field = context.nav.Field(context.log);
-        const int32_t region = field ? field->RegionAt(Player->Pos()) : 0;
+        const int32_t region = field ? field->RegionAt(IntPos(Player)) : 0;
         for (int32_t k = 0; k < 16 && field; ++k)
         {
             const double angle = k * (2.0 * M_PI / 16.0);
@@ -538,7 +538,7 @@ class TGrindRunner final : public TShadowStepRunner
     // began (the plan brought him there, so the way is his), running.
     EShadowStatus StartRest(SShadowContext& context)
     {
-        const bool seen = !ShadowLegEncounters({Player->Pos()}, Player->GetLevel()).empty();
+        const bool seen = !ShadowLegEncounters({IntPos(Player)}, Player->GetLevel()).empty();
         context.log.Event("grind", "resting at " + std::to_string(Player->Health()) + "/" +
                                        std::to_string(Player->MaxHealth()) + " health" +
                                        (seen ? ", away from the monsters" : ""));

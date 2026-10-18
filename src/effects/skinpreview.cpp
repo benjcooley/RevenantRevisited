@@ -86,7 +86,7 @@ void SubmitWorld(State* s)
    constexpr int corners[4]={0,1,3,2};for(int c=0;c<4;++c){const auto& vert=s->dust[corners[c]];hmm_vec3 world;MtxTransform(&matrix,&vert.pos,&world);item.world_pos[c][0]=world.X;item.world_pos[c][1]=world.Y;item.world_pos[c][2]=StartupVfxNativeDomain?world.Z:world_z+(world.Z-center[2])*WORLD3D_Z_SCALE;item.uv[c][0]=vert.tu;item.uv[c][1]=vert.tv;}Renderer->SubmitFxQuad(item);++draws;
   }
  }
- hmm_mat4 local,root,world;if(!Pose(*s,s->owner->GetFrame(),local))return;const auto& origin=s->owner->Pos();
+ hmm_mat4 local,root,world;if(!Pose(*s,s->owner->GetFrame(),local))return;const auto& origin=IntPos(s->owner);
  hmm_vec3 p{},r{},scale{};if(!img->GetUninterpolatedAniKey(2,0,s->owner->GetFrame(),p,r,scale,true))return;BuildRetailSpeedCameraMatrix(local,p,r,scale);
  if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,origin.x,origin.y,origin.z,0);else root=s->owner->Transform().Matrix();MtxMultiply(&world,&local,&root);
  SHelperMeshSubmit mesh={};mesh.mesh=s->flare;for(int row=0;row<4;++row)for(int col=0;col<4;++col)mesh.world[row*4+col]=world.Elements[col][row];mesh.additive_blend=true;mesh.retail_lighting=1;mesh.retail_positive_face_cull=false;mesh.retail_software_projection=StartupVfxNativeDomain;Renderer->SubmitGoldFlareAfterFx(mesh);

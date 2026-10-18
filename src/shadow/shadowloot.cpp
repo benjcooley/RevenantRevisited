@@ -37,7 +37,7 @@ SShadowChest ShadowReadChest(TContainer& chest)
     c.chest = &chest;
     c.type = chest.GetTypeName() ? chest.GetTypeName() : "";
     c.name = chest.GetName() && chest.GetName()[0] ? chest.GetName() : c.type;
-    c.pos = chest.Pos();
+    c.pos = IntPos(chest);
     c.openable = chest.Openable() != 0;
     c.locked = chest.Locked() != 0;
     c.key = chest.KeyId();

@@ -892,7 +892,7 @@ SShadowFightReport TShadowDuel::Fight(TPlayer& locke, const std::vector<TCharact
     me.health = locke.Health();
     me.fatigue = locke.Fatigue();
     me.radius = locke.Radius();
-    const S3DPoint stand = standat ? *standat : locke.Pos();
+    const S3DPoint stand = standat ? *standat : IntPos(locke);
     me.pos = {double(stand.x), double(stand.y)};
     me.walk = std::max(1.0, ShadowMoveSpeed(locke, {locke.WeaponType() == WT_HAND ? "handf" : "combatf", "walkf"}));
 
@@ -907,7 +907,7 @@ SShadowFightReport TShadowDuel::Fight(TPlayer& locke, const std::vector<TCharact
         f.health = foe->Health();
         f.fatigue = foe->Fatigue();
         f.radius = foe->Radius();
-        f.pos = {double(foe->Pos().x), double(foe->Pos().y)};
+        f.pos = {double(IntPos(foe).x), double(IntPos(foe).y)};
         f.face = Bearing(f.pos, me.pos);
         f.walk = std::max(1.0, ShadowMoveSpeed(*foe, {"combatf", "walkf", "runf"}));
         f.target = &me;

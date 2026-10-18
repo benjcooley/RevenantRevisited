@@ -36,6 +36,8 @@
 _CLASSDEF(TWeapon)
 class TWeapon : public TObjectInstance
 {
+    friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
+    friend class TLegacySerialize;
   public:
     TWeapon(TObjectImagery* newim) : TObjectInstance(newim) { ClearWeapon(); }
     TWeapon(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { ClearWeapon(); }
@@ -46,9 +48,6 @@ class TWeapon : public TObjectInstance
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
     int32_t CursorType(TObjectInstance* with = nullptr) override;
-
-    virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
-    virtual void Save(RTOutputStream os);
 
   // Weapon stats
     STATFUNC(EqSlot)

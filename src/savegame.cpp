@@ -9,6 +9,8 @@
 
 #include "savegame.h"
 
+#include "legacystream.h"
+
 #include "dialog.h"
 
 #include "area.h"
@@ -361,7 +363,7 @@ bool TSaveGame::LoadGame(const std::vector<uint8_t>& data, const std::string& so
 
     if (Player)
     {
-        const S3DPoint pos = Player->Pos();
+        const S3DPoint pos = IntPos(Player);
         log_info("[savegame] loaded %s: module=%s time=%d version=%d states=%d "
                  "players=%d; main player '%s' L%d HP %d/%d items=%d on level %d at (%d,%d,%d)",
                  file, module, header.gametime, header.version,
@@ -443,7 +445,7 @@ bool TSaveGame::ReadPlayers(TInputStream& is, const SSaveHeader& header)
 
     for (int32_t i = 0; i < count && is.Remaining() > 0; i++)
     {
-        TObjectInstance* object = TObjectInstance::LoadObject(is, header.version);
+        TObjectInstance* object = TLegacyDeserialize::ReadObject(is, header.version);
         if (!object)
             continue;
         if (object->ObjClass() != OBJCLASS_PLAYER)
@@ -826,7 +828,7 @@ void TSaveGame::WriteBody(TOutputStream& os) const
         for (TInventoryIterator item(player); item; item++)
             item->ResetFlags(item->Flags() & ~OF_VIRGIN);
         player->SetHudWords(CurrentHudWords(*player));
-        TObjectInstance::SaveObject(player, os);
+        TLegacySerialize::WriteObject(player, os);
     }
 }
 

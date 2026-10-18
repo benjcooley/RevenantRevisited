@@ -109,7 +109,7 @@ void SpawnTrapEffect(TObjectInstance* container, const char* type, int32_t facin
         return;
     def.flags = OF_MOVING;
     def.level = uint16_t(MapPane.GetMapLevel());
-    def.pos = container->Pos();
+    def.pos = IntPos(container);
     def.pos.z += 50;
     def.facing = uint8_t(facing);
     MapPane.NewObject(&def);
@@ -280,7 +280,7 @@ void TContainer::SpringTraps(TObjectInstance* user)
     if (Explosive())
     {
         SpawnTrapEffect(this, "fireflash", Player ? AngleTo(Player) : 0);
-        who->KnockBack(Pos(), -1);
+        who->KnockBack(IntPos(*this), -1);
         who->Burn();
         who->Damage(random(5, 15), DT_BURN);
     }
@@ -381,32 +381,6 @@ bool TContainer::CanTrade()
     return !(ObjClass() == OBJCLASS_INVCONTAINER && !stricmp(GetName(), "Swag Bag"));
 }
 
-// REVSYNC: TContainer::Load @ 0x004dd3e0 (SAVE_GAME.md §11.3).
-void TContainer::Load(RTInputStream is, int32_t version, int32_t objversion)
-{
-    TObjectInstance::Load(is, version, objversion);
-
-    if (version >= 2 && version < 5) // We're using object stats now
-    {
-        int32_t contflags, pickdifficulty;
-        is >> contflags >> pickdifficulty;
-        SetStat("Locked", contflags != 0);
-        SetStat("PickDifficulty", pickdifficulty);
-    }
-
-  // A container in the world re-enters its saved state (open or shut).
-    if (!(flags & OF_INVENTORY))
-    {
-        SetCommandDone(true);
-        SetState(state);
-    }
-}
-
-void TContainer::Save(RTOutputStream os)
-{
-    TObjectInstance::Save(os);
-}
-
 // REVSYNC: CheckKeyUse @ 0x004dd480 -- a key or lockpick used on this locked
 // container or door. True for any key or pick attempt, whatever came of it;
 // only the main player hears and reads about it. A lock of difficulty 0
@@ -472,17 +446,6 @@ bool TContainer::CheckKeyUse(TObjectInstance* user, TObjectInstance* inst)
 // *************
 
 _CLASSDEF(TVialRack)
-class TVialRack : public TContainer
-{
-  public:
-    TVialRack(TObjectImagery* newim) : TContainer(newim) {}
-    TVialRack(SObjectDef* def, TObjectImagery* newim) : TContainer(def, newim) {}
-
-    virtual bool Use(TObjectInstance* user, int32_t with = -1);
-    int32_t CursorType(TObjectInstance* inst = nullptr) override;
-    virtual void Save(RTOutputStream os);
-};
-
 DEFINE_BUILDER("VIAL RACK", TVialRack)
 REGISTER_BUILDER(TVialRack)
 
@@ -503,7 +466,7 @@ bool TVialRack::Use(TObjectInstance* user, int32_t with)
                 memset(&def, 0, sizeof(SObjectDef));
                 def.objclass = OBJCLASS_CONTAINER;
                 def.objtype = ContainerClass.FindObjType("Empty Vial");
-                GetPos(def.pos);
+                def.pos = IntPos(*this);
                 int32_t index = MapPane.NewObject(&def);
 
                 TakenObject = MapPane.GetInstance(index);
@@ -548,13 +511,6 @@ int32_t TVialRack::CursorType(TObjectInstance* inst)
         return CURSOR_HAND;
 
     return CURSOR_NONE;
-}
-
-void TVialRack::Save(RTOutputStream os)
-{
-    inventory.DeleteAll();
-
-    TContainer::Save(os);
 }
 
 

@@ -33,7 +33,7 @@ State* Spawn(const S3DPoint& source)
     if(!owner || owner->ObjId()!=0xad92bd31u || !dynamic_cast<TEffect*>(owner))return nullptr;
     // Controlled coordinates can lie outside loaded map sectors. Establish
     // the explicit fixture transform before creating the animator/controllers.
-    owner->ForcePos(source);owner->Face(0);owner->OnScreen();
+    SetIntPos(owner, source);owner->Face(0);owner->OnScreen();
     auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());auto* animator=dynamic_cast<T3DAnimator*>(owner->GetAnimator());
     if(!image || !animator || !image->HasRetailFGeyserProfile() || animator->PartSysUnsupported() || animator->PartSysControllerCount()!=2)return nullptr;
     animator->SetFGeyserGround([](int,int,int){return 1;});
@@ -70,7 +70,7 @@ void SubmitWorld(State* c,EFxDebugMode)
     auto* o=c->owner.get();o->Animate(false);auto* a=dynamic_cast<T3DAnimator*>(o->GetAnimator());auto* image=a->Get3DImagery();
     // Preserve native tag order: fire, then sparks.
     for(int prototype:{0,2})a->SubmitPartSys(*Renderer,prototype,1,{1,1,1},StartupVfxNativeDomain);
-    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=o->Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(o->GetFace()));}
+    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=IntPos(o);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(o)));}
     for(const auto& part:c->parts){
         hmm_vec3 p{},r{},s{};if(!image->GetUninterpolatedAniKey(part.object,o->GetState(),o->GetFrame(),p,r,s,true) || s.X<=1e-5f || s.Y<=1e-5f || s.Z<=1e-5f)continue;
         hmm_mat4 local;BuildRetailFGeyserMatrix(local,part.object,p,r,s);

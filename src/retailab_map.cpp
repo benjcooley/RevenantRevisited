@@ -44,7 +44,7 @@ class TStandInObject : public TObjectInstance
     {
         objclass = (short)spec["class"].Int();
         mapindex = (int32_t)spec["id"].Int();
-        ForcePos(ReadPoint(spec["pos"]));
+        SetIntPos(*this, ReadPoint(spec["pos"]));
         SetInventNum((short)spec["inventnum"].Int(-1));
     }
 };

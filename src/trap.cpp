@@ -104,7 +104,7 @@ void TArrowWall::Pulse()
                 def.objtype = AmmoClass.FindObjType("Arrow3D");
                 def.flags = OF_WEIGHTLESS;
 
-                GetPos(def.pos);
+                def.pos = IntPos(*this);
                 def.pos.x += random(-50, 50);
                 def.pos.y += random(-50, 50);
                 def.pos.z += 50 + random(-30, 30);

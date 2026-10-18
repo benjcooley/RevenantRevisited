@@ -502,7 +502,7 @@ class TFizzleRuntimeBuilder final : public T3DAnimatorBuilder
             owner->GetComponent<TFizzleRuntimeComponent>())
             return;
         auto* imagery = dynamic_cast<T3DImagery*>(owner->GetImagery());
-        auto state = std::unique_ptr<State>(BindImagery(imagery, owner->Pos()));
+        auto state = std::unique_ptr<State>(BindImagery(imagery, IntPos(owner)));
         if (!state || !BindTextures(state.get())) return; // retry after upload
         S3DTex texture = {};
         imagery->GetTexture(0, &texture);
@@ -511,7 +511,7 @@ class TFizzleRuntimeBuilder final : public T3DAnimatorBuilder
                              int32_t(texture.desc.height), 1, 1, 1,
                              1.0f, 1.0f, false, true);
         owner->AddComponent(std::move(component));
-        const S3DPoint position = owner->Pos();
+        const S3DPoint position = IntPos(owner);
         log_info("[fizzle-runtime] attached type='%s' id=%08x map_index=%d origin=(%d,%d,%d)",
                  owner->GetTypeName(), owner->ObjId(), owner->GetMapIndex(),
                  position.x, position.y, position.z);

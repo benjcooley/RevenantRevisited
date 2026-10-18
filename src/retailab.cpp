@@ -859,7 +859,7 @@ class TFixtureObject : public Base
     {
         this->objclass = (short)objclass;
         this->level = (uint16_t)level;
-        this->ForcePos(pos);
+        SetIntPos(this, pos);
         this->name = _strdup(name.c_str());
         this->mapindex = id;
         MapPane.RegisterInstance(this, id);
@@ -889,7 +889,7 @@ class TFixtureWorld : public TScript::ITriggerWorld
     TObjectInstance* ObjectInCube(PS3DRect cube, int32_t level, int32_t /*objset*/) const override
     {
         for (TObjectInstance* o : objects)
-            if (o->GetLevel() == level && cube->In(o->Pos()))
+            if (o->GetLevel() == level && cube->In(IntPos(o)))
                 return o;
         return nullptr;
     }

@@ -12,6 +12,7 @@
 #include "revutils.h"
 #include "retailadler32.h"
 #include "sectorstore.h"
+#include "legacystream.h"
 #include "gamemap.h"
 #include "mapmanager.h"
 #include "stream.h"
@@ -201,7 +202,7 @@ bool TSector::Load(bool lock)
         if (is.Remaining() < 2)
             return malformed("object data ends early");
 
-        TObjectInstance* inst = TObjectInstance::LoadObject(is, version, OSTREAM_MAP);
+        TObjectInstance* inst = TLegacyDeserialize::ReadObject(is, version, OSTREAM_MAP);
         // Note: inst can be nullptr here if a placeholder (-1) was saved for the obj class id
 
         if (inst)
@@ -255,14 +256,14 @@ void TSector::KeepInside(TObjectInstance* inst) const
         const int32_t offset = (v - lo) % size;
         return lo + (offset < 0 ? offset + size : offset);
     };
-    S3DPoint p = inst->Pos();
+    S3DPoint p = IntPos(inst);
     const int32_t x = inside(p.x, sectorx * SECTORWIDTH, SECTORWIDTH);
     const int32_t y = inside(p.y, sectory * SECTORHEIGHT, SECTORHEIGHT);
     if (x != p.x || y != p.y)
     {
         p.x = x;
         p.y = y;
-        inst->ForcePos(p);
+        SetIntPos(inst, p);
     }
 }
 
@@ -284,7 +285,7 @@ uint32_t TSector::StateHash()
         if (!inst || (inst->ObjClass() != OBJCLASS_CHARACTER && inst->ObjClass() != OBJCLASS_PLAYER))
             continue;
         os.Reset();
-        TObjectInstance::SaveObject(inst, os, OSTREAM_MAP | OSTREAM_NOINVENTORY);
+        TLegacySerialize::WriteObject(inst, os, OSTREAM_MAP | OSTREAM_NOINVENTORY);
         hash.Update(os.Buffer(), os.DataSize());
     }
 
@@ -313,7 +314,7 @@ void TSector::Serialize(TOutputStream& os)
     os << objects.NumItems();
 
     for (TPointerIterator<TObjectInstance> i(&objects); i; i++)
-        TObjectInstance::SaveObject(i.Item(), os, OSTREAM_MAP);
+        TLegacySerialize::WriteObject(i.Item(), os, OSTREAM_MAP);
 
     statehash = (int32_t)StateHash();
     const int32_t end = os.GetPos();

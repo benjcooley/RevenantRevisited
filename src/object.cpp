@@ -6,6 +6,8 @@
 
 #include "object.h"
 
+#include "intworld.h"
+
 #include "3dscene.h"
 #include "animation.h"
 #include "command.h"
@@ -397,60 +399,6 @@ const TObjectInstance* TConstInventoryIterator::NextItem() const
 // * TObjectInstance *
 // *******************
 
-// World-space position. Reads through the transform's global matrix,
-// so the cost is at worst a parent-chain recompute (cached afterwards).
-S3DPoint TObjectInstance::Pos() const
-{
-    const hmm_mat4& m = transform_.Matrix();
-    // Row-vector convention: translation in last row.
-    return { int32_t(m.Elements[3][0]),
-             int32_t(m.Elements[3][1]),
-             int32_t(m.Elements[3][2]) };
-}
-
-// Single internal setter shared by SetPos / ForcePos / load /
-// ClearObject reset. Updates transform_ (the canonical world-pos
-// store) and mirrors back to the legacy `pos` integer field so the
-// scatter of direct `oi->pos.x` reads across the codebase keeps
-// returning the right value.
-//
-// Phase A: while no game object has a transform parent, "world pos"
-// is the same as "local pos", so we route world setters straight to
-// SetLocalPos. When parenting is wired up later, swap this to
-// transform_.SetPos for a proper world->local decomposition.
-static void WriteTransformPos(TTransform& tr, S3DPoint& legacy_pos, const S3DPoint& world_p)
-{
-    tr.SetLocalPos(hmm_vec3{ float(world_p.x), float(world_p.y), float(world_p.z) });
-    legacy_pos = world_p;
-}
-
-// Rebuild the transform's rotation quat from rotatex / rotatey /
-// rotatez (uint8 angles, 0..255 maps to 0..2*pi). Composition order
-// matches BuildRootMatrixSource: applied to a row vector v as
-// v * Rz * Rx * Ry. Quat composition for that "rotate Z first, then
-// X, then Y" application order is qy * qx * qz (innermost is applied
-// first to the vector, outermost is applied last).
-void TObjectInstance::SyncTransformRot()
-{
-    constexpr float kTurn  = float(M_PI * 2.0 / 256.0);
-    const float ax = float(rotatex) * kTurn;
-    const float ay = float(rotatey) * kTurn;
-    const float az = float(rotatez) * kTurn;
-    const SAnimQuat qx = { std::sin(ax * 0.5f), 0.0f, 0.0f, std::cos(ax * 0.5f) };
-    const SAnimQuat qy = { 0.0f, std::sin(ay * 0.5f), 0.0f, std::cos(ay * 0.5f) };
-    const SAnimQuat qz = { 0.0f, 0.0f, std::sin(az * 0.5f), std::cos(az * 0.5f) };
-    // q = qy * qx * qz  (apply order Z, X, Y).
-    auto qmul = [](const SAnimQuat& a, const SAnimQuat& b) -> SAnimQuat {
-        return {
-            a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
-            a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
-            a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
-            a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
-        };
-    };
-    transform_.SetLocalRot(qmul(qy, qmul(qx, qz)));
-}
-
 void TObjectInstance::ClearObject()
 {
     SetNotify(N_SCRIPTADDED);
@@ -484,9 +432,7 @@ void TObjectInstance::ClearObject()
     anim_last_loop_wrap_game_frame = -1;
 
     level = 0;
-    pos.x = pos.y = pos.z = 0;
     vel.x = vel.y = vel.z = 0;
-    rotatex = rotatey = rotatez = 0;
     accum.x = accum.y = accum.z = 0;
     invindex = inventnum = -1;
     shadow = -1;
@@ -509,13 +455,11 @@ void TObjectInstance::ClearObject()
 
     stats.Clear();
 
-    // make oldpos DIFFERENT from pos here
-    oldpos.x = pos.x + 1; oldpos.y = pos.y + 1; oldpos.z = pos.z + 1;
+    // Origin, no rotation; oldpos differs so the first GetScreenPos projects.
+    SetIntPos(*this, S3DPoint{0, 0, 0});
+    transform_.SetLocalRotEuler(hmm_vec3{{ 0.0f, 0.0f, 0.0f }});
+    oldpos = S3DPoint{1, 1, 1};
     screenx = screeny = screenz = 0;
-
-    // Init transform_ from the zeroed pos. Single setter path keeps
-    // transform_ and the legacy `pos` field in lockstep.
-    WriteTransformPos(transform_, pos, S3DPoint{0, 0, 0});
 
     // World Z-stretch baked into the instance's transform. The
     // engine's mesh authoring is at "model Z"; world rendering and
@@ -529,9 +473,6 @@ void TObjectInstance::ClearObject()
     // becomes redundant for anything that reads through the bone
     // transform path; it can be dropped in C4.
     transform_.SetLocalScl(hmm_vec3{ 1.0f, 1.0f, WORLD3D_Z_SCALE });
-
-    // Sync transform_'s rotation from the just-zeroed rotate triple.
-    SyncTransformRot();
 }
 
 TObjectInstance::TObjectInstance(TObjectImagery* img)
@@ -555,16 +496,19 @@ TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
 {
     ClearObject();
 
-    memcpy(&objclass, def, sizeof(SObjectDef));
-
-    // The memcpy above writes def.pos / rotatex / rotatey / rotatez
-    // straight into the legacy fields, bypassing the WriteTransformPos
-    // / SetRotateX setter paths -- so transform_ would stay at the
-    // identity ClearObject left it. Sync from the freshly-loaded
-    // values so Pos() and the bone-chain world matrix reflect spawn
-    // coords + orientation instead of origin / identity.
-    transform_.SetLocalPos(hmm_vec3{ float(pos.x), float(pos.y), float(pos.z) });
-    SyncTransformRot();
+    // The spawn record's initial state; the record itself is not kept.
+    objclass = def->objclass;
+    objtype  = def->objtype;
+    flags    = def->flags;
+    state    = def->state;
+    level    = def->level;
+    vel      = def->vel;
+    accum    = def->accum;
+    group    = def->group;
+    SetIntPos(*this, def->pos);
+    SetIntRotateX(*this, def->rotatex);
+    SetIntRotateY(*this, def->rotatey);
+    SetIntFacing(*this, def->rotatez);
 
   // Set imagery
     imagery = img;
@@ -663,26 +607,11 @@ void TObjectInstance::SetMapIndex(int32_t newindex)
     }
 }
 
-// Node transform properties for a map object: position goes through
-// SetPos (sector bookkeeping + legacy `pos` mirror), rotation through the
-// 0..255 legacy angle fields (SyncTransformRot keeps the transform current).
+// A map object's position goes through SetPos (sector bookkeeping) whoever
+// sets it: a track, the inspector, a prefab.
 void TObjectInstance::SetLocalPos(const hmm_vec3& p)
 {
-    SetPos(S3DPoint{ int32_t(std::lround(p.X)), int32_t(std::lround(p.Y)), int32_t(std::lround(p.Z)) });
-}
-
-hmm_vec3 TObjectInstance::LocalRotDeg() const
-{
-    constexpr float kToDeg = 360.0f / 256.0f;
-    return hmm_vec3{{ float(rotatex) * kToDeg, float(rotatey) * kToDeg, float(rotatez) * kToDeg }};
-}
-
-void TObjectInstance::SetLocalRotDeg(const hmm_vec3& deg)
-{
-    auto legacy = [](float d) { return int32_t(std::lround(d * 256.0f / 360.0f)) & 255; };
-    SetRotateX(legacy(deg.X));
-    SetRotateY(legacy(deg.Y));
-    SetRotateZ(legacy(deg.Z));
+    SetPos(ToIntPos(p));
 }
 
 // REVSYNC: ~TObjectInstance @ 0x0046e420
@@ -834,21 +763,21 @@ void TObjectInstance::RepaintObject()
 
 int32_t TObjectInstance::Distance(const TObjectInstance* inst) const
 {
-    return ::Distance(pos, inst->pos);
+    return ::Distance(IntPos(*this), IntPos(inst));
 }
 
 // Returns the angle to the other instance
 int32_t TObjectInstance::AngleTo(const TObjectInstance* inst) const
 {
     S3DPoint tpos;
-    inst->GetPos(tpos);
-    return ConvertToFacing(pos, tpos);
+    tpos = IntPos(inst);
+    return ConvertToFacing(IntPos(*this), tpos);
 }
 
 // Returns the + or - difference between this objects facing and the dest obj
 int32_t TObjectInstance::FaceAngleTo(const TObjectInstance* inst) const
 {
-    int32_t angle = AngleTo(inst) - GetFace();
+    int32_t angle = AngleTo(inst) - IntFacing(*this);
     if (angle >= 128)
         angle = angle - 256;
     else if (angle <= -128)
@@ -865,7 +794,7 @@ int32_t TObjectInstance::FaceAngleTo(const TObjectInstance* inst) const
 // more. In doubles the sums are exact, as on the x87.
 void TObjectInstance::GetScreenPos(int32_t &x, int32_t &y) const
 {
-    if (oldpos != pos)
+    if (oldpos != IntPos(*this))
         Project();
     x = screenx;
     y = screeny;
@@ -873,7 +802,7 @@ void TObjectInstance::GetScreenPos(int32_t &x, int32_t &y) const
 
 void TObjectInstance::GetScreenPos(S3DPoint& s) const
 {
-    if (oldpos != pos)
+    if (oldpos != IntPos(*this))
         Project();
     s.x = screenx;
     s.y = screeny;
@@ -883,6 +812,7 @@ void TObjectInstance::GetScreenPos(S3DPoint& s) const
 void TObjectInstance::Project() const
 {
     constexpr float kHalf = 0.5f, kHeight = 0.867f;     // retail's floats
+    const S3DPoint pos = IntPos(*this);
     const double px = pos.x, py = pos.y, pz = pos.z;
     screenx = int32_t(px - py);
     screeny = int32_t(px * kHalf + py * kHalf - pz * kHeight);
@@ -900,6 +830,8 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
     if (newlevel < 0)
         newlevel = level;
 
+    const S3DPoint pos = IntPos(*this);
+
   // Didn't move
     if (newpos == pos && newlevel == level)
         return index;                           // no movement, so bail out
@@ -907,7 +839,7 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
   // Isn't in map
     if (override || !sector || index < 0)
     {
-        WriteTransformPos(transform_, pos, newpos);
+        SetIntPos(*this, newpos);
         level = newlevel;
         return index;
     }
@@ -921,8 +853,7 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
             S3DPoint delta = newpos;
             delta -= pos;
 
-            S3DPoint spos;
-            s->GetPos(spos);
+            S3DPoint spos = IntPos(s);
             spos += delta;
             s->SetPos(spos);
         }
@@ -939,7 +870,7 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
     MapPane.ExtractWalkmap(this);
 
   // Sets new position
-    WriteTransformPos(transform_, pos, to);
+    SetIntPos(*this, to);
     if (flags & OF_NONMAP)
         level = newlevel;
 
@@ -948,7 +879,7 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
   // Update 3D system light
     if (lightdef.lightindex != -1)
     {
-        S3DPoint lpos = pos;
+        S3DPoint lpos = to;
         lpos += lightdef.pos;
         Scene3D.SetLightPosition(lightdef.lightindex, lpos);
     }
@@ -988,19 +919,11 @@ void TObjectInstance::Teleport(const S3DPoint& to, int32_t tolevel, bool overrid
     SetPos(to, tolevel, override);
 }
 
-// "Raw poke" path: same single setter as SetPos but skips the
-// validation / sector / walkmap / shadow side effects. Routes
-// through transform_ so the world matrix stays coherent.
-void TObjectInstance::ForcePos(const S3DPoint& newpos)
-{
-    WriteTransformPos(transform_, pos, newpos);
-}
-
 // Gets new snap position
 void TObjectInstance::GetSnapPos(const TObjectInstance* oi, int32_t dist, S3DPoint &p) const
 {
-    ConvertToVector(oi->GetFace(), dist, p);
-    p += oi->Pos();
+    ConvertToVector(IntFacing(oi), dist, p);
+    p += IntPos(oi);
 }
 
 // Moves this object so that it is the given distance 'dist' from 'oi'
@@ -1013,7 +936,7 @@ void TObjectInstance::SnapDist(TObjectInstance* oi, int32_t dist)
         {
             S3DPoint p;
             ConvertToVector(oi->AngleTo(this), dist, p);
-            p += oi->Pos();
+            p += IntPos(oi);
             SetPos(p);
         }
     }
@@ -1218,7 +1141,7 @@ void TObjectInstance::PlaceInInventory(TObjectInstance* inst, int32_t slot)
     inst->inventnum = short(slot);
     inst->owner = this;
 
-    inst->pos.x = inst->pos.y = inst->pos.z = 0;
+    SetIntPos(inst, S3DPoint{0, 0, 0});
     inst->level = 0;
     inst->sector = nullptr;
 
@@ -1660,21 +1583,21 @@ uint32_t TObjectInstance::Move()
         return MOVE_NOTHING;
 
   // Now do this frame's movement
-    S3DPoint newpos = pos;
+    S3DPoint newpos = IntPos(*this);
     uint32_t retval = 0;
 
-    int32_t h = (MapPane.GetWalkHeight(pos) + 1);
+    int32_t h = (MapPane.GetWalkHeight(IntPos(*this)) + 1);
 
-    if ((pos.z < h || h == 1) && !(flags & OF_NOCOLLISION))
+    if ((IntPos(*this).z < h || h == 1) && !(flags & OF_NOCOLLISION))
         return MOVE_BLOCKED;                // very basic collision detection
 
-    if (h < pos.z && vel.z > -TERMINAL_VELOCITY && !(flags & OF_WEIGHTLESS))
+    if (h < IntPos(*this).z && vel.z > -TERMINAL_VELOCITY && !(flags & OF_WEIGHTLESS))
     {
         vel.z -= GRAVITY;
         retval |= MOVE_FALLING;
 
         // $$$ KES $$$ -- check to see that we aren't falling too far...
-        if ((pos.z + vel.z) < (h + 1)) vel.z = ((h + 1) - pos.z);
+        if ((IntPos(*this).z + vel.z) < (h + 1)) vel.z = ((h + 1) - IntPos(*this).z);
     }
 
 
@@ -1704,10 +1627,10 @@ uint32_t TObjectInstance::Move()
     if ((objclass == OBJCLASS_CHARACTER) && (newpos.z < h))
         newpos.z = h;
 
-    if (newpos == pos && vel.x == 0 && vel.y == 0 && vel.z == 0)
+    if (newpos == IntPos(*this) && vel.x == 0 && vel.y == 0 && vel.z == 0)
         return MOVE_NOTHING;        // can only check this _after_ gravity
 
-    if (newpos == pos)
+    if (newpos == IntPos(*this))
         return MOVE_MOVED | retval;         // they moved, but not a whole unit
 
     //if (!MapPane.LineOfSight(pos, newpos))
@@ -1881,7 +1804,7 @@ void TObjectInstance::OnScreen()
     {
         if (lightdef.lightindex == -1)
         {
-            S3DPoint lpos = pos;
+            S3DPoint lpos = IntPos(*this);
             lpos += lightdef.pos;
             lightdef.lightindex = Scene3D.AddLight(lpos, lightdef.color, lightdef.intensity, lightdef.multiplier);
         }
@@ -1965,12 +1888,12 @@ void TObjectInstance::GetFacingBoundBox(int32_t &nx, int32_t &ny, int32_t &nsx, 
     nsx = width;
     nsy = length;
 
-    if (facing >= 0xE0 || facing < 0x20)
+    if (IntFacing(*this) >= 0xE0 || IntFacing(*this) < 0x20)
     {
         // north, which is default
         return;
     }
-    else if (facing < 0x60)
+    else if (IntFacing(*this) < 0x60)
     {
         // east
         nx = regy;
@@ -1978,12 +1901,12 @@ void TObjectInstance::GetFacingBoundBox(int32_t &nx, int32_t &ny, int32_t &nsx, 
         nsx = length;
         nsy = width;
     }
-    else if (facing < 0xA0)
+    else if (IntFacing(*this) < 0xA0)
     {
         // south
         nx = width - regx - 1;
     }
-    else if (facing < 0xE0)
+    else if (IntFacing(*this) < 0xE0)
     {
         // west
         ny = width - regx - 1;
@@ -2119,7 +2042,7 @@ void TObjectInstance::RedrawLight()
 
 void TObjectInstance::GetLightRect(RSRect r)
 {
-    S3DPoint wlpos = pos;
+    S3DPoint wlpos = IntPos(*this);
     wlpos += lightdef.pos;
 
     S3DPoint slpos;
@@ -2190,7 +2113,7 @@ void TObjectInstance::SetLightPos(S3DPoint& newpos)
 
     if (lightdef.lightindex != -1)
     {
-        S3DPoint lpos = pos;
+        S3DPoint lpos = IntPos(*this);
         lpos += lightdef.pos;
         Scene3D.SetLightPosition(lightdef.lightindex, lpos);
         RedrawLight();
@@ -2230,7 +2153,7 @@ void TObjectInstance::DrawLight(TSurface* surface, bool resetid)
         if (imagery)
             imagery->DrawLight(this, surface);
 
-        S3DPoint wlpos = pos;
+        S3DPoint wlpos = IntPos(*this);
         wlpos += lightdef.pos;
 
         S3DPoint slpos;
@@ -2260,9 +2183,9 @@ int32_t TObjectInstance::GetIllumination(TObjectInstance* oi)
 
   // Dist from object to light (assumes char, and uses CHARHEIGHT value)
     S3DPoint p;
-    oi->GetPos(p);
+    p = IntPos(oi);
     p.z += LIGHTINGCHARHEIGHT;
-    p -= pos;
+    p -= IntPos(*this);
 
   // Out of range
     if (abs(p.x) > lightdef.intensity || abs(p.y) > lightdef.intensity)
@@ -2310,559 +2233,6 @@ void TObjectInstance::Notify(int32_t notify, void *ptr)
         if (!script && CanHaveScript())
             InitScript(ScriptManager.ObjectScript(this));
     }
-}
-
-// Diagnostic counters for why LoadObject returned nullptr. Wired up by the
-// sector test harness to tell "legitimate empty placeholder" apart from
-// "loader couldn't recover this object".
-int32_t g_loadObjNullObjVerNeg   = 0;
-int32_t g_loadObjNullClassNeg    = 0;
-int32_t g_loadObjNullBadClass    = 0;
-int32_t g_loadObjNullBadType     = 0;
-int32_t g_loadObjNullNewObjFail  = 0;
-int32_t g_loadObjNullCorruptDrop = 0;
-int32_t g_loadObjNullNonMapDrop  = 0;
-int32_t g_loadObjOk              = 0;
-
-namespace {
-
-// Object names in sector and save files carry bit 7 on every byte.
-constexpr uint8_t kNameByteFlag = 0x80;
-constexpr uint8_t kNameByteMask = 0x7f;
-
-// The stats an object untouched since placement keeps through a load
-// (health, fatigue and mana for a character); the rest come from its type.
-constexpr int32_t kFirstKeptStat = 3;
-constexpr int32_t kLastKeptStat  = 5;
-
-}  // namespace
-
-// REVSYNC: TObjectInstance::LoadObject (universal stream decoder) @ 0x00471ce0.
-// docs/gameflow/forensics/SAVE_GAME.md §11.1. `streamflags` carries what
-// retail kept in DAT_0065a254: OSTREAM_MAP discards NONMAP objects (players
-// never come from a sector file), OSTREAM_NOINVENTORY skips inventories.
-//
-// The type comes from the unique id; when the id belongs to another class
-// the object is built as that class and loaded with the base
-// TObjectInstance::Load ("force simple"), as retail. Retail looked the id up
-// in one global table; the port asks the stored class first and then every
-// class, which finds the same type because ids are unique.
-TObjectInstance* TObjectInstance::LoadObject(RTInputStream is, int32_t version, uint32_t streamflags)
-{
-    uint32_t uniqueid = 0;
-    short objversion = 0;
-    short objclass;
-    short objtype = -1;
-    short blocksize = -1;
-    short invblocksize = -1;  // v14+: the inventory's share of blocksize
-    bool forcesimple = false;
-    bool corrupted = false;
-
-    // ****** Load object block header ******
-
-    if (version >= 8)
-        is >> objversion;
-    if (objversion < 0) // Placeholder for an empty slot (map version 8 and up)
-    {
-        ++g_loadObjNullObjVerNeg;
-        return nullptr;
-    }
-
-    is >> objclass;
-    if (objclass < 0)   // Placeholder for an empty slot
-    {
-        ++g_loadObjNullClassNeg;
-        return nullptr;
-    }
-
-    if (version < 1)
-        is >> objtype;              // Version 0: no unique ids
-    else
-    {
-        is >> uniqueid;
-        if (version >= 4)
-            is >> blocksize;        // Version 4: block size, so unknown objects can be skipped
-        if (version >= 14)
-            is >> invblocksize;
-    }
-
-    const int32_t headerend = is.GetPos();
-    auto skipBlock = [&]() { is.SetPos(headerend + blocksize); };
-
-    // ****** Is this object any good? ******
-
-    TObjectClass* cl = TObjectClass::GetClass(objclass);
-    if (!cl || !cl->ClassName())
-    {
-        if (Debug)
-            FatalError("Object in map file has invalid class - possible file corruption");
-        else if (blocksize >= 0)
-        {
-            skipBlock();
-            ++g_loadObjNullBadClass;
-            return nullptr;
-        }
-        else                        // Try to fix it by assuming its a tile
-        {
-            objclass = OBJCLASS_TILE;
-            cl = TObjectClass::GetClass(objclass);
-            corrupted = true;
-        }
-    }
-
-    // Retail never loads a map scroll from a file.
-    if (objclass == OBJCLASS_MAPSCROLL && blocksize >= 0)
-    {
-        skipBlock();
-        return nullptr;
-    }
-
-    if (objtype < 0)
-    {
-        objtype = cl->FindObjType(uniqueid);
-        if (objtype < 0)
-        {
-            for (int32_t newobjclass = 0; newobjclass < MAXOBJECTCLASSES; newobjclass++)
-            {
-                TObjectClass* newcl = TObjectClass::GetClass(newobjclass);
-                const int32_t newobjtype = newcl ? newcl->FindObjType(uniqueid) : -1;
-                if (newobjtype >= 0)
-                {
-                    objclass = (short)newobjclass;
-                    objtype = (short)newobjtype;
-                    cl = newcl;
-                    forcesimple = true;
-                    break;
-                }
-            }
-        }
-
-        if (objtype < 0)  // Still can't find type
-        {
-            if (Debug)
-            {
-                char buf[80];
-                snprintf(buf, sizeof(buf), "Object unique id 0x%x not found in class.def", uniqueid);
-                FatalError(buf);
-            }
-            else if (blocksize >= 0)
-            {
-                skipBlock();
-                ++g_loadObjNullBadType;
-                return nullptr;
-            }
-            else
-            {
-                objtype = 0;
-                corrupted = true;
-            }
-        }
-    }
-
-    // ****** Create the object ******
-
-    // Retail builds it LOADING: the constructor leaves the script to Load.
-    SObjectDef def;
-    memset(&def, 0, sizeof(SObjectDef));
-    def.objclass = objclass;
-    def.objtype  = objtype;
-    def.flags    = OF_LOADING;
-
-    TObjectInstance* inst = cl->NewObject(&def);
-    if (!inst)
-    {
-        // A type whose class.def builder the port lacks. Retail would have
-        // crashed here ("Trouble creating loaded object", then an unchecked
-        // call); skip the block instead.
-        if (blocksize >= 0)
-            skipBlock();
-        ++g_loadObjNullNewObjFail;
-        return nullptr;
-    }
-
-    // ****** Load the object ******
-
-    // v14+: blocksize covers body and inventory; invblocksize is the
-    // inventory's tail of it. Older versions don't say where the body ends.
-    const int32_t bodystart = is.GetPos();
-    const int32_t bodysize  = (version >= 14 && blocksize >= 0)
-                                  ? blocksize - std::max<int32_t>(invblocksize, 0) : -1;
-
-    if (forcesimple)
-        inst->TObjectInstance::Load(is, version, objversion);
-    else
-        inst->Load(is, version, objversion);
-
-    if (bodysize >= 0)
-    {
-        const int32_t consumed = is.GetPos() - bodystart;
-        if (consumed < bodysize)
-            inst->KeepUnreadClassData(is, bodystart + consumed, bodystart + bodysize);
-        else if (consumed > bodysize)
-            log_warn("[object] block size error for object %s: body is %d bytes, Load read %d",
-                     inst->GetName() ? inst->GetName() : "?", bodysize, consumed);
-        is.SetPos(bodystart + bodysize);
-    }
-
-    // Before v14 the inventory can't be skipped (its size isn't recorded).
-    const bool loadInventory =
-        version < 14 || (!(streamflags & OSTREAM_NOINVENTORY) && invblocksize >= 1);
-    if (loadInventory)
-        inst->LoadInventory(is, version, streamflags);
-
-    if (blocksize >= 0)
-        is.SetPos(bodystart + blocksize);
-
-    const bool nonmap_drop = (streamflags & OSTREAM_MAP) && (inst->Flags() & OF_NONMAP);
-    if (corrupted || nonmap_drop || inst->ObjClass() == OBJCLASS_MAPSCROLL)
-    {
-        delete inst;
-        if (nonmap_drop)
-            ++g_loadObjNullNonMapDrop;
-        else
-            ++g_loadObjNullCorruptDrop;
-        return nullptr;
-    }
-
-    ++g_loadObjOk;
-    return inst;
-}
-
-// REVSYNC: TObjectInstance::SaveObject (universal stream encoder) @ 0x00472110.
-// Layout: SAVE_GAME.md §11.1. `streamflags` carries what retail kept in
-// DAT_0065a250: OSTREAM_MAP writes a NONMAP object as the empty placeholder,
-// OSTREAM_NOINVENTORY leaves inventories out.
-void TObjectInstance::SaveObject(TObjectInstance* inst, RTOutputStream os, uint32_t streamflags)
-{
-    if (!inst || ((streamflags & OSTREAM_MAP) && (inst->Flags() & OF_NONMAP)))
-    {
-        os << (short)-1;
-        return;
-    }
-
-    os << (short)inst->ObjVersion();
-    os << (short)inst->ObjClass();
-    os << (uint32_t)inst->ObjId();
-    const int32_t sizes = os.GetPos();
-    os << (short)0;                           // blocksize, patched below
-    os << (short)0;                           // invblocksize, patched below
-
-    const int32_t bodystart = os.GetPos();
-    inst->Save(os);
-    inst->SaveUnreadClassData(os);
-    const int32_t bodyend = os.GetPos();
-
-    // Retail calls SaveInventory only when there is something to save, so
-    // an empty inventory writes no count and invblocksize stays 0.
-    if (!(streamflags & OSTREAM_NOINVENTORY) && inst->RealNumInventoryItems() > 0)
-        inst->SaveInventory(os, streamflags);
-
-    const int32_t end = os.GetPos();
-    os.SetPos(sizes);
-    os << (short)(end - bodystart);
-    os << (short)(end - bodyend);
-    os.SetPos(end);
-}
-
-// REVSYNC: TObjectInstance::LoadInventory @ 0x00472310 (vtable slot 0x168).
-// Each item takes the first free slot (retail's array Add) and its invindex
-// is set to that slot, so a loaded inventory is packed whatever invindex the
-// file recorded.
-void TObjectInstance::LoadInventory(RTInputStream is, int32_t version, uint32_t streamflags)
-{
-    if (version < 3)
-        return;
-
-    int32_t num = 0;
-    is >> num;
-    if (num < 1 || num > 2048)
-    {
-        if (num != 0)
-            log_warn("[object] invalid inventory size %d for %s", num, GetName() ? GetName() : "?");
-        return;
-    }
-
-    for (int32_t i = 0; i < num; i++)
-    {
-        TObjectInstance* inst = LoadObject(is, version, streamflags);
-        if (!inst)
-            continue;
-        inst->invindex = (short)inventory.Add(inst);
-        inst->SetOwner(this);
-    }
-}
-
-// REVSYNC: TObjectInstance::SaveInventory @ 0x00472380 (vtable slot 0x16c):
-// int32 count, then each item. REVSYNC-DIVERGENCE: the count is the number
-// of items. Retail wrote the array's high-water mark, which overcounts after
-// an item is removed from the middle, so its next load read the following
-// data as inventory (SAVE_GAME.md §11.1).
-void TObjectInstance::SaveInventory(RTOutputStream os, uint32_t streamflags)
-{
-    os << (int32_t)RealNumInventoryItems();
-    for (TInventoryIterator i(this); i; i++)
-        TObjectInstance::SaveObject(i.Item(), os, streamflags);
-}
-
-// Class data a port class doesn't read yet: kept as bytes and written back
-// after the class's own fields, so the object survives a round trip intact.
-// REVSYNC-DIVERGENCE: retail always had the class (SAVE_GAME.md §11.3 lists
-// the layouts these bytes follow).
-void TObjectInstance::KeepUnreadClassData(RTInputStream is, int32_t from, int32_t to)
-{
-    const int32_t count = to - from;
-    if (count <= 0)
-        return;
-    unreadClassData = std::make_unique<std::vector<uint8_t>>(count);
-    is.SetPos(from);
-    is.ReadBytes(unreadClassData->data(), count);
-
-    static std::set<std::string> logged;
-    const char* type = inf && inf->name ? inf->name : "?";
-    if (logged.insert(type).second)
-        log_info("[object] '%s' (class %d): keeping %d bytes of class data the port doesn't read",
-                 type, objclass, count);
-}
-
-void TObjectInstance::SaveUnreadClassData(RTOutputStream os) const
-{
-    if (unreadClassData && !unreadClassData->empty())
-        os.WriteBytes(unreadClassData->data(), (int32_t)unreadClassData->size());
-}
-
-// REVSYNC: TObjectInstance::Load @ 0x00472430 (vtable slot 0x160). Fields:
-// SAVE_GAME.md §11.2 (the older-version branches follow the 1998 source and
-// retail). pos is routed through WriteTransformPos so transform_ and the
-// legacy pos mirror stay in lockstep.
-void TObjectInstance::Load(RTInputStream is, int32_t version, int32_t objversion)
-{
-    // Names are stored with bit 7 set on every byte; length 0 means "the
-    // type's name", which the constructor already set.
-    uint8_t len;
-    is >> len;
-    if (len > 0)
-    {
-        name = (char *)malloc(len + 1);
-        for (int32_t i = 0; i < len; i++)
-        {
-            uint8_t encoded;
-            is >> encoded;
-            name[i] = (char)(encoded & kNameByteMask);
-        }
-        name[len] = 0;
-    }
-
-    uint32_t newflags;
-    {
-        S3DPoint loaded;
-        is >> newflags >> loaded.x >> loaded.y >> loaded.z;
-        WriteTransformPos(transform_, pos, loaded);
-    }
-
-  // The constructor's fixed flags stay; everything else comes from the file
-    flags = (flags & OF_FIXEDFLAGS) | (newflags & ~OF_FIXEDFLAGS);
-
-  // Don't load velocity vectors if not mobile
-    if (version < 6 || !(flags & OF_IMMOBILE))
-        is >> vel.x >> vel.y >> vel.z;
-
-    if (version < 9)
-    {
-        uint8_t statebyte;
-        is >> statebyte;
-        state = statebyte;
-    }
-    else
-        is >> state;
-
-  // Non map objects (i.e. players) store their level: they come from the
-  // save, not a sector, so the level says where to put them.
-    if (version >= 6 && (flags & OF_NONMAP))
-    {
-        if (version < 9)
-        {
-            uint8_t levelbyte;
-            is >> levelbyte;
-            level = levelbyte;
-        }
-        else
-            is >> level;
-    }
-    else
-        level = 0;
-
-    uint8_t health = 0;
-    if (version < 5)
-        is >> health; // Now an object stat
-
-    if (version < 3)
-    {
-        uint8_t dummy8;
-        short dummy16;
-        is >> facing >> dummy16 >> inventnum >> dummy16 >> shadow >> dummy8;
-
-        inventnum = -1;     // ignore inventories in old versions
-        mapindex = -1;      // the sector sets old-style indexes after the load
-    }
-    else
-    {
-        int32_t loaded_mapindex = -1;
-        is >> inventnum >> invindex >> shadow >> rotatex >> rotatey >> rotatez >> loaded_mapindex;
-        // Through SetMapIndex so the mapindex registry sees every streamed-in
-        // instance; TSafeRef<T>::Get() relies on it.
-        SetMapIndex(loaded_mapindex);
-    }
-    // The rotation fields bypass the SetRotate* setters, so re-sync
-    // transform_'s rotation from them.
-    SyncTransformRot();
-    moveangle = rotatez;
-
-    if (version < 5)  // Empty stat array with health stuck in it
-    {
-        frame = 0;
-        framerate = 1;
-        group = 0;
-
-        if (cl->NumObjStats() > 0)
-        {
-            stats.SetNumItems(cl->NumObjStats());
-            for (int32_t c = 0; c < cl->NumObjStats(); c++)
-                ResetObjStat(c);
-        }
-
-        SetHealth(health);
-    }
-    else
-    {
-        if (version < 6 || (flags & OF_ANIMATE))
-            is >> frame >> framerate;
-
-        is >> group;
-
-        if (cl->NumObjStats() > 0)
-            stats.SetNumItems(cl->NumObjStats());
-
-        // Each saved stat is matched to the class's stats by unique id (the
-        // saved id carries bit 7 in every byte); the slow path searches every
-        // class stat, so stats survive a reordered class.def.
-        constexpr uint32_t kStatIdMask = 0x7f7f7f7f;
-        uint8_t numstats;
-        is >> numstats;
-        int32_t statid = 0;
-        for (int32_t st = 0; st < numstats && statid < stats.NumItems(); st++)
-        {
-            int32_t stat;
-            uint32_t uniqueid;
-            is >> stat >> uniqueid;
-            uniqueid &= kStatIdMask;
-
-            if (uniqueid == cl->ObjStatUniqueId(statid))
-            {
-                stats[statid] = stat;
-                statid++;
-            }
-            else
-            {
-                for (int32_t c = 0; c < cl->NumObjStats(); c++)
-                {
-                    if (uniqueid == cl->ObjStatUniqueId(c))
-                        stats[c] = stat;
-                }
-            }
-        }
-
-        // An object untouched since it was placed takes its type's current
-        // stats; only its health, fatigue and mana (stats 3-5) are its own.
-        if (flags & OF_VIRGIN)
-        {
-            for (int32_t c = 0; c < cl->NumObjStats(); c++)
-            {
-                if (c < kFirstKeptStat || c > kLastKeptStat)
-                    ResetObjStat(c);
-            }
-        }
-    }
-
-    if (flags & OF_LIGHT)
-    {
-        is >> lightdef.flags >> lightdef.pos.x >> lightdef.pos.y >> lightdef.pos.z >>
-            lightdef.color.red >> lightdef.color.green >> lightdef.color.blue >>
-            lightdef.intensity >> lightdef.multiplier;
-        flags |= OF_LIGHT | OF_ANIMATE;
-    }
-
-  // Set Object info pointer
-    cl = TObjectClass::GetClass(objclass);
-    if (!cl)
-        FatalError("Bad object class!"); // This should never happen!!
-    inf = cl->GetObjType(objtype);
-
-  // Any script the object had goes; the right one is attached below
-    delete script;
-    script = nullptr;
-
-  // Reset inventory
-    if (this == Inventory.GetContainer())
-        Inventory.Update();
-
-  // Flags retail settles once the object is loaded
-    if (version < 12)
-        flags &= ~(OF_DRAWFLIP | OF_VIRGIN | OF_LOADING | OF_INVULNERABLE | OF_BACKGROUND |
-                   OF_INVENTORY | OF_CALLEDPREDEL);
-    flags &= ~OF_LOADING;
-    if (objclass == OBJCLASS_TILE && (flags & OF_LIGHT))
-        flags &= ~OF_PULSE;
-    if (flags & OF_INVENTORY)
-        flags |= OF_ANIMATE | OF_PULSE;
-
-  // The script, now that the name and flags are final
-    if (CanHaveScript())
-        InitScript(ScriptManager.ObjectScript(this));
-}
-
-// REVSYNC: TObjectInstance::Save @ 0x00472980 (vtable slot 0x164).
-// Byte-symmetric with Load above (SAVE_GAME.md §11.2).
-void TObjectInstance::Save(RTOutputStream os)
-{
-    if (flags & OF_LIGHT)
-        flags |= OF_PULSE | OF_ANIMATE;
-
-    // Only a renamed instance stores its name, each byte with bit 7 set.
-    const bool renamed = name && inf && inf->name && strcmp(name, inf->name) != 0;
-    const uint8_t len = renamed ? (uint8_t)std::min<size_t>(strlen(name), 255) : 0;
-    os << len;
-    for (int32_t i = 0; i < len; i++)
-        os << (uint8_t)(name[i] | kNameByteFlag);
-
-    os << flags << pos.x << pos.y << pos.z;
-
-    if (!(flags & OF_IMMOBILE))
-        os << vel.x << vel.y << vel.z;
-
-    os << state;
-
-    if (flags & OF_NONMAP)
-        os << level;
-
-    os << inventnum << invindex << shadow <<
-        rotatex << rotatey << rotatez << FileMapIndex();
-
-    if (flags & OF_ANIMATE)
-        os << frame << framerate;
-
-    os << group;
-
-    // Object stats with their unique ids (<=4 char codes like "AMT",
-    // "TYPE", "AC"), each id byte with bit 7 set.
-    constexpr uint32_t kStatIdFlag = 0x80808080;
-    os << (uint8_t)(cl->NumObjStats());
-    for (int32_t c = 0; c < cl->NumObjStats(); c++)
-        os << stats[c] << (uint32_t)(cl->ObjStatUniqueId(c) | kStatIdFlag);
-
-    if (flags & OF_LIGHT)
-        os << lightdef.flags << lightdef.pos.x << lightdef.pos.y << lightdef.pos.z <<
-            lightdef.color.red << lightdef.color.green << lightdef.color.blue <<
-            lightdef.intensity << lightdef.multiplier;
 }
 
 // ----------------- Flag Functions --------------
@@ -3046,7 +2416,7 @@ bool TObjectInstance::GetFieldText(const char *field, char *buf, int32_t buflen)
 bool TObjectInstance::PlayWave(char *soundname, int32_t nr, int32_t volume, int32_t freq)
 {
     S3DPoint p, mp;
-    GetPos(p);
+    p = IntPos(*this);
     MapPane.GetMapPos(mp);
     p -= mp;
 

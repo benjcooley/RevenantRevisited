@@ -647,7 +647,7 @@ struct TMapRenderer::Impl
     {
         TObjectInstance* oi = L.ref.Get();
         if (!oi) return {0,0,0};
-        S3DPoint p = oi->Pos();
+        S3DPoint p = IntPos(oi);
         if (PSLightDef ld = oi->GetLightDef()) {
             p.x += ld->pos.x; p.y += ld->pos.y; p.z += ld->pos.z;
         }

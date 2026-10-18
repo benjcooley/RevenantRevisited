@@ -71,7 +71,7 @@ State* Spawn(const S3DPoint& source)
     if(!owner || owner->ObjId()!=0xad92bd21u || !dynamic_cast<TEffect*>(owner))return nullptr;
     // Controlled coordinates can lie outside loaded map sectors. Establish
     // the explicit fixture transform before creating the animator/controllers.
-    owner->ForcePos(source);owner->Face(0);owner->OnScreen();
+    SetIntPos(owner, source);owner->Face(0);owner->OnScreen();
     auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());auto* animator=dynamic_cast<T3DAnimator*>(owner->GetAnimator());
     if(!image || !animator || !ValidateNakrnoth(*image))return nullptr;
     // Original 40e8d0 renders controllers first, then texture-major objects.
@@ -118,7 +118,7 @@ void SubmitWorld(State* c,EFxDebugMode)
         constexpr int corners[4]={0,1,3,2};for(int i=0;i<4;++i){const auto& v=c->dust[corners[i]];hmm_vec3 w;MtxTransform(&m,&v.pos,&w);q.world_pos[i][0]=w.X;q.world_pos[i][1]=w.Y;q.world_pos[i][2]=StartupVfxNativeDomain?w.Z:particles[slot].position[2]+(w.Z-sample.position[2])*WORLD3D_Z_SCALE;q.uv[i][0]=v.tu;q.uv[i][1]=v.tv;}Renderer->SubmitFxQuad(q);++draws;
     }
     CacheEmitters(*c,o->GetFrame());
-    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=o->Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(o->GetFace()));}
+    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=IntPos(o);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(o)));}
     for(const auto& part:c->parts){
         hmm_vec3 p{},r{},s{};if(!image->GetUninterpolatedAniKey(part.object,o->GetState(),o->GetFrame(),p,r,s,true) || s.X<=1e-5f || s.Y<=1e-5f || s.Z<=1e-5f)continue;
         hmm_mat4 local;PoseMatrix(local,image->GetObjectName(part.object),p,r,s);

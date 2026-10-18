@@ -371,7 +371,7 @@ void TAnimAnimator::Animate(bool draw)
             drawmode |= DM_ALPHA;
 
         S3DPoint pos, spos;
-        inst->GetPos(pos);
+        pos = IntPos(inst);
         WorldToScreen(pos, spos);
         spos.x += image->GetAnimRegX(state);
         spos.y += image->GetAnimRegY(state);

@@ -44,7 +44,7 @@ State* Spawn(const S3DPoint& source)
  auto* cls=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cls?cls->FindObjType(0xad92bd27u):-1;if(type<0)return nullptr;
  SObjectDef def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;c->owner.reset(cls->NewObject(&def));auto* o=c->owner.get();
  if(!o || o->ObjId()!=0xad92bd27u || !dynamic_cast<TEffect*>(o))return nullptr;
- o->ForcePos(source);o->Face(0);o->OnScreen();auto* image=dynamic_cast<T3DImagery*>(o->GetImagery());
+ SetIntPos(o, source);o->Face(0);o->OnScreen();auto* image=dynamic_cast<T3DImagery*>(o->GetImagery());
  if(!image || !dynamic_cast<T3DAnimator*>(o->GetAnimator()) || !ValidateCFire(*image))return nullptr;
  // Actual installed filename opens both fail before the prototypes are hidden.
  // Keep only those literal base meshes; no replacement particle definition.
@@ -69,7 +69,7 @@ void SubmitWorld(State* c,EFxDebugMode)
 {
  if(!c || !c->owner || !Renderer || (c->owner->GetFlags()&OF_KILL) || c->rendered==TTime::FrameCount())return;c->rendered=TTime::FrameCount();
  auto* o=c->owner.get();auto* image=static_cast<T3DImagery*>(o->GetImagery());hmm_mat4 owner=o->Transform().Matrix();
- if(StartupVfxNativeDomain){const auto p=o->Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(o->GetFace()));}
+ if(StartupVfxNativeDomain){const auto p=IntPos(o);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(o)));}
  for(const auto& part:c->parts){hmm_vec3 p{},r{},s{};if(!image->GetUninterpolatedAniKey(part.object,0,o->GetFrame(),p,r,s,true))continue;
   hmm_mat4 local,world;BuildRetailSpeedCameraMatrix(local,p,r,s);MtxMultiply(&world,&local,&owner);
   // Original full Render: SRCALPHA/INVSRCALPHA, CULL_NONE, Z test without writes.

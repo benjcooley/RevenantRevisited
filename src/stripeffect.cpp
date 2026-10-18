@@ -102,9 +102,9 @@ void TStripEffect::Initialize()
 
     // Match pre-release: raise the spawn position 50 wu in Z so the
     // bolt starts at hand/eye level above the caster's feet.
-    S3DPoint p = Pos();
+    S3DPoint p = IntPos(*this);
     p.z += 50;
-    ForcePos(p);
+    SetIntPos(*this, p);
 }
 
 void TStripEffect::Pulse()
@@ -148,7 +148,7 @@ TStripEffect* TStripEffect::SpawnForTest(const S3DPoint& origin)
     // just stores the pointer + flags). The strip is rendered with the
     // renderer's white texture so we don't need a real imagery slot.
     auto* strip = new TStripEffect(static_cast<TObjectImagery*>(nullptr));
-    strip->ForcePos(origin);
+    SetIntPos(strip, origin);
 
     // Same map-index ritual as TFlameEffect / TBloodEffect: AddComponent
     // gates Activate() on GetMapIndex() >= 0, and any future
@@ -398,7 +398,7 @@ void TStripEffect::Initialize()
     duration = 20;
     targetrange = -1;
     S3DPoint temp_point;
-    GetPos(temp_point);
+    temp_point = IntPos(*this);
     temp_point.z += 50;
     SetPos(temp_point);
 }
@@ -551,8 +551,8 @@ void TLightningAnimator::SetupObjects()
 
     // code for figure the maxpoints
     float r = 10.0f;
-    float dx = r * (float)sin((float)TORADIAN * (((float)inst->GetFace() * 360.0f) / 256.0f));
-    float dy = -r * (float)cos((float)TORADIAN * (((float)inst->GetFace() * 360.0f) / 256.0f));
+    float dx = r * (float)sin((float)TORADIAN * (((float)IntFacing(inst) * 360.0f) / 256.0f));
+    float dy = -r * (float)cos((float)TORADIAN * (((float)IntFacing(inst) * 360.0f) / 256.0f));
     S3DPoint effect;
     ((PTEffect)inst)->GetPos(effect);
     hmm_vec3 point;
@@ -603,7 +603,7 @@ void TLightningAnimator::SetupObjects()
                 if (((PTStripEffect)inst)->chr->IsDead())
                     continue;
 
-                ((PTStripEffect)inst)->chr->GetPos(temp_point2);
+                ((PTStripEffect)inst)->temp_point2 = IntPos(chr);
                 if (Distance(temp_point1,temp_point2) > 16)
                     continue;
 
@@ -839,7 +839,7 @@ bool TLightningAnimator::Render()
         ResetExtents();
 
         // Face strip to our absolute angle
-        mystrip->GenerateStrip( inst->GetFace() + showangle);
+        mystrip->GenerateStrip( IntFacing(inst) + showangle);
 
         obj = mystrip->GetStripObj();
 
@@ -997,7 +997,7 @@ void TWindStripEffect::Pulse()
             {
                 int32_t j;
                 S3DPoint temp_point1, temp_point2;
-                GetPos(temp_point1);
+                temp_point1 = IntPos(*this);
                 PTWindStripAnimator wsa = (PTWindStripAnimator)GetAnimator();
                 temp_point1.x += (int32_t)wsa->realpos.x;
                 temp_point1.y += (int32_t)wsa->realpos.y;
@@ -1015,7 +1015,7 @@ void TWindStripEffect::Pulse()
                     if (invoker && !invoker->IsEnemy(chr))
                         continue;   // We can't hurt our friends
 
-                    chr->GetPos(temp_point2);
+                    temp_point2 = IntPos(chr);
                     if (::Distance(temp_point1,temp_point2) > 50)
                         continue;
 
@@ -1222,7 +1222,7 @@ void TWindStripAnimator::Animate(bool draw)
         ConvertToVector(centerang, WINDSTRIP_RADIUS, vel);
         center.x += (float)vel.x;
         center.y += (float)vel.y;
-        ConvertToVector(centerang + invoker->GetFace(), WINDSTRIP_RADIUS, vel);
+        ConvertToVector(centerang + IntFacing(invoker), WINDSTRIP_RADIUS, vel);
         realpos.x += vel.x;
         realpos.y += vel.y;
         centerang = (centerang + random(-2, 2)) & 255;
@@ -1281,7 +1281,7 @@ bool TWindStripAnimator::Render()
             ResetExtents();
             // Face strip to our absolute angle
 
-            mystrip[j]->GenerateStrip(0);//inst->GetFace());
+            mystrip[j]->GenerateStrip(0);//IntFacing(inst));
             obj = mystrip[j]->GetStripObj();
 
             obj->flags |= OBJ3D_MATRIX;

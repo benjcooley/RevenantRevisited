@@ -214,7 +214,7 @@ TObjectInstance* ShadowFindObject(const std::string& name, int32_t level, const 
                 continue;
             if (living && (i->ObjClass() != OBJCLASS_CHARACTER || static_cast<TCharacter*>(i.Item())->Health() <= 0))
                 continue;
-            const S3DPoint p = i->Pos();
+            const S3DPoint p = IntPos(i);
             const int64_t d = int64_t(p.x - at.x) * (p.x - at.x) + int64_t(p.y - at.y) * (p.y - at.y);
             if (d < bestdist)
             {
@@ -278,7 +278,7 @@ bool TShadowTravel::Destination(SShadowContext& context, S3DPoint& out, std::str
         objectname = place->object;
     }
 
-    TObjectInstance* found = ShadowFindObject(objectname, level, Player->Pos(), living);
+    TObjectInstance* found = ShadowFindObject(objectname, level, IntPos(Player), living);
     if (!found)
     {
         failure = "no " + objectname + " on level " + std::to_string(level);
@@ -305,7 +305,7 @@ bool TShadowTravel::Destination(SShadowContext& context, S3DPoint& out, std::str
     // region, between touching it and a step further, nearest him.
     const int32_t room = (found->IsCharacter() ? static_cast<TCharacter*>(found)->Radius() : kObjectRadius) +
                          Player->Radius();
-    const S3DPoint centre = found->Pos();
+    const S3DPoint centre = IntPos(found);
     const std::optional<S3DPoint> spot = field->NearestStandable(centre, room + kApproachSlack, region);
     if (!spot)
     {
@@ -315,7 +315,7 @@ bool TShadowTravel::Destination(SShadowContext& context, S3DPoint& out, std::str
     // NearestStandable gives the cell nearest the object, which may be under
     // it; step back out along the line toward Locke until there is room.
     S3DPoint best = *spot;
-    const S3DPoint locke = Player->Pos();
+    const S3DPoint locke = IntPos(Player);
     const double dx = locke.x - centre.x, dy = locke.y - centre.y;
     const double len = std::max(1.0, std::hypot(dx, dy));
     for (int32_t back = room; back <= room + kApproachSlack; back += 8)
@@ -392,7 +392,7 @@ bool TShadowTravel::Meet(SShadowContext& context, const std::vector<SShadowEncou
 bool TShadowTravel::OntoStrip(const TShadowWalkField& field, TExit& exit, S3DPoint& dest, std::string& failure) const
 {
     const SRect strip = exit.StripRect();
-    const S3DPoint middle((strip.left + strip.right) / 2, (strip.top + strip.bottom) / 2, exit.Pos().z);
+    const S3DPoint middle((strip.left + strip.right) / 2, (strip.top + strip.bottom) / 2, IntPos(exit).z);
     std::optional<S3DPoint> best;
     int32_t bestdist = INT32_MAX;
     for (int32_t y = strip.top + GRIDSIZE / 2; y < strip.bottom; y += GRIDSIZE)
@@ -433,7 +433,7 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
         }
         // Where Locke stands; if the cell under him fails the standing rule
         // (he is on its edge), the nearest one that passes.
-        const std::optional<S3DPoint> start = field->NearestStandable(Player->Pos(), 48);
+        const std::optional<S3DPoint> start = field->NearestStandable(IntPos(Player), 48);
         if (!start)
         {
             failure = "Locke isn't standing anywhere the walk field knows";
@@ -641,7 +641,7 @@ EShadowStatus TShadowTravel::Pulse(SShadowContext& context, std::string& failure
         // On the strip, the exit's own pulse takes him through (TExit::Pulse,
         // Activate); at a door, its script does. The session brings the
         // level in.
-        if (Player->GetLevel() == startlevel && Distance2D(Player->Pos(), dest) < kExitJump)
+        if (Player->GetLevel() == startlevel && Distance2D(IntPos(Player), dest) < kExitJump)
         {
             if (++waited > kExitTicks)
             {

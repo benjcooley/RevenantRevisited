@@ -182,7 +182,7 @@ std::optional<int32_t> MemberValue(TToken& t, TObjectInstance& obj,
     }
     if (t.Is("face"))
     {
-        const int32_t value = obj.GetFace();
+        const int32_t value = IntFacing(obj);
         t.WhiteGet();
         return value;
     }
@@ -217,9 +217,9 @@ std::optional<int32_t> MemberValue(TToken& t, TObjectInstance& obj,
         }
         if (!other)
             return std::nullopt;            // DEVIATION: retail dereferences the missing object
-        const S3DPoint at = other->Pos();
+        const S3DPoint at = IntPos(other);
         const S3DPoint spot = { at.x + dx, at.y + dy, at.z };
-        const int32_t value = Distance(spot, obj.Pos()) < kAtPositionRange;
+        const int32_t value = Distance(spot, IntPos(obj)) < kAtPositionRange;
         t.WhiteGet();
         return value;
     }
@@ -253,7 +253,7 @@ std::optional<int32_t> MemberValue(TToken& t, TObjectInstance& obj,
             return std::nullopt;
         }
         const S3DPoint spot = RelativeDistanceSpot(*other, distance, angle);
-        const int32_t value = Distance(spot, obj.Pos()) < kAtPositionRange;
+        const int32_t value = Distance(spot, IntPos(obj)) < kAtPositionRange;
         t.WhiteGet();
         return value;
     }
@@ -286,7 +286,7 @@ std::optional<int32_t> MemberValue(TToken& t, TObjectInstance& obj,
     {
         t.Get();                            // "."
         t.Get();
-        const S3DPoint pos = obj.Pos();
+        const S3DPoint pos = IntPos(obj);
         std::optional<int32_t> value;       // DEVIATION: retail reuses a stale value
         if (t.Is("x"))                      // for anything but x, y or z
             value = pos.x;
@@ -462,8 +462,8 @@ std::optional<int32_t> EvaluateExpression(TToken& t, TObjectInstance* context, T
 S3DPoint RelativeDistanceSpot(const TObjectInstance& obj, int32_t distance, int32_t angle)
 {
     const double radians = kRadiansPerFacing;
-    const int32_t a = obj.GetFace() + angle;
-    const S3DPoint at = obj.Pos();
+    const int32_t a = IntFacing(obj) + angle;
+    const S3DPoint at = IntPos(obj);
     return { at.x + static_cast<int32_t>(distance * std::sin((a + 0x7f) * radians)),
              at.y + static_cast<int32_t>(distance * std::cos(a * radians)),
              at.z };

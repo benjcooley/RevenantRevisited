@@ -27,8 +27,6 @@ class TFood : public TObjectInstance
     int32_t CursorType(TObjectInstance* inst = nullptr) override { if (inst) return CURSOR_NONE; return CURSOR_MOUTH; }
         // Yummy
 
-    void Load(RTInputStream is, int32_t version, int32_t objversion) override;
-        // A loaded stack holds at least one
     bool MergeInto(TObjectInstance* newowner) override;
         // REVSYNC: 0x0050ea80. Joins newowner's stack of the same name
 

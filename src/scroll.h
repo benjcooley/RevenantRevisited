@@ -15,6 +15,8 @@
 _CLASSDEF(TScroll)
 class TScroll final : public TObjectInstance
 {
+    friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
+    friend class TLegacySerialize;
   public:
     TScroll(TObjectImagery* newim) : TObjectInstance(newim) { text = nullptr; }
     TScroll(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { text = nullptr; }
@@ -28,9 +30,6 @@ class TScroll final : public TObjectInstance
         // Read scroll
     int32_t CursorType(TObjectInstance* inst = nullptr) override { if (inst) return CURSOR_NONE; return CURSOR_EYE; }
         // Indicate you can read the scroll
-
-    virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
-    virtual void Save(RTOutputStream os);
 
     // Scroll stats
     STATFUNC(Value)

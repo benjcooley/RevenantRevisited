@@ -24,7 +24,7 @@ State*Spawn(const S3DPoint&origin){
 bool Alive(State*s){return s&&s->owner&&!(s->owner->GetFlags()&OF_KILL);}
 void Advance(State*s,double seconds){if(!Alive(s)||!std::isfinite(seconds)||seconds<=0)return;s->accumulator+=seconds;while(Alive(s)&&s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;s->owner->NextFrame();s->owner->SetCommandDone(false);s->core.Pulse();if(!s->core.alive)s->owner->SetFlag(OF_KILL);}}
 void SubmitWorld(State*s){
- if(!Alive(s)||!Renderer||s->rendered==TTime::FrameCount())return;s->rendered=TTime::FrameCount();hmm_mat4 root;const auto&p=s->owner->Pos();if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(s->owner->GetFace()));else root=s->owner->Transform().Matrix();int count=0;
+ if(!Alive(s)||!Renderer||s->rendered==TTime::FrameCount())return;s->rendered=TTime::FrameCount();hmm_mat4 root;const auto&p=IntPos(s->owner);if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(IntFacing(s->owner)));else root=s->owner->Transform().Matrix();int count=0;
  s->core.Render([&](int,const hmm_mat4&local){hmm_mat4 world;MtxMultiply(&world,const_cast<hmm_mat4*>(&local),&root);SHelperMeshSubmit draw={};draw.mesh=s->meshes[0];draw.retail_lighting=3;draw.retail_source_alpha=true;draw.retail_software_projection=StartupVfxNativeDomain;for(int row=0;row<4;++row)for(int col=0;col<4;++col)draw.world[row*4+col]=world.Elements[col][row];Renderer->SubmitRetailSourceAlphaAfterFx(draw);++count;});
  log_info("[teleporter-phase] tick=%d life=%d phase=%d draws=%d rotation=%.9g alive=%d",s->core.ticks,s->core.life,s->core.phase,count,s->core.rotation,int(Alive(s)));
 }

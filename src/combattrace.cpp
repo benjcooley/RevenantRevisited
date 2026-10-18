@@ -55,7 +55,7 @@ void Block(const char* key, const TActionBlock* ab)
 
 void Character(TCharacter* c)
 {
-    const S3DPoint p = c->Pos();
+    const S3DPoint p = IntPos(c);
     const TObjectImagery* im = c->GetImagery();
     const int32_t st = c->TObjectInstance::GetState();
     const char* anim = im ? im->GetAniName(st) : nullptr;
@@ -63,7 +63,7 @@ void Character(TCharacter* c)
     const TObjectInstance* target = doing && doing->obj ? doing->obj
                                   : c->RootBlock() ? c->RootBlock()->obj : nullptr;
     fprintf(g_out, "%lld\tchar\tname=%s\tid=%d\tpos=%d,%d,%d\tface=%d\tmove=%d\tstate=%s\tframe=%d", (long long)g_tick,
-            Name(c), c->GetMapIndex(), p.x, p.y, p.z, c->GetFace(), c->GetMoveAngle(), anim ? anim : "?",
+            Name(c), c->GetMapIndex(), p.x, p.y, p.z, IntFacing(c), c->GetMoveAngle(), anim ? anim : "?",
             (int)c->GetFrame());
     Block("doing", doing);
     Block("desired", c->DesiredBlock() != doing ? c->DesiredBlock() : nullptr);

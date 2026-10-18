@@ -564,8 +564,8 @@ bool TSpell::Timer()
             SObjectDef def{};
             def.objclass = OBJCLASS_EFFECT;
             def.level = (uint16_t)MapPane.GetMapLevel();
-            def.pos = caster->Pos() + SourceOffset();
-            def.facing = variant->facing ? (uint8_t)caster->GetFace() : 0;
+            def.pos = IntPos(caster) + SourceOffset();
+            def.facing = variant->facing ? (uint8_t)IntFacing(caster) : 0;
             def.objtype = (short)EffectClass.FindObjType(variant->effect);
             NewEffect(def);
         }
@@ -730,7 +730,7 @@ void AreaDamage(TObjectInstance* attacker, const S3DPoint& pos, int32_t radius, 
     {
         if (target == caster)
             continue;
-        const int32_t distance = ::Distance(pos, target->Pos());
+        const int32_t distance = ::Distance(pos, IntPos(target));
         if (distance > radius || distance < minradius)
             continue;
         if (target->Health() <= 0)
@@ -816,7 +816,7 @@ SObjectDef TStrikeSpell::EffectDef(TObjectInstance* target) const
     SObjectDef def{};
     def.objclass = OBJCLASS_EFFECT;
     def.level = (uint16_t)MapPane.GetMapLevel();
-    def.pos = target->Pos();
+    def.pos = IntPos(target);
     if (control.posset)
         def.pos += S3DPoint(control.pos[0], control.pos[1], control.pos[2]);
     else
@@ -828,7 +828,7 @@ SObjectDef TStrikeSpell::EffectDef(TObjectInstance* target) const
         def.pos += SourceOffset();
     }
     TObjectInstance* caster = invoker_ref.Get();
-    def.facing = (variant->facing && caster) ? (uint8_t)caster->GetFace() : 0;
+    def.facing = (variant->facing && caster) ? (uint8_t)IntFacing(caster) : 0;
     def.objtype = (short)EffectClass.FindObjType(variant->effect);
     return def;
 }
@@ -933,7 +933,7 @@ bool TStrikeSpell::Timer()
 
     if (control.multipletargets && caster)
     {
-        const S3DPoint center = caster->Pos();
+        const S3DPoint center = IntPos(caster);
         if (!control.oncaster)
         {
             for (TCharacter* c : CharactersAround(-1, center, radius))

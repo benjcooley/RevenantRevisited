@@ -281,11 +281,11 @@ bool CaseHelperSight(const S3DPoint& from, const S3DPoint& to)
 {
     std::string a = "?", b = "?";
     for (const SCaseHelper& h : g_helpers)
-        if (h.object->Pos().x == from.x && h.object->Pos().y == from.y)
+        if (IntPos(h.object).x == from.x && IntPos(h.object).y == from.y)
             a = h.name;
     for (const JsonValue& spec : (*g_answers.cs)["chars"].Items())
     {
-        const S3DPoint p = g_answers.world->Get(spec["name"].Str())->Pos();
+        const S3DPoint p = IntPos(g_answers.world->Get(spec["name"].Str()));
         if (p.x == to.x && p.y == to.y && p.z == to.z)
             b = spec["name"].Str();
     }

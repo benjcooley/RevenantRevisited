@@ -46,8 +46,8 @@ void SubmitWorld(State* state)
  auto* imagery=dynamic_cast<T3DImagery*>(owner->GetImagery());if(!scroll_water_profile::Matches(owner,imagery))return;
  owner->Animate(false);auto* animator=dynamic_cast<T3DAnimator*>(owner->GetAnimator());if(!animator || !animator->IsObjectEnabled(0))return;
  SHelperMeshSubmit mesh={};mesh.mesh=state->mesh;mesh.retail_lighting=3;mesh.retail_positive_face_cull=true;mesh.retail_software_projection=StartupVfxNativeDomain;
- hmm_mat4 world,root;const auto& position=owner->Pos();
- if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,position.x,position.y,position.z,uint8_t(owner->GetFace()));else root=owner->Transform().Matrix();
+ hmm_mat4 world,root;const auto& position=IntPos(owner);
+ if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,position.x,position.y,position.z,uint8_t(IntFacing(owner)));else root=owner->Transform().Matrix();
  float local[16];BuildStaticObjectMatrix(imagery,0,0,owner->GetFrame(),local);
  hmm_mat4 source_local;for(int row=0;row<4;++row)for(int column=0;column<4;++column)source_local.Elements[column][row]=local[row*4+column];
  MtxMultiply(&world,&source_local,&root);

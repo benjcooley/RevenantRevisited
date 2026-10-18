@@ -48,7 +48,7 @@ void Advance(State* s,double dt){
    // character set2 and caster level. The proven fixture's genuine actors
    // are not sector residents. Execute that query; reject other contexts
    // rather than pretending to implement the unverified damage branch.
-   const S3DPoint pos=s->owner->Pos();SRect rectangle{pos.x-200,pos.y-200,pos.x+200,pos.y+200};
+   const S3DPoint pos=IntPos(s->owner);SRect rectangle{pos.x-200,pos.y-200,pos.x+200,pos.y+200};
    TMapIterator characters(s->caster->GetLevel(),&rectangle,CHECK_NOINVENT|CHECK_MAPRECT|CHECK_LOADED,OBJSET_CHARACTER);
    if(characters){log_error("[tornado] unsupported nonempty damage query; configured fixture stopped");s->core.alive=false;s->spell->Kill();s->owner->SetFlag(OF_KILL|OF_PULSE);}
    else log_info("[tornado-damage-query] tick=%d radius=200 loaded=1 characters=0",s->core.frame);

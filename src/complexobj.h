@@ -135,6 +135,8 @@ char *StName(const char *name, const char *str);
 _CLASSDEF(TComplexObject)
 class TComplexObject : public TObjectInstance
 {
+    friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
+    friend class TLegacySerialize;
   public:
     void ClearComplexObj();
 
@@ -189,13 +191,6 @@ class TComplexObject : public TObjectInstance
     virtual void Notify(int32_t notify, void *ptr);
         // Notify Action (check root,desired, and doing for deleted target obj)
 
-  // Streaming functions
-    virtual int32_t ObjVersion() { return 1; }
-        // Returns the object version for this object
-    virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
-        // Loads object data from the sector
-    virtual void Save(RTOutputStream os);
-        // Saves object data to the sector
 
 
   protected:

@@ -1072,7 +1072,7 @@ void DrawGameViewPanel()
                 ImGuizmo::SetGizmoSizeClipSpace(0.20f);   // 2x default
 
                 float model[16];
-                ModelMatrixFromTranslation(oi->Pos(), model);
+                ModelMatrixFromTranslation(IntPos(oi), model);
                 const bool was_using = ImGuizmo::IsUsing();
                 if (ImGuizmo::Manipulate(view, proj,
                                          ToolToGizmoOp(g_tool),
@@ -1081,7 +1081,7 @@ void DrawGameViewPanel()
                     if (g_tool == EEditorTool::Move) {
                         if (!s_drag_primary) {
                             s_drag_primary = oi;
-                            s_drag_start   = oi->Pos();
+                            s_drag_start   = IntPos(oi);
                             s_drag_others.clear();
                             // Mark every selected adapter dirty before
                             // touching their underlying instances. Lock
@@ -1098,7 +1098,7 @@ void DrawGameViewPanel()
                                 if (!sel) continue;
                                 EditorUndo::MarkDirty(sel);
                                 if (sel != oi)
-                                    s_drag_others.push_back({ mi, sel->Pos() });
+                                    s_drag_others.push_back({ mi, IntPos(sel) });
                             }
                         }
                         const S3DPoint np{ int32_t(model[12]),
@@ -1239,7 +1239,7 @@ void DrawGameViewPanel()
                     // Tiles legitimately have wheight=0 (flat floor plates).
                     // Draw the floor quad in that case rather than a degenerate
                     // cube. For real 3D bounds, draw the full 12-edge AABB.
-                    const S3DPoint& P = oi->Pos();
+                    const S3DPoint& P = IntPos(oi);
                     const int32_t x0 = P.x - rx, y0 = P.y - ry, z0 = P.z - rz;
                     const int32_t x1 = x0 + bw, y1 = y0 + bl;
                     if (bh > 0) {
@@ -1269,7 +1269,7 @@ void DrawGameViewPanel()
                     // Fall back to the imagery's screen-space sprite rect:
                     // map image-pixel (regx,regy)->(regx+w, regy+h) onto the
                     // panel relative to the projected anchor.
-                    const ImVec2 p = WorldToPanel(oi->Pos());
+                    const ImVec2 p = WorldToPanel(IntPos(oi));
                     const float sx = gw / float(kGameViewW);   // panel-px per game-px
                     const float sy = gh / float(kGameViewH);
                     const ImVec2 a(p.x - float(img_rx) * sx,
@@ -1280,14 +1280,14 @@ void DrawGameViewPanel()
                 } else {
                     // No spatial extents at all -- small cross at anchor
                     // (lights, helpers, abstract effects).
-                    const ImVec2 p = WorldToPanel(oi->Pos());
+                    const ImVec2 p = WorldToPanel(IntPos(oi));
                     dl->AddLine(ImVec2(p.x-6, p.y), ImVec2(p.x+6, p.y), col, 1.0f);
                     dl->AddLine(ImVec2(p.x, p.y-6), ImVec2(p.x, p.y+6), col, 1.0f);
                 }
 
                 // Always draw a small filled dot on the anchor too -- gives
                 // the eye a stable reference even for tall / wide bboxes.
-                const S3DPoint& origin = oi->Pos();
+                const S3DPoint& origin = IntPos(oi);
                 const ImVec2 anchor = WorldToPanel(origin);
                 dl->AddCircleFilled(anchor, 3.0f, col);
 
@@ -1499,7 +1499,7 @@ void RegisterBuiltinCommands()
                 TObjectInstance* sel = safe_cast<TObjectInstance>(mi);
                 if (!sel) continue;
                 if (count == 0) level = sel->GetLevel();
-                const S3DPoint& p = sel->Pos();
+                const S3DPoint& p = IntPos(sel);
                 sx += p.x; sy += p.y; sz += p.z; ++count;
             }
             if (count == 0) return;

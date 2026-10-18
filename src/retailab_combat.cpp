@@ -231,13 +231,13 @@ std::string CombatKernels(const Case& c, std::string& error)
             }
             else if (kernel == "obj-distance" || kernel == "obj-angle")
             {
-                a.ForcePos(point(in[0]));
-                b.ForcePos(point(in[1]));
+                SetIntPos(a, point(in[0]));
+                SetIntPos(b, point(in[1]));
                 j.Value(kernel == "obj-distance" ? a.Distance(&b) : a.AngleTo(&b));
             }
             else if (kernel == "screen-xy" || kernel == "screen-pos")
             {
-                a.ForcePos(point(in));
+                SetIntPos(a, point(in));
                 S3DPoint s{0, 0, 0};
                 if (kernel == "screen-xy")
                     a.GetScreenPos(s.x, s.y);

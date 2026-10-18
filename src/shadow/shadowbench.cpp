@@ -40,7 +40,7 @@ std::string NameOf(const TObjectInstance& o)
 std::string Describe(TCharacter& who)
 {
     std::ostringstream text;
-    text << NameOf(who) << " (health " << who.Health() << ", at " << who.Pos().x << "," << who.Pos().y
+    text << NameOf(who) << " (health " << who.Health() << ", at " << IntPos(who).x << "," << IntPos(who).y
          << ")";
     return text.str();
 }
@@ -69,7 +69,7 @@ EShadowStatus TShadowDuelBench::Pulse(TShadowLog& log)
 std::vector<TCharacter*> TShadowDuelBench::FindFoes() const
 {
     int32_t indices[kMaxNear];
-    const int32_t n = MapPane.FindObjectsInRange(Player->Pos(), Player->GetLevel(), indices, kFoeRange, 0,
+    const int32_t n = MapPane.FindObjectsInRange(IntPos(Player), Player->GetLevel(), indices, kFoeRange, 0,
                                                  OBJCLASS_CHARACTER, kMaxNear, OBJSET_ALL);
     std::vector<TCharacter*> near;
     for (int32_t i = 0; i < n; ++i)

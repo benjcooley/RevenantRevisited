@@ -120,11 +120,11 @@ void TParaEffect::Initialize()
     if (spell)
     {
         PTCharacter invoker = (PTCharacter)spell->GetInvoker();
-        invoker->GetPos(temp_point);
+        temp_point = IntPos(invoker);
         if (level == 3)
         {
             PTCharacter invoker = (PTCharacter)spell->GetInvoker();
-            GetPos(temp_point);
+            temp_point = IntPos(*this);
             // figure out how many targets are in range
             int32_t num = MapPane.FindObjectsInRange(temp_point, itargets, 5000, 0, OBJCLASS_CHARACTER);
             for (i = 0; i < num; i++) 
@@ -148,7 +148,7 @@ void TParaEffect::Initialize()
                 target_position[0].z = (int32_t)FIX_Z_VALUE(target_position[0].z);
             }
 
-            invoker->GetPos(temp_point);
+            temp_point = IntPos(invoker);
 
         }
         else
@@ -161,7 +161,7 @@ void TParaEffect::Initialize()
                 target_position[0].z = (int32_t)FIX_Z_VALUE(target_position[0].z);
                 num_targets = 1;
             }
-            invoker->GetPos(temp_point);
+            temp_point = IntPos(invoker);
         }
     }
     else
@@ -169,7 +169,7 @@ void TParaEffect::Initialize()
         num_targets = 0;
         target[0] = '\0';
         GetPos(target_position[0]);
-        GetPos(temp_point);
+        temp_point = IntPos(*this);
         target_position[0].z = (int32_t)FIX_Z_VALUE(target_position[0].z);
     }
 */
@@ -201,7 +201,7 @@ void TParaEffect::Initialize()
         PTCharacter invoker = (PTCharacter)spell->GetInvoker();
         if (invoker)
         {
-            invoker->GetPos(temp_point);
+            temp_point = IntPos(invoker);
             invoker->GetPos(target_position[0]);
             target_position[0].z = (int32_t)FIX_Z_VALUE(target_position[0].z);
             target[0] = (PTCharacter)invoker->Fighting();
@@ -213,7 +213,7 @@ void TParaEffect::Initialize()
             }
             S3DPoint temp_point1;
             S3DPoint temp_point2;
-            invoker->GetPos(temp_point1);
+            temp_point1 = IntPos(invoker);
             for (TMapIterator i(nullptr, CHECK_NOINVENT, OBJSET_CHARACTER); i; i++)
             {
                 PTCharacter chr = (PTCharacter)i.Item();
@@ -224,7 +224,7 @@ void TParaEffect::Initialize()
                 if (chr->IsDead())
                     continue;
 
-                chr->GetPos(temp_point2);
+                temp_point2 = IntPos(chr);
                 if (::Distance(temp_point1,temp_point2) > 400)
                     continue;
 
@@ -260,7 +260,7 @@ void TParaEffect::Initialize()
 
     SetCommandDone( false);
 
-    GetPos(temp_point);
+    temp_point = IntPos(*this);
     
     temp_point.z = (int32_t)FIX_Z_VALUE(temp_point.z);
 
@@ -956,13 +956,13 @@ void TManaDrainAnimator::Animate(bool draw)
         // if a victim exists, get its position...
         if (victim)
         {
-            victim->GetPos(victim_pos);
+            victim_pos = IntPos(victim);
             victim_pos.z = (int32_t)FIX_Z_VALUE(victim_pos.z);
         }
         // if the caster exists, get its position...
         if (caster)
         {
-            caster->GetPos(caster_pos);
+            caster_pos = IntPos(caster);
             caster_pos.z = (int32_t)FIX_Z_VALUE(caster_pos.z);
         }
 
@@ -1247,8 +1247,8 @@ void TShriekAnimator::Initialize()
     {
         if (((PTShriekEffect)inst)->GetSpell()->GetInvoker())
         {
-            anglec = (float)cos(((PTShriekEffect)inst)->GetSpell()->GetInvoker()->GetFace() * (6.28318 / 256));
-            angles = (float)sin(((PTShriekEffect)inst)->GetSpell()->GetInvoker()->GetFace() * (6.28318 / 256));
+            anglec = (float)cos(((PTShriekEffect)inst)->IntFacing(GetSpell()->GetInvoker()) * (6.28318 / 256));
+            angles = (float)sin(((PTShriekEffect)inst)->IntFacing(GetSpell()->GetInvoker()) * (6.28318 / 256));
         }
     }
 }
@@ -1292,7 +1292,7 @@ void TShriekAnimator::Animate(bool draw)
         max = spell->VariantData()->maxdamage;
         dtype = spell->SpellData()->damagetype;
     }
-    inst->GetPos(position);
+    position = IntPos(inst);
     
     position.x -= (int32_t)angles * (int32_t)shriek_scale[0] * 8;
     position.y -= (int32_t)anglec * (int32_t)shriek_scale[0] * 8;
@@ -1456,7 +1456,7 @@ void TPukeAnimator::Animate(bool draw)
                     if (((PT3DAnimator)invoker->GetAnimator())->GetObjectMapPos("warrior_he", sourcepos))
                     {
                         int32_t z = sourcepos.z;
-                        ConvertToVector(invoker->GetFace(), Distance(sourcepos), sourcepos);
+                        ConvertToVector(IntFacing(invoker), Distance(sourcepos), sourcepos);
                         sourcepos.z = z + 50;
                     }
                     else
@@ -1509,8 +1509,8 @@ void TPukeAnimator::Animate(bool draw)
                 if (invoker)
                 {
                     S3DPoint temp_point1, temp_point2;
-                    float ang = (float)((6.283f * (float)invoker->GetFace()) / 256);
-                    invoker->GetPos(temp_point1);
+                    float ang = (float)((6.283f * (float)IntFacing(invoker)) / 256);
+                    temp_point1 = IntPos(invoker);
                     temp_point1.x += (int32_t)((position[0].x * cos(ang)) - (position[0].y * sin(ang)));
                     temp_point1.y += (int32_t)((position[0].x * sin(ang)) + (position[0].y * cos(ang)));
                     temp_point1.z = (int32_t)(position[0].z);
@@ -1524,7 +1524,7 @@ void TPukeAnimator::Animate(bool draw)
                         if (chr->IsDead())
                             continue;
 
-                        chr->GetPos(temp_point2);
+                        temp_point2 = IntPos(chr);
                         if (Distance(temp_point1,temp_point2) > 16)
                             continue;
 
@@ -2138,7 +2138,7 @@ void TFunnelEffect::Pulse()
     if (life == 1)
     {
         int32_t angle;
-        angle = GetFace();
+        angle = IntFacing(*this);
         angles = (float)sin(((float)angle * 6.283180) / 255);
         anglec = (float)cos(((float)angle * 6.283180) / 255);
     }
@@ -2152,8 +2152,8 @@ void TFunnelEffect::Pulse()
             {
                 S3DPoint temp_point, temp_point2;
 
-                GetPos(temp_point);
-                anim->my_tornado->GetPos(temp_point2);
+                temp_point = IntPos(*this);
+                temp_point2 = IntPos(anim->my_tornado);
 
                 temp_point.x += (int32_t)((temp_point2.x * anglec) - (temp_point2.y * angles));
                 temp_point.y += (int32_t)((temp_point2.x * angles) + (temp_point2.y * anglec));
@@ -2171,8 +2171,8 @@ void TFunnelEffect::Pulse()
             {
                 S3DPoint temp_point, temp_point2;
 
-                GetPos(temp_point);
-                anim->my_tornado->GetPos(temp_point2);
+                temp_point = IntPos(*this);
+                temp_point2 = IntPos(anim->my_tornado);
 
                 temp_point.x += (int32_t)((temp_point2.x * anglec) - (temp_point2.y * angles));
                 temp_point.y += (int32_t)((temp_point2.x * angles) + (temp_point2.y * anglec));
@@ -2184,7 +2184,7 @@ void TFunnelEffect::Pulse()
                         if (spell->GetInvoker())
                         {
                             S3DPoint temp_point3;
-                            spell->GetInvoker()->GetPos(temp_point3);
+                            temp_point3 = IntPos(spell->GetInvoker());
                             if (::Distance(temp_point,temp_point3) > 10)
                             {
                                 anim->my_tornado->my_state = TORNADO_STATE_SHRINK;
@@ -2223,7 +2223,7 @@ void TFunnelEffect::Pulse()
                             if (chr->IsDead())
                                 continue;
 
-                            chr->GetPos(temp_point3);
+                            temp_point3 = IntPos(chr);
 
                             if (::Distance(temp_point,temp_point3) > 10)
                                 continue;
@@ -2620,7 +2620,7 @@ bool TInvisibleAnimator::Render()
         if (invoker)
         {
             S3DPoint invoker_position;
-            invoker->GetPos(invoker_position);
+            invoker_position = IntPos(invoker);
 
             obj->flags |= OBJ3D_SCL1 | OBJ3D_ROT2 | OBJ3D_POS3 | OBJ3D_ABSPOS;// | OBJ3D_VERTS;
 
@@ -3037,7 +3037,7 @@ void TCataclysmEffect::SetUp()
         if (chr == invoker)
             continue;
 
-        distance = ::Distance(pos, chr->Pos());
+        distance = ::Distance(pos, IntPos(chr));
         if (distance > 400)
             continue;
 
@@ -3057,7 +3057,7 @@ void TCataclysmEffect::SetUp()
     if (target)
     {
         S3DPoint temp_point;
-        target->GetPos(temp_point);
+        temp_point = IntPos(target);
         position.x += temp_point.x;
         position.y += temp_point.y;
         position.z += temp_point.z;
@@ -3065,7 +3065,7 @@ void TCataclysmEffect::SetUp()
     else if (invoker)
     {
         S3DPoint temp_point;
-        invoker->GetPos(temp_point);
+        temp_point = IntPos(invoker);
         position.x += temp_point.x;
         position.y += temp_point.y;
         position.z += temp_point.z;
@@ -3103,11 +3103,11 @@ void TCataclysmEffect::Pulse()
                     {
                         if (target)
                         {
-                            target->GetPos(temp_point);
+                            temp_point = IntPos(target);
                             spell->Damage(target);
                         }
                         else
-                            spell->GetInvoker()->GetPos(temp_point);
+                            temp_point = IntPos(spell->GetInvoker());
                         BlastCharactersInRange(spell->GetInvoker(),temp_point,400,spell->VariantData()->mindamage,spell->VariantData()->maxdamage,spell->VariantData()->type);
                     }
                 }
@@ -3542,7 +3542,7 @@ void TIceStormEffect::Pulse()
             if (invoker)
             {
                 S3DPoint temp_point;
-                GetPos(temp_point);
+                temp_point = IntPos(*this);
                 BlastCharactersInRange(invoker, temp_point, 50, spell->VariantData()->mindamage, spell->VariantData()->maxdamage, spell->VariantData()->type);
             }
         }
@@ -3587,7 +3587,7 @@ bool TIceStormAnimator::Render()
 
     S3DPoint temp_point;
 
-    inst->GetPos(temp_point);
+    temp_point = IntPos(inst);
     obj->pos.x = (float)temp_point.x;
     obj->pos.y = (float)temp_point.y;
     obj->pos.z = (float)temp_point.z;

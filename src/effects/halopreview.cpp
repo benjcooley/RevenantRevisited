@@ -71,7 +71,7 @@ void SubmitWorld(State* s) {
     if(!Alive(s) || !Renderer || s->rendered==TTime::FrameCount())return;
     s->rendered=TTime::FrameCount();hmm_mat4 local;
     if(!s->core.Matrix(local))return;
-    const auto& p=s->owner->Pos();hmm_mat4 root,world;
+    const auto& p=IntPos(s->owner);hmm_mat4 root,world;
     if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,0);else root=s->owner->Transform().Matrix();
     MtxMultiply(&world,&local,&root);
     SHelperMeshSubmit draw={};draw.mesh=s->mesh;draw.retail_lighting=3;

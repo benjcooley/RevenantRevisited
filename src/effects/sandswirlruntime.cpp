@@ -49,7 +49,7 @@ public:
  }
  void Submit(TRenderer&r,const TObjectInstance&owner) const override {
   auto*a=owner.GetComponent<SeekingAnimator>();if(!a || owner.Flags()&OF_KILL)return;
-  hmm_mat4 root;const auto&o=owner.Pos();if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,o.x,o.y,o.z,owner.GetFace());else root=owner.Transform().Matrix();
+  hmm_mat4 root;const auto&o=IntPos(owner);if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,o.x,o.y,o.z,IntFacing(owner));else root=owner.Transform().Matrix();
   a->core.Render([&](int object,retail_seeking_particles::Vec p){hmm_mat4 local,world;MtxClear(&local);const hmm_vec3 pos={p.x,p.y,p.z};MtxTranslate(&local,&pos);MtxMultiply(&world,&local,&root);
    SHelperMeshSubmit q{};q.mesh=meshes[object];q.retail_lighting=3;q.retail_source_alpha=true;q.retail_alpha_source_quantize=restored_sand && StartupVfxNativeDomain;q.retail_software_projection=StartupVfxNativeDomain;q.retail_normal_z_scale=StartupVfxNativeDomain?1.f:1.f/WORLD3D_Z_SCALE;
    for(int row=0;row<4;++row)for(int col=0;col<4;++col)q.world[row*4+col]=world.Elements[col][row];r.SubmitHelperMesh(q);});
@@ -95,10 +95,10 @@ bool Effect::InitializeRuntime(){
  if(ObjId()!=0xbecefedau){runtime->parent.Start(false);SetFlag(OF_KILL);return false;}
  auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cl?(runtime->qualified?cl->FindObjType(0x14db0f2eu):cl->FindObjType("sand")):-1;
  if(type<0 || (!runtime->qualified && !runtime->restored)){runtime->parent.Start(false);SetFlag(OF_KILL);log_warn("[sandswirl-runtime] missing intended sand dependency; no alias or static fallback");return false;}
- SObjectDef d{};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.level=MapPane.GetMapLevel();d.pos=Pos();
+ SObjectDef d{};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.level=MapPane.GetMapLevel();d.pos=IntPos(*this);
  const int index=MapPane.NewObject(&d);auto*child=MapPane.GetInstance(index);if(!child){runtime->parent.Start(false);SetFlag(OF_KILL);return false;}
  child->CreateAnimator();int direction=0;
- if(spell){auto*invoker=spell->GetInvokerRef().Get();auto*target=spell->GetTargetRef().Get();if(target && target!=invoker)direction=ConvertToFacing(Pos(),target->Pos());else if(invoker)direction=invoker->GetFace();else{child->SetFlag(OF_KILL);runtime->parent.Start(false);SetFlag(OF_KILL);return false;}}
+ if(spell){auto*invoker=spell->GetInvokerRef().Get();auto*target=spell->GetTargetRef().Get();if(target && target!=invoker)direction=ConvertToFacing(IntPos(*this),IntPos(target));else if(invoker)direction=IntFacing(invoker);else{child->SetFlag(OF_KILL);runtime->parent.Start(false);SetFlag(OF_KILL);return false;}}
  S3DPoint vector;ConvertToVector(direction,100,vector);
  retail_seeking_particles::Params p;p.count=random(50,100);p.pos={0,0,70};
  p.pspread={50,50,50};p.dir={float(double(vector.x)/100),float(double(vector.y)/100),float(double(vector.z)/100)};p.spread={.5f,.5f,.5f};p.trails=1;p.maxstart=p.count/2;p.minlife=100;p.maxlife=150;p.killobj=1;p.objflags=15;p.seeking=1;p.seekz=runtime->seekz;p.target_count=1;p.targets[0]={0,0,100};p.turn=.5f;p.speed=5;
@@ -109,13 +109,13 @@ void Effect::Pulse(){
  if(Flags()&OF_KILL)return;TEffect::Pulse();if(!runtime->attempted && !InitializeRuntime())return;
  if(!runtime->parent.Alive())return;retail_sandswirl::Caller caller;
  if(runtime->parent.NeedsQueryNextTick()){
-  caller.valid=spell && spell->GetInvokerRef().Get();caller.caster=reinterpret_cast<uintptr_t>(caller.valid?spell->GetInvokerRef().Get():nullptr);caller.origin={Pos().x,Pos().y,Pos().z};
-  if(caller.valid){int indices[MAXFOUNDOBJS]{};const int count=MapPane.FindObjectsInRange(Pos(),indices,400,0,OBJCLASS_CHARACTER);runtime->query.assign(indices,indices+count);
-   for(int i=0;i<count && caller.count<5;++i){auto*character=dynamic_cast<TCharacter*>(MapPane.GetInstance(indices[i]));if(character && character!=spell->GetInvokerRef().Get() && !character->IsDead() && character->Health()>0){const auto&p=character->Pos();caller.found[caller.count++]={reinterpret_cast<uintptr_t>(character),{p.x,p.y,p.z},character->Health()};}}}
+  caller.valid=spell && spell->GetInvokerRef().Get();caller.caster=reinterpret_cast<uintptr_t>(caller.valid?spell->GetInvokerRef().Get():nullptr);caller.origin={IntPos(*this).x,IntPos(*this).y,IntPos(*this).z};
+  if(caller.valid){int indices[MAXFOUNDOBJS]{};const int count=MapPane.FindObjectsInRange(IntPos(*this),indices,400,0,OBJCLASS_CHARACTER);runtime->query.assign(indices,indices+count);
+   for(int i=0;i<count && caller.count<5;++i){auto*character=dynamic_cast<TCharacter*>(MapPane.GetInstance(indices[i]));if(character && character!=spell->GetInvokerRef().Get() && !character->IsDead() && character->Health()>0){const auto&p=IntPos(character);caller.found[caller.count++]={reinterpret_cast<uintptr_t>(character),{p.x,p.y,p.z},character->Health()};}}}
  }
  const auto result=runtime->parent.Advance(caller);
  for(unsigned i=0;i<result.spawn_count;++i){auto*target=reinterpret_cast<TObjectInstance*>(result.spawn_for[i]);auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cl?cl->FindObjType("Quicksand"):-1;if(type<0)continue;
-  SObjectDef d{};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.level=MapPane.GetMapLevel();d.pos=target->Pos();const int index=MapPane.NewObject(&d);auto*child=MapPane.GetInstance(index);
+  SObjectDef d{};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.level=MapPane.GetMapLevel();d.pos=IntPos(target);const int index=MapPane.NewObject(&d);auto*child=MapPane.GetInstance(index);
   if(child && AttachNullQuicksand(*child)){runtime->quicksands.push_back(index);log_info("[sandswirl-runtime-quicksand] parent_tick=%d child=%d null_spell=1 initializer_ret8=1",runtime->parent.Frame(),index);}else if(child)child->SetFlag(OF_KILL);
  }
  if(result.reset_targets){auto*child=runtime->child.Get();auto*anim=child?child->GetComponent<SeekingAnimator>():nullptr;if(!anim){SetFlag(OF_KILL);return;}auto p=anim->core.params;const auto&t=runtime->parent.Targets();p.seeking=t.seeking;p.target_count=int(t.count);p.turn=t.turn;p.speed=t.speed;p.autorange=t.autorange;p.hitrange=t.hitrange;

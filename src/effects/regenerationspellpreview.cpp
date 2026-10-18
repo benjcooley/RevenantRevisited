@@ -70,7 +70,7 @@ State* Spawn(const S3DPoint& origin) {
     s->spell.reset(creator->create(actor,targets,1,&source,data,variant,nullptr));
     auto* strike=dynamic_cast<TStrikeSpell*>(s->spell.get());if(!strike || !IsShippedRegeneration(*strike))return nullptr;
     log_info("[native-domain] enabled=%d camera_z=0 owner=actual_world_RzRxRyT particle=MODELZ",int(StartupVfxNativeDomain));
-    log_info("[regeneration-spell] genuine source creator=Strike variant=Regeneration transient_level=%d origin=%d,%d,%d target=%d,%d,%d follow=invoker duration=2880 blink=24",State::level,origin.x,origin.y,origin.z,target->Pos().x,target->Pos().y,target->Pos().z);
+    log_info("[regeneration-spell] genuine source creator=Strike variant=Regeneration transient_level=%d origin=%d,%d,%d target=%d,%d,%d follow=invoker duration=2880 blink=24",State::level,origin.x,origin.y,origin.z,IntPos(target).x,IntPos(target).y,IntPos(target).z);
     return s.release();
 }
 bool Alive(State* s) {return s && s->spell && !s->done;}
@@ -86,7 +86,7 @@ void Advance(State* s,double seconds) {
         }
         if(auto* effect=dynamic_cast<TEffect*>(s->spell->GetEffect(0))) {
             s->owner=effect;effect->NextFrame();effect->Pulse();
-            const auto& light=effect->LightRamp();const auto p=effect->Pos();
+            const auto& light=effect->LightRamp();const auto p=IntPos(effect);
             log_info("[regeneration-owner] step=%d done=%d flags=%x pos=%d,%d,%d follow=%d remaining=%d delay=%d light=%d,%d,%d,%d resident=%d frame=%d",s->step,int(done),effect->Flags(),p.x,p.y,p.z,effect->FollowTime(),effect->Duration(),effect->StartWait(),light.in,light.out,light.value,light.peak,int(effect->GetSector()!=nullptr),effect->GetFrame());
         } else log_info("[regeneration-owner] step=%d done=%d absent=1",s->step,int(done));
         ++s->step;

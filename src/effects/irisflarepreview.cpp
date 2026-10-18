@@ -21,7 +21,7 @@ State*Spawn(const S3DPoint&origin){
 bool Alive(State*s){return s&&s->owner&&!(s->owner->GetFlags()&OF_KILL);}
 void Advance(State*s,double seconds){if(!Alive(s)||!std::isfinite(seconds)||seconds<=0)return;s->accumulator+=seconds;while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;s->owner->NextFrame();s->owner->Pulse();if(!Alive(s))return;s->owner->SetCommandDone(false);s->core.Advance();}}
 void SubmitWorld(State*s){
- if(!Alive(s)||!Renderer||s->rendered==TTime::FrameCount())return;s->rendered=TTime::FrameCount();hmm_mat4 root;const auto&p=s->owner->Pos();if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(s->owner->GetFace()));else root=s->owner->Transform().Matrix();int count=0;
+ if(!Alive(s)||!Renderer||s->rendered==TTime::FrameCount())return;s->rendered=TTime::FrameCount();hmm_mat4 root;const auto&p=IntPos(s->owner);if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(IntFacing(s->owner)));else root=s->owner->Transform().Matrix();int count=0;
  s->core.Render([&](int object,uint32_t,const hmm_mat4&local){hmm_mat4 world;MtxMultiply(&world,const_cast<hmm_mat4*>(&local),&root);SHelperMeshSubmit draw={};draw.mesh=s->meshes[object];draw.retail_lighting=3;draw.retail_source_alpha=true;draw.retail_software_projection=StartupVfxNativeDomain;for(int row=0;row<4;++row)for(int col=0;col<4;++col)draw.world[row*4+col]=world.Elements[col][row];Renderer->SubmitRetailSourceAlphaAfterFx(draw);++count;});
  if(s->core.ticks<=6||s->core.ticks==19||s->core.ticks==20||s->core.ticks==50||s->core.ticks==200)log_info("[irisflare-phase] tick=%d iterations=%d draws=%d rotation=%.9g cylinder=%.9g",s->core.ticks,s->core.iterations,count,s->core.rotation,s->core.cylinder[0]);
 }

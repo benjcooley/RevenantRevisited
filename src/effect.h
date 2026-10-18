@@ -553,7 +553,7 @@ class TIceEffect : public TEffect
   public:
     TIceEffect(TObjectImagery* newim) : TEffect(newim) { flags |= OF_MOVING; }
     TIceEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim)
-        { pos.y += ICEDIST; pos.x -= ICEDIST; pos.z += ICEDIST; flags |= OF_MOVING; }
+        { SetIntPos(*this, IntPos(*this) + S3DPoint(-ICEDIST, ICEDIST, ICEDIST)); flags |= OF_MOVING; }
 
     virtual void Pulse();
 };
@@ -2328,6 +2328,8 @@ _CLASSDEF(TDripEffect)
 
 class TDripEffect : public TEffect
 {
+    friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
+    friend class TLegacySerialize;
   public:
     TDripEffect(TObjectImagery* newim) : TEffect(newim) {}
     TDripEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
@@ -2336,8 +2338,6 @@ class TDripEffect : public TEffect
     void Pulse() override;
     void SetParams(int32_t ri, int32_t he, int32_t pe) { ripplesize = ri; height = he; period = pe; }
     void GetParams(int32_t* ri, int32_t* he, int32_t* pe) { *ri = ripplesize; *he = height; *pe = period; }
-    void Load(RTInputStream is, int32_t version, int32_t objversion) override;
-    void Save(RTOutputStream os) override;
     // Loads the authored Magic\\drip.i3d quad; defaults64/128/48 are
     // unchanged. Short A/B demos must explicitly SetParams(64,128,1).
     [[nodiscard]] static TDripEffect* SpawnForTest(const S3DPoint& origin);
@@ -4081,10 +4081,6 @@ class TAmbSoundEffect : public TEffect
     TAmbSoundEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TAmbSoundEffect() { if (id > 0) SoundPlayer.Unmount(id); }
 
-    virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
-        // Loads object data from the sector
-    virtual void Save(RTOutputStream os);
-        // Saves object data to the sector
     virtual void Initialize();
     virtual void Pulse();
 

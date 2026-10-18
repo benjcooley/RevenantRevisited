@@ -122,63 +122,7 @@ void GiveSpawnTreasure(TObjectInstance* monster, int32_t tier)
     monster->AddToInventory("Gold", random(t.goldmin, t.goldmax));
 }
 
-// A NUL-terminated string from the stream (the stream reads zeros past its
-// end, so this always ends).
-std::string ReadCString(TInputStream& is)
-{
-    std::string text;
-    char c = 0;
-    is >> c;
-    while (c != '\0')
-    {
-        text += c;
-        is >> c;
-    }
-    return text;
-}
-
 } // namespace
-
-void TMonsterGen::Load(TInputStream& is, int32_t version, int32_t objversion)
-{
-    THelper::Load(is, version, objversion);
-
-    uint8_t count = 0;
-    is >> count;
-    for (int32_t i = 0; i < count; i++)
-    {
-        const std::string type = ReadCString(is);
-        int32_t treasure = 0, frequency = 0;
-        is >> treasure >> frequency;
-        AddType(type.c_str(), frequency, treasure);
-
-        // Before version 15 a loaded clock starts at the load. Retail put the
-        // start in the i-th slot, which AddType has just filled.
-        if (version >= 15)
-        {
-            int32_t start = 0;
-            is >> start;
-            if (i < kMaxTypes && slots[i])
-                slots[i]->start = start;
-        }
-    }
-    is >> maxmonsters;
-}
-
-void TMonsterGen::Save(TOutputStream& os)
-{
-    THelper::Save(os);
-
-    os << uint8_t(NumTypes());
-    for (const std::optional<SSlot>& slot : slots)
-    {
-        if (!slot)
-            continue;
-        os.WriteBytes(slot->type.c_str(), int32_t(slot->type.size()) + 1);
-        os << slot->treasure << slot->frequency << slot->start;
-    }
-    os << maxmonsters;
-}
 
 // REVSYNC: TMonsterGen::OnScreen @ 0x00517660 / OffScreen @ 0x00517640 kept
 // +0xf0 as retail's animate pass (TMapPane::AnimateObjects 0x00458750) told
@@ -193,7 +137,7 @@ void TMonsterGen::Pulse()
     if (onscreen && *onscreen == offscreen)
     {
         offscreen = !*onscreen;
-        log_debug("[monstergen] %s at (%d, %d) is %s screen", GetName(), Pos().x, Pos().y, offscreen ? "off" : "on");
+        log_debug("[monstergen] %s at (%d, %d) is %s screen", GetName(), IntPos(*this).x, IntPos(*this).y, offscreen ? "off" : "on");
     }
 
     // The "dummies" cheat (0x00668110) stops generators with the monsters.
@@ -221,13 +165,13 @@ void TMonsterGen::Pulse()
         slot.start = PlayScreen.GameTime();
 
         int32_t found[kCountMax] = {};
-        const int32_t near = MapPane.FindObjectsInRange(Pos(), GetLevel(), found, kCountRadius, 0,
+        const int32_t near = MapPane.FindObjectsInRange(IntPos(*this), GetLevel(), found, kCountRadius, 0,
                                                         OBJCLASS_CHARACTER, kCountMax, OBJSET_CHARACTER);
         if (near < maxmonsters)
             Spawn(i);
         else
             log_debug("[monstergen] %s at (%d, %d): %s due, but %d characters within %d (cap %d)",
-                      GetName(), Pos().x, Pos().y, slot.type.c_str(), near, kCountRadius, maxmonsters);
+                      GetName(), IntPos(*this).x, IntPos(*this).y, slot.type.c_str(), near, kCountRadius, maxmonsters);
     }
 }
 
@@ -276,7 +220,7 @@ void TMonsterGen::Spawn(int32_t index)
         return;
 
     const SSlot& slot = *slots[index];
-    const S3DPoint home = Pos();
+    const S3DPoint home = IntPos(*this);
 
     S3DPoint at{};
     int32_t facing = 0;

@@ -56,7 +56,7 @@ State* Spawn(const S3DPoint& source)
     if(!owner || owner->ObjId()!=0xaeaeeb27u || !dynamic_cast<TEffect*>(owner))return nullptr;
     // Controlled coordinates can lie outside loaded map sectors. Establish
     // the explicit fixture transform before creating the animator/controllers.
-    owner->ForcePos(source);owner->Face(0);owner->OnScreen();
+    SetIntPos(owner, source);owner->Face(0);owner->OnScreen();
     auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());auto* animator=dynamic_cast<T3DAnimator*>(owner->GetAnimator());
     if(!image || !animator || !ValidateYPowerUp(*image))return nullptr;
     // Original 40e8d0 renders controllers first, then texture-major objects.
@@ -94,7 +94,7 @@ void SubmitWorld(State* c,EFxDebugMode)
 {
     if(!c || !c->owner || !Renderer || (c->owner->GetFlags()&OF_KILL))return;
     auto* o=c->owner.get();o->Animate(false);auto* a=dynamic_cast<T3DAnimator*>(o->GetAnimator());auto* image=a->Get3DImagery();
-    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=o->Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(o->GetFace()));}
+    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=IntPos(o);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(o)));}
     for(const auto& part:c->parts){
         hmm_vec3 p{},r{},s{};if(!image->GetUninterpolatedAniKey(part.object,o->GetState(),o->GetFrame(),p,r,s,true) || s.X<=1e-5f || s.Y<=1e-5f || s.Z<=1e-5f)continue;
         hmm_mat4 local;BuildRetailYPowerUpMatrix(local,part.object,p,r,s);

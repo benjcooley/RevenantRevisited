@@ -141,8 +141,8 @@ void TCharacter::BaezCrowd(SBaezState& s)
     if (health < s.health)
         boo = true;
 
-    const S3DPoint player = Player ? Player->Pos() : S3DPoint{};
-    const S3DPoint mid((player.x + pos.x) / 2, (pos.y + player.y) / 2, (pos.z + player.z) / 2);
+    const S3DPoint player = Player ? IntPos(Player) : S3DPoint{};
+    const S3DPoint mid((player.x + IntPos(*this).x) / 2, (IntPos(*this).y + player.y) / 2, (IntPos(*this).z + player.z) / 2);
     for (const TSafeRef<TComplexObject>& ref : s.watchers)
     {
         TComplexObject* watcher = ref.Get();
@@ -150,7 +150,7 @@ void TCharacter::BaezCrowd(SBaezState& s)
             continue;
         if (!watcher->GetAnimator())
             watcher->CreateAnimator();
-        watcher->Face(ConvertToFacing(watcher->Pos(), mid));
+        watcher->Face(ConvertToFacing(IntPos(watcher), mid));
         for (const SCrowdMood& mood : kCrowdMoods)
             if (watcher->IsRoot(mood.root))
             {
@@ -216,7 +216,7 @@ void TCharacter::BaezStuns(SBaezState& s)
 void TCharacter::BaezFall(SBaezState& s)
 {
     charflags |= kCharFlagNoTurn;
-    const S3DPoint me = Pos();
+    const S3DPoint me = IntPos(*this);
     if (s.stage == 0 && !BaezSetUpFall(s))
         return;
     if (s.stage == 1)
@@ -263,7 +263,7 @@ bool TCharacter::BaezSetUpFall(SBaezState& s)
         return false;
     }
   // (Retail sets firstspot only while it is (0, 0, 0): always, cleared above.)
-    const S3DPoint t = table->Pos();
+    const S3DPoint t = IntPos(table);
     s.firstspot = S3DPoint(t.x + 0x20, t.y + 0x1b0, t.z + 0x58);
     s.playerspot = S3DPoint(t.x, t.y + 0xa0, t.z);
     s.baezspot = S3DPoint(t.x, t.y + 0x15e, t.z);
@@ -290,7 +290,7 @@ void TCharacter::BaezWalk(SBaezState& s, const S3DPoint& me)
     Face(ConvertToFacing(me, s.baezspot));
     S3DPoint spot = s.playerarrived ? s.playerspot : s.firstspot;
   // Retail reads whatever its stack holds for a missing player here.
-    const S3DPoint player = Player ? Player->Pos() : S3DPoint{};
+    const S3DPoint player = Player ? IntPos(Player) : S3DPoint{};
     if (!s.playerarrived && RoughDistance(player, spot) < 32)
     {
       // On this tick the spot is cleared before the test below: the player
@@ -314,7 +314,7 @@ void TCharacter::BaezWalk(SBaezState& s, const S3DPoint& me)
         if (near < 0x20)
         {
             const TObjectInstance* table = MapPane.GetInstance(s.table);
-            Face(ConvertToFacing(me, table ? table->Pos() : S3DPoint{}));
+            Face(ConvertToFacing(me, table ? IntPos(table) : S3DPoint{}));
             S3DPoint baezspot = s.baezspot;
             MoveTo(baezspot);
             Try("walkf");
@@ -444,9 +444,9 @@ void TCharacter::BossSolifuge(SSolifugeState& s)
             return;
         }
         Player->charflags &= ~kCharFlagDeathHold;
-        player = Player->Pos();
+        player = IntPos(Player);
     }
-    const S3DPoint me = Pos();
+    const S3DPoint me = IntPos(*this);
     const uint32_t objflags = flags;
     const int32_t pct = Health() * 100 / MaxHealth();
     if (pct > 66 && pct <= 100)
@@ -625,7 +625,7 @@ void TCharacter::SolifugeBrood(SSolifugeState& s)
         if (def.objtype >= 0)
         {
             def.level = static_cast<uint16_t>(MapPane.GetMapLevel());
-            def.pos = Pos();
+            def.pos = IntPos(*this);
             def.objclass = OBJCLASS_CHARACTER;
             const int32_t xoffset = random(0, Radius() * 8);
             def.pos.x += xoffset - Radius() * 4;
@@ -739,7 +739,7 @@ void TCharacter::BossJhaga(SJhagaState& s)
     }
     if (s.frame == 0)
     {
-        MakeEffect("jtele", Pos());
+        MakeEffect("jtele", IntPos(*this));
         Try("cinv2");
     }
     if (s.frame == 6)
@@ -757,8 +757,8 @@ void TCharacter::BossJhaga(SJhagaState& s)
             CastByName("Priest Fire Wind");
         else
         {
-            const S3DPoint from = Pos();
-            const S3DPoint to = Player ? Player->Pos() : s.points[4];
+            const S3DPoint from = IntPos(*this);
+            const S3DPoint to = Player ? IntPos(Player) : s.points[4];
             Face(ConvertToFacing(from, to));
             CastByName("Priest Fireball");
         }
@@ -801,7 +801,7 @@ bool TCharacter::JhagaSetUp(SJhagaState& s)
     S3DPoint sum{};
     for (size_t i = 0; i < at.size(); ++i)
     {
-        at[i] = waypoints[i]->Pos();
+        at[i] = IntPos(waypoints[i]);
         sum.x += at[i].x;
         sum.y += at[i].y;
         sum.z += at[i].z;

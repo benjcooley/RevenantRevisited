@@ -190,7 +190,7 @@ void TTerrainTemplate::ApplyTemplate(TObjectInstance* inst, TSector* sect, int32
     t = foundlist[random(0, numfound - 1)];
 
     S3DPoint pos;
-    inst->GetPos(pos);
+    pos = IntPos(inst);
 
     for (int32_t i = 0; i < templates[t].numobjects; i++)
     {

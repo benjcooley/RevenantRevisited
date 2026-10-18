@@ -293,7 +293,7 @@ bool UpdateFloor(const S3DPoint& camera) {
     for(int index:ground_objects) {
         auto* tile=MapPane.GetInstance(index);
         if(!tile) continue;
-        const auto p=tile->Pos();
+        const auto p=IntPos(tile);
         if(std::abs(p.x-cx)>960 || std::abs(p.y-cy)>960) MapPane.DeleteObject(tile);
         else { retained.push_back(index); present.insert({p.x,p.y}); }
     }
@@ -482,12 +482,12 @@ void Spawn(Entry& e, size_t index) {
     }
     if(authored_icebolt) {
         e.beam.reset(TIceBoltEffect_Bespoke::SpawnForTest_BESPOKE(source));
-        if(!e.beam || !e.beam->SetBeamEndpoints(e.beam->Pos(),target)) {
+        if(!e.beam || !e.beam->SetBeamEndpoints(IntPos(e.beam),target)) {
             e.beam.reset(); e.failed=true; e.missing_visual=true;
             e.status="Beam runtime initialization failed"; return;
         }
         e.missing_visual=false; e.status="Authored stationary beam and endpoint march"; ++e.cycles;
-        const auto& lifted=e.beam->Pos();
+        const auto& lifted=IntPos(e.beam);
         log_info("[vfx-review] beam name=%s cycle=%u source=%d,%d,%d target=%d,%d,%d target_fixture=1",
             e.name.c_str(),e.cycles,lifted.x,lifted.y,lifted.z,target.x,target.y,target.z);
         return;

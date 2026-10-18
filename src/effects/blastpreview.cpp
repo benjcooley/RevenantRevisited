@@ -64,7 +64,7 @@ void SubmitWorld(State* s)
 {
  if(!Alive(s) || !Renderer)return;
  auto* img=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!img)return;
- img->SetPrevState(-1,0);hmm_mat4 root;const auto& origin=s->owner->Pos();
+ img->SetPrevState(-1,0);hmm_mat4 root;const auto& origin=IntPos(s->owner);
  if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,origin.x,origin.y,origin.z,0);else root=s->owner->Transform().Matrix();
  int draws=0;
  for(const auto& part:s->parts){

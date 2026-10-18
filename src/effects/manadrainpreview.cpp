@@ -24,7 +24,7 @@ struct State {
  double accumulator=0;
  uint64_t initial_draws=0;
  int64_t rendered=-1;
- ~State(){if(caster && target && spell){const auto& p=target->Pos();log_info("[manadrain-cleanup] tick=%d alive=%d mana=%d/%d health=%d/%d target=(%d,%d,%d) flags=%x/%x spell_timer=%d",tick,int(core.alive),caster->Mana(),target->Mana(),caster->Health(),target->Health(),p.x,p.y,p.z,caster->Flags(),target->Flags(),spell->TimerValue());}if(auto* effect=dynamic_cast<TEffect*>(owner.get()))effect->SetSpell(nullptr);if(Renderer)for(auto mesh:meshes)if(mesh)Renderer->ReleaseMeshAssetRef(mesh);}
+ ~State(){if(caster && target && spell){const auto& p=IntPos(target);log_info("[manadrain-cleanup] tick=%d alive=%d mana=%d/%d health=%d/%d target=(%d,%d,%d) flags=%x/%x spell_timer=%d",tick,int(core.alive),caster->Mana(),target->Mana(),caster->Health(),target->Health(),p.x,p.y,p.z,caster->Flags(),target->Flags(),spell->TimerValue());}if(auto* effect=dynamic_cast<TEffect*>(owner.get()))effect->SetSpell(nullptr);if(Renderer)for(auto mesh:meshes)if(mesh)Renderer->ReleaseMeshAssetRef(mesh);}
 };
 static State* Spawn(const S3DPoint& origin,bool isolated_seed,bool essence=false){
  if(!Renderer || !SpellList.Initialize())return nullptr;
@@ -60,14 +60,14 @@ void Advance(State* s,double dt){
  while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;if(!Alive(s))return;s->owner->NextFrame();
   if(s->core.stage<0)s->caster->Face(s->owner->AngleTo(s->target.get()));
   s->core.Pulse(s->minimum,s->maximum,[](int a,int b){return random(a,b);},[&](int amount){amount=(std::min)(amount,s->target->Mana());s->caster->SetMana((std::min)(s->caster->Mana()+amount,s->caster->MaxMana()));s->target->SetMana(s->target->Mana()-amount);return amount;},[&]{s->spell->Kill();s->owner->SetFlag(OF_KILL);});
-  ++s->tick;if(Alive(s)){const auto& a=s->caster->Pos();const auto& b=s->target->Pos();s->core.Animate({a.x,a.y,int(RetailSoftwareOwnerZ(a.z))},{b.x,b.y,int(RetailSoftwareOwnerZ(b.z))},ConvertToFacing(a,b),[](int a,int b){return random(a,b);},[](manadrain_core::Point a,manadrain_core::Point b){return ::Distance(S3DPoint(a.x,a.y,a.z),S3DPoint(b.x,b.y,b.z));});}
+  ++s->tick;if(Alive(s)){const auto& a=IntPos(s->caster);const auto& b=IntPos(s->target);s->core.Animate({a.x,a.y,int(RetailSoftwareOwnerZ(a.z))},{b.x,b.y,int(RetailSoftwareOwnerZ(b.z))},ConvertToFacing(a,b),[](int a,int b){return random(a,b);},[](manadrain_core::Point a,manadrain_core::Point b){return ::Distance(S3DPoint(a.x,a.y,a.z),S3DPoint(b.x,b.y,b.z));});}
   log_info("[manadrain-phase] tick=%d stage=%d remaining=%d amount=%d scale=%.9g mana=%d/%d alive=%d",s->tick,s->core.stage,s->core.ticks,s->core.amount,s->core.scale,s->caster->Mana(),s->target->Mana(),int(Alive(s)));
  }
 }
 void SubmitWorld(State* s){
  if(!Alive(s) || !Renderer || s->rendered==TTime::FrameCount())return;s->rendered=TTime::FrameCount();const float glow=s->core.RenderGlowScale([](int a,int b){return random(a,b);});
  const auto& p=s->core.position[0];log_info("[manadrain-draw] tick=%d rng=%llu first=(%d,%d,%d) scale=%.9g rotation=%.9g glow=%.9g",s->tick,static_cast<unsigned long long>(RandomDraws()-s->initial_draws),p.x,p.y,p.z,s->core.scale,s->core.rotation,glow);
- manadrain_core::ForEachDraw(s->core,ConvertToFacing(s->caster->Pos(),s->target->Pos()),glow,[&](int object,hmm_mat4 matrix,bool){
+ manadrain_core::ForEachDraw(s->core,ConvertToFacing(IntPos(s->caster),IntPos(s->target)),glow,[&](int object,hmm_mat4 matrix,bool){
   matrix.Elements[3][0]+=s->display.x-3185;matrix.Elements[3][1]+=s->display.y-3185;matrix.Elements[3][2]+=RetailSoftwareOwnerZ(s->display.z)-RetailSoftwareOwnerZ(16);
   SHelperMeshSubmit draw={};draw.mesh=s->meshes[object-2];draw.retail_lighting=3;draw.retail_source_alpha=true;draw.retail_alpha_source_quantize=StartupVfxNativeDomain;draw.retail_software_projection=StartupVfxNativeDomain;
   for(int row=0;row<4;++row)for(int col=0;col<4;++col)draw.world[row*4+col]=matrix.Elements[col][row];Renderer->SubmitHelperMesh(draw);

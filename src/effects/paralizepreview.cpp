@@ -26,7 +26,7 @@ struct State {
   if(!target || target_cleanup_done)return;
   target->SetParalize((target_initial_flags&OF_PARALIZE)!=0);
   target->SetFlag(OF_DISABLED,(target_initial_flags&OF_DISABLED)!=0);
-  S3DPoint p;target->GetPos(p);
+  S3DPoint p;p = IntPos(target);
   log_info("[paralize-target-cleanup] tick=%d alive=%d flags_before=%x flags_after=%x health=%d target=(%d,%d,%d)",completed_tick<0?ticks:completed_tick,int(core.alive),target_initial_flags,target->Flags(),target->Health(),p.x,p.y,p.z);
   target_cleanup_done=true;
  }
@@ -83,7 +83,7 @@ void Advance(State* s,double dt)
 {
  if(!s || !std::isfinite(dt) || dt<=0)return;s->accumulator+=dt;
  while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;if(!Alive(s))return;if(s->target){
-   S3DPoint t;s->target->GetPos(t);s->target->Disable();s->target->Stop();s->target->SetParalize(true);
+   S3DPoint t;t = IntPos(s->target);s->target->Disable();s->target->Stop();s->target->SetParalize(true);
    s->core.TickTarget([](int a,int b){return random(a,b);},s->origin,{t.x,t.y,int(RetailSoftwareOwnerZ(t.z))},s->target->Radius(),1);
    if(!s->core.alive){s->owner->SetFlag(OF_KILL);s->CleanupTarget(s->ticks+1);}
   }else s->core.Tick([](int a,int b){return random(a,b);},s->origin);++s->ticks;
