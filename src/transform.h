@@ -51,6 +51,8 @@
 #include <cstdint>
 #include <vector>
 
+class TNodeInst;
+
 class TTransform : public TSafeObjectBase<TTransform>
 {
   public:
@@ -82,6 +84,11 @@ class TTransform : public TSafeObjectBase<TTransform>
     TTransform& operator=(TTransform&&)      = delete;
 
     // ---- Hierarchy ---------------------------------------------------------
+
+    // The node this transform belongs to (nullptr for a bare transform,
+    // e.g. in tests). Set once by the owning TNodeInst's constructor;
+    // lets hierarchy traversal reach names and components.
+    [[nodiscard]] TNodeInst*  Node() const { return node_; }
 
     [[nodiscard]] TTransform* Parent() const { return parent_; }
     void                      SetParent(TTransform* parent);
@@ -186,6 +193,10 @@ class TTransform : public TSafeObjectBase<TTransform>
     void AddChildEntry(TTransform* child);
     void RemoveChildEntry(TTransform* child);
 
+    friend class TNodeInst;
+    void SetNode(TNodeInst* node) { node_ = node; }
+
+    TNodeInst*                node_   = nullptr;
     TTransform*               parent_ = nullptr;
     std::vector<TTransform*>  children_;
         // Eagerly-allocated. Empty for leaves; sizeof(vector) overhead

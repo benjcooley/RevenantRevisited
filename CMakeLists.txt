@@ -9,6 +9,30 @@ project(RevenantRevisited
   LANGUAGES C CXX
 )
 include(FetchContent)
+
+# ----------------------------------------------------------------------------
+# Annotated properties (docs/vfx/PREFAB_SYSTEM.md §2). Headers mark members
+# with PROP(id); until our compilers read C++26 annotations, tools/reflect/
+# gen.py emits the property tables + Set/Get switches into the build tree.
+# rev_reflect(<target> <header>...) wires one generated .cpp per header into
+# the target. Delete this block and the script when the compilers catch up.
+# ----------------------------------------------------------------------------
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+set(REV_REFLECT_GEN "${CMAKE_SOURCE_DIR}/tools/reflect/gen.py")
+function(rev_reflect target)
+  foreach(header IN LISTS ARGN)
+    get_filename_component(abs "${header}" ABSOLUTE)
+    get_filename_component(stem "${header}" NAME_WE)
+    set(out "${CMAKE_BINARY_DIR}/generated/reflect/${target}_${stem}.props.cpp")
+    add_custom_command(
+      OUTPUT "${out}"
+      COMMAND ${Python3_EXECUTABLE} -I "${REV_REFLECT_GEN}" "${abs}" "${out}"
+      DEPENDS "${abs}" "${REV_REFLECT_GEN}"
+      COMMENT "reflect: ${header}"
+      VERBATIM)
+    target_sources(${target} PRIVATE "${out}")
+  endforeach()
+endfunction()
 if(APPLE)
   enable_language(OBJC)
 endif()
@@ -181,6 +205,13 @@ endif()
 
 add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
 target_link_libraries(Revenant PRIVATE imgui revsmk)
+# Annotated classes (PROP / PROP_FN). One line per header; see rev_reflect.
+rev_reflect(Revenant
+  src/nodeinst.h
+  src/object.h
+  src/sector.h
+  src/particledef.h
+  src/particlecomponent.h)
 
 # buildinfo.h: the commit the binary is built from (the playtest recordings
 # name it) and its version (the main menu shows it). Regenerated every
@@ -252,6 +283,42 @@ target_include_directories(test_particlefx PRIVATE
   ${SOKOL_DIR}
   ${HANDMADE_MATH_DIR})
 target_compile_definitions(test_particlefx PRIVATE REV_ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")
+
+add_executable(test_props
+  tools/test_props.cpp
+  src/refl.cpp
+  src/packed.cpp)
+target_include_directories(test_props PRIVATE ${HANDMADE_MATH_DIR})
+target_link_libraries(test_props PRIVATE GTest::gtest_main)
+rev_reflect(test_props tools/test_props_types.h)
+
+add_executable(test_defio
+  tools/test_defio.cpp
+  src/defio.cpp
+  src/nodepack.cpp
+  src/nodeinst.cpp
+  src/transform.cpp
+  src/animsystem.cpp
+  src/math3d.cpp
+  src/refl.cpp
+  src/packed.cpp
+  src/particledef.cpp)
+target_include_directories(test_defio PRIVATE ${HANDMADE_MATH_DIR})
+target_compile_definitions(test_defio PRIVATE REV_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_link_libraries(test_defio PRIVATE GTest::gtest_main)
+rev_reflect(test_defio tools/test_defio_types.h src/nodeinst.h src/particledef.h)
+
+add_executable(test_nodeinst
+  tools/test_nodeinst.cpp
+  src/nodeinst.cpp
+  src/transform.cpp
+  src/animsystem.cpp
+  src/math3d.cpp
+  src/refl.cpp
+  src/packed.cpp)
+target_include_directories(test_nodeinst PRIVATE ${HANDMADE_MATH_DIR})
+target_link_libraries(test_nodeinst PRIVATE GTest::gtest_main)
+rev_reflect(test_nodeinst src/nodeinst.h)
 
 add_executable(test_savefile
   tools/test_savefile.cpp
@@ -444,9 +511,12 @@ endforeach()
 foreach(test IN ITEMS
     test_audio_decode
     test_classiclighting
+    test_defio
     test_defwidget
     test_particlefx
+    test_nodeinst
     test_playerstats
+    test_props
     test_savefile
     test_sectorstore
     test_shadowplan)

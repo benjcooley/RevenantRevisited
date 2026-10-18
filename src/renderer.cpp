@@ -6284,6 +6284,9 @@ void TRenderer::SubmitFxParticleBucket(const TParticleBucket& bucket,
     {
         const float* dp = bucket.VarPtr(i, EParticleVar::DrawPos);
         if (!dp) continue;
+        // Held by a start delay: not drawn yet.
+        if (const float* delay = bucket.VarPtr(i, EParticleVar::Delay); delay && *delay > 0.0f)
+            continue;
         SParticleDrawItem item = {};
         item.world_pos[0] = dp[0];
         item.world_pos[1] = dp[1];
@@ -6309,13 +6312,15 @@ void TRenderer::SubmitFxParticleBucket(const TParticleBucket& bucket,
             item.color_rgba[3] = dc[3];
         }
 
-        // UV priority: explicit DrawUvRect (per-particle override) >
-        // sprite-grid pick from DrawFrame > whole texture.
+        // UV priority: explicit DrawUvRect (per-particle override; a zero
+        // size means "unset") > sprite-grid pick from DrawFrame > whole
+        // texture.
         item.uv_rect[0] = 0.0f;
         item.uv_rect[1] = 0.0f;
         item.uv_rect[2] = 1.0f;
         item.uv_rect[3] = 1.0f;
-        if (const float* du = bucket.VarPtr(i, EParticleVar::DrawUvRect))
+        const float* du = bucket.VarPtr(i, EParticleVar::DrawUvRect);
+        if (du && du[2] > 0.0f && du[3] > 0.0f)
         {
             item.uv_rect[0] = du[0];
             item.uv_rect[1] = du[1];
@@ -6349,6 +6354,25 @@ void TRenderer::SubmitFxParticleBucket(const TParticleBucket& bucket,
         item.light_mode  = light_mode;
         item.orientation = orientation;
         SubmitFxParticle(item);
+
+        // Motion-streak copies along the velocity (retail "trails": the
+        // same sprite re-drawn one tick ahead, with gravity applied).
+        if (desc.trail_count > 1)
+        {
+            const float* vel = bucket.VarPtr(i, EParticleVar::EmitVel);
+            if (!vel) continue;
+            float p[3] = { dp[0], dp[1], dp[2] };
+            float v[3] = { vel[0], vel[1], vel[2] };
+            for (int32_t k = 1; k < desc.trail_count; ++k)
+            {
+                p[0] += v[0]; p[1] += v[1]; p[2] += v[2];
+                v[2] -= desc.trail_gravity;
+                item.world_pos[0] = p[0];
+                item.world_pos[1] = p[1];
+                item.world_pos[2] = p[2];
+                SubmitFxParticle(item);
+            }
+        }
     }
 }
 

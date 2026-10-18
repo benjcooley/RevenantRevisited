@@ -340,6 +340,63 @@ TEST(ParticleFxBucket, LayoutAndOwnerCleanup)
     EXPECT_FALSE(bucket.Active());
 }
 
+// Swizzle reads inside step / select statements: a spark bounce body.
+// Regression for the swizzle-as-stack-ref desync (a `pos.z` read mid-slot
+// carried the wrong lane count, so the next slots computed garbage and a
+// spark 47 units up "bounced" with pos.z = pos.y).
+TEST(ParticleFxStatements, SwizzleStepSelectOnBucket)
+{
+    SParticleBufferLayout layout = {};
+    ASSERT_TRUE(ParticleLayoutAddVar(layout, EParticleVar::OwnerId));
+    ASSERT_TRUE(ParticleLayoutAddVar(layout, EParticleVar::Life));
+    ASSERT_TRUE(ParticleLayoutAddVar(layout, EParticleVar::DrawPos));
+    ASSERT_TRUE(ParticleLayoutAddVar(layout, EParticleVar::DrawScl));
+    ASSERT_TRUE(ParticleLayoutAddVar(layout, EParticleVar::EmitVel));
+    SParticleBucketDesc desc = {};
+    desc.name = "swz";
+    TParticleBucket bucket(desc, layout);
+    const int p = bucket.AddParticle(1.0f, -1.0f);
+    float* pos = bucket.VarPtr(p, EParticleVar::DrawPos);
+    float* scl = bucket.VarPtr(p, EParticleVar::DrawScl);
+    float* vel = bucket.VarPtr(p, EParticleVar::EmitVel);
+    pos[0] = 1.0f; pos[1] = 2.0f; pos[2] = 47.0f;
+    scl[0] = 8.5f; scl[1] = 6.9f; scl[2] = 1.0f;
+    vel[0] = 0.8f; vel[1] = 0.1f; vel[2] = -0.25f;
+    const float emit_pos[3] = {0, 0, 0};
+    const float emit_vel[3] = {0, 0, 0};
+
+    TParticleExpression tick;
+    std::string err;
+    ASSERT_TRUE(tick.Compile(
+        "pos = pos + vel;"
+        "vel.z = vel.z - 0.25;"
+        "scale.x = select(step(pos.z, emit_pos.z) * step(-4, vel.z), 0, scale.x);"
+        "vel.z = select(step(pos.z, emit_pos.z), vel.z * -0.5, vel.z);"
+        "pos.z = select(step(pos.z, emit_pos.z), 2 * emit_pos.z - pos.z, pos.z);",
+        &err, EParticleExprMode::Statements)) << err;
+    SParticleEvalContext ctx = {};
+
+    // Mid-air: integrates, no bounce, no kill.
+    tick.EvalParticle(ctx, bucket, p, emit_pos, emit_vel);
+    expect_near(pos[0], 1.8f);
+    expect_near(pos[1], 2.1f);
+    expect_near(pos[2], 46.75f);
+    expect_near(vel[2], -0.5f);
+    expect_near(scl[0], 8.5f);
+
+    // Falling fast through the ground: mirrored, vz halved and flipped, alive.
+    pos[2] = 1.0f; vel[2] = -6.0f;
+    tick.EvalParticle(ctx, bucket, p, emit_pos, emit_vel);
+    expect_near(pos[2], 5.0f);           // 1 - 6 = -5, mirrored about the ground
+    expect_near(vel[2], 3.125f);         // vz after gravity -6.25, flipped and halved
+    expect_near(scl[0], 8.5f);
+
+    // Landing slowly: spent (scale 0).
+    pos[2] = 0.5f; vel[2] = -1.0f; scl[0] = 8.5f;
+    tick.EvalParticle(ctx, bucket, p, emit_pos, emit_vel);
+    expect_near(scl[0], 0.0f);
+}
+
 TEST(ParticleFxManager, GlobalBucketLookup)
 {
     SParticleBufferLayout layout = {};
