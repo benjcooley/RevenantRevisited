@@ -35,9 +35,10 @@ class ChangedFilesTests(unittest.TestCase):
         return self.git("rev-parse", "HEAD")
 
     def selected(self, *, ref="refs/heads/feature", before=None, event_name="push"):
-        return cpp_changed(self.root, event_name, {
-            "repository": {"default_branch": "main"}, "before": before or self.base,
-        }, ref)
+        event = {"repository": {"default_branch": "main"}, "before": before or self.base}
+        if event_name == "pull_request":
+            event["pull_request"] = {"base": {"ref": "main"}}
+        return cpp_changed(self.root, event_name, event, ref)
 
     def test_rust_docs_and_rust_workflow_do_not_build_cpp(self):
         self.commit("rust/src/main.rs")
@@ -54,6 +55,12 @@ class ChangedFilesTests(unittest.TestCase):
                 self.git("checkout", "-B", "fixture", self.base)
                 self.commit(path)
                 self.assertTrue(self.selected())
+
+    def test_a_pull_request_compares_against_its_base_branch(self):
+        self.commit("docs/design.md")
+        self.assertFalse(self.selected(event_name="pull_request", ref="refs/pull/7/merge"))
+        self.commit("src/object.cpp")
+        self.assertTrue(self.selected(event_name="pull_request", ref="refs/pull/7/merge"))
 
     def test_cpp_change_survives_a_rust_only_followup_push(self):
         previous = self.commit("src/renderer.cpp")

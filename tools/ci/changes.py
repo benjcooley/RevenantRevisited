@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Select C++ CI from the files changed by a push, without skipping its checks."""
+"""Select C++ CI from the files a push or pull request changed, without skipping its checks."""
 
 from __future__ import annotations
 
@@ -19,21 +19,23 @@ CPP_PATHS = (
 
 def cpp_changed(root: Path, event_name: str, event: dict, ref: str) -> bool:
     # Manual runs deliberately rebuild. Unknown events also build conservatively.
-    if event_name != "push":
+    if event_name not in ("push", "pull_request"):
         return True
 
     def git(*args: str) -> subprocess.CompletedProcess:
         return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
 
     default_branch = event["repository"]["default_branch"]
-    if ref == f"refs/heads/{default_branch}":
+    if event_name == "push" and ref == f"refs/heads/{default_branch}":
         base = event["before"]
         if not base or set(base) == {"0"}:
             return True
     else:
-        # Use the whole branch's diff: a Rust-only follow-up must not turn a
-        # previous failed C++ build into skipped checks on the same PR.
-        merge_base = git("merge-base", "HEAD", f"refs/remotes/origin/{default_branch}")
+        # Use the whole branch's diff against the branch it will merge into:
+        # a Rust-only follow-up must not turn a previous failed C++ build into
+        # skipped checks on the same PR.
+        base_branch = event["pull_request"]["base"]["ref"] if event_name == "pull_request" else default_branch
+        merge_base = git("merge-base", "HEAD", f"refs/remotes/origin/{base_branch}")
         if merge_base.returncode:
             print("::warning::Cannot determine the branch base; running C++ CI.")
             return True

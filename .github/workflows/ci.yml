@@ -2,12 +2,18 @@
 # the packages to downloads.revenantrevisited.com. Other changes skip those jobs.
 # The three "Build & test" checks gate merges into main. docs/CI.md has the
 # details.
+#
+# Pull requests are built on pull_request, from this repository and from
+# forks alike, at the pull request's head commit; main is built on push. A
+# fork's run claims no version (its token is read-only) and publishes
+# nothing; its packages are the run's artifacts.
 
 name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -20,6 +26,10 @@ permissions:
   contents: read
 
 env:
+  # The commit under test and the branch it is on: a pull request's head,
+  # not the merge commit GitHub would check out by default.
+  REVENANT_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+  REVENANT_BRANCH: ${{ github.head_ref || github.ref_name }}
   DOWNLOADS_URL: https://downloads.revenantrevisited.com
   PYTHONUNBUFFERED: "1"
   CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -45,6 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          ref: ${{ env.REVENANT_COMMIT }}
           sparse-checkout: tools/ci
           fetch-depth: 0
 
@@ -55,7 +66,8 @@ jobs:
         run: python3 tools/ci/changes.py
 
       - id: claim
-        if: steps.changes.outputs.cpp != 'false'
+        # A fork's pull request builds with BuildInfo.cmake's local version.
+        if: steps.changes.outputs.cpp != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         run: python3 tools/ci/ci.py version
 
   # Static names let each required check report skipped without a runner.
@@ -74,6 +86,8 @@ jobs:
       CI_PLATFORM: osx
     steps: &cpp_steps
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ env.REVENANT_COMMIT }}
 
       # Only the engine's own assets (fonts, editor icons) ship; nothing else
       # in LFS is read by the build or the tests. They come from a cache
@@ -189,7 +203,8 @@ jobs:
   publish:
     name: Publish & report
     needs: [version, build_osx, build_windows, build_linux]
-    if: *cpp_build
+    # Not for a fork: its code is not published and its token has no secrets.
+    if: ${{ !cancelled() && needs.version.outputs.cpp != 'false' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -197,6 +212,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          ref: ${{ env.REVENANT_COMMIT }}
           sparse-checkout: tools/ci
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0

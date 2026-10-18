@@ -1,10 +1,12 @@
 # Continuous integration
 
-C++ changes pushed to GitHub, on any branch, get a version and are built
-and tested on macOS, Windows and Linux. Packages that pass are published to
-`https://downloads.revenantrevisited.com`. When C++ is unchanged, the three
-required build checks report **skipped** without starting platform runners;
-no version is claimed and no package is published.
+Every pull request, and every push to `main`, is built and tested on macOS,
+Windows and Linux at the commit under test (a pull request's head commit,
+not GitHub's merge commit), and C++ changes get a version. Packages that
+pass are published to `https://downloads.revenantrevisited.com`. When C++
+is unchanged, the three required build checks report **skipped** without
+starting platform runners; no version is claimed and no package is
+published.
 
 - Workflow: [.github/workflows/ci.yml](../.github/workflows/ci.yml)
 - Driver: [tools/ci/ci.py](../tools/ci/ci.py), one subcommand per workflow step
@@ -14,10 +16,16 @@ no version is claimed and no package is published.
 The C++ inputs are `src/`, `thirdparty/`, `assets/`, `cmake/`, `tools/`,
 `CMakeLists.txt`, `editor.def`, `.gitattributes`, `.gitmodules`, and the C++
 workflow itself. Rust-only and documentation-only changes skip the C++ jobs.
-On feature branches, selection compares the entire branch against its merge
-base with `main`: a later Rust-only push cannot hide an earlier C++ failure.
-On `main`, it compares the commits before and after the push. Missing comparison
-history runs the build conservatively; a manual dispatch always runs it.
+On a pull request, selection compares the entire branch against its merge
+base with the branch it will merge into: a later Rust-only push cannot hide
+an earlier C++ failure. On `main`, it compares the commits before and after
+the push. Missing comparison history runs the build conservatively; a
+manual dispatch always runs it.
+
+A pull request from a fork runs the same three build checks, but claims no
+version (the fork's token is read-only, so the build takes
+`BuildInfo.cmake`'s local fallback) and publishes nothing; its packages are
+the run's artifacts. A branch pushed without a pull request is not built.
 
 The separate [Rust workflow](../.github/workflows/rust.yml) runs for `rust/`
 changes, its own workflow changes, and `src/mappane.cpp`, which its terrain
@@ -34,8 +42,8 @@ with a manual dispatch available. Other C++ changes do not start Rust CI.
 | `Build & test (linux)` | `ubuntu-24.04` (x86-64) | the same |
 | `Publish & report` | `ubuntu-24.04` | uploads passing packages to R2, writes the run summary |
 
-A push to a branch other than `main` cancels that branch's run in flight;
-runs on `main` are never cancelled, so each C++ change there gets its archive.
+A new push to a pull request cancels its run in flight; runs on `main` are
+never cancelled, so each C++ change there gets its archive.
 `workflow_dispatch` reruns any branch from the Actions tab.
 
 ### Toolchains

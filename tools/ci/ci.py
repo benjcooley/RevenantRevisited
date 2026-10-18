@@ -111,8 +111,11 @@ def git(*args: str) -> str:
 
 
 def commit_info() -> dict:
-    sha = os.environ.get("GITHUB_SHA") or git("rev-parse", "HEAD")
-    branch = os.environ.get("GITHUB_REF_NAME") or git("rev-parse", "--abbrev-ref", "HEAD")
+    # The workflow names the commit under test (a pull request's head, not
+    # GitHub's merge commit) and the branch it is on.
+    sha = os.environ.get("REVENANT_COMMIT") or os.environ.get("GITHUB_SHA") or git("rev-parse", "HEAD")
+    branch = (os.environ.get("REVENANT_BRANCH") or os.environ.get("GITHUB_REF_NAME")
+              or git("rev-parse", "--abbrev-ref", "HEAD"))
     server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
     repo = os.environ.get("GITHUB_REPOSITORY", "benjcooley/RevenantRevisited")
     run_id = os.environ.get("GITHUB_RUN_ID")
