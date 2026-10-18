@@ -199,7 +199,7 @@ void TAmmo::DrawUnlit(TSurface* surface)
     if (ammogroundusecount[objtype][count] < 1 && imagery)
         AllocGroundItem(imagery, state, objtype, count);
 
-    imagery->DrawUnlit(this, surface);
+    TObjectInstance::DrawUnlit(surface);
 }
 
 PTBitmap TAmmo::GetStillImage(int32_t ostate)

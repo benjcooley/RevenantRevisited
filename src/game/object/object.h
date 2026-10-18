@@ -1113,22 +1113,22 @@ class TObjectInstance : public TComponent
         // Get animation bounding rect for the object, if different from screen rect
     virtual int32_t BgDrawMode();
         // Determines the bgdraw pipeline position this object should start at when drawing to bg
-    virtual void DrawUnlit(TSurface* surface) { if (imagery) imagery->DrawUnlit(this, surface); }
+    virtual void DrawUnlit(TSurface* surface);
         // Causes the object to draw itself to the unlit background
-    void DrawLit(TSurface* surface) { if (imagery) imagery->DrawLit(this, surface); }
+    void DrawLit(TSurface* surface);
         // Causes the object to draw itself to the lit background
-    virtual bool GetZ(const TObjectInstance* frontmost) { return (imagery) ? imagery->GetZ(this, frontmost) : false; }
+    virtual bool GetZ(const TObjectInstance* frontmost);
         // True when the object's own pixel is the one the frame shows at the
         // map pane's pick point (TObjectImagery::GetZ; retail 0x00477bc0)
-    void DrawSelected(TSurface* surface)
-        { if (imagery) imagery->DrawSelected(this, surface); }
+    void DrawSelected(TSurface* surface);
         // Causes image to draw selection (hilighting) around itself
     virtual void DrawInvItem(int32_t x, int32_t y) { if (imagery) imagery->DrawInvItem(this, x, y); }
         // Draws inventory icon for object
     void RedrawBackground(int32_t bgdraw = -1);
         // Forces the background for the current object rect to be redrawn
         // Allows moving objects to erase and redraw themselves, and redraws lighting
-    virtual bool AlwaysOnTop() { if (imagery) return imagery->AlwaysOnTop(this); return false; }
+    virtual bool AlwaysOnTop();
+        // Picked and sorted above everything with a z-buffer (the visual's rule)
 
   // More spiffy virtuals
     virtual void Pulse();

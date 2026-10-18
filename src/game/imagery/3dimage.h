@@ -461,7 +461,6 @@ class T3DImagery : public TObjectImagery
       // "blendcont" tag; 0 when the state has none
 
     bool GetZ(TObjectInstance* oi, const TObjectInstance* frontmost) override { return true; }
-    virtual bool AlwaysOnTop(TObjectInstance* oi) { return true; }
     TBitmap* GetInvImage(int32_t state, int32_t num = 0) override;
     TAnimation* GetInvAnimation(int32_t state) override;
 

@@ -243,7 +243,7 @@ void TMoney::DrawUnlit(TSurface* surface)
     if (groundusecount[objtype][count] < 1 && imagery)
         AllocGroundItem(imagery->GetStillImage(GetState()), objtype, count);
 
-    imagery->DrawUnlit(this, surface);
+    TObjectInstance::DrawUnlit(surface);
 }
 
 PTBitmap TMoney::GetStillImage(int32_t ostate)

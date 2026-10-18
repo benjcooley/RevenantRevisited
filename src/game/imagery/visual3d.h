@@ -39,6 +39,10 @@ class T3DVisualComponent final : public TVisualComponent
     // The owning object's 3D visual, or nullptr for any other picture
     [[nodiscard]] static T3DVisualComponent* Of(const TObjectInstance* oi);
 
+    // A mesh has no z-buffer in the software frame: picked and sorted
+    // above the tiles (retail's T3DImagery::AlwaysOnTop)
+    [[nodiscard]] bool AlwaysOnTop() const override { return true; }
+
   private:
     T3DImagery* imagery_ = nullptr;   // the asset, cache-owned
 };

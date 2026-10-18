@@ -40,6 +40,15 @@ class T2DVisualComponent final : public TVisualComponent
     // The owning object's 2D visual, or nullptr for any other picture
     [[nodiscard]] static T2DVisualComponent* Of(const TObjectInstance* oi);
 
+    // The Classic software path: the imagery's retail draw and pick code,
+    // run for the owner (TAnimImagery::DrawUnlit / DrawLit / DrawSelected /
+    // AlwaysOnTop / GetZ)
+    void DrawUnlit(TSurface* surface) override;
+    void DrawLit(TSurface* surface) override;
+    void DrawSelected(TSurface* surface) override;
+    [[nodiscard]] bool AlwaysOnTop() const override;
+    [[nodiscard]] bool GetZ(const TNode* frontmost) const override;
+
   private:
     TAnimImagery* imagery_ = nullptr;   // the asset, cache-owned
 };

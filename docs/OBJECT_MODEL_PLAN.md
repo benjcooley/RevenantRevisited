@@ -230,10 +230,10 @@ component is the node's whole picture (`ReplacesDefaultVisual`), and a
 themselves. The two imagery-born visuals derive from it in the game:
 
 - `T2DVisualComponent` (`src/game/imagery/visual2d.{h,cpp}`) wraps the 2D
-  `TAnimImagery`: the still and the animation-layer frame for a state, the
-  registration point and world box. The Classic software path (DrawUnlit /
-  DrawLit / DrawSelected / GetZ / AlwaysOnTop) keeps calling the imagery
-  through TObjectInstance for now; it moves onto this component next.
+  `TAnimImagery`: the still and the animation-layer frame for a state, and
+  the Classic software path (the map pane's unlit, lit and selected passes
+  over a surface, and the AlwaysOnTop / GetZ pick rules), which are
+  virtuals on the base that the object's forwarders call.
 - `T3DVisualComponent` (`src/game/imagery/visual3d.{h,cpp}`) wraps the
   `T3DImagery`: the mesh asset the renderer registers submeshes from, the
   authored animator (`Animator()`, a `T3DAnimator` while the playhead still
@@ -250,14 +250,16 @@ one visual (a flame's billboard sits next to its mesh); the renderer walks
 the node's components, skips the imagery-born visual when another one
 replaces it, and never asks what kind of imagery an object has.
 
-Inch 1 (this commit): base + two components + creation + the map
-renderer's classification and submit paths reading through them (the
-`T3DImagery` / `TAnimImagery` / `T3DAnimator` dynamic_casts in
-maprenderer.cpp go). Inch 2: the Classic software draw path through
-`T2DVisualComponent`; `TParticleEffectComponent` onto the base; the
-billboard's `Submit` loses its instance parameter. Then the playhead
-(state / frame) moves into the animator component, and the imagery and
-3D-scene files unpark into the engine (docs/SOURCE_LAYOUT.md).
+Landed: the base, the two components, their creation, the map renderer's
+classification and submit paths reading through them (the `T3DImagery` /
+`TAnimImagery` / `T3DAnimator` dynamic_casts in maprenderer.cpp are gone),
+and the Classic software path through the visual. Open: the test harnesses
+and tools that still cast an object's imagery (testmodes, vfxtest,
+uiequiptest, shadow, bossai, charanimator's in-hand mesh);
+`TParticleEffectComponent` onto the base; the billboard's `Submit` losing
+its instance parameter (21 overrides). Then the playhead (state / frame)
+moves into the animator component, and the imagery and 3D-scene files
+unpark into the engine (docs/SOURCE_LAYOUT.md).
 
 ### Phase 4: native packed sector format
 

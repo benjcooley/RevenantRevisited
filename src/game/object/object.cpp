@@ -2025,6 +2025,37 @@ TVisualComponent* TObjectInstance::Visual() const
     return visual_.Get();
 }
 
+// The Classic software passes and pick rules go to the visual component.
+void TObjectInstance::DrawUnlit(TSurface* surface)
+{
+    if (TVisualComponent* visual = Visual())
+        visual->DrawUnlit(surface);
+}
+
+void TObjectInstance::DrawLit(TSurface* surface)
+{
+    if (TVisualComponent* visual = Visual())
+        visual->DrawLit(surface);
+}
+
+void TObjectInstance::DrawSelected(TSurface* surface)
+{
+    if (TVisualComponent* visual = Visual())
+        visual->DrawSelected(surface);
+}
+
+bool TObjectInstance::GetZ(const TObjectInstance* frontmost)
+{
+    TVisualComponent* visual = Visual();
+    return visual && visual->GetZ(frontmost ? frontmost->Node() : nullptr);
+}
+
+bool TObjectInstance::AlwaysOnTop()
+{
+    TVisualComponent* visual = Visual();
+    return visual && visual->AlwaysOnTop();
+}
+
 void TObjectInstance::AttachVisual()
 {
     std::unique_ptr<TVisualComponent> owned = imagery ? imagery->NewVisualComponent() : nullptr;

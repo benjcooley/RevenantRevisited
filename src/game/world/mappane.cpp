@@ -10,6 +10,7 @@
 
 #include "game/world/gamemap.h"
 #include "engine/render/graphics.h"
+#include "engine/render/visualcomponent.h"
 #include "game/world/mapmanager.h"
 #include "game/world/maprenderer.h"
 #include "engine/core/stream.h"
@@ -2012,8 +2013,9 @@ TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectIns
             continue;
         if (!Editor && inst->ObjClass() == OBJCLASS_TILE)
             continue;
-        if (const TObjectImagery* img = inst->GetImagery())
-            if (img->GetHeader() && img->GetHeader()->imageryid == OBJIMAGE_MESH3D)
+        // The software pick sees no meshes: the GPU draws them
+        if (const TVisualComponent* visual = inst->Visual())
+            if (visual->Kind() == EVisualKind::Mesh)
                 continue;
         if (on && !inst->AlwaysOnTop() && (priority || !inst->GetZ(pick.frontmost)))
             continue;

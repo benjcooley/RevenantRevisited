@@ -12,7 +12,10 @@
 //
 // The renderer draws sprites and meshes itself from its resident asset
 // records (pass management and ordering stay in the renderer); a
-// self-drawing visual fills the renderer's queues from Submit.
+// self-drawing visual fills the renderer's queues from Submit. The Classic
+// software path is the map pane's three object passes over a surface
+// (unlit, lit, selected) and its two pick rules; a visual that the GPU
+// draws leaves them alone.
 //
 // *************************************************************************
 
@@ -23,6 +26,7 @@
 #include <cstdint>
 
 _CLASSDEF(TRenderer)
+_CLASSDEF(TSurface)
 
 enum class EVisualKind : uint8_t
 {
@@ -43,6 +47,19 @@ class TVisualComponent : public TComponent
     // Self-drawing visuals fill the renderer's queues here; sprites and
     // meshes are drawn by the map renderer from its records and leave it.
     virtual void Submit(TRenderer& renderer) const { (void)renderer; }
+
+    // ---- The Classic software path -------------------------------------
+    virtual void DrawUnlit(TSurface* surface) { (void)surface; }
+        // The unlit background pass, before the lights
+    virtual void DrawLit(TSurface* surface) { (void)surface; }
+        // The lit pass, after the light transfer
+    virtual void DrawSelected(TSurface* surface) { (void)surface; }
+        // The selection highlight
+    [[nodiscard]] virtual bool AlwaysOnTop() const { return false; }
+        // Picked and sorted above everything with a z-buffer
+    [[nodiscard]] virtual bool GetZ(const TNode* frontmost) const { (void)frontmost; return false; }
+        // True when this visual's own pixel is what the frame shows at the
+        // pick point; `frontmost` is the node the renderer drew there
 };
 
 // The visual on a node that replaces the imagery-born one, or nullptr.
