@@ -18,7 +18,8 @@ CPP_PATHS = (
 
 
 def cpp_changed(root: Path, event_name: str, event: dict, ref: str) -> bool:
-    # Manual runs deliberately rebuild. Unknown events also build conservatively.
+    # Manual runs deliberately rebuild; a fork's pull request builds whatever
+    # it changed. Unknown events also build conservatively.
     if event_name != "push":
         return True
 
