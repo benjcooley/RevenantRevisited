@@ -6,6 +6,16 @@
 
 #include "revutils.h"
 
+// Caller-address for the random observers. GCC/Clang builtin; MSVC uses the
+// _ReturnAddress intrinsic (same value, no frame-walk).
+#if defined(_MSC_VER)
+#include <intrin.h>
+#pragma intrinsic(_ReturnAddress)
+#define REV_RETURN_ADDRESS() ((void *)_ReturnAddress())
+#else
+#define REV_RETURN_ADDRESS() ((void *)__builtin_return_address(0))
+#endif
+
 #include "display.h"
 #include "imagery.h"
 #include "logging.h"
@@ -1896,7 +1906,7 @@ int32_t Draw(const void* caller)
 
 int32_t GameRand()
 {
-    return Draw(__builtin_return_address(0));
+    return Draw(REV_RETURN_ADDRESS());
 }
 
 void SetRandomObserver(RandomObserver observer)
@@ -1939,7 +1949,7 @@ int32_t random(int32_t min, int32_t max)
         max = t;
     }
 
-    int32_t r = Draw(__builtin_return_address(0)) % (max - min + 1);
+    int32_t r = Draw(REV_RETURN_ADDRESS()) % (max - min + 1);
     r += min;
     if (g_randomRangeObserver)
         g_randomRangeObserver(min, max, r);
