@@ -432,17 +432,12 @@ void InitializeSelfSpawnParticle(TParticleBucket& bucket, int32_t particle_index
         *df = float(spawn_frame);
     if (float* uv = bucket.VarPtr(particle_index, EParticleVar::DrawUvRect))
     {
+        // Atlas buckets leave the rect unset (zero size): the renderer then
+        // derives the cell from DrawFrame on every draw, so a tick_expr can
+        // animate `frame`. Single-sprite buckets use the whole texture.
         if (atlas_cells > 1)
         {
-            const int32_t cell  = ((spawn_frame % atlas_cells) + atlas_cells) % atlas_cells;
-            const int32_t fx    = cell % bucket_def.atlas_cols;
-            const int32_t fy    = cell / bucket_def.atlas_cols;
-            const float cw      = 1.0f / float(bucket_def.atlas_cols);
-            const float ch      = 1.0f / float(bucket_def.atlas_rows);
-            uv[0] = float(fx) * cw;
-            uv[1] = float(fy) * ch;
-            uv[2] = cw;
-            uv[3] = ch;
+            uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 0.0f; uv[3] = 0.0f;
         }
         else
         {
@@ -679,17 +674,10 @@ int32_t TParticleEffectManager::EmitChainParticle(SBucketRuntime& chain_brt,
         *df = float(chain_spawn_frame);
     if (float* uv = bucket.VarPtr(pi, EParticleVar::DrawUvRect))
     {
+        // As in InitializeSelfSpawnParticle: atlas cell comes from DrawFrame.
         if (chain_atlas_cells > 1)
         {
-            const int32_t cell  = ((chain_spawn_frame % chain_atlas_cells) + chain_atlas_cells) % chain_atlas_cells;
-            const int32_t fx    = cell % bd.atlas_cols;
-            const int32_t fy    = cell / bd.atlas_cols;
-            const float cw      = 1.0f / float(bd.atlas_cols);
-            const float ch      = 1.0f / float(bd.atlas_rows);
-            uv[0] = float(fx) * cw;
-            uv[1] = float(fy) * ch;
-            uv[2] = cw;
-            uv[3] = ch;
+            uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 0.0f; uv[3] = 0.0f;
         }
         else
         {
