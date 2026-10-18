@@ -6,7 +6,8 @@
 
 #include "editorundo.h"
 
-#include "nodeinst.h"
+#include "node.h"
+#include "objectcomponent.h"
 #include "refl.h"
 
 #include <unordered_map>
@@ -37,6 +38,7 @@ private:
 // use (the vector may move the entry).
 struct SSnapEntry
 {
+    int32_t     slot = -1;          // -1: the node itself; else a component slot
     uint16_t    id = 0;
     SPropValue  value;
     std::string text;
@@ -51,34 +53,63 @@ struct SSnapEntry
 
 using SObjectSnapshot = std::vector<SSnapEntry>;
 
-SObjectSnapshot SnapshotOf(const refl::SType& type, const TNodeInst* node)
+// The thing a snapshot entry addresses: the node, or one of its
+// components (the map object among them), with its reflected type.
+void* TargetOf(TNode* node, int32_t slot, const refl::SType*& type)
 {
-    SObjectSnapshot snap;
-    if (!node) return snap;
-    for (const refl::SType* t = &type; t; t = t->base)
+    if (!node) { type = nullptr; return nullptr; }
+    if (slot < 0) { type = refl::Of(*node); return node; }
+    TObjectComponent* c = node->GetComponent(slot);
+    type = c ? refl::Of(*c) : nullptr;
+    return c;
+}
+
+void SnapshotTarget(SObjectSnapshot& snap, int32_t slot, const refl::SType* type, const void* obj)
+{
+    if (!type || !obj) return;
+    for (const refl::SType* t = type; t; t = t->base)
     {
         for (int32_t i = 0; i < t->prop_count; ++i)
         {
             const refl::SProp& p = t->props[i];
             if (p.read_only || p.type == EPropType::Trigger) continue;
             SSnapEntry e;
+            e.slot = slot;
             e.id = p.id;
-            if (!refl::Get(type, node, p.id, e.value)) continue;
+            if (!refl::Get(*type, obj, p.id, e.value)) continue;
             if (e.value.type == EPropType::String) e.text = std::string(e.value.str);
             snap.push_back(std::move(e));
         }
     }
+}
+
+// The node's own properties and every component's.
+SObjectSnapshot SnapshotOf(TNode* node)
+{
+    SObjectSnapshot snap;
+    if (!node) return snap;
+    for (int32_t slot = -1; slot < node->NumComponents(); ++slot)
+    {
+        const refl::SType* type = nullptr;
+        void* obj = TargetOf(node, slot, type);
+        SnapshotTarget(snap, slot, type, obj);
+    }
     return snap;
 }
 
-void ApplyOnto(const refl::SType& type, TNodeInst* node, const SObjectSnapshot& snap)
+void ApplyOnto(TNode* node, const SObjectSnapshot& snap)
 {
     if (!node) return;
     for (const SSnapEntry& e : snap)
-        refl::Set(type, node, e.id, e.Value());
+    {
+        const refl::SType* type = nullptr;
+        void* obj = TargetOf(node, e.slot, type);
+        if (type && obj)
+            refl::Set(*type, obj, e.id, e.Value());
+    }
 }
 
-// Entries of `after` whose value differs from the same id in `before`.
+// Entries of `after` whose value differs from the same (slot, id) in `before`.
 SObjectSnapshot Diff(const SObjectSnapshot& before, const SObjectSnapshot& after)
 {
     SObjectSnapshot d;
@@ -86,7 +117,7 @@ SObjectSnapshot Diff(const SObjectSnapshot& before, const SObjectSnapshot& after
     {
         bool changed = true;
         for (const SSnapEntry& b : before)
-            if (b.id == a.id) { changed = !refl::Equals(a.Value(), b.Value()); break; }
+            if (b.slot == a.slot && b.id == a.id) { changed = !refl::Equals(a.Value(), b.Value()); break; }
         if (changed) d.push_back(a);
     }
     return d;
@@ -100,15 +131,14 @@ class BatchSnapshotCommand : public IEditorCommand
 public:
     struct SEntry
     {
-        TSafeRef<TNodeInst> node;
-        const refl::SType*  type = nullptr;
+        TSafeRef<TNode> node;
         SObjectSnapshot     before;
         SObjectSnapshot     after;
     };
     BatchSnapshotCommand(std::string name, std::vector<SEntry> entries)
         : name_(std::move(name)), entries_(std::move(entries)) {}
-    void Undo() override { for (auto& e : entries_) ApplyOnto(*e.type, e.node.Get(), e.before); }
-    void Redo() override { for (auto& e : entries_) ApplyOnto(*e.type, e.node.Get(), e.after);  }
+    void Undo() override { for (auto& e : entries_) ApplyOnto(e.node.Get(), e.before); }
+    void Redo() override { for (auto& e : entries_) ApplyOnto(e.node.Get(), e.after);  }
     const char* Name() const override { return name_.c_str(); }
 private:
     std::string         name_;
@@ -117,8 +147,7 @@ private:
 
 struct SDirtyEntry
 {
-    TSafeRef<TNodeInst> node;
-    const refl::SType*  type = nullptr;
+    TSafeRef<TNode> node;
     SObjectSnapshot     before;
 };
 
@@ -133,9 +162,9 @@ std::vector<std::unique_ptr<IEditorCommand>>& RedoStack()
     return s;
 }
 
-std::unordered_map<TNodeInst*, SDirtyEntry>& DirtySet()
+std::unordered_map<TNode*, SDirtyEntry>& DirtySet()
 {
-    static std::unordered_map<TNodeInst*, SDirtyEntry> s;
+    static std::unordered_map<TNode*, SDirtyEntry> s;
     return s;
 }
 
@@ -155,17 +184,15 @@ std::string& PendingName()
 
 // ---- Dirty-tracking ------------------------------------------------------
 
-void EditorUndo::MarkDirty(TNodeInst* node)
+void EditorUndo::MarkDirty(TNode* node)
 {
     if (!node) return;
     auto& d = DirtySet();
     if (d.find(node) != d.end()) return;     // idempotent
-    const refl::SType* type = refl::Of(*node);
-    if (!type) return;
-    d.emplace(node, SDirtyEntry{ TSafeRef<TNodeInst>(node), type, SnapshotOf(*type, node) });
+    d.emplace(node, SDirtyEntry{ TSafeRef<TNode>(node), SnapshotOf(node) });
 }
 
-void EditorUndo::DropDirty(TNodeInst* node)
+void EditorUndo::DropDirty(TNode* node)
 {
     DirtySet().erase(node);
 }
@@ -180,19 +207,19 @@ void EditorUndo::ResolveDirty()
     changed.reserve(d.size());
     for (auto& [key, entry] : d)
     {
-        TNodeInst* node = entry.node.Get();
+        TNode* node = entry.node.Get();
         if (!node) continue;                      // deleted mid-transaction
-        SObjectSnapshot now   = SnapshotOf(*entry.type, node);
+        SObjectSnapshot now   = SnapshotOf(node);
         SObjectSnapshot after = Diff(entry.before, now);
         if (after.empty()) continue;
-        // Pair each "after" id with its "before" value so undo flips back
+        // Pair each "after" entry with its "before" value so undo flips back
         // exactly what we changed.
         SObjectSnapshot before_sub;
         before_sub.reserve(after.size());
         for (const SSnapEntry& a : after)
             for (const SSnapEntry& b : entry.before)
-                if (a.id == b.id) { before_sub.push_back(b); break; }
-        changed.push_back({ entry.node, entry.type, std::move(before_sub), std::move(after) });
+                if (a.slot == b.slot && a.id == b.id) { before_sub.push_back(b); break; }
+        changed.push_back({ entry.node, std::move(before_sub), std::move(after) });
     }
     d.clear();
 

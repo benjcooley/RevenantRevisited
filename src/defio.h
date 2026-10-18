@@ -9,7 +9,7 @@
 // into live objects:
 //
 //   key = value         -> refl::Set on the current object (table lookup by name)
-//   node <name> { }     -> a child TNodeInst (any DEF_BLOCK type), parented to
+//   node <name> { }     -> a child TNode (any DEF_BLOCK type), parented to
 //                          the current node, owned by the caller's `owned` list
 //   <component> [label] { }
 //                       -> a DEF_COMPONENT type, created through its factory
@@ -34,7 +34,7 @@
 #include <string_view>
 #include <vector>
 
-class TNodeInst;
+class TNode;
 namespace defdoc { class Node; }
 
 namespace defio {
@@ -46,8 +46,8 @@ namespace defio {
 // `post_load = false` deserializes without running any PostLoad(): the
 // objects are data only, for baking to a buffer or for tools. Stamping
 // from the buffer is where PostLoad belongs.
-bool Read(std::string_view text, TNodeInst& root,
-          std::vector<std::unique_ptr<TNodeInst>>& owned, std::string* error = nullptr,
+bool Read(std::string_view text, TNode& root,
+          std::vector<std::unique_ptr<TNode>>& owned, std::string* error = nullptr,
           bool post_load = true);
 
 // Read a flat document into one reflected object (no sub-blocks allowed).
@@ -63,7 +63,7 @@ bool ReadObject(std::string_view text, T& obj, std::string* error = nullptr, boo
 
 // Write a node tree as a document: the root's properties, components and
 // child `node` blocks at top level (the form Read expects for its root).
-[[nodiscard]] std::string Write(const TNodeInst& root);
+[[nodiscard]] std::string Write(const TNode& root);
 
 // Write one object's saveable properties, one `key = value` line each,
 // then nested Struct / List records as `key [name] { }` blocks, at

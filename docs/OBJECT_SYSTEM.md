@@ -147,60 +147,77 @@ struct SObjectInfo
 
 **Purpose:** Represents individual game object instances in the world.
 
-**Inheritance Structure:**
+**Structure** (since 2026-10-18, docs/OBJECT_MODEL_PLAN.md §3b): a map object is
+a `TNode` (final: name, soft-ref id, TTransform, children, components, map
+index, sector, level) whose first component is the `TObjectInstance`, the root
+of the object class hierarchy. The node owns the object; `node->Object()` and
+`instance->Node()` are cached pointers. The instance forwards the node-facing
+API, so a `TObjectInstance*` still answers transform, map index, sector and
+components. Delete an object with `DeleteObject(inst)`, own one with
+`TObjectPtr<T>`.
 ```cpp
-class TObjectInstance : protected SObjectDef
+class TObjectInstance : public TObjectComponent
 {
-    // Object identification
+    // Identity in the class system
+    short objclass, objtype;         // Class / type indices
     SObjectInfo* inf;                // Pointer to shared object info
     TObjectClass* cl;                // Pointer to object class
     char *name;                      // Instance-specific name
-    
-    // Object state
-    S3DPoint pos;                    // 3D position in world
+
+    // State retail kept in the object header (reflected: props 15-19)
     uint32_t flags;                  // Object flags
     uint16_t state;                  // Current state
+    uint16_t level;                  // Map level
+    S3DPoint vel, accum;             // Movement integrator
     uint8_t group;                   // Group assignment
-    
-    // Systems
-    TObjectAnimator* animator;       // Animation system
+
+    // Systems (components live in TNode's slots)
     TScript* script;                 // Scripting system
-    TInventory inventory;            // Inventory system
+    TPointerArray<TObjectInstance> inventory;
     SLightDef lightdef;              // Lighting system
 };
 ```
 
+The transform is the only spatial store. Code written against retail's
+integer world reads and writes it through the free functions in
+`intworld.h`: `IntPos(oi)`, `SetIntPos(oi, p)`, `IntFacing(oi)`,
+`SetIntFacing(oi, f)`, `IntRotateX/Y`. `SetPos` remains the map move with
+its sector, walkmap, shadow and light side effects.
+
 ## Object Definition System
 
-### SObjectDef - Object Creation Template
+### SObjectDef - Spawn Record
 
-**Purpose:** Defines the initial state when creating new object instances.
+**Purpose:** What a caller fills before `NewObject` builds an object from it:
+the initial state, nothing the class sets up itself. It is not part of the
+object (it was its base class until 2026-10-18); the constructor applies it
+and lets it go. Phase 5 of docs/OBJECT_MODEL_PLAN.md replaces it with
+spawning from a packed message.
 
 **Structure:**
 ```cpp
-class SObjectDef
+struct SObjectDef
 {
-  public:
-    short       objclass;   // Class of item (-1 if no object)
-    short       objtype;    // Type of item in class (-1 if no object)
-    uint32_t    flags;      // Initial object flags
-    
-    uint16_t    state;      // Initial state
-    uint16_t    level;      // Object level
-    
-    S3DPoint    pos;        // Initial position
-    S3DPoint    vel;        // Initial velocity
-    S3DPoint    accum;      // Movement accumulator
-    
-    uint8_t     rotatex;    // X-axis rotation (0-255)
-    uint8_t     rotatey;    // Y-axis rotation (0-255)
+    short       objclass = -1;  // Class of item (-1 if no object)
+    short       objtype  = -1;  // Type of item in class (-1 if no object)
+    uint32_t    flags    = 0;   // Initial object flags
+
+    uint16_t    state    = 0;   // Initial state
+    uint16_t    level    = 0;   // Object level
+
+    S3DPoint    pos{0, 0, 0};   // Initial position
+    S3DPoint    vel{0, 0, 0};   // Initial velocity
+    S3DPoint    accum{0, 0, 0}; // Movement accumulator
+
+    uint8_t     rotatex = 0;    // X-axis rotation (0-255)
+    uint8_t     rotatey = 0;    // Y-axis rotation (0-255)
     union
     {
-        uint8_t rotatez;    // Z-axis rotation (0-255)
-        uint8_t facing;     // Facing direction (0-255)
+        uint8_t rotatez = 0;    // Z-axis rotation (0-255)
+        uint8_t facing;         // Facing direction (0-255)
     };
-    
-    uint8_t     group;      // Group assignment
+
+    uint8_t     group = 0;      // Group assignment
 };
 ```
 
@@ -239,9 +256,17 @@ TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef)
 ```cpp
 TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
 {
-    // Copy definition data
-    memcpy(&objclass, def, sizeof(SObjectDef));
-    
+    ClearObject();
+
+    // The spawn record's initial state; the record itself is not kept
+    objclass = def->objclass;  objtype = def->objtype;
+    flags = def->flags;  state = def->state;  level = def->level;
+    vel = def->vel;  accum = def->accum;  group = def->group;
+    SetIntPos(*this, def->pos);
+    SetIntRotateX(*this, def->rotatex);
+    SetIntRotateY(*this, def->rotatey);
+    SetIntFacing(*this, def->rotatez);
+
     // Set imagery and initialize systems
     imagery = img;
     cl = TObjectClass::GetClass(objclass);

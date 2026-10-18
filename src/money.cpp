@@ -168,27 +168,6 @@ int32_t TMoney::CursorType(TObjectInstance* with)
     return CURSOR_NONE;
 }
 
-// REVSYNC: TMoney::Load @ 0x00515f40. Retail cleared OF_VIRGIN before
-// loading; the base Load replaces that flag from the file, so the clear has
-// no effect and isn't ported.
-void TMoney::Load(RTInputStream is, int32_t version, int32_t objversion)
-{
-    TObjectInstance::Load(is, version, objversion);
-
-    if (version < 5)
-    {
-        int32_t amount;
-        is >> amount;
-        amount++;
-        SetStat("Amount", amount);
-    }
-}
-
-void TMoney::Save(RTOutputStream os)
-{
-    TObjectInstance::Save(os);
-}
-
 void TMoney::AllocGroundItem(PTBitmap ground, int32_t type, int32_t count)
 {
     if (!ground)
@@ -248,7 +227,7 @@ void TMoney::GetScreenRect(SRect &r)
         PSImageryStateHeader st = imagery->GetState(GetState());
 
         int32_t x, y;
-        WorldToScreen(pos, x, y);
+        WorldToScreen(IntPos(*this), x, y);
 
         r.left   = x - st->regx;
         r.right  = r.left + (INVITEMREALWIDTH / 2) - 1;

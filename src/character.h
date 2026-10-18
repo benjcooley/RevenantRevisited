@@ -79,6 +79,8 @@ struct SBlowOutcome
 _CLASSDEF(TCharacter)
 class TCharacter : public TComplexObject
 {
+    friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
+    friend class TLegacySerialize;
   public:
     void ClearChar();       // Clear out working vars of char
 
@@ -556,9 +558,9 @@ class TCharacter : public TComplexObject
     // Static access functions
     static TCharacter* CharBlocking(TObjectInstance* inst, const S3DPoint& pos, int32_t radius = 0);
         // Find if a character is blocking movement to this position
-    TCharacter* CharBlocking() { return CharBlocking(this, Pos(), Radius()); }
+    TCharacter* CharBlocking() { return CharBlocking(this, IntPos(*this), Radius()); }
         // Calls static function above with this chars parameters
-    bool Blocked(S3DPoint& pos, S3DPoint& newpos, uint32_t bits = 0, int32_t* height = nullptr, TCharacter** bychar = nullptr);
+    bool Blocked(const S3DPoint& pos, S3DPoint& newpos, uint32_t bits = 0, int32_t* height = nullptr, TCharacter** bychar = nullptr);
       // Returns true if character would be blocked when going to new position
     uint32_t MoveStep();
       // One tick's displacement (Move repeats it toward a MoveTo target)
@@ -589,13 +591,6 @@ class TCharacter : public TComplexObject
       // Pulses the invoke animation holds the spell's effect back (retail +0x188, SetCast)
       // Get spell manager object
 
-  // Streaming functions
-    virtual int32_t ObjVersion() { return 4; }
-        // Returns the version id for this object for loading/saving
-    virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
-        // Loads object data from the sector
-    virtual void Save(RTOutputStream os);
-        // Saves object data to the sector
 
   // Fading (retail TCharacter +0x194..+0x1a4): fade is the visibility 0..100
   // that Transparency() reports; each Pulse moves it by fade_step (positive

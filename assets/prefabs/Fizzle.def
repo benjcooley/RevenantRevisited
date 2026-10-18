@@ -1,0 +1,164 @@
+// Fizzle -- the spell-fail dust puff (retail TFizzleEffect / TFizzleAnimator,
+// effect_old.cpp:12282-12516 + TParticleSystem effectcomp.cpp:1041-1109;
+// forensics docs/vfx/forensics/X21_TFizzleEffect.md; port src/effects/fizzle.cpp).
+//
+// Retail runs three TParticleSystems (blue / red / purple), one per authored
+// sub-object of Magic\Fizzle.I3D (box01 = texture 0 blue, box02 = texture 1
+// purple, box03 = texture 2 magenta), and each new particle joins a random
+// one of the three. Here that is three buckets with a fixed 7 / 6 / 7 split
+// of the 20-particle burst.
+//
+// Retail parameters, all per tick at 24 Hz:
+//   emission    add += DUST_ADD (1.5) per tick, one spawn per whole unit,
+//               only while frame_count < DUST_FRAME (15): 20 particles over
+//               ticks 1..14 -> spawn_burst with a 0..13 tick start delay
+//   position    (random(-15,15), random(-15,15), random(70,130)) local wu;
+//               the owner matrix carries WORLD3D_Z_SCALE (1.5) on local z,
+//               so the height band is 105..195 world units
+//   velocity    (0, 0, -random(5,45) * 0.1) local wu/tick, constant
+//               (acc = 1): x1.5 on z -> -0.75..-6.75 wu/tick
+//   spin        rot.z += random(-15,15) deg/tick, starting at 0
+//   scale       0 -> +DUST_SCL_INC (0.05)/tick until it exceeds the particle's
+//               max random(5,25) * 0.01, then -DUST_SCL_DEC (0.02)/tick to 0,
+//               then freed. Growing k ticks (k = ceil(max / 0.05), 1..5)
+//               reaches 0.05k, so the envelope at tick t is
+//               min(0.05 t, 0.05 k - 0.02 (t - k)) = min(0.05 t, 1.4 peak - 0.02 t)
+//   flicker     random(0,1) re-rolled every tick; the set frames draw at x1.5
+//   sprite      authored 49.3 x 50.2 quad (bbox +-24.64, +-25.12, z = 0),
+//               drawn through RotateZ(spin) * RotateX(-pi/2) * RotateZ(-pi/4):
+//               the in-plane spin, then the tip upright, then the yaw that
+//               faces the fixed camera. Under the engine projection
+//               (S = x - y, T = 0.5 (x + y) - 0.867 z) the authored x axis
+//               lands on pure screen x (x sqrt 2 = 69.7 per unit scale) and
+//               the authored y axis on pure screen y (x 1.5 x 0.867 = 65.3),
+//               i.e. a camera-facing quad spinning in the screen plane:
+//               screen_aligned + rot.
+//   blend       alpha (SetBlendState, SRCALPHA / INVSRCALPHA), unlit, white
+//               material: the colour is the texture's own; depth test only.
+//
+// Per-particle constants the VM has no scratch lane for ride in lanes retail
+// leaves unused: vel.x = spin rate (rad/tick; retail vel.x is 0 and only
+// pos.z is integrated here), scale.z = peak scale (the z scale of a quad is
+// never drawn).
+particles
+{
+    effect Fizzle
+    {
+        inactive_ttl_pulses = 12
+
+        bucket fizzle_blue
+        {
+            imagery_path = "Magic\\Fizzle.I3D"
+            texture_slot = 0
+            width = 69.7
+            height = 65.3
+            blend_mode = "alpha"
+            light_mode = "unlit"
+            depth_mode = "test_no_write"
+            orientation = "screen_aligned"
+
+            spawn_burst = 7
+            spawn_delay_min = 0
+            spawn_delay_max = 13
+            tick_hz = 24
+            default_life = 0
+
+            spawn_expr = "
+                pos = emit_pos + vec3(floor(rand(-15, 16)), floor(rand(-15, 16)), 1.5 * floor(rand(70, 131)));
+                vel = vec3(floor(rand(-15, 16)) * 0.017453293, 0, -0.15 * floor(rand(5, 46)));
+                scale = vec3(0, 0, 0.05 * floor((floor(rand(5, 26)) + 4) / 5));
+                rot.x = 0;
+                color = vec4(1, 1, 1, 1);
+            "
+
+            // age * 24 is the particle's tick count (age advances by 1/24
+            // before the body runs, so the first tick is t = 1). scale.x
+            // holds the retail unit scale until the last two statements
+            // turn it into the drawn width / height.
+            tick_expr = "
+                pos.z = pos.z + vel.z;
+                rot.x = rot.x + vel.x;
+                scale.x = min(0.05 * age * 24, 1.4 * scale.z - 0.02 * age * 24);
+                scale.x = scale.x * (1 + 0.5 * step(0.5, rand01()));
+                scale.y = scale.x * 65.3;
+                scale.x = scale.x * 69.7;
+            "
+
+            kill_expr = "step(scale.x, 0)"
+        }
+
+        bucket fizzle_purple
+        {
+            imagery_path = "Magic\\Fizzle.I3D"
+            texture_slot = 1
+            width = 69.7
+            height = 65.3
+            blend_mode = "alpha"
+            light_mode = "unlit"
+            depth_mode = "test_no_write"
+            orientation = "screen_aligned"
+
+            spawn_burst = 6
+            spawn_delay_min = 0
+            spawn_delay_max = 13
+            tick_hz = 24
+            default_life = 0
+
+            spawn_expr = "
+                pos = emit_pos + vec3(floor(rand(-15, 16)), floor(rand(-15, 16)), 1.5 * floor(rand(70, 131)));
+                vel = vec3(floor(rand(-15, 16)) * 0.017453293, 0, -0.15 * floor(rand(5, 46)));
+                scale = vec3(0, 0, 0.05 * floor((floor(rand(5, 26)) + 4) / 5));
+                rot.x = 0;
+                color = vec4(1, 1, 1, 1);
+            "
+
+            tick_expr = "
+                pos.z = pos.z + vel.z;
+                rot.x = rot.x + vel.x;
+                scale.x = min(0.05 * age * 24, 1.4 * scale.z - 0.02 * age * 24);
+                scale.x = scale.x * (1 + 0.5 * step(0.5, rand01()));
+                scale.y = scale.x * 65.3;
+                scale.x = scale.x * 69.7;
+            "
+
+            kill_expr = "step(scale.x, 0)"
+        }
+
+        bucket fizzle_red
+        {
+            imagery_path = "Magic\\Fizzle.I3D"
+            texture_slot = 2
+            width = 69.7
+            height = 65.3
+            blend_mode = "alpha"
+            light_mode = "unlit"
+            depth_mode = "test_no_write"
+            orientation = "screen_aligned"
+
+            spawn_burst = 7
+            spawn_delay_min = 0
+            spawn_delay_max = 13
+            tick_hz = 24
+            default_life = 0
+
+            spawn_expr = "
+                pos = emit_pos + vec3(floor(rand(-15, 16)), floor(rand(-15, 16)), 1.5 * floor(rand(70, 131)));
+                vel = vec3(floor(rand(-15, 16)) * 0.017453293, 0, -0.15 * floor(rand(5, 46)));
+                scale = vec3(0, 0, 0.05 * floor((floor(rand(5, 26)) + 4) / 5));
+                rot.x = 0;
+                color = vec4(1, 1, 1, 1);
+            "
+
+            tick_expr = "
+                pos.z = pos.z + vel.z;
+                rot.x = rot.x + vel.x;
+                scale.x = min(0.05 * age * 24, 1.4 * scale.z - 0.02 * age * 24);
+                scale.x = scale.x * (1 + 0.5 * step(0.5, rand01()));
+                scale.y = scale.x * 65.3;
+                scale.x = scale.x * 69.7;
+            "
+
+            kill_expr = "step(scale.x, 0)"
+        }
+    }
+}

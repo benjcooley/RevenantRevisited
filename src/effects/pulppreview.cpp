@@ -13,7 +13,7 @@
 #include <cstring>
 namespace pulp_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;std::unique_ptr<TCharacter> actor;pulp_core::State core;
+ TObjectPtr<TObjectInstance> owner;TObjectPtr<TCharacter> actor;pulp_core::State core;
  MeshHandle meshes[11]{};S3DMat materials[11]{};S3DPoint display={};double accumulator=0;uint64_t initial_draws=0;int64_t rendered=-1;uint32_t actor_flags=0;bool context_valid=true;int decal_requests=0;
  ~State(){if(actor){actor->SetFlag(OF_INVISIBLE,(actor_flags&OF_INVISIBLE)!=0);log_info("[pulp-cleanup] tick=%d flags=%x health=%d decals=%d",core.tick,actor->Flags(),actor->Health(),decal_requests);}if(Renderer)for(auto mesh:meshes)if(mesh)Renderer->ReleaseMeshAssetRef(mesh);}
 };

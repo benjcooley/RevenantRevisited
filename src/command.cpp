@@ -1580,7 +1580,7 @@ COMMAND(CmdGoto)
         if (TObjectInstance* target = MapPane.FindClosestObject(t.Text(), context, true))
         {
             t.WhiteGet();
-            const S3DPoint at = target->Pos();
+            const S3DPoint at = IntPos(target);
             chr->Goto(at.x, at.y);
             return CMD_WAIT;
         }
@@ -1614,12 +1614,12 @@ COMMAND(CmdGotoRelativePosition)
         return CMD_BADPARAMS;
     }
 
-    const S3DPoint at = target->Pos();
+    const S3DPoint at = IntPos(target);
     S3DPoint spot = { at.x + dx, at.y + dy, at.z };
     int32_t dx2 = 0, dy2 = 0;
     if (Parse(t, "%d %d", &dx2, &dy2))
     {
-        const S3DPoint from = context->Pos();
+        const S3DPoint from = IntPos(context);
         const S3DPoint other = { at.x + dx2, at.y + dy2, at.z };
         if (Distance(from, other) < Distance(from, spot))
             spot = other;
@@ -1627,7 +1627,7 @@ COMMAND(CmdGotoRelativePosition)
 
     TCharacter* chr = static_cast<TCharacter*>(context);   // the table admits characters only
     log_debug("[cmd] %s at (%d, %d): gotorelativeposition %s at (%d, %d) -> (%d, %d)",
-              chr->GetName(), chr->Pos().x, chr->Pos().y, target->GetName(), at.x, at.y,
+              chr->GetName(), IntPos(chr).x, IntPos(chr).y, target->GetName(), at.x, at.y,
               spot.x, spot.y);
     chr->Goto(spot.x, spot.y);
     return CMD_WAIT;
@@ -1660,8 +1660,8 @@ COMMAND(CmdGotoRelativeDistance)
     const S3DPoint spot = RelativeDistanceSpot(*target, distance, angle);
     TCharacter* chr = static_cast<TCharacter*>(context);   // the table admits characters only
     log_debug("[cmd] %s at (%d, %d): gotorelativedistance %s at (%d, %d) facing %d, %d at %d -> (%d, %d)",
-              chr->GetName(), chr->Pos().x, chr->Pos().y, target->GetName(), target->Pos().x,
-              target->Pos().y, target->GetFace(), distance, angle, spot.x, spot.y);
+              chr->GetName(), IntPos(chr).x, IntPos(chr).y, target->GetName(), IntPos(target).x,
+              IntPos(target).y, IntFacing(target), distance, angle, spot.x, spot.y);
     chr->Goto(spot.x, spot.y);
     return CMD_WAIT;
 }
@@ -1700,7 +1700,7 @@ COMMAND(CmdFaceObject)
     {
         context->Face(context->AngleTo(target) + offset);
         log_debug("[cmd] %s: faceobject %s %d -> facing %d",
-                  context->GetName(), target->GetName(), offset, context->GetFace());
+                  context->GetName(), target->GetName(), offset, IntFacing(context));
     }
     return CMD_WAIT;
 }
@@ -2707,7 +2707,7 @@ COMMAND(CmdTemplate)
     }
 
     S3DPoint pos;
-    context->GetPos(pos);
+    pos = IntPos(context);
 
     int32_t objlist[MAXOBJECTREFS];
     int32_t numfound = MapPane.FindObjectsInRange(pos, objlist, PLATEWIDTH, PLATEHEIGHT, OBJCLASS_TILE, MAXOBJECTREFS);
@@ -2719,7 +2719,7 @@ COMMAND(CmdTemplate)
         if (inst && inst != context)
         {
             S3DPoint ipos;
-            inst->GetPos(ipos);
+            ipos = IntPos(inst);
             ipos.x -= pos.x;
             ipos.y -= pos.y;
             ipos.z -= pos.z;
@@ -3265,7 +3265,7 @@ COMMAND(CmdMove)
             return CMD_BADPARAMS;
 
     S3DPoint oldpos;
-    context->GetPos(oldpos);
+    oldpos = IntPos(context);
     S3DPoint newpos = oldpos;
 
     newpos.x += newx;
@@ -3285,7 +3285,7 @@ COMMAND(CmdMove)
 // z to itself; kept.
 COMMAND(CmdPos)
 {
-    S3DPoint newpos = context->Pos();
+    S3DPoint newpos = IntPos(context);
     int32_t newlevel = -1;
 
     if (t.Type() == TKN_RETURN || t.Type() == TKN_EOF)
@@ -3314,7 +3314,7 @@ COMMAND(CmdPos)
         }
 
         if (add)
-            newpos += context->Pos();
+            newpos += IntPos(context);
     }
 
     MapPane.AddObjectUpdateRect(context->GetMapIndex());
@@ -3340,15 +3340,15 @@ COMMAND(CmdRotate)
 
     if (add)
     {
-        context->SetRotateX(x + context->GetRotateX());
-        context->SetRotateY(y + context->GetRotateY());
-        context->SetRotateZ(z + context->GetRotateZ());
+        SetIntRotateX(context, x + IntRotateX(context));
+        SetIntRotateY(context, y + IntRotateY(context));
+        SetIntFacing(context, z + IntFacing(context));
     }
     else
     {
-        context->SetRotateX(x);
-        context->SetRotateY(y);
-        context->SetRotateZ(z);
+        SetIntRotateX(context, x);
+        SetIntRotateY(context, y);
+        SetIntFacing(context, z);
     }
 
     return 0;
@@ -3466,7 +3466,7 @@ COMMAND(CmdStat)
 
     // if no params, just display the object's stats
     S3DPoint pos;
-    context->GetPos(pos);
+    pos = IntPos(context);
     sprintf(buf, "\"%s\" %s:%s (%d, %d, %d)\n", context->GetName(),
             context->GetTypeName(), context->GetClassName(), pos.x, pos.y, pos.z);
     Output(buf);
@@ -3536,7 +3536,7 @@ int32_t CenterOnFunc(TObjectInstance* context, TToken &t, TScript* script, bool 
     // Editor, no target: the map moves to the context object and its level.
     if (Editor && context && t.Type() != TKN_IDENT && t.Type() != TKN_NUMBER)
     {
-        S3DPoint pos = context->Pos();
+        S3DPoint pos = IntPos(context);
         MapPane.SetMapPos(pos);
         MapPane.SetMapLevel(context->GetLevel());
         return 0;
@@ -3552,7 +3552,7 @@ int32_t CenterOnFunc(TObjectInstance* context, TToken &t, TScript* script, bool 
         }
         if (Editor)
         {
-            S3DPoint pos = inst->Pos();
+            S3DPoint pos = IntPos(inst);
             MapPane.SetMapPos(pos);
         }
         else
@@ -3907,7 +3907,7 @@ COMMAND(CmdReplace)
             def.objtype = objtype;
             def.level = MapPane.GetMapLevel();
 
-            context->GetPos(def.pos);
+            def.pos = IntPos(context);
             int32_t index = MapPane.NewObject(&def);
             if (index < 0)
                 Console.Output("ERROR: Creating object\n");

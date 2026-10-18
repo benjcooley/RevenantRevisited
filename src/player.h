@@ -112,9 +112,6 @@ struct SAutoMapRecord
 {
     std::string                module;
     std::vector<SAutoMapLevel> levels;
-
-    void Load(RTInputStream is);
-    void Save(RTOutputStream os) const;
 };
 
 // ***********
@@ -124,6 +121,8 @@ struct SAutoMapRecord
 _CLASSDEF(TPlayer)
 class TPlayer : public TCharacter
 {
+    friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
+    friend class TLegacySerialize;
   public:
     void ClearPlayer();
     void SetPlayerLevel(int32_t level);
@@ -296,15 +295,6 @@ class TPlayer : public TCharacter
     // Resolve functions
     int32_t ResolveCombat(PTActionBlock ab, int32_t bits) override;
 
-  // Streaming functions
-    int32_t ObjVersion() override { return 15; }
-        // The shipped game's player layout (SAVE_GAME.md §11.4)
-    void Load(RTInputStream is, int32_t version, int32_t objversion) override;
-        // Loads object data from the sector
-    void Save(RTOutputStream os) override;
-        // Saves object data to the sector
-    void LoadInventory(RTInputStream is, int32_t version, uint32_t streamflags) override;
-        // Loads the inventory, re-equips, and keeps health/fatigue/mana
 
   // Shipped-game player record (SAVE_GAME.md §11.4)
     [[nodiscard]] int32_t PlayerState() const { return playerstate; }

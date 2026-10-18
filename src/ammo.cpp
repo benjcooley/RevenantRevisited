@@ -127,24 +127,6 @@ void TAmmo::SetAmount(int32_t amt)
 }
 
 
-void TAmmo::Load(RTInputStream is, int32_t version, int32_t objversion)
-{
-    TObjectInstance::Load(is, version, objversion);
-
-    if (version < 5)
-    {
-        int32_t amount;
-        is >> amount;
-        amount++;
-        SetStat("Amount", amount);
-    }
-}
-
-void TAmmo::Save(RTOutputStream os)
-{
-    TObjectInstance::Save(os);
-}
-
 void TAmmo::AllocGroundItem(TObjectImagery* img, int32_t state, int32_t type, int32_t count)
 {
     if (!img || !img->GetStillImage(state))
@@ -201,7 +183,7 @@ void TAmmo::GetScreenRect(SRect &r)
         PSImageryStateHeader st = imagery->GetState(GetState());
 
         int32_t x, y;
-        WorldToScreen(pos, x, y);
+        WorldToScreen(IntPos(*this), x, y);
 
         r.left   = x - st->regx;
         r.right  = r.left + (INVITEMREALWIDTH / 2) - 1;
@@ -263,8 +245,8 @@ uint32_t TAmmo::Move()
 
     // The character where the arrow is; one far above or below it stops
     // everything this step, a wall included.
-    TCharacter* victim = TCharacter::CharBlocking(this, pos, 0);
-    if (victim && abs(victim->Pos().z - pos.z) > 80)
+    TCharacter* victim = TCharacter::CharBlocking(this, IntPos(*this), 0);
+    if (victim && abs(IntPos(victim).z - IntPos(*this).z) > 80)
         return bits;
     if (killwait >= 0 || (!(bits & MOVE_BLOCKED) && !victim))
         return bits;
@@ -275,7 +257,7 @@ uint32_t TAmmo::Move()
 
     char sound[] = "impact*bow";
     sound[6] = char('1' + random(0, 2));
-    PlayAt(sound, pos);
+    PlayAt(sound, IntPos(*this));
 
     // REVSYNC-DIVERGENCE: retail reads the class of whatever its shooter's
     // id gives, so a shooter removed while the arrow flew crashes it; here
@@ -291,7 +273,7 @@ uint32_t TAmmo::Move()
     }
 
     // The knockback comes from two steps behind the arrow.
-    const S3DPoint from(pos.x - 2 * vel.x, pos.y - 2 * vel.y, pos.z - 2 * vel.z);
+    const S3DPoint from(IntPos(*this).x - 2 * vel.x, IntPos(*this).y - 2 * vel.y, IntPos(*this).z - 2 * vel.z);
 
     // AMMODATA: base, per level of a monster (or of a player a trap hits),
     // per level of a player shooting, per point of bow skill, the least
@@ -357,7 +339,7 @@ uint32_t TAmmo::Move()
 void TAmmo::IceAround()
 {
     int32_t found[10];
-    const int32_t n = MapPane.FindObjectsInRange(pos, found, 200, 0, -1, 10, OBJSET_CHARACTER);
+    const int32_t n = MapPane.FindObjectsInRange(IntPos(*this), found, 200, 0, -1, 10, OBJSET_CHARACTER);
     for (int32_t i = 0; i < n; i++)
     {
         auto* c = static_cast<TCharacter*>(MapPane.GetInstance(found[i]));
@@ -368,7 +350,7 @@ void TAmmo::IceAround()
         def.objclass = OBJCLASS_EFFECT;
         def.objtype = EffectClass.FindObjType("Iced");
         def.level = MapPane.GetMapLevel();
-        def.pos = c->Pos();
+        def.pos = IntPos(c);
         TObjectInstance* iced = MapPane.GetInstance(MapPane.NewObject(&def));
         if (!iced)
             continue;

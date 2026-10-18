@@ -3416,16 +3416,16 @@ void T3DImagery::SetObjectMotion(TObjectInstance* inst)
         int32_t dist, vert, ang, rotx, roty, rotz;
         if (GetMotion(state, frame, dist, vert, ang, rotx, roty, rotz))
         {
-            ang  = (ang  + inst->GetFace())     & 255;
-            rotx = (rotx + inst->GetRotateX()) & 255;
-            roty = (roty + inst->GetRotateY()) & 255;
-            rotz = (rotz + inst->GetRotateZ()) & 255;
+            ang  = (ang  + IntFacing(inst))     & 255;
+            rotx = (rotx + IntRotateX(inst)) & 255;
+            roty = (roty + IntRotateY(inst)) & 255;
+            rotz = (rotz + IntFacing(inst)) & 255;
             inst->SetMoveDist(dist);
             inst->SetMoveVert(vert);
             inst->SetMoveAngle(ang);
-            inst->SetRotateX(rotx);
-            inst->SetRotateY(roty);
-            inst->SetRotateZ(rotz);
+            SetIntRotateX(inst, rotx);
+            SetIntRotateY(inst, roty);
+            SetIntFacing(inst, rotz);
         }
     }
     else
@@ -3603,9 +3603,9 @@ struct T3DAnimator::SPartSysControllers
         const bool poison_pose=(owner.ObjId()==0xe0a3bc42u && animator.Get3DImagery()->HasRetailPoisonProfile());
         const bool dust_pose=(owner.ObjId()==0x0c052637u && animator.Get3DImagery()->HasRetailDustProfile());
         auto& inputs = controller.inputs;
-        const S3DPoint p = owner.Pos();
+        const S3DPoint p = IntPos(owner);
         inputs.owner_position = {float(p.x), float(p.y), float(p.z)};
-        inputs.owner_face = static_cast<unsigned char>(owner.GetFace());
+        inputs.owner_face = static_cast<unsigned char>(IntFacing(owner));
         // Retail 403771 reads animator+14; Animate copies owner frame later.
         // Gold's transient PPS curve must see initial cached0, not owner1.
         inputs.animation_frame = ((head_pose || jhaga_pose || lightstrip_pose || funnel_pose || comet_pose || fgeyser_pose || dust_pose || poison_pose) || owner.ObjId() == 0xd0c0f035u ||
@@ -4137,7 +4137,7 @@ bool T3DAnimator::CombatFlashBaseMeshWorldMatrix(int32_t object, hmm_mat4& world
         ApplyRetailGoldCameraOrientation(world); // Recovered generic '#' branch, no new fitted matrix.
     MtxTranslate(&world,&position); // Original preserves translation after fixed camera orientation.
     hmm_mat4 owner=inst->Transform().Matrix();
-    if(native_software){const auto& p=inst->Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(inst->GetFace()));}
+    if(native_software){const auto& p=IntPos(inst);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(inst)));}
     MtxMultiply(&world,&world,&owner);
     return true;
 }
@@ -4368,7 +4368,7 @@ int32_t T3DAnimator::SubmitPartSys(TRenderer& renderer, int32_t object,
             // The retail helper samples three rotation ranges during Render.
             // Keep those calls here; Submit never advances simulation state.
             const auto sample = controller.simulation.SampleRender(slot, rng);
-            if(inst->ObjId()==0xad92bd32u && std::getenv("REV_STRIKE_PARTICLE_TRACE")){const auto&p=particles[slot];const auto pos=inst->Pos();log_info("[strike-particle] owner=%d,%d,%d frame=%d prototype=%d slot=%zu pos=%.9g,%.9g,%.9g vel=%.9g,%.9g,%.9g",pos.x,pos.y,pos.z,inst->GetFrame(),track.prototype,slot,p.position[0],p.position[1],p.position[2],p.velocity[0],p.velocity[1],p.velocity[2]);}
+            if(inst->ObjId()==0xad92bd32u && std::getenv("REV_STRIKE_PARTICLE_TRACE")){const auto&p=particles[slot];const auto pos=IntPos(inst);log_info("[strike-particle] owner=%d,%d,%d frame=%d prototype=%d slot=%zu pos=%.9g,%.9g,%.9g vel=%.9g,%.9g,%.9g",pos.x,pos.y,pos.z,inst->GetFrame(),track.prototype,slot,p.position[0],p.position[1],p.position[2],p.velocity[0],p.velocity[1],p.velocity[2]);}
 
             if(jhaga && object==0)NoteJhagaAttackPrototypeSample();
             if(head && object==0)NoteHeadFireBallPrototypeSample();
@@ -4660,7 +4660,7 @@ void T3DAnimator::RecordNewExtents(TObjectInstance* oi, int32_t state, bool fron
 
 void T3DAnimator::AnimateResetBoundRect()
 {
-    int32_t face = inst->GetFace();
+    int32_t face = IntFacing(inst);
     face += (flags & ANI3D_UPDATEFRONTONLY) ? 256 : 64;
     inst->Face(face & 255);
     if (face < 1 || face >= 256)
@@ -5068,12 +5068,12 @@ void T3DAnimator::Animate(bool draw)
     // Per-frame: refresh the bone hierarchy so consumers (renderer,
     // attachment lookup, etc.) can read up-to-date world matrices off
     // bone.transform.Matrix(). Runs before the legacy pos/rot mirror
-    // below so anything reading inst->Pos() in this frame gets the
+    // below so anything reading IntPos(inst) in this frame gets the
     // pose-aware bone state.
     UpdateBoneTransforms();
 
     S3DPoint p;
-    inst->GetPos(p);
+    p = IntPos(inst);
 
     changed = false;
     if (pos.X != (float)p.x || pos.Y != (float)p.y || pos.Z != FIX_Z_VALUE(p.z))
@@ -5084,7 +5084,7 @@ void T3DAnimator::Animate(bool draw)
         changed = true;
     }
 
-    float newrotz = inst->GetFace() / 256.0f * (float)(M_PI * 2.0);
+    float newrotz = IntFacing(inst) / 256.0f * (float)(M_PI * 2.0);
     if (fabsf(rot.Z - newrotz) > 0.0001f)
     {
         rot.Z = newrotz;
@@ -5118,7 +5118,7 @@ void T3DAnimator::MakeMatrix(hmm_mat4* m)
 void T3DAnimator::PreRender()
 {
     S3DPoint curpos;
-    inst->GetPos(curpos);
+    curpos = IntPos(inst);
     Scene3D.LightAffectObject(curpos.x, curpos.y, curpos.z + LIGHTINGCHARHEIGHT);
 
     if (changed)

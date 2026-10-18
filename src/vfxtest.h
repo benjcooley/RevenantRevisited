@@ -51,7 +51,7 @@ namespace VfxTest {
 // submit_attached callback (instead of submit), and its factory is
 // called once at boot with the initial anchor — the moving anchor is
 // re-applied on the owning instance every frame, so any effect whose
-// emit logic reads inst->Pos() tracks the bone automatically.
+// emit logic reads IntPos(inst) tracks the bone automatically.
 // Diagnostic backdrop modes for --test=vfx. The harness cycles between
 // these (UI dropdown + `B` key) so effects can be visually vetted against
 // different contexts -- a black backdrop probes additive bloom; LtGray
@@ -126,8 +126,8 @@ struct SVfxAnchor
 // CharacterAttack, CharacterCast}) set `anchor` and `submit_attached`
 // instead of `submit`. The rig resolves the anchor each frame and
 // passes the world position into the submit hook; the rig also keeps
-// the effect's owning instance position synced via ForcePos() so
-// in-game-style emit-from-Pos() effects track the bone naturally.
+// the effect's owning instance position synced via SetIntPos(*this, ) so
+// in-game-style emit-from-IntPos(*this) effects track the bone naturally.
 struct SEffect
 {
     std::string id;

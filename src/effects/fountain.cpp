@@ -393,7 +393,7 @@ class TFountainRuntimeBuilder final : public T3DAnimatorBuilder
         imagery->GetTexture(0, &texture);
         if (texture.htexture == kInvalidTexture) return; // lazy hook retries
         // Do not seed a discarded particle state on a texture-upload retry.
-        auto state = std::unique_ptr<State>(BindImagery(imagery, owner->Pos(), colorobj_));
+        auto state = std::unique_ptr<State>(BindImagery(imagery, IntPos(owner), colorobj_));
         if (!state) return;
         state->texture = texture.htexture;
         auto component = std::make_unique<TFountainRuntimeComponent>(state.release());
@@ -401,7 +401,7 @@ class TFountainRuntimeBuilder final : public T3DAnimatorBuilder
                              int32_t(texture.desc.height), 1, 1, 1,
                              1.0f, 1.0f, false, true);
         owner->AddComponent(std::move(component));
-        const S3DPoint position = owner->Pos();
+        const S3DPoint position = IntPos(owner);
         log_info("[fountain-runtime] attached type='%s' id=%08x map_index=%d "
                  "colorobj=%d texture=%u origin=(%d,%d,%d)",
                  owner->GetTypeName(), owner->ObjId(), owner->GetMapIndex(), colorobj_,

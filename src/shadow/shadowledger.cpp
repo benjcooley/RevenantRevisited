@@ -63,7 +63,7 @@ SShadowSnapshot SShadowSnapshot::Take(TPlayer& player, int64_t tick)
 {
     SShadowSnapshot s;
     s.tick = tick;
-    s.pos = player.Pos();
+    s.pos = IntPos(player);
     s.maplevel = player.GetLevel();
     s.health = player.Health();
     s.mana = player.Mana();

@@ -14,7 +14,7 @@
 
 namespace barrier_preview {
 struct State {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     retail_barrier::State core;
     MeshHandle mesh=0;
     double accumulated=0;
@@ -71,8 +71,8 @@ void SubmitWorld(State* s) {
     if(!Alive(s) || !Renderer || s->rendered==TTime::FrameCount())return;
     s->rendered=TTime::FrameCount();++s->renders;s->uv+=.01f;
     auto* im=static_cast<T3DImagery*>(s->owner->GetImagery());
-    const auto& p=s->owner->Pos();hmm_mat4 root;
-    if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(s->owner->GetFace()));
+    const auto& p=IntPos(s->owner);hmm_mat4 root;
+    if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(IntFacing(s->owner)));
     else root=s->owner->Transform().Matrix();
     S3DAnimObj o={};o.objnum=o.animtrack=0;o.flags=OBJ3D_POS1;
     // Original Render4e7a10 sets wall position to zero and POS1 bypasses

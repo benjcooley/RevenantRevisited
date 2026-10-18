@@ -7,7 +7,7 @@
 #include <memory>
 #include <string>
 namespace flame_variants_preview {
-struct State {std::unique_ptr<TObjectInstance> owner;};
+struct State {TObjectPtr<TObjectInstance> owner;};
 static uint64_t Hash(const void* p,size_t n){uint64_t h=1469598103934665603ull;const auto*b=static_cast<const unsigned char*>(p);while(n--){h^=*b++;h*=1099511628211ull;}return h;}
 bool Matches(const TObjectInstance* owner,T3DImagery* img)
 {

@@ -13,7 +13,7 @@
 #include <cstring>
 namespace tornado_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;std::unique_ptr<TCharacter> caster,target;std::unique_ptr<TSpell> spell;
+ TObjectPtr<TObjectInstance> owner;TObjectPtr<TCharacter> caster,target;std::unique_ptr<TSpell> spell;
  tornado_core::State core;MeshHandle meshes[4]{};S3DPoint display={};double accumulator=0;uint64_t initial_draws=0;int64_t rendered=-1;
  ~State(){if(caster && target && spell)log_info("[tornado-cleanup] tick=%d alive=%d health=%d/%d flags=%x/%x spell_timer=%d damage_events=%d",core.frame,int(core.alive),caster->Health(),target->Health(),caster->Flags(),target->Flags(),spell->TimerValue(),core.damage_events);if(auto* effect=dynamic_cast<TEffect*>(owner.get()))effect->SetSpell(nullptr);if(Renderer)for(auto mesh:meshes)if(mesh)Renderer->ReleaseMeshAssetRef(mesh);}
 };
@@ -31,7 +31,7 @@ static State* Spawn(const S3DPoint& origin,bool isolated){
   s->meshes[i]=Renderer->RegisterMeshAsset(0x544f524e41440000ull+i,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()),img->GetTextureHandle(texslot));if(!s->meshes[i])return nullptr;Renderer->AddMeshAssetRef(s->meshes[i]);
  }
  auto* characters=TObjectClass::GetClass(OBJCLASS_CHARACTER);const int actor_type=characters?characters->FindObjType("Acolyte"):-1;if(actor_type<0)return nullptr;
- auto make=[&](S3DPoint p){SObjectDef d={};d.objclass=OBJCLASS_CHARACTER;d.objtype=short(actor_type);d.pos=p;return std::unique_ptr<TCharacter>(dynamic_cast<TCharacter*>(characters->NewObject(&d)));};s->caster=make({3185,3185,16});s->target=make({3281,3185,16});if(!s->caster || !s->target || !s->caster->BeginFighting(s->target.get()))return nullptr;
+ auto make=[&](S3DPoint p){SObjectDef d={};d.objclass=OBJCLASS_CHARACTER;d.objtype=short(actor_type);d.pos=p;return TObjectPtr<TCharacter>(dynamic_cast<TCharacter*>(characters->NewObject(&d)));};s->caster=make({3185,3185,16});s->target=make({3281,3185,16});if(!s->caster || !s->target || !s->caster->BeginFighting(s->target.get()))return nullptr;
  TObjectInstance* target=s->target.get();S3DPoint offset={0,0,0};s->spell=std::make_unique<TSpell>(s->caster.get(),&target,1,&offset,data,variant);if(auto* effect=dynamic_cast<TEffect*>(s->owner.get()))effect->SetSpell(s->spell.get());else return nullptr;
  const auto& snap=FrameSnap::GetConfig();if(isolated && snap.seed_set)SeedRandom(snap.seed);s->initial_draws=RandomDraws();s->core.Initialize([](int a,int b){return random(a,b);});
  log_info("[tornado-rng] seeded=%d seed=%u initial_draws=%llu",int(isolated && snap.seed_set),snap.seed,static_cast<unsigned long long>(RandomDraws()-s->initial_draws));
@@ -48,7 +48,7 @@ void Advance(State* s,double dt){
    // character set2 and caster level. The proven fixture's genuine actors
    // are not sector residents. Execute that query; reject other contexts
    // rather than pretending to implement the unverified damage branch.
-   const S3DPoint pos=s->owner->Pos();SRect rectangle{pos.x-200,pos.y-200,pos.x+200,pos.y+200};
+   const S3DPoint pos=IntPos(s->owner);SRect rectangle{pos.x-200,pos.y-200,pos.x+200,pos.y+200};
    TMapIterator characters(s->caster->GetLevel(),&rectangle,CHECK_NOINVENT|CHECK_MAPRECT|CHECK_LOADED,OBJSET_CHARACTER);
    if(characters){log_error("[tornado] unsupported nonempty damage query; configured fixture stopped");s->core.alive=false;s->spell->Kill();s->owner->SetFlag(OF_KILL|OF_PULSE);}
    else log_info("[tornado-damage-query] tick=%d radius=200 loaded=1 characters=0",s->core.frame);

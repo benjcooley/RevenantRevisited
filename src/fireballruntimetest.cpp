@@ -30,13 +30,13 @@ bool RunFireballRuntimeTest(TMapRenderer& renderer)
     definition.objclass=EffectClass.ClassId();definition.objtype=EffectClass.FindObjType(0x63fd382au);
     definition.level=StartupSceneCamera[0];definition.pos={center.x,center.y,height+128};
     if(definition.objtype<0)return false;
-    std::unique_ptr<TObjectInstance> owned(EffectClass.NewObject(&definition));
+    TObjectPtr<TObjectInstance> owned(EffectClass.NewObject(&definition));
     auto* effect=dynamic_cast<TFireBallEffect*>(owned.get());
     if(!effect||effect->ObjId()!=0x63fd382au)
     {
         log_error("[fireball-runtime] actual type factory did not produce TFireBallEffect");return false;
     }
-    const S3DPoint source=effect->Pos();
+    const S3DPoint source=IntPos(effect);
     S3DPoint destination{source.x+480,source.y,source.z};
     if(!effect->SetProjectileEndpoints(source,destination))return false;
     if(effect->ProjectileState().speed_fixed!=8*65536||!effect->IsAlive())return false;
@@ -44,12 +44,12 @@ bool RunFireballRuntimeTest(TMapRenderer& renderer)
     bool launched=false,impacted=false,killed=false,generic_did_not_move=true,state_matches=true;
     for(int tick=0;tick<192;++tick)
     {
-        const S3DPoint before=effect->Pos();
+        const S3DPoint before=IntPos(effect);
         effect->Move(); // Same generic walk that the actual map invokes.
-        const S3DPoint unmoved=effect->Pos();
+        const S3DPoint unmoved=IntPos(effect);
         generic_did_not_move&=before.x==unmoved.x&&before.y==unmoved.y&&before.z==unmoved.z;
         effect->Pulse(); // Actual production virtual runtime method.
-        const auto& state=effect->ProjectileState();const S3DPoint current=effect->Pos();
+        const auto& state=effect->ProjectileState();const S3DPoint current=IntPos(effect);
         positions.emplace(current.x,current.y,current.z);
         launched|=state.state==1;impacted|=state.state==2;
         state_matches&=effect->GetState()==state.state;

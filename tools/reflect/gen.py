@@ -55,10 +55,14 @@ TYPE_MAP = {
     "bool":        ("Bool",   "b",   "{m} = v.b;",                                   "out = SPropValue::Bool({m});"),
     "int32_t":     ("Int",    "i",   "{m} = v.i;",                                   "out = SPropValue::Int({m});"),
     "int":         ("Int",    "i",   "{m} = v.i;",                                   "out = SPropValue::Int({m});"),
+    "uint32_t":    ("Int",    "i",   "{m} = uint32_t(v.i);",                         "out = SPropValue::Int(int32_t({m}));"),
     "float":       ("Float",  "f",   "{m} = v.f;",                                   "out = SPropValue::Float({m});"),
     "std::string": ("String", "str", "{m}.assign(v.str.data(), v.str.size());",       "out = SPropValue::String({m});"),
     "hmm_vec3":    ("Vec3",   "v3",  "{m} = hmm_vec3{{{{v.v3[0], v.v3[1], v.v3[2]}}}};", "out = SPropValue::Vec3({m}.X, {m}.Y, {m}.Z);"),
     "SRgba":       ("Color",  "c4",  "{m} = SRgba{{v.c4[0], v.c4[1], v.c4[2], v.c4[3]}};", "out = SPropValue::Color({m}.r, {m}.g, {m}.b, {m}.a);"),
+    # Retail's integer world point rides the Vec3 lanes.
+    "S3DPoint":    ("Vec3",   "v3",  "{m} = S3DPoint(int32_t(std::lround(v.v3[0])), int32_t(std::lround(v.v3[1])), int32_t(std::lround(v.v3[2])));",
+                                     "out = SPropValue::Vec3(float({m}.x), float({m}.y), float({m}.z));"),
 }
 
 RE_CLASS = re.compile(r"^\s*(?:class|struct)\s+([A-Za-z_]\w*)\s*(?:final\s*)?(?::\s*(?:(?:public|protected|private|virtual)\s+)*([\w:]+)[^{;]*)?\{")
@@ -379,7 +383,7 @@ def emit(path: Path, out: Path, include: str):
     o.append('#include "%s"\n' % include)
     refl_h = (Path(__file__).resolve().parent.parent.parent / "src" / "refl.h").as_posix()
     o.append('#include "%s"\n\n' % refl_h)
-    o.append("#include <cstring>\n\nnamespace {\n")
+    o.append("#include <cmath>\n#include <cstring>\n\nnamespace {\n")
     for k in targets:
         for m in k.members:
             if m.ctype in enums and m.ctype not in used_enums:
@@ -527,7 +531,7 @@ def emit(path: Path, out: Path, include: str):
         props = ("kProps_%s" % k.name) if k.members else "nullptr"
         setf  = ("&refl::Access<%s>::Set" % k.name) if k.members else "nullptr"
         getf  = ("&refl::Access<%s>::Get" % k.name) if k.members else "nullptr"
-        cnode = ("[]() -> TNodeInst* { return new %s(); }" % k.name) if k.def_kind == "node" else "nullptr"
+        cnode = ("[]() -> TNode* { return new %s(); }" % k.name) if k.def_kind == "node" else "nullptr"
         ccomp = ("[]() -> TObjectComponent* { return new %s(); }" % k.name) if k.def_kind == "component" else "nullptr"
         loaded = ("&refl::Access<%s>::PostLoad" % k.name) if k.has_postload else "nullptr"
         if nested_members:

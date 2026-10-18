@@ -31,44 +31,6 @@ void TScroll::SetText(char *newtext)
         strcpy(text, newtext);
 }
 
-void TScroll::Load(RTInputStream is, int32_t version, int32_t objversion)
-{
-    TObjectInstance::Load(is, version, objversion);
-
-    short len;
-    is >> len;
-
-    if (len < 1)
-        text = nullptr;
-    else
-    {
-        text = new char[len+1];
-
-        if (text)
-        {
-            int32_t i;
-            for (i = 0; i < len; i++)
-                is >> text[i];
-
-            text[i] = 0;
-        }
-    }
-}
-
-void TScroll::Save(RTOutputStream os)
-{
-    TObjectInstance::Save(os);
-
-    short len = text ? strlen(text) : 0;
-    os << len;
-
-    if (len)
-    {
-        for (int32_t i = 0; i < len; i++)
-            os << text[i];
-    }
-}
-
 bool TScroll::Use(TObjectInstance* user, int32_t with)
 {
     if (with < 0)

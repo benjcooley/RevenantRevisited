@@ -217,7 +217,7 @@ TObjectInstance* AddItem(TObjectInstance* owner, const char* name, int32_t slot,
             owner->PlaceInInventory(item, slot);
             return item;
         }
-        delete item;
+        DeleteObject(item);
         break;
     }
     log_warn("[ui-demo] could not add '%s' at slot %d", name, slot);
@@ -230,7 +230,7 @@ void RemoveItems(TObjectInstance* owner, int32_t first, int32_t last)
         if (TObjectInstance* item = owner->GetInventorySlot(slot))
         {
             item->RemoveFromInventory();
-            delete item;
+            DeleteObject(item);
         }
 }
 

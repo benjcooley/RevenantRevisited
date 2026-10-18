@@ -13,10 +13,10 @@
 #include <vector>
 namespace paralize_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;
+ TObjectPtr<TObjectInstance> owner;
  paralize_core::State core;
  paralize_core::Vec origin;
- std::unique_ptr<TCharacter> invoker,target;
+ TObjectPtr<TCharacter> invoker,target;
  MeshHandle mesh=0,egg=0;
  float egg_uv=0;
  S3DPoint display_origin={};
@@ -26,7 +26,7 @@ struct State {
   if(!target || target_cleanup_done)return;
   target->SetParalize((target_initial_flags&OF_PARALIZE)!=0);
   target->SetFlag(OF_DISABLED,(target_initial_flags&OF_DISABLED)!=0);
-  S3DPoint p;target->GetPos(p);
+  S3DPoint p;p = IntPos(target);
   log_info("[paralize-target-cleanup] tick=%d alive=%d flags_before=%x flags_after=%x health=%d target=(%d,%d,%d)",completed_tick<0?ticks:completed_tick,int(core.alive),target_initial_flags,target->Flags(),target->Health(),p.x,p.y,p.z);
   target_cleanup_done=true;
  }
@@ -59,7 +59,7 @@ static State* SpawnWithTarget(const S3DPoint& origin,bool isolated_seed)
  const uint64_t setup_draws=RandomDraws();
  auto s=std::unique_ptr<State>(Spawn(origin));if(!s)return nullptr;
  auto* cl=TObjectClass::GetClass(OBJCLASS_CHARACTER);const int type=cl?cl->FindObjType(config.actor_type):-1;if(type<0)return nullptr;
- auto make=[&](S3DPoint p){SObjectDef def={};def.objclass=OBJCLASS_CHARACTER;def.objtype=short(type);def.pos=p;return std::unique_ptr<TCharacter>(dynamic_cast<TCharacter*>(cl->NewObject(&def)));};
+ auto make=[&](S3DPoint p){SObjectDef def={};def.objclass=OBJCLASS_CHARACTER;def.objtype=short(type);def.pos=p;return TObjectPtr<TCharacter>(dynamic_cast<TCharacter*>(cl->NewObject(&def)));};
  s->invoker=make({config.source_x,config.source_y,config.source_z});s->target=make({config.source_x+config.target_dx,config.source_y+config.target_dy,config.source_z+config.target_dz});
  if(s->target)s->target_initial_flags=s->target->Flags();
  if(!s->invoker || !s->target || s->target->Radius()!=config.expected_radius || !s->invoker->BeginFighting(s->target.get()) || s->invoker->Fighting()!=s->target.get())return nullptr;
@@ -83,7 +83,7 @@ void Advance(State* s,double dt)
 {
  if(!s || !std::isfinite(dt) || dt<=0)return;s->accumulator+=dt;
  while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;if(!Alive(s))return;if(s->target){
-   S3DPoint t;s->target->GetPos(t);s->target->Disable();s->target->Stop();s->target->SetParalize(true);
+   S3DPoint t;t = IntPos(s->target);s->target->Disable();s->target->Stop();s->target->SetParalize(true);
    s->core.TickTarget([](int a,int b){return random(a,b);},s->origin,{t.x,t.y,int(RetailSoftwareOwnerZ(t.z))},s->target->Radius(),1);
    if(!s->core.alive){s->owner->SetFlag(OF_KILL);s->CleanupTarget(s->ticks+1);}
   }else s->core.Tick([](int a,int b){return random(a,b);},s->origin);++s->ticks;

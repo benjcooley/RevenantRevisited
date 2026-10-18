@@ -658,7 +658,7 @@ void TAutoMap::ComposeMarkers(int32_t target_w, int32_t target_h)
     if (!Player)
         return;
     S3DPoint pos;
-    Player->GetPos(pos);
+    pos = IntPos(Player);
     Renderer->SetTargetClip(kWindowLeft, kWindowTop, kWindowSize, kWindowSize);
     for (TMapIterator i(pos, kNearRange, CHECK_NOINVENT | CHECK_MAPRECT, OBJSET_CHARACTER); i.Item(); i++)
     {

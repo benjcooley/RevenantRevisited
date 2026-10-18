@@ -215,7 +215,7 @@ class TMapRenderer
     // of the camera's world->pixel transform (camera offset + viewport
     // scale + iso projection), so game-side input code can compute "what
     // world point is the cursor over?" without hand-rolling the camera
-    // math. Common z_floor is Player->Pos().z (snap to walkable height
+    // math. Common z_floor is IntPos(Player).z (snap to walkable height
     // beneath the player).
     void ScreenToWorld(int32_t screen_x, int32_t screen_y,
                        int32_t z_floor, S3DPoint &out) const;

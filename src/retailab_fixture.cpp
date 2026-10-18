@@ -386,7 +386,7 @@ std::vector<std::pair<std::string, std::string>> g_walls;
 std::string EyesOf(const S3DPoint& p)
 {
     for (TCharacter* c : g_world->Order())
-        if (c->Pos().x == p.x && c->Pos().y == p.y && c->Pos().z + LIGHTINGCHARHEIGHT == p.z)
+        if (IntPos(c).x == p.x && IntPos(c).y == p.y && IntPos(c).z + LIGHTINGCHARHEIGHT == p.z)
             return g_world->NameOf(c);
     return "?";
 }
@@ -477,7 +477,7 @@ std::vector<TObjectInstance*> CaseMapObjects(int32_t level, const SRect& r, int3
     Seam(j.str());
     std::vector<TObjectInstance*> items;
     for (const SMapObject& m : g_mapObjects)
-        if ((level < 0 || m.level == level) && r.In(m.object->Pos().x, m.object->Pos().y))
+        if ((level < 0 || m.level == level) && r.In(IntPos(m.object).x, IntPos(m.object).y))
             items.push_back(m.object);
     return items;
 }

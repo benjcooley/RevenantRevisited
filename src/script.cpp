@@ -216,8 +216,8 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance
         else if (player && !stricmp(st->name, player->GetName()))
         {
             // Box first, then dx² + dy² ≤ 2·dist².
-            const S3DPoint here = context->Pos();
-            const S3DPoint there = player->Pos();
+            const S3DPoint here = IntPos(context);
+            const S3DPoint there = IntPos(player);
             const int32_t dx = here.x - there.x;
             const int32_t dy = here.y - there.y;
             if (std::abs(dx) <= st->dist && std::abs(dy) <= st->dist &&
@@ -235,7 +235,7 @@ bool TScript::Triggered(PSScriptTrigger st, int32_t curpriority, TObjectInstance
             fires = true;
         else if (player && (!stricmp(st->name, "player") || !stricmp(st->name, player->GetName())))
         {
-            if (st->cube.In(player->Pos()))
+            if (st->cube.In(IntPos(player)))
             {
                 triggerer = player;
                 useralias = kAliasUser;

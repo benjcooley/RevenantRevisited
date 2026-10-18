@@ -1983,6 +1983,8 @@ void GetParameters(int argc, char **argv)
         std::string p;
         if (arg_param(cmd, "level", p))
             strncpyz(StartupLevelId, p.c_str(), sizeof(StartupLevelId));
+        if (arg_param(cmd, "dump-out", p))
+            strncpyz(StartupDumpOut, p.c_str(), sizeof(StartupDumpOut));
         if (arg_param(cmd, "scene-camera", p))
             StartupSceneCameraSet = sscanf(p.c_str(), "%d,%d,%d,%d", &StartupSceneCamera[0],
                 &StartupSceneCamera[1], &StartupSceneCamera[2], &StartupSceneCamera[3]) == 4;

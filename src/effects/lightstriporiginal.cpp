@@ -14,7 +14,7 @@
 
 namespace lightstrip_original {
 struct State {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     struct Part {MeshHandle mesh=0;S3DMat material{};int object=0,slot=0;};
     std::vector<Part> parts;
     S3DPoint source{},target{},velocity{};
@@ -37,7 +37,7 @@ State* Spawn(const S3DPoint& source,const S3DPoint& target)
     if(!owner || owner->ObjId()!=0x10da54d0u || !dynamic_cast<TEffect*>(owner))return nullptr;
     // Controlled coordinates can lie outside loaded map sectors. Establish
     // the explicit fixture transform before creating the animator/controllers.
-    owner->ForcePos(source);owner->Face(ConvertToFacing(source,target));owner->OnScreen();
+    SetIntPos(owner, source);owner->Face(ConvertToFacing(source,target));owner->OnScreen();
     auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());auto* animator=dynamic_cast<T3DAnimator*>(owner->GetAnimator());
     if(!image || !animator || !image->HasRetailLightStripProfile() || animator->PartSysUnsupported() || animator->PartSysControllerCount()!=1)return nullptr;
     auto* context=c.get();animator->SetLightStripGround([context](int x,int y,int z){return context->Ground(x,y,z);});
@@ -62,12 +62,12 @@ void Advance(State* c,double seconds)
     c->accumulated+=seconds;auto* o=c->owner.get();
     while(c->accumulated+1e-10>=TTime::LegacyFrameSeconds && !(o->GetFlags()&OF_KILL)){
         c->accumulated-=TTime::LegacyFrameSeconds;o->NextFrame();++c->counter;
-        if(c->counter==1){ConvertToVector(o->GetFace(),20,c->velocity);c->ground_z=o->Pos().z-50;o->Face(0);}
+        if(c->counter==1){ConvertToVector(IntFacing(o),20,c->velocity);c->ground_z=IntPos(o).z-50;o->Face(0);}
         switch(o->GetState()){
         case 0:if(o->CommandDone())o->SetState(1);break;
-        case 1:{auto p=o->Pos();if(c->counter<=300){const int height=c->Ground(p.x,p.y,p.z);if(!height || height>c->ground_z+32)c->counter=300;}
+        case 1:{auto p=IntPos(o);if(c->counter<=300){const int height=c->Ground(p.x,p.y,p.z);if(!height || height>c->ground_z+32)c->counter=300;}
             // Source detects terrain before moving, including the impact pulse.
-            p.x+=c->velocity.x;p.y+=c->velocity.y;o->ForcePos(p);
+            p.x+=c->velocity.x;p.y+=c->velocity.y;SetIntPos(o, p);
             if(c->counter>=300)o->SetState(2);
             else if(o->CommandDone()){o->SetFrame(0);o->SetCommandDone(false);}break;}
         case 2:if(o->CommandDone())o->SetFlags(o->GetFlags()|OF_KILL|OF_PULSE);break;
@@ -80,7 +80,7 @@ void SubmitWorld(State* c,EFxDebugMode)
     if(!c || !c->owner || !Renderer || (c->owner->GetFlags()&OF_KILL))return;
     auto* o=c->owner.get();o->Animate(false);auto* a=dynamic_cast<T3DAnimator*>(o->GetAnimator());auto* image=a->Get3DImagery();
     a->SubmitPartSys(*Renderer,11,1,{1,1,1},StartupVfxNativeDomain);
-    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=o->Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(o->GetFace()));}
+    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=IntPos(o);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(o)));}
     for(const auto& part:c->parts){
         hmm_vec3 p{},r{},s{};if(!image->GetUninterpolatedAniKey(part.object,o->GetState(),o->GetFrame(),p,r,s,true) || s.X<=1e-5f || s.Y<=1e-5f || s.Z<=1e-5f)continue;
         hmm_mat4 local;BuildRetailLightStripMatrix(local,part.object,p,r,s);

@@ -14,7 +14,7 @@
 namespace generic_static_preview {
 struct State {
  struct Part{int object;MeshHandle mesh;int lighting;};
- std::unique_ptr<TObjectInstance> owner;TSafeRef<> identity;std::vector<Part>parts;double accumulated=0;
+ TObjectPtr<TObjectInstance> owner;TSafeRef<> identity;std::vector<Part>parts;double accumulated=0;
  ~State(){if(Renderer)for(const auto&p:parts)Renderer->ReleaseMeshAssetRef(p.mesh);}
 };
 State* Spawn(const S3DPoint& origin,uint32_t id){
@@ -39,7 +39,7 @@ void Advance(State*state,double seconds){
 void SubmitWorld(State*state,EFxDebugMode mode){
  if(!state||!Renderer||!state->owner||mode!=EFxDebugMode::Normal)return;auto*owner=state->identity.Get();auto*im=owner?dynamic_cast<T3DImagery*>(owner->GetImagery()):nullptr;if(!generic_static_profile::Matches(owner,im))return;owner->Animate(false);auto*animator=dynamic_cast<T3DAnimator*>(owner->GetAnimator());if(!animator)return;
  for(const auto&part:state->parts){if(!animator->IsObjectEnabled(part.object))continue;
-  if(StartupVfxNativeDomain){hmm_mat4 root,world;const auto&p=owner->Pos();BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(owner->GetFace()));float local[16];BuildStaticObjectMatrix(im,part.object,0,owner->GetFrame(),local);hmm_mat4 matrix;for(int row=0;row<4;++row)for(int col=0;col<4;++col)matrix.Elements[col][row]=local[row*4+col];MtxMultiply(&world,&matrix,&root);
+  if(StartupVfxNativeDomain){hmm_mat4 root,world;const auto&p=IntPos(owner);BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(IntFacing(owner)));float local[16];BuildStaticObjectMatrix(im,part.object,0,owner->GetFrame(),local);hmm_mat4 matrix;for(int row=0;row<4;++row)for(int col=0;col<4;++col)matrix.Elements[col][row]=local[row*4+col];MtxMultiply(&world,&matrix,&root);
    SHelperMeshSubmit mesh={};mesh.mesh=part.mesh;mesh.retail_lighting=part.lighting;mesh.retail_software_projection=true;mesh.retail_positive_face_cull=true;for(int row=0;row<4;++row)for(int col=0;col<4;++col)mesh.world[row*4+col]=world.Elements[col][row];Renderer->SubmitHelperMesh(mesh);
   }else{auto*bone=animator->GetObject(part.object);if(!bone)continue;SMeshSubmit mesh={};mesh.mesh=part.mesh;mesh.retail_lighting=part.lighting;mesh.retail_positive_face_cull=true;for(int row=0;row<4;++row)for(int col=0;col<4;++col)mesh.world[row*4+col]=bone->transform.Matrix().Elements[col][row];mesh.tint[0]=mesh.tint[1]=mesh.tint[2]=mesh.tint[3]=1;Renderer->SubmitMesh(mesh);}
  }

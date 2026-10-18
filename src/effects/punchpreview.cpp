@@ -19,7 +19,7 @@
 namespace punch_authored_preview {
 struct State {
     struct Part { int32_t object = -1, texture_slot = -1; MeshHandle mesh = 0; S3DMaterial material{}; };
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     TSafeRef<> identity;
     std::vector<Part> parts;
     double accumulated = 0;
@@ -110,7 +110,7 @@ void SubmitWorld(State* context, EFxDebugMode) {
         if(context->submitted_frame==TTime::FrameCount())return;
         context->submitted_frame=TTime::FrameCount();
         auto* image=static_cast<T3DImagery*>(owner->GetImagery());hmm_mat4 root;
-        const auto& p=owner->Pos();BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(owner->GetFace()));
+        const auto& p=IntPos(owner);BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(IntFacing(owner)));
         // Original default PreRender always supplies owner previous-state/frame,
         // including the first five frames after an authored same-state wrap.
         image->SetPrevState(owner->GetPrevState(),owner->GetPrevFrame());

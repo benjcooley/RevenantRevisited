@@ -218,7 +218,7 @@ bool CaseSeesMelee(TCharacter* self, TCharacter* chr, int32_t angle)
 struct SCaseHelper
 {
     std::string name;
-    std::unique_ptr<TObjectInstance> object;
+    TObjectPtr<TObjectInstance> object;
     int32_t level = 0;
 };
 std::vector<SCaseHelper> g_helpers;
@@ -239,7 +239,7 @@ void MakeHelpers(const JsonValue& cs)
         def.pos = S3DPoint((int32_t)w["pos"][0].Int(), (int32_t)w["pos"][1].Int(), (int32_t)w["pos"][2].Int());
         def.level = (uint16_t)w["level"].Int(0);
         auto* imagery = new TFixtureImagery(TFixtureImagery::Register({}), w["name"].Str(), {}, false);
-        auto object = std::make_unique<TObjectInstance>(&def, imagery);
+        auto object = TObjectPtr<TObjectInstance>(new TObjectInstance(&def, imagery));
         object->SetMapIndex(kHelperIndex + (int32_t)g_helpers.size());
         g_helpers.push_back({w["name"].Str(), std::move(object), (int32_t)def.level});
     }
@@ -281,11 +281,11 @@ bool CaseHelperSight(const S3DPoint& from, const S3DPoint& to)
 {
     std::string a = "?", b = "?";
     for (const SCaseHelper& h : g_helpers)
-        if (h.object->Pos().x == from.x && h.object->Pos().y == from.y)
+        if (IntPos(h.object).x == from.x && IntPos(h.object).y == from.y)
             a = h.name;
     for (const JsonValue& spec : (*g_answers.cs)["chars"].Items())
     {
-        const S3DPoint p = g_answers.world->Get(spec["name"].Str())->Pos();
+        const S3DPoint p = IntPos(g_answers.world->Get(spec["name"].Str()));
         if (p.x == to.x && p.y == to.y && p.z == to.z)
             b = spec["name"].Str();
     }
@@ -502,7 +502,7 @@ class TFixtureMade : public TBloodEffect
 };
 // Made before the case's seams start (their imagery is asked about the
 // animator as they are built); NewObject hands them out in turn.
-std::vector<std::unique_ptr<TFixtureMade>> g_made;
+std::vector<TObjectPtr<TFixtureMade>> g_made;
 size_t g_madeUsed = 0;
 constexpr int32_t kMadeIndex = 0x7100;          // map indices the made objects take (retail BLOOD_INDEX)
 constexpr size_t kMadeObjects = 16;
@@ -515,7 +515,7 @@ void MakeMadeObjects()
     {
         const std::string label = "made " + std::to_string(i + 1);
         auto* imagery = new TFixtureImagery(TFixtureImagery::Register({}), label, {}, false);
-        g_made.push_back(std::make_unique<TFixtureMade>(imagery, label));
+        g_made.push_back(TObjectPtr<TFixtureMade>(new TFixtureMade(imagery, label)));
     }
 }
 
@@ -849,7 +849,7 @@ struct SBossAnswers
 {
     const TFixtureWorld* world = nullptr;
     const JsonValue* cs = nullptr;
-    std::vector<std::unique_ptr<TFixtureProp>> props;
+    std::vector<TObjectPtr<TFixtureProp>> props;
     size_t madeHandedOut = 0;
 };
 SBossAnswers g_boss;
@@ -930,7 +930,7 @@ class SBossScope
             std::vector<std::string> states;
             for (const JsonValue& st : p["states"].Items())
                 states.push_back(st.Str());
-            g_boss.props.push_back(std::make_unique<TFixtureProp>(&def, p["name"].Str(), std::move(states)));
+            g_boss.props.push_back(TObjectPtr<TFixtureProp>(new TFixtureProp(&def, p["name"].Str(), std::move(states))));
             if (const int32_t id = (int32_t)p["id"].Int(0))
                 RegisterId(g_boss.props.back().get(), id);
         }

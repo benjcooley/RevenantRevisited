@@ -15,10 +15,10 @@
 DEFINE_BUILDER("Aura",TAuraEffect)
 REGISTER_BUILDER(TAuraEffect)
 void TAuraEffect::Initialize(){first_time=true;}
-void TAuraEffect::Pulse(){TEffect::Pulse();if(first_time && spell){spell->SetDefense(spell->VariantData()->mindamage);spell->SetOffense(spell->VariantData()->maxdamage);first_time=false;}S3DPoint p=GetCharacter()?GetCharacter()->Pos():Pos();SetPos(p);if(spell){spell->SetDefense(spell->VariantData()->mindamage);spell->SetOffense(spell->VariantData()->maxdamage);}}
+void TAuraEffect::Pulse(){TEffect::Pulse();if(first_time && spell){spell->SetDefense(spell->VariantData()->mindamage);spell->SetOffense(spell->VariantData()->maxdamage);first_time=false;}S3DPoint p=GetCharacter()?IntPos(GetCharacter()):IntPos(*this);SetPos(p);if(spell){spell->SetDefense(spell->VariantData()->mindamage);spell->SetOffense(spell->VariantData()->maxdamage);}}
 namespace aura_public_preview {
 struct State {
- std::unique_ptr<TCharacter>actor;std::unique_ptr<TSpell>spell;std::unique_ptr<TAuraEffect>owner;aura_core::State core;
+ TObjectPtr<TCharacter>actor;std::unique_ptr<TSpell>spell;TObjectPtr<TAuraEffect>owner;aura_core::State core;
  MeshHandle mesh{};double accumulator=0;int64_t rendered=-1;
  ~State(){if(owner)owner->SetSpell(nullptr);if(Renderer && mesh)Renderer->ReleaseMeshAssetRef(mesh);}
 };
@@ -46,10 +46,10 @@ State* Spawn(const S3DPoint&origin){
  log_info("[native-domain] enabled=%d camera_z=0 genuineAura publicSetSpell",int(StartupVfxNativeDomain));log_info("[aura-public] typed_id=00ab1d1d actor=Acolyte state14frame0 facing96 integer_pose_control=1 source_CalcObjectMatrix_Interpolate0=1 selector_zero_control=1 source_seed_after_actor=%d poseFraction=%.9g",int(std::string(StartupTestMode)=="vfx"),TTime::LegacyFrameFraction());return s.release();
 }
 bool Alive(State*s){return s && s->owner && !s->core.done && !(s->owner->Flags()&OF_KILL);}
-void Advance(State*s,double seconds){if(!Alive(s)||!std::isfinite(seconds)||seconds<=0)return;s->accumulator+=seconds;while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;s->owner->NextFrame();s->owner->Pulse();if(!Alive(s))return;auto*anim=dynamic_cast<T3DAnimator*>(s->actor->GetAnimator());hmm_mat4 root;const auto p=s->actor->Pos();BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(s->actor->GetFace()));// Original constructor storage in this cached-boot case observes limit0.
+void Advance(State*s,double seconds){if(!Alive(s)||!std::isfinite(seconds)||seconds<=0)return;s->accumulator+=seconds;while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;s->owner->NextFrame();s->owner->Pulse();if(!Alive(s))return;auto*anim=dynamic_cast<T3DAnimator*>(s->actor->GetAnimator());hmm_mat4 root;const auto p=IntPos(s->actor);BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(IntFacing(s->actor)));// Original constructor storage in this cached-boot case observes limit0.
  s->core.Advance([](int a,int b){return random(a,b);},[&](int i,hmm_mat4&m){return IntegerBone(anim,i,m);},root,0,p);if(s->core.done){s->owner->KillThisEffect();s->spell->Kill();}}
 }
-void SubmitWorld(State*s){if(!Alive(s)||!Renderer||s->rendered==TTime::FrameCount())return;s->rendered=TTime::FrameCount();int draws=0;hmm_mat4 owner;const auto p=s->owner->Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,0);s->core.Render([&](int,const hmm_mat4&local){hmm_mat4 world;MtxMultiply(&world,const_cast<hmm_mat4*>(&local),&owner);SHelperMeshSubmit d={};d.mesh=s->mesh;d.retail_lighting=1;d.additive_blend=true;d.retail_additive_cull_none=true;d.retail_software_projection=StartupVfxNativeDomain;for(int r=0;r<4;++r)for(int c=0;c<4;++c)d.world[r*4+c]=world.Elements[c][r];Renderer->SubmitHelperMesh(d);++draws;});log_info("[aura-phase] tick=%d to_add=%d draws=%d defense=%d offense=%d rng_draws=%llu",s->core.frame,s->core.to_add,draws,s->spell->GetDefense(),s->spell->GetOffense(),(unsigned long long)RandomDraws());
+void SubmitWorld(State*s){if(!Alive(s)||!Renderer||s->rendered==TTime::FrameCount())return;s->rendered=TTime::FrameCount();int draws=0;hmm_mat4 owner;const auto p=IntPos(s->owner);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,0);s->core.Render([&](int,const hmm_mat4&local){hmm_mat4 world;MtxMultiply(&world,const_cast<hmm_mat4*>(&local),&owner);SHelperMeshSubmit d={};d.mesh=s->mesh;d.retail_lighting=1;d.additive_blend=true;d.retail_additive_cull_none=true;d.retail_software_projection=StartupVfxNativeDomain;for(int r=0;r<4;++r)for(int c=0;c<4;++c)d.world[r*4+c]=world.Elements[c][r];Renderer->SubmitHelperMesh(d);++draws;});log_info("[aura-phase] tick=%d to_add=%d draws=%d defense=%d offense=%d rng_draws=%llu",s->core.frame,s->core.to_add,draws,s->spell->GetDefense(),s->spell->GetOffense(),(unsigned long long)RandomDraws());
  if(std::string(StartupTestMode)=="vfx")for(int i=0;i<100;++i){const auto&p=s->core.particles[i];if(p.used)log_info("[aura-slot] tick=%d slot=%d p=%.9g,%.9g,%.9g scale=%.9g life=%d span=%d",s->core.frame,i,p.position.X,p.position.Y,p.position.Z,p.scale.X,p.life,p.span);}}
 void Destroy(State*s){delete s;}
 }

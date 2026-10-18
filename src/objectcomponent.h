@@ -4,18 +4,19 @@
 // *           objectcomponent.h - per-instance optional behavior         *
 // *************************************************************************
 //
-// Components are owned by a TNodeInst (TObjectInstance or a plain prefab
-// node) and are the intended place for optional systems such as
-// specialized visuals, effects, or animation transition logic that should
-// override or extend the class-definition default without adding more
-// ad-hoc checks to instance/sector code. A component is a behaviour on a
-// node; it is never a node itself.
+// Components are owned by a TNode and are the intended place for optional
+// systems such as specialized visuals, effects, or animation transition
+// logic that should override or extend the class-definition default
+// without adding more ad-hoc checks to instance/sector code. A component
+// is a behaviour on a node; it is never a node itself. The map object is
+// one too: TObjectInstance, the root of the object class hierarchy, is the
+// first component of a map object's node (docs/OBJECT_MODEL_PLAN.md §3b).
 //
 // Lifecycle
 //   - Constructed however the caller chooses, then handed to
-//     TNodeInst::AddComponent which records it in the node's component
-//     slot and (unless the node defers it -- TObjectInstance waits for a
-//     map index) calls Activate() -> OnAttach().
+//     TNode::AddComponent which records it in the node's component
+//     slot and (unless the node is a map object still waiting for its map
+//     index) calls Activate() -> OnAttach().
 //   - Update() is the externally-callable hook; OnUpdate() is the virtual
 //     subclasses override. RegisterUpdate / UnregisterUpdate plug into a
 //     global update list driven once per pulse from RunUpdateList(). Code
@@ -40,7 +41,7 @@
 #include <cstdint>
 #include <string>
 
-_CLASSDEF(TNodeInst)
+_CLASSDEF(TNode)
 _CLASSDEF(TObjectInstance)
 _CLASSDEF(TObjectComponent)
 
@@ -52,9 +53,13 @@ class TObjectComponent
     TObjectComponent() = default;
     virtual ~TObjectComponent() = default;
 
-    [[nodiscard]] TNodeInst* Owner() const { return owner; }
-    // The owning map object, or nullptr when the owner is a plain node.
+    [[nodiscard]] TNode* Owner() const { return node_; }
+    // The map object on the owning node, or nullptr when the node is a
+    // plain prefab node.
     [[nodiscard]] TObjectInstance* OwnerInstance() const;
+    // The object component answers itself; every other component nullptr.
+    // Lets TNode cache its object at attach time without a search.
+    [[nodiscard]] virtual TObjectInstance* AsObjectInstance() { return nullptr; }
     [[nodiscard]] int32_t ComponentSlot() const { return slot; }
     [[nodiscard]] uint32_t Generation() const { return generation; }
     [[nodiscard]] virtual const char* ComponentName() const { return "component"; }
@@ -74,16 +79,16 @@ class TObjectComponent
     virtual void OnUpdate() {}
 
   private:
-    friend class TNodeInst;
-    void Attach(TNodeInst* newowner, int32_t newslot, uint32_t newgeneration)
-        { owner = newowner; slot = newslot; generation = newgeneration; }
+    friend class TNode;
+    void Attach(TNode* newowner, int32_t newslot, uint32_t newgeneration)
+        { node_ = newowner; slot = newslot; generation = newgeneration; }
     void Activate()
         { if (!active) { active = true; OnAttach(); } }
     void Detach()
-        { if (active) { OnDetach(); active = false; } UnregisterUpdate(nullptr); owner = nullptr; slot = -1; ++generation; }
+        { if (active) { OnDetach(); active = false; } UnregisterUpdate(nullptr); node_ = nullptr; slot = -1; ++generation; }
 
     std::string label_;
-    TNodeInst* owner = nullptr;
+    TNode* node_ = nullptr;
     int32_t slot = -1;
     uint32_t generation = 1;
     bool active = false;

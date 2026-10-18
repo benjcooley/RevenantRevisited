@@ -14,7 +14,7 @@
 namespace vortex_preview {
 struct State {
  struct Part{int object;MeshHandle mesh;int lighting;std::vector<hmm_vec3> positions;std::vector<uint16_t> indices;S3DMaterial material{};};
- std::unique_ptr<TObjectInstance> owner;std::vector<Part>parts;double accumulated=0;
+ TObjectPtr<TObjectInstance> owner;std::vector<Part>parts;double accumulated=0;
  ~State(){if(Renderer)for(auto p:parts)Renderer->ReleaseMeshAssetRef(p.mesh);}
 };
 State* Spawn(const S3DPoint& origin){
@@ -26,7 +26,7 @@ State* Spawn(const S3DPoint& origin){
 bool Alive(State*s){return s && s->owner && !(s->owner->GetFlags()&OF_KILL);}
 void Advance(State*s,double seconds){if(!Alive(s)||!std::isfinite(seconds)||seconds<=0)return;s->accumulated+=seconds;while(s->accumulated+1e-10>=TTime::LegacyFrameSeconds){s->accumulated-=TTime::LegacyFrameSeconds;s->owner->NextFrame();s->owner->Pulse();if(!Alive(s))return;}}
 void SubmitWorld(State*s){
- if(!Alive(s)||!Renderer)return;auto*im=static_cast<T3DImagery*>(s->owner->GetImagery());hmm_mat4 root;const auto&p=s->owner->Pos();if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(s->owner->GetFace()));else root=s->owner->Transform().Matrix();
+ if(!Alive(s)||!Renderer)return;auto*im=static_cast<T3DImagery*>(s->owner->GetImagery());hmm_mat4 root;const auto&p=IntPos(s->owner);if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(IntFacing(s->owner)));else root=s->owner->Transform().Matrix();
  for(const auto&part:s->parts){S3DAnimObj o={};o.objnum=o.animtrack=part.object;if(!im->CalcObjectMatrix(&o,0,0,&root,false))continue;hmm_mat4 world;MtxMultiply(&world,&o.matrix,&root);SHelperMeshSubmit mesh={};mesh.mesh=part.mesh;mesh.retail_lighting=part.lighting;mesh.retail_source_alpha=part.lighting==4;mesh.retail_software_projection=StartupVfxNativeDomain;mesh.retail_positive_face_cull=true;for(int row=0;row<4;++row)for(int col=0;col<4;++col)mesh.world[row*4+col]=world.Elements[col][row];if(part.lighting!=4){Renderer->SubmitHelperMesh(mesh);continue;}
   // The modern fallback consumes material uniforms; the software RGB5 path
   // deliberately ignores them. Preserve the own resource rather than zero alpha.

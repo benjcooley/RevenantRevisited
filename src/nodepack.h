@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-class TNodeInst;
+class TNode;
 class TPackedWriter;
 class TPackedReader;
 
@@ -40,12 +40,12 @@ constexpr uint16_t kSubBody  = 3;    // component props
 constexpr uint16_t kSubNode  = 2;    // child node message
 
 
-void Pack(const TNodeInst& root, TPackedWriter& w);
+void Pack(const TNode& root, TPackedWriter& w);
 // `apply_root_props = false` leaves the root's own properties alone
 // (stamping a prefab under an object that already has its position).
 // `post_load = false` deserializes data only (no PostLoad), for tools.
-bool Unpack(TPackedReader& r, TNodeInst& root,
-            std::vector<std::unique_ptr<TNodeInst>>& owned, std::string* error = nullptr,
+bool Unpack(TPackedReader& r, TNode& root,
+            std::vector<std::unique_ptr<TNode>>& owned, std::string* error = nullptr,
             bool apply_root_props = true, bool post_load = true);
 
 } // namespace nodepack

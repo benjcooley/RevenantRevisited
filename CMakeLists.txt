@@ -207,7 +207,7 @@ add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
 target_link_libraries(Revenant PRIVATE imgui revsmk)
 # Annotated classes (PROP / PROP_FN). One line per header; see rev_reflect.
 rev_reflect(Revenant
-  src/nodeinst.h
+  src/node.h
   src/object.h
   src/sector.h
   src/particledef.h
@@ -296,7 +296,7 @@ add_executable(test_defio
   tools/test_defio.cpp
   src/defio.cpp
   src/nodepack.cpp
-  src/nodeinst.cpp
+  src/node.cpp
   src/transform.cpp
   src/animsystem.cpp
   src/math3d.cpp
@@ -306,19 +306,19 @@ add_executable(test_defio
 target_include_directories(test_defio PRIVATE ${HANDMADE_MATH_DIR})
 target_compile_definitions(test_defio PRIVATE REV_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(test_defio PRIVATE GTest::gtest_main)
-rev_reflect(test_defio tools/test_defio_types.h src/nodeinst.h src/particledef.h)
+rev_reflect(test_defio tools/test_defio_types.h src/node.h src/particledef.h)
 
-add_executable(test_nodeinst
-  tools/test_nodeinst.cpp
-  src/nodeinst.cpp
+add_executable(test_node
+  tools/test_node.cpp
+  src/node.cpp
   src/transform.cpp
   src/animsystem.cpp
   src/math3d.cpp
   src/refl.cpp
   src/packed.cpp)
-target_include_directories(test_nodeinst PRIVATE ${HANDMADE_MATH_DIR})
-target_link_libraries(test_nodeinst PRIVATE GTest::gtest_main)
-rev_reflect(test_nodeinst src/nodeinst.h)
+target_include_directories(test_node PRIVATE ${HANDMADE_MATH_DIR})
+target_link_libraries(test_node PRIVATE GTest::gtest_main)
+rev_reflect(test_node src/node.h)
 
 add_executable(test_savefile
   tools/test_savefile.cpp
@@ -514,7 +514,7 @@ foreach(test IN ITEMS
     test_defio
     test_defwidget
     test_particlefx
-    test_nodeinst
+    test_node
     test_playerstats
     test_props
     test_savefile

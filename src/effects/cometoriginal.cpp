@@ -15,7 +15,7 @@
 
 namespace comet_original {
 struct State {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     struct Part {MeshHandle mesh=0;S3DMat material{};int object=0,slot=0,triangle=0;hmm_vec3 vertices[3]{};};
     std::vector<Part> parts;
     S3DPoint source{};
@@ -34,7 +34,7 @@ State* Spawn(const S3DPoint& source)
     if(!owner || owner->ObjId()!=0xf32bcfacu || !dynamic_cast<TEffect*>(owner))return nullptr;
     // Controlled coordinates can lie outside loaded map sectors. Establish
     // the explicit fixture transform before creating the animator/controllers.
-    owner->ForcePos(source);owner->Face(0);owner->OnScreen();
+    SetIntPos(owner, source);owner->Face(0);owner->OnScreen();
     auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());auto* animator=dynamic_cast<T3DAnimator*>(owner->GetAnimator());
     if(!image || !animator || !image->HasRetailCometProfile() || animator->PartSysUnsupported() || animator->PartSysControllerCount()!=3)return nullptr;
     animator->SetCometGround([](int,int,int){return 1;});
@@ -74,14 +74,14 @@ void SubmitWorld(State* c,EFxDebugMode)
     auto* o=c->owner.get();o->Animate(false);auto* a=dynamic_cast<T3DAnimator*>(o->GetAnimator());auto* image=a->Get3DImagery();
     // Preserve native controller tag order: comet, trail, then impact sparks.
     for(int prototype:{0,5,2})a->SubmitPartSys(*Renderer,prototype,1,{1,1,1},StartupVfxNativeDomain);
-    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=o->Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(o->GetFace()));}
+    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=IntPos(o);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(o)));}
     for(const auto& part:c->parts){
         hmm_vec3 p{},r{},s{};if(!image->GetUninterpolatedAniKey(part.object,o->GetState(),o->GetFrame(),p,r,s,true) || s.X<=1e-5f || s.Y<=1e-5f || s.Z<=1e-5f)continue;
         hmm_mat4 local;BuildRetailCometMatrix(local,part.object,p,r,s);
         hmm_mat4 world;MtxMultiply(&world,&local,&owner);
         if(StartupVfxNativeDomain && Renderer->UsesRetailSoftwareMeshLighting()){
-            hmm_mat4 native_owner,native_world;const auto position=o->Pos();
-            BuildRetailSoftwareOwner(native_owner,position.x,position.y,position.z,uint8_t(o->GetFace()));
+            hmm_mat4 native_owner,native_world;const auto position=IntPos(o);
+            BuildRetailSoftwareOwner(native_owner,position.x,position.y,position.z,uint8_t(IntFacing(o)));
             MtxMultiply(&native_world,&local,&native_owner);
             if(!RetailCometTriangleAllowed(part.vertices,native_world))continue;
         }

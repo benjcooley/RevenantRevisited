@@ -12,7 +12,7 @@
 #include <vector>
 namespace ribbon_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;ribbon_state::State simulation;MeshHandle spark[5]{},tube=0;double accumulator=0;int64_t rendered=-1;
+ TObjectPtr<TObjectInstance> owner;ribbon_state::State simulation;MeshHandle spark[5]{},tube=0;double accumulator=0;int64_t rendered=-1;
  ~State(){if(Renderer){for(auto m:spark)if(m)Renderer->ReleaseMeshAssetRef(m);if(tube)Renderer->ReleaseMeshAssetRef(tube);}}
 };
 State* Spawn(const S3DPoint& origin)
@@ -30,7 +30,7 @@ void Advance(State*s,double seconds){if(!Alive(s) || !std::isfinite(seconds) || 
 static void Submit(State&s,MeshHandle mesh,int object,uint32_t flags,const hmm_vec3&p,const hmm_vec3&r,const hmm_vec3&scale)
 {
  auto*im=static_cast<T3DImagery*>(s.owner->GetImagery());S3DAnimObj o={};o.objnum=o.animtrack=object;o.flags=int32_t(flags);o.pos=p;o.rot=r;o.scl=scale;hmm_mat4 root;
- const auto&pos=s.owner->Pos();if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,pos.x,pos.y,pos.z,uint8_t(s.owner->GetFace()));else root=s.owner->Transform().Matrix();if(!im->CalcObjectMatrix(&o,0,0,&root,false))return;
+ const auto&pos=IntPos(s.owner);if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,pos.x,pos.y,pos.z,uint8_t(IntFacing(s.owner)));else root=s.owner->Transform().Matrix();if(!im->CalcObjectMatrix(&o,0,0,&root,false))return;
  hmm_mat4 world;MtxMultiply(&world,&o.matrix,&root);
  SHelperMeshSubmit draw={};draw.mesh=mesh;for(int row=0;row<4;++row)for(int col=0;col<4;++col)draw.world[row*4+col]=world.Elements[col][row];draw.retail_lighting=3;draw.retail_source_alpha=true;draw.retail_software_projection=StartupVfxNativeDomain;Renderer->SubmitRetailSourceAlphaAfterFx(draw);
 }

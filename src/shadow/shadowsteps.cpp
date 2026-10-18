@@ -241,7 +241,7 @@ class TApproachRunner final : public TShadowStepRunner
     {
         TObjectInstance* target = travel.Object();
         if (!target)
-            target = ShadowFindObject(step.target, Player->GetLevel(), Player->Pos());
+            target = ShadowFindObject(step.target, Player->GetLevel(), IntPos(Player));
         if (!target)
         {
             why = "no " + step.target + " here";
@@ -472,7 +472,7 @@ class TSaveRunner final : public TShadowStepRunner
         waypoint.stage = context.stage.id;
         waypoint.tick = context.tick;
         waypoint.maplevel = Player->GetLevel();
-        waypoint.pos = Player->Pos();
+        waypoint.pos = IntPos(Player);
         waypoint.health = {Player->Health(), Player->MaxHealth()};
         waypoint.mana = {Player->Mana(), Player->MaxMana()};
         waypoint.fatigue = {Player->Fatigue(), Player->MaxFatigue()};

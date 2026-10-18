@@ -41,6 +41,8 @@ enum
 _CLASSDEF(TExit)
 class TExit : public TContainer
 {
+    friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
+    friend class TLegacySerialize;
   public:
     // REVSYNC: Build @ 0x0050e360 -- exits never move and always pulse.
     TExit(TObjectImagery* newim) : TContainer(newim) { flags |= OF_IMMOBILE | OF_PULSE; }
@@ -68,9 +70,6 @@ class TExit : public TContainer
     // Every entry, in file order. For checks that a move went through an
     // exit, and for route planning (Shadow Smoke, docs/shadow/ARCHITECTURE.md).
     [[nodiscard]] static std::vector<STarget> Targets();
-
-    void Load(RTInputStream is, int32_t version, int32_t objversion) override;
-    void Save(RTOutputStream os) override;
 
     // REVSYNC: 0x0050d640 -- state auto-step, then every player on the strip.
     void Pulse() override;

@@ -11,7 +11,7 @@
 #include <cstring>
 namespace dragonfire_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;retail_dragonfire::State core;MeshHandle meshes[2]{};S3DMat materials[2]{};
+ TObjectPtr<TObjectInstance> owner;retail_dragonfire::State core;MeshHandle meshes[2]{};S3DMat materials[2]{};
  double accumulator=0;int ticks=0;int64_t rendered=-1;uint64_t initial_draws=0;
  ~State(){log_info("[dragonfire-cleanup] tick=%d alive=%d",ticks,int(core.alive));if(Renderer)for(auto m:meshes)if(m)Renderer->ReleaseMeshAssetRef(m);}
 };
@@ -33,8 +33,8 @@ State* Spawn(const S3DPoint& origin){
 bool Alive(State* s){return s && s->core.alive && !(s->owner->Flags()&OF_KILL);}
 void Advance(State* s,double dt){if(!s || !std::isfinite(dt) || dt<=0)return;s->accumulator+=dt;while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;if(!Alive(s))return;s->owner->NextFrame();s->owner->Pulse();if(!Alive(s))return;++s->ticks;s->core.Advance([](int lo,int hi){return random(lo,hi);});if(!s->core.alive)s->owner->SetFlags(s->owner->Flags()|OF_KILL);Log(s);}}
 void SubmitWorld(State* s){
- if(!Alive(s) || !Renderer || s->rendered==TTime::FrameCount())return;s->rendered=TTime::FrameCount();hmm_mat4 root;const auto& p=s->owner->Pos();if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(s->owner->GetFace()));else root=s->owner->Transform().Matrix();
- const float facing=float(-double(s->owner->GetFace())*360.0/256.0*0.017453292519943295);
+ if(!Alive(s) || !Renderer || s->rendered==TTime::FrameCount())return;s->rendered=TTime::FrameCount();hmm_mat4 root;const auto& p=IntPos(s->owner);if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(IntFacing(s->owner)));else root=s->owner->Transform().Matrix();
+ const float facing=float(-double(IntFacing(s->owner))*360.0/256.0*0.017453292519943295);
  for(int i=0;i<2;++i)for(const auto& particle:(i?s->core.smoke:s->core.fire).particles)if(particle.used){hmm_mat4 local=retail_dragonfire::LocalMatrix(particle,facing),world;MtxMultiply(&world,&local,&root);
   SHelperMeshSubmit q={};q.mesh=s->meshes[i];q.additive_blend=true;q.retail_lighting=1;q.retail_software_projection=StartupVfxNativeDomain;
   const auto& m=s->materials[i].matdesc;std::memcpy(q.diffuse,&m.diffuse,16);std::memcpy(q.ambient,&m.ambient,16);std::memcpy(q.specular,&m.specular,16);std::memcpy(q.emissive,&m.emissive,16);q.power=m.power;

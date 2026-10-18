@@ -45,11 +45,6 @@ class TAmmo : public TObjectInstance
     static void FreeGroundItem(int32_t type, int32_t count);
         // Free up use of an instance of this count
 
-    void Load(RTInputStream is, int32_t version, int32_t objversion) override;
-        // Loads data from the sector
-    void Save(RTOutputStream os) override;
-        // Saves data to the sector
-
     SInvIcon InventoryIcon() override;
         // REVSYNC: 0x004bfda0. A stack of copies of the inventory image
 

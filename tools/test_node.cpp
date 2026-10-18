@@ -1,9 +1,9 @@
 // *************************************************************************
-// *     test_nodeinst.cpp - TNodeInst: hierarchy, paths, components,      *
+// *     test_node.cpp - TNode: hierarchy, paths, components,      *
 // *                         soft refs, annotated properties               *
 // *************************************************************************
 
-#include "../src/nodeinst.h"
+#include "../src/node.h"
 #include "../src/packed.h"
 
 #include <gtest/gtest.h>
@@ -26,10 +26,10 @@ struct STestComponent : public TObjectComponent
 
 } // namespace
 
-TEST(NodeInst, HierarchyAndPaths)
+TEST(Node, HierarchyAndPaths)
 {
-    TNodeInst root("root");
-    TNodeInst core("core"), ring("ring"), flare("flare");
+    TNode root("root");
+    TNode core("core"), ring("ring"), flare("flare");
     core.SetParent(&root);
     ring.SetParent(&root);
     flare.SetParent(&core);
@@ -54,7 +54,7 @@ TEST(NodeInst, HierarchyAndPaths)
 
     // Destroying a child detaches it from the parent's list.
     {
-        TNodeInst temp("temp");
+        TNode temp("temp");
         temp.SetParent(&root);
         EXPECT_EQ(root.GetChildCount(), 3);
     }
@@ -62,9 +62,9 @@ TEST(NodeInst, HierarchyAndPaths)
     EXPECT_EQ(root.FindChild("temp"), nullptr);
 }
 
-TEST(NodeInst, ComponentsAndSafeRefs)
+TEST(Node, ComponentsAndSafeRefs)
 {
-    auto node = std::make_unique<TNodeInst>("n");
+    auto node = std::make_unique<TNode>("n");
     auto comp = std::make_unique<STestComponent>();
     STestComponent* raw = comp.get();
     const int32_t slot = node->AddComponent(std::move(comp));
@@ -81,7 +81,7 @@ TEST(NodeInst, ComponentsAndSafeRefs)
     TSafeComponentRef<STestComponent> ref(raw);
     EXPECT_TRUE(ref);
     EXPECT_EQ(ref.Get(), raw);
-    TSafeRef<TNodeInst> nref(node.get());
+    TSafeRef<TNode> nref(node.get());
     EXPECT_EQ(nref.Get(), node.get());
 
     node->RemoveComponent(slot);                           // detaches and destroys it
@@ -103,9 +103,9 @@ TEST(NodeInst, ComponentsAndSafeRefs)
     EXPECT_FALSE(nref);
 }
 
-TEST(NodeInst, AnnotatedProperties)
+TEST(Node, AnnotatedProperties)
 {
-    const refl::SType* tp = refl::Of<TNodeInst>();
+    const refl::SType* tp = refl::Of<TNode>();
     ASSERT_NE(tp, nullptr);
     EXPECT_NE(refl::FindProp(*tp, "pos"), nullptr);
     EXPECT_NE(refl::FindProp(*tp, "rot"), nullptr);
@@ -114,7 +114,7 @@ TEST(NodeInst, AnnotatedProperties)
     EXPECT_TRUE(refl::FindProp(*tp, "name")->read_only);
     // Accessor-backed defaults must match a fresh node (scl is 1,1,1 not 0,0,0).
     {
-        TNodeInst fresh("fresh");
+        TNode fresh("fresh");
         for (const refl::SType* t = tp; t; t = t->base)
             for (int32_t i = 0; i < t->prop_count; ++i)
             {
@@ -127,7 +127,7 @@ TEST(NodeInst, AnnotatedProperties)
         EXPECT_FLOAT_EQ(refl::FindProp(*tp, "scl")->def.v3[0], 1.0f);
     }
 
-    TNodeInst n("glow");
+    TNode n("glow");
     EXPECT_TRUE(refl::Set(*tp, &n, refl::FindProp(*tp, "pos")->id, SPropValue::Vec3(1, 2, 3)));
     EXPECT_FLOAT_EQ(n.LocalPos().Z, 3.0f);
     EXPECT_TRUE(refl::SetLane(*tp, &n, refl::FindProp(*tp, "scl")->id, 2, 1.5f));
@@ -143,7 +143,7 @@ TEST(NodeInst, AnnotatedProperties)
     // Packed round trip of a node's own properties.
     TPackedWriter w;
     refl::Pack(*tp, &n, w);
-    TNodeInst m("other");
+    TNode m("other");
     TPackedReader r(w.Buffer());
     refl::Unpack(*tp, &m, r);
     EXPECT_FLOAT_EQ(m.LocalPos().Y, 2.0f);

@@ -137,7 +137,7 @@ void TBloodAnimator::Submit(TRenderer& renderer, EFxDebugMode debug_mode) const
         return;
     const float ease = float(TTime::LegacyFrameFraction());
     const hmm_mat4& owner = inst->Transform().Matrix();
-    const S3DPoint effect = inst->Pos();
+    const S3DPoint effect = IntPos(inst);
     const auto& drops = spray.Drops();
     for (size_t i = 0; i < drops.size(); ++i)
     {

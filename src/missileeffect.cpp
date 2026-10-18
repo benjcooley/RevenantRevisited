@@ -509,7 +509,7 @@ void TFireBallAnimator::Initialize()
     // *** FIREBALL ***
 
     S3DPoint temp_point;
-    inst->GetPos(temp_point);
+    temp_point = IntPos(inst);
     temp_point.z += 50;
     inst->SetPos(temp_point);
     // init the fireball's position
@@ -1218,7 +1218,7 @@ void TFireColumnAnimator::Initialize()
     // Set the beginning state of the effect
     state = oldstate = MISSILE_LAUNCH;
 
-    ConvertToVector( inst->GetFace(), 10, vctr);
+    ConvertToVector( IntFacing(inst), 10, vctr);
     p[0].x = p[0].y = 0;
     OffsetPoint( 0);
     for (n = 0; n < NUM_FIRE_COLUMNS; n++)

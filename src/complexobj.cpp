@@ -299,7 +299,7 @@ void TComplexObject::SetDoing(PTActionBlock ab)
 void TComplexObject::Try(const char *state)
 {
     auto* ab = new TActionBlock(state, ACTION_ANIMATE);
-    ab->angle = GetFace();
+    ab->angle = IntFacing(*this);
     if (!SetDesired(ab, 0))
         DropUnheld(ab);
 }
@@ -313,7 +313,7 @@ int32_t TComplexObject::Force(const char *state)
     if (doing && doing->priority && desired != doing)
         return COM_EXECUTING;
     auto* ab = new TActionBlock(state, ACTION_ANIMATE);
-    ab->angle = GetFace();
+    ab->angle = IntFacing(*this);
     const int32_t result = ForceCommand(ab, 0, 0);
     DropUnheld(ab);
     return result;
@@ -480,78 +480,12 @@ int32_t TComplexObject::ForceCommand(PTActionBlock ab, int32_t bits, uint32_t fl
     return COM_EXECUTING;
 }
 
-// REVSYNC: TComplexObject::Load @ 0x004db930 (SAVE_GAME.md §11.3).
-void TComplexObject::Load(RTInputStream is, int32_t version, int32_t objversion)
-{
-    uint8_t basever = 0;
-    if (objversion >= 1)
-        is >> basever;
-    TObjectInstance::Load(is, version, basever);
-
-  // Load root state
-    PTActionBlock ab;
-    if (version < 7)
-    {
-        ab = new TActionBlock(DefaultRootState());
-    }
-    else
-    {
-        uint8_t action;
-        is >> action;
-        const std::string rootname = is.ReadString();
-        ab = new TActionBlock(rootname.substr(0, RESNAMELEN - 1).c_str(), (ACTION)action);
-    }
-
-  // REVSYNC-DIVERGENCE: a root that names no state of the model can never be
-  // entered. Every ForceCommand back to it is impossible, so a speaker who
-  // finishes a line stays in "say" and the script's speech wait never ends.
-  // The shipped level-46 map saves Shegra and the slaves with a "combat" root
-  // their walk-and-say models lack (docs/gameflow/forensics/DIALOG.md §2.5).
-  // Such a root becomes the default one, else "walk", as a plain animation
-  // block like the one Clear builds.
-    if (imagery && !imagery->HasState(ab->name))
-    {
-        const char* fallback = imagery->HasState(DefaultRootState()) ? DefaultRootState() : "walk";
-        if (imagery->HasState(fallback))
-        {
-            delete ab;
-            ab = new TActionBlock(fallback);
-        }
-    }
-
-    SetRoot(ab);
-    SetDoing(ab);
-    SetDesired(ab);
-
-  // Keep the saved state when it is the root's own (an animation state is
-  // named "<group>:<name>"); otherwise start the root.
-    if (const char* statename = imagery ? imagery->GetAniName(state) : nullptr)
-    {
-        if (const char* colon = strchr(statename, ':'))
-            statename = colon + 1;
-        if (stricmp(ab->name, statename) == 0)
-            return;
-    }
-    state = FindState(ab->name);
-}
-
-// REVSYNC: TComplexObject::Save @ 0x004dbb80.
-void TComplexObject::Save(RTOutputStream os)
-{
-    os << (uint8_t)TObjectInstance::ObjVersion();
-    TObjectInstance::Save(os);
-
-  // Save root state
-    os << (uint8_t)root->action;
-    os << root->name;
-}
-
 void TComplexObject::Notify(int32_t notify, void *ptr)
 {
     // **** WARNING!!! MAKE SURE YOU CHECK FOR BROKEN LINKS AND DELETED OBJECTS HERE!!! ****
     // If you want to be notified, you must call SetNotify() in your contsructor
 
-    if (sector == (TSector*)ptr)
+    if (GetSector() == (TSector*)ptr)
         return;
 
     TObjectInstance::Notify(notify, ptr);

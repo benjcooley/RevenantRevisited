@@ -189,7 +189,7 @@ public:
 protected:
     void OnUpdate() override
     {
-        if(auto* effect=dynamic_cast<TCureEffect_Bespoke*>(Owner())) effect->Advance(TTime::DeltaTime());
+        if(auto* effect=dynamic_cast<TCureEffect_Bespoke*>(OwnerInstance())) effect->Advance(TTime::DeltaTime());
     }
 };
 
@@ -263,11 +263,11 @@ void TCureEffect_Bespoke::FirstSpellPulse()
         {
             auto* candidate=dynamic_cast<TCharacter*>(it.Item());
             if(!candidate||candidate==invoker||candidate->IsDead()||
-               ::Distance(invoker->Pos(),candidate->Pos())>400||!invoker->IsEnemy(candidate)) continue;
+               ::Distance(IntPos(invoker),IntPos(candidate))>400||!invoker->IsEnemy(candidate)) continue;
             target=candidate;
             break;
         }
-    if(target) { SetPos(target->Pos()); target->SetPoisoned(true); }
+    if(target) { SetPos(IntPos(target)); target->SetPoisoned(true); }
     impl_->first_spell_pulse=false;
 }
 
@@ -279,7 +279,7 @@ void TCureEffect_Bespoke::BindFacing()
         if(auto* invoker=linked->GetInvokerRef().Get())
         {
             auto* target=linked->GetTargetRef().Get();
-            angle=target&&target!=invoker?ConvertToFacing(Pos(),target->Pos()):invoker->GetFace();
+            angle=target&&target!=invoker?ConvertToFacing(IntPos(*this),IntPos(target)):IntFacing(invoker);
         }
     impl_->state.facing=float(angle);
     impl_->aim_bound=true;
@@ -331,7 +331,7 @@ void TCureEffect_Bespoke::Initialize(bool attach)
         auto component=std::make_unique<TCureRuntimeComponent>();
         component->Configure(texture.htexture,64,64,1,1,1,1,1,true,true);
         AddComponent(std::move(component));
-        const auto origin=Pos();
+        const auto origin=IntPos(*this);
         log_info("[cure-runtime] attached id=%08x map_index=%d origin=(%d,%d,%d) swirls=80 balls=5 visible_object=0",
                  ObjId(),GetMapIndex(),origin.x,origin.y,origin.z);
     }
@@ -358,7 +358,7 @@ TCureEffect_Bespoke* TCureEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& o
     if(!dynamic_cast<T3DImagery*>(imagery))
     { if(imagery) TObjectImagery::FreeImagery(imagery); log_error("[cure-runtime] cannot load '%s'",kCureAsset); return nullptr; }
     auto* effect=new TCureEffect_Bespoke(imagery);
-    effect->ForcePos(origin);
+    SetIntPos(effect, origin);
     effect->SetMapIndex(MapPane.MakeIndex());
     effect->Initialize(false);
     if(!effect->impl_->initialized) { delete effect; return nullptr; }

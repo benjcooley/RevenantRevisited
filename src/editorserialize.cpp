@@ -87,18 +87,26 @@ bool CaptureInstance(TObjectInstance* oi,
     // Walk the annotated properties (base chain first). Read-only ones
     // ("class" / "type" / "mapindex") are covered by the meta keys; values
     // use the DEF text form so the clipboard reads like a DEF.
+    // The node's properties (transform) first, then the object's.
     const refl::SType* type = refl::Of(*oi);
     if (!type) return false;
-    std::vector<const refl::SType*> chain;
-    for (const refl::SType* t = type; t; t = t->base) chain.push_back(t);
-    for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+    const std::pair<const refl::SType*, void*> targets[] = {
+        { refl::Of(*oi->Node()), static_cast<void*>(oi->Node()) },
+        { type, static_cast<void*>(oi) },
+    };
+    for (const auto& [t_obj, obj] : targets) {
+      if (!t_obj) continue;
+      std::vector<const refl::SType*> chain;
+      for (const refl::SType* t = t_obj; t; t = t->base) chain.push_back(t);
+      for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
         for (int32_t i = 0; i < (*it)->prop_count; ++i) {
             const refl::SProp& p = (*it)->props[i];
             if (p.read_only || !p.serialized || p.type == EPropType::Trigger) continue;
             SPropValue v;
-            if (!refl::Get(*type, oi, p.id, v)) continue;
+            if (!refl::Get(*t_obj, obj, p.id, v)) continue;
             props_out.emplace_back(p.name, defio::FormatValue(p, v));
         }
+      }
     }
     return true;
 }
@@ -147,7 +155,7 @@ int32_t InstantiateInstance(const SParsedBlock& blk, bool preserve_refid)
     def.level    = (uint16_t)mr->CameraLevel();
     // The spawn position decides the sector, so it is read before the
     // object exists; the node's `pos` property describes its text form.
-    if (const refl::SType* node_type = refl::Of<TNodeInst>()) {
+    if (const refl::SType* node_type = refl::Of<TNode>()) {
         const refl::SProp* pos_prop = refl::FindProp(*node_type, "pos");
         for (const auto& kv : blk.props) {
             if (kv.first == "pos" && pos_prop) {
@@ -192,16 +200,24 @@ int32_t InstantiateInstance(const SParsedBlock& blk, bool preserve_refid)
 
     // Apply the remaining annotated props. Pos already landed via def;
     // re-applying it is a no-op. Unknown keys are ignored (forward-compat).
-    if (const refl::SType* type = refl::Of(*live)) {
-        for (const auto& kv : blk.props) {
+    // A key is the node's (transform) or the object's; the node's first.
+    const std::pair<const refl::SType*, void*> targets[] = {
+        { refl::Of(*live->Node()), static_cast<void*>(live->Node()) },
+        { refl::Of(*live),         static_cast<void*>(live) },
+    };
+    for (const auto& kv : blk.props) {
+        for (const auto& [type, obj] : targets) {
+            if (!type) continue;
             const refl::SProp* p = refl::FindProp(*type, kv.first);
-            if (!p || p->read_only) continue;
+            if (!p) continue;
+            if (p->read_only) break;
             SPropValue v;
             std::string storage, err;
             if (defio::ParseValue(*p, kv.second, v, storage, &err))
-                refl::Set(*type, live, p->id, v);
+                refl::Set(*type, obj, p->id, v);
             else
                 log_warn("[serialize] %s: %s", kv.first.c_str(), err.c_str());
+            break;
         }
     }
     return final_idx;

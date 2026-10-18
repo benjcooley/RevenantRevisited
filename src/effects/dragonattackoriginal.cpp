@@ -15,7 +15,7 @@
 
 namespace dragonattack_original {
 struct State {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     struct Part {MeshHandle mesh=0;S3DMat material{};int object=0,slot=0;};
     std::vector<Part> parts;
     retail_dragonattack::State simulation;
@@ -35,7 +35,7 @@ State* Spawn(const S3DPoint& source)
     if(!owner || owner->ObjId()!=0xba09feadu || !dynamic_cast<TEffect*>(owner))return nullptr;
     // Controlled coordinates can lie outside loaded map sectors. Establish
     // the explicit fixture transform before creating the animator/controllers.
-    owner->ForcePos(source);owner->Face(0);owner->OnScreen();
+    SetIntPos(owner, source);owner->Face(0);owner->OnScreen();
     auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());auto* animator=dynamic_cast<T3DAnimator*>(owner->GetAnimator());
     if(!image || !animator || !image->HasRetailHeadFireBallProfile() || animator->PartSysUnsupported())return nullptr;
     animator->SetDragonAttackGround([](int,int,int){return 0;});
@@ -66,7 +66,7 @@ void Advance(State* c,double seconds)
         o->SetFrame(c->simulation.frame);
         S3DPoint velocity={c->simulation.vx,c->simulation.vy,c->simulation.vz};o->SetVel(velocity);
         if(c->simulation.state>0)o->SetFlags(o->GetFlags()|OF_NOCOLLISION);
-        o->ForcePos({c->simulation.x,c->simulation.y,c->simulation.z});
+        SetIntPos(o, {c->simulation.x,c->simulation.y,c->simulation.z});
         if(!c->simulation.alive)o->SetFlags(o->GetFlags()|OF_KILL|OF_PULSE);
     }
 }
@@ -84,8 +84,8 @@ void SubmitWorld(State* c,EFxDebugMode)
     a->SubmitPartSys(*Renderer,3,1,{1,1,1},StartupVfxNativeDomain);
     const auto stats=a->PartSysStats();
     const auto& cache=a->DragonAttackPrototype().value;
-    log_info("[dragonattack-phase] tick=%d state=%d frame=%d position=%d,%d,%d alive=%zu capacity=%zu random=%llu cache=%.9g,%.9g,%.9g",c->ticks,o->GetState(),o->GetFrame(),o->Pos().x,o->Pos().y,o->Pos().z,size_t(stats.alive),size_t(stats.capacity),static_cast<unsigned long long>(RandomDraws()),cache[0],cache[1],cache[2]);
-    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=o->Pos();BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(o->GetFace()));}
+    log_info("[dragonattack-phase] tick=%d state=%d frame=%d position=%d,%d,%d alive=%zu capacity=%zu random=%llu cache=%.9g,%.9g,%.9g",c->ticks,o->GetState(),o->GetFrame(),IntPos(o).x,IntPos(o).y,IntPos(o).z,size_t(stats.alive),size_t(stats.capacity),static_cast<unsigned long long>(RandomDraws()),cache[0],cache[1],cache[2]);
+    hmm_mat4 owner=o->Transform().Matrix();if(StartupVfxNativeDomain){const auto p=IntPos(o);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(o)));}
     for(const auto& part:c->parts){
         hmm_vec3 p{},r{},s{};if(!image->GetUninterpolatedAniKey(part.object,o->GetState(),o->GetFrame(),p,r,s,true) || s.X<=1e-5f || s.Y<=1e-5f || s.Z<=1e-5f)continue;
         hmm_mat4 local;BuildRetailHeadFireBallMatrix(local,part.object,p,r,s);

@@ -252,7 +252,7 @@ void TMapManager::ReloadLevel(int32_t level, const std::function<void()>& editFi
         TObjectInstance* oi = ref.Get();
         if (!oi || oi->GetSector())
             continue;
-        if (TSector* sector = reloaded->SectorAt(oi->Pos()))
+        if (TSector* sector = reloaded->SectorAt(IntPos(oi)))
         {
             sector->AddObject(oi);
             ++placed;

@@ -26,7 +26,7 @@ constexpr int32_t kLookSpacing = 64;
 bool WouldFind(TCharacter& monster, const S3DPoint& at)
 {
     const SCharData* data = monster.GetCharData();
-    const S3DPoint from = monster.Pos();
+    const S3DPoint from = IntPos(monster);
     const int32_t centre = (int32_t)std::lround(std::hypot(double(at.x - from.x), double(at.y - from.y)));
     const int32_t edge = std::max(0, centre - monster.Radius() - Player->Radius());
     return edge <= data->combatrangemax && edge - monster.Radius() - 32 <= data->hearingrange;

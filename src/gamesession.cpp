@@ -208,7 +208,7 @@ TGameSession::EStep TGameSession::EnterWorld()
     // binding to the play screen (TPlayerManager::BindMainPlayerToScreen,
     // retail's SetMainPlayerNum): an in-game load has made it already, a
     // new session makes it as the play screen starts.
-    S3DPoint pos = Player->Pos();
+    S3DPoint pos = IntPos(Player);
     MapPane.SetMapPos(pos);
     MapPane.SetMapLevel(Player->GetLevel());
 
@@ -231,7 +231,7 @@ void TGameSession::PlacePlayers(TGameMap& map, bool entering) const
         if (!player || player->GetSector() || player->GetLevel() != map.Level())
             continue;
 
-        const S3DPoint pos = player->Pos();
+        const S3DPoint pos = IntPos(player);
         TSector* sector = map.FindSector(pos.x >> SECTORWSHIFT, pos.y >> SECTORHSHIFT);
         if (!sector)
         {

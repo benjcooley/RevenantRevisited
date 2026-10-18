@@ -54,7 +54,7 @@ class STestPrivate
     PROP(2)                     int32_t count_ = 2;
 };
 
-// Accessor-backed properties (the TNodeInst shape: state lives behind
+// Accessor-backed properties (the TNode shape: state lives behind
 // setters, e.g. in a TTransform).
 struct STestAccessor
 {

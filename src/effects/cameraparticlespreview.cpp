@@ -16,7 +16,7 @@ namespace camera_particles_preview {
 struct State
 {
     struct Part {int object=0;MeshHandle mesh=0;S3DMaterial material{};};
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     TSafeRef<> identity;
     std::vector<Part> parts;
     double accumulated=0;
@@ -78,7 +78,7 @@ void SubmitWorld(State* state)
     auto* animator=dynamic_cast<T3DAnimator*>(owner->GetAnimator());if(!animator || animator->PartSysUnsupported())return;
     animator->SubmitPartSys(*Renderer,0,1,{1,1,1},StartupVfxNativeDomain);
     hmm_mat4 native_owner;
-    if(StartupVfxNativeDomain){const auto& p=owner->Pos();BuildRetailSoftwareOwner(native_owner,p.x,p.y,p.z,uint8_t(owner->GetFace()));}
+    if(StartupVfxNativeDomain){const auto& p=IntPos(owner);BuildRetailSoftwareOwner(native_owner,p.x,p.y,p.z,uint8_t(IntFacing(owner)));}
     for(const auto& part:state->parts){
         hmm_mat4 world;uint32_t blend=0;
         if(!animator->CameraParticleBaseMeshBlend(part.object,blend) ||

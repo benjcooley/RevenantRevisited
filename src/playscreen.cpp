@@ -484,7 +484,7 @@ static void EquipStarterLoadout(TPlayer *p)
         memset(&def, 0, sizeof(def));
         def.objclass = cl->ClassId();
         def.objtype  = ot;
-        p->GetPos(def.pos);    // placeholder; AddToInventory reparents
+        def.pos = IntPos(p);    // placeholder; AddToInventory reparents
 
         TObjectInstance *inst = cl->NewObject(&def);
         if (!inst)
@@ -589,7 +589,7 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
                     if (!is_char && !is_prop) continue;
                     if (is_char && char_logged) continue;
                     if (is_prop && prop_logged) continue;
-                    S3DPoint pp; probe->GetPos(pp);
+                    S3DPoint pp; pp = IntPos(probe);
                     const int32_t plx = (pp.x & (SECTORWIDTH  - 1)) >> WALKMAPSHIFT;
                     const int32_t ply = (pp.y & (SECTORHEIGHT - 1)) >> WALKMAPSHIFT;
                     const int32_t pwalk = probe_sec->ReturnWalkmap(plx, ply);
@@ -781,7 +781,7 @@ static void PulseSaveCycleTest()
     static int32_t settle = StartupSaveCycleSettle;
 
     auto snapshot = [](const char* tag) {
-        const S3DPoint p = Player->Pos();
+        const S3DPoint p = IntPos(Player);
         log_info("[savecycle] %s: pos=(%d,%d,%d) level=%d flags=0x%x "
                  "mapindex=%d sector=%s inv=%d",
                  tag, p.x, p.y, p.z, Player->GetLevel(),
@@ -1250,7 +1250,7 @@ static void DrawPlayerStatusOverlay()
     if (!Player) return;
     if (CurrentMode() != GameMode()) return;
 
-    S3DPoint p; Player->GetPos(p);
+    S3DPoint p; p = IntPos(Player);
     const int32_t lvl = Player->GetLevel();
     const int32_t walk = MapPane.GetWalkHeight(p);
     const int32_t z_delta = p.z - walk;
@@ -1353,6 +1353,7 @@ static void DrawPlayerStatusOverlay()
                                 d3->DebugPoseUpdateNextFrame(),
                                 d3->DebugPoseUpdateFrameFrac());
                 }
+#ifdef _DEBUG
                 ImGui::Separator();
                 ImGui::Text("sets    : total=%u same=%u",
                             pinst->DebugStateSetCount(),
@@ -1368,6 +1369,7 @@ static void DrawPlayerStatusOverlay()
                             pinst->DebugLastLoopWrapState(),
                             pinst->DebugLastLoopWrapFrame(),
                             pinst->DebugLastLoopWrapGameFrame());
+#endif
                 ImGui::Separator();
                 ImGui::Text("doing   : action=%d name=\"%s\"",
                             pc->DoingAction(), pc->DoingName());
@@ -1494,7 +1496,7 @@ static void DrawClosestMonsterOverlay()
     if (!Player) return;
     if (CurrentMode() != GameMode()) return;
 
-    const S3DPoint pp = Player->Pos();
+    const S3DPoint pp = IntPos(Player);
     TCharacter*    closest      = nullptr;
     int32_t        closest_dist = INT32_MAX;
 
@@ -1509,7 +1511,7 @@ static void DrawClosestMonsterOverlay()
                 if (!oi) continue;
                 if (oi->ObjClass() != OBJCLASS_CHARACTER) continue;
                 if (oi == (TObjectInstance*)Player) continue;
-                S3DPoint mp = oi->Pos();
+                S3DPoint mp = IntPos(oi);
                 const int32_t dx = mp.x - pp.x;
                 const int32_t dy = mp.y - pp.y;
                 const int32_t d2 = dx * dx + dy * dy;
@@ -1538,7 +1540,7 @@ static void DrawClosestMonsterOverlay()
         return;
     }
 
-    const S3DPoint mp = closest->Pos();
+    const S3DPoint mp = IntPos(closest);
     const int32_t  dx = mp.x - pp.x;
     const int32_t  dy = mp.y - pp.y;
     const int32_t  flat_dist = int32_t(std::sqrt(double(dx) * dx + double(dy) * dy));
@@ -1579,6 +1581,7 @@ static void DrawClosestMonsterOverlay()
                 cstate, cinst->GetFrame(), clen,
                 cinst->GetPrevState(), cinst->GetPrevFrame(),
                 closest->CommandDone() ? 1 : 0);
+#ifdef _DEBUG
     ImGui::Text("sets    : total=%u same=%u last %d->%d frame=%d gf=%d",
                 cinst->DebugStateSetCount(),
                 cinst->DebugSameStateSetCount(),
@@ -1591,6 +1594,7 @@ static void DrawClosestMonsterOverlay()
                 cinst->DebugLastLoopWrapState(),
                 cinst->DebugLastLoopWrapFrame(),
                 cinst->DebugLastLoopWrapGameFrame());
+#endif
 
     ImGui::Text("doing   : action=%d name=\"%s\"  target=(%d,%d)",
                 closest->DoingAction(), closest->DoingName(),

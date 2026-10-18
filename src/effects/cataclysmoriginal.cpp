@@ -14,7 +14,7 @@
 #include <memory>
 namespace cataclysm_original {
 struct State {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     cataclysm_core::State core;
     struct Part {MeshHandle mesh=0;S3DMat material{};std::vector<SMeshVertex> vertices;std::vector<uint16_t> indices;};
     std::array<Part,5> parts{};
@@ -43,7 +43,7 @@ State* Spawn(const S3DPoint& source,bool yellow_variant) {
     if(!Renderer)return nullptr;auto c=std::make_unique<State>();c->yellow_variant=yellow_variant;const uint32_t id=yellow_variant?0xad92fc13u:0xad92bc19u;auto* cls=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cls?cls->FindObjType(id):-1;if(type<0)return nullptr;
     SObjectDef def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;c->owner.reset(cls->NewObject(&def));
     auto* owner=c->owner.get();if(!owner || owner->ObjId()!=id)return nullptr;
-    owner->ForcePos(source);owner->Face(0);owner->OnScreen();auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());
+    SetIntPos(owner, source);owner->Face(0);owner->OnScreen();auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());
     if(!image || !ValidateCataclysm(*image)){log_warn("[cataclysm-original] exact profile rejected");return nullptr;}
     constexpr int slots[]={1,2,0,3,4};
     for(int i=0;i<5;++i){auto& p=c->parts[i];if(!ExtractSubMeshTextureSlot(image,i,slots[i],p.vertices,p.indices))return nullptr;
@@ -68,7 +68,7 @@ void Advance(State* c,double seconds) {
 }
 void SubmitWorld(State* c,EFxDebugMode) {
     if(!IsAlive(c) || !Renderer)return;
-    const auto source=c->owner->Pos();
+    const auto source=IntPos(c->owner);
     cataclysm_core::ForEachDraw(c->core,[&](const cataclysm_core::Draw& d){
         if(d.scale<=1e-5f)return;const auto& p=c->parts[d.object];hmm_mat4 world;cataclysm_core::Matrix(world,d,c->yellow_variant);
         // Translation relocates the explicit empty-world fixture for map review.

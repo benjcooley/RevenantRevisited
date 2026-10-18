@@ -133,7 +133,7 @@ void TRockStormAnimator::Initialize()
         if (target)
         {           
             // if there was a target, get its position...
-            target->GetPos(target_pos);
+            target_pos = IntPos(target);
         }
         else
         {

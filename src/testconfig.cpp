@@ -9,6 +9,7 @@
 char  StartupTestMode[32]     = "";
 char  StartupSectorId[32]     = "";
 char  StartupLevelId[32]      = "";
+char  StartupDumpOut[260]     = "";
 int32_t StartupSceneCamera[4] = {0,0,0,0};
 bool StartupSceneCameraSet = false;
 int32_t StartupSceneViewport[2] = {640,340};

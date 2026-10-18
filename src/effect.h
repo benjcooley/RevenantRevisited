@@ -247,20 +247,20 @@ class TFlipbookBillboardComponent : public TObjectComponent
 class TParticleEffectManager
 {
   public:
-    void PulseEffect(const SParticleEffectDef* effect_def, TNodeInst* owner);
-    void StopEffect(const SParticleEffectDef* effect_def, TNodeInst* owner);
+    void PulseEffect(const SParticleEffectDef* effect_def, TNode* owner);
+    void StopEffect(const SParticleEffectDef* effect_def, TNode* owner);
     // Per-frame integration tick. Called from TParticleEffectComponent::
     // DrawPulse via the render-frame walk so each runtime's bucket
     // expressions (spawn / tick / kill) advance once per frame using the
     // shared TTime::DeltaTime.
-    void IntegrateEffect(const SParticleEffectDef* effect_def, TNodeInst* owner, float dt_seconds);
+    void IntegrateEffect(const SParticleEffectDef* effect_def, TNode* owner, float dt_seconds);
     // Submit the buckets of this owner's runtime to the renderer. The map
     // walk drains every global bucket once per frame instead; this is for
     // a standalone driver (the --test=vfx harness) that shows one effect.
-    void SubmitEffect(const SParticleEffectDef* effect_def, TNodeInst* owner, EFxDebugMode debug_mode);
+    void SubmitEffect(const SParticleEffectDef* effect_def, TNode* owner, EFxDebugMode debug_mode);
     // True while any bucket still holds a particle of this owner's runtime
     // (a one-shot burst that has played out answers false).
-    [[nodiscard]] bool EffectHasParticles(const SParticleEffectDef* effect_def, TNodeInst* owner);
+    [[nodiscard]] bool EffectHasParticles(const SParticleEffectDef* effect_def, TNode* owner);
     void ExpireInactiveEffects();
     void Clear();
 
@@ -286,7 +286,7 @@ class TParticleEffectManager
     struct SRuntime
     {
         const SParticleEffectDef* effect_def = nullptr;
-        TSafeRef<TNodeInst> owner;
+        TSafeRef<TNode> owner;
         float owner_particle_id = -1.0f;    // the owner's NodeId()
         uint32_t last_draw_pulse_pass = 0;
         std::vector<TParticleBucket*> buckets;
@@ -294,15 +294,15 @@ class TParticleEffectManager
     };
 
     SRuntime* FindRuntime(const SParticleEffectDef* effect_def, int32_t owner_node_id);
-    void StartRuntime(SRuntime& runtime, TNodeInst* owner);
+    void StartRuntime(SRuntime& runtime, TNode* owner);
     void StopRuntime(size_t runtime_index);
-    void IntegrateBucket(SRuntime& runtime, SBucketRuntime& brt, TNodeInst* owner,
+    void IntegrateBucket(SRuntime& runtime, SBucketRuntime& brt, TNode* owner,
                          float dt_seconds, float owner_particle_id);
-    void EmitSpawnTopup(SBucketRuntime& brt, TNodeInst* owner, float owner_particle_id);
+    void EmitSpawnTopup(SBucketRuntime& brt, TNode* owner, float owner_particle_id);
     // Emit one chain particle into `chain_brt` using `(pos, vel)` as the
     // chain spawn's emit_pos / emit_vel. Returns the new particle index
     // (-1 if the chain bucket is full or the chain runtime is missing).
-    int32_t EmitChainParticle(SBucketRuntime& chain_brt, TNodeInst* owner,
+    int32_t EmitChainParticle(SBucketRuntime& chain_brt, TNode* owner,
                               float owner_particle_id,
                               const float dying_pos[3],
                               const float dying_vel[3]);
@@ -553,7 +553,7 @@ class TIceEffect : public TEffect
   public:
     TIceEffect(TObjectImagery* newim) : TEffect(newim) { flags |= OF_MOVING; }
     TIceEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim)
-        { pos.y += ICEDIST; pos.x -= ICEDIST; pos.z += ICEDIST; flags |= OF_MOVING; }
+        { SetIntPos(*this, IntPos(*this) + S3DPoint(-ICEDIST, ICEDIST, ICEDIST)); flags |= OF_MOVING; }
 
     virtual void Pulse();
 };
@@ -2273,7 +2273,7 @@ class TRippleEffect : public TEffect
     std::vector<S3DVertex> ring_vertices_;
     std::vector<S3DVertex> splash_vertices_;
     std::vector<SWaterDrop> splash_drops_;
-    std::vector<std::unique_ptr<TRippleEffect>> spawned_ripples_;
+    std::vector<TObjectPtr<TRippleEffect>> spawned_ripples_;
 };
 
 // *******************
@@ -2328,6 +2328,8 @@ _CLASSDEF(TDripEffect)
 
 class TDripEffect : public TEffect
 {
+    friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
+    friend class TLegacySerialize;
   public:
     TDripEffect(TObjectImagery* newim) : TEffect(newim) {}
     TDripEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
@@ -2336,8 +2338,6 @@ class TDripEffect : public TEffect
     void Pulse() override;
     void SetParams(int32_t ri, int32_t he, int32_t pe) { ripplesize = ri; height = he; period = pe; }
     void GetParams(int32_t* ri, int32_t* he, int32_t* pe) { *ri = ripplesize; *he = height; *pe = period; }
-    void Load(RTInputStream is, int32_t version, int32_t objversion) override;
-    void Save(RTOutputStream os) override;
     // Loads the authored Magic\\drip.i3d quad; defaults64/128/48 are
     // unchanged. Short A/B demos must explicitly SetParams(64,128,1).
     [[nodiscard]] static TDripEffect* SpawnForTest(const S3DPoint& origin);
@@ -2359,7 +2359,7 @@ class TDripEffect : public TEffect
     hmm_vec3 drop_vel_ = {};
     TTextureHandle drop_texture_ = kInvalidTexture;
     std::vector<S3DVertex> drop_vertices_;
-    std::vector<std::unique_ptr<TRippleEffect>> spawned_ripples_;
+    std::vector<TObjectPtr<TRippleEffect>> spawned_ripples_;
 };
 
 // *******************
@@ -4081,10 +4081,6 @@ class TAmbSoundEffect : public TEffect
     TAmbSoundEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TAmbSoundEffect() { if (id > 0) SoundPlayer.Unmount(id); }
 
-    virtual void Load(RTInputStream is, int32_t version, int32_t objversion);
-        // Loads object data from the sector
-    virtual void Save(RTOutputStream os);
-        // Saves object data to the sector
     virtual void Initialize();
     virtual void Pulse();
 
@@ -6503,7 +6499,7 @@ class TSparksEffect_Bespoke : public TEffect
     [[nodiscard]] bool IsAlive() const { return burst_ && burst_->IsAlive(); }
 
   private:
-    std::unique_ptr<TSparkEffect> burst_;
+    TObjectPtr<TSparkEffect> burst_;
 };
 
 _CLASSDEF(TCombatFlashEffect_Bespoke)

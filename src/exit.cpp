@@ -188,8 +188,8 @@ SRect TExit::StripRect()
     int32_t regx = 0, regy = 0, regz = 0, width = 0, length = 0, height = 0;
     GetExitStrip(regx, regy, regz, width, length, height);
     SRect strip;
-    strip.left = pos.x - regx * GRIDSIZE;
-    strip.top = pos.y - regy * GRIDSIZE;
+    strip.left = IntPos(*this).x - regx * GRIDSIZE;
+    strip.top = IntPos(*this).y - regy * GRIDSIZE;
     strip.right = strip.left + width * GRIDSIZE;
     strip.bottom = strip.top + length * GRIDSIZE;
     return strip;
@@ -269,7 +269,7 @@ bool TExit::AddExit(const char *name, TObjectInstance* inst, bool getamb)
 
     if (inst->ObjClass() != OBJCLASS_EXIT)
     {
-        inst->GetPos(ref->target);
+        ref->target = IntPos(inst);
         ref->mapindex = -1;
     }
     else
@@ -284,7 +284,7 @@ bool TExit::AddExit(const char *name, TObjectInstance* inst, bool getamb)
             const S3DPoint end(start.x + width * GRIDSIZE, start.y + length * GRIDSIZE, 0);
             ref->target = S3DPoint((start.x + end.x) / 2, (start.y + end.y) / 2, 0);
         }
-        ref->target += inst->Pos();
+        ref->target += IntPos(inst);
 
         // remember to close the door on the way out...
         ref->mapindex = inst->GetMapIndex();
@@ -346,7 +346,7 @@ void TExit::GetExitStrip(int32_t &regx, int32_t &regy, int32_t &regz, int32_t &w
     // get the facing data
     int32_t dir = Facing();
     if (dir < 0)
-        dir = GetFace();
+        dir = IntFacing(*this);
 
     // find the strip based on the direction the exit is facing
     if (dir >= 0xE0 || dir < 0x20)
@@ -377,8 +377,8 @@ void TExit::GetExitStrip(int32_t &regx, int32_t &regy, int32_t &regz, int32_t &w
 // of the strip's near edge still counts).
 bool TExit::OnStrip(const S3DPoint& at, int32_t regx, int32_t regy, int32_t width, int32_t length) const
 {
-    const int32_t gx = (regx * GRIDSIZE - pos.x + at.x) / GRIDSIZE;
-    const int32_t gy = (regy * GRIDSIZE - pos.y + at.y) / GRIDSIZE;
+    const int32_t gx = (regx * GRIDSIZE - IntPos(*this).x + at.x) / GRIDSIZE;
+    const int32_t gy = (regy * GRIDSIZE - IntPos(*this).y + at.y) / GRIDSIZE;
     return gx >= 0 && gy >= 0 && gx < width && gy < length;
 }
 
@@ -420,7 +420,7 @@ void TExit::Pulse()
             for (int32_t i = 0; i < PlayerManager.NumPlayers(); i++)
             {
                 TPlayer* player = PlayerManager.GetPlayer(i);
-                if (!player || !OnStrip(player->Pos(), regx, regy, width, length) ||
+                if (!player || !OnStrip(IntPos(player), regx, regy, width, length) ||
                     IsScriptedDoorType(GetTypeName()))
                     continue;
 
@@ -517,11 +517,11 @@ bool TExit::IsOutside(const TObjectInstance* obj)
     if (!obj)
         return false;
 
-    const int32_t facing = Facing() + GetFace();
+    const int32_t facing = Facing() + IntFacing(*this);
     const S3DPoint front = RetailFacingPoint(facing, 10);
     const S3DPoint back  = RetailFacingPoint(facing + 0x7f, 10);
-    S3DPoint delta = obj->Pos();
-    delta -= pos;
+    S3DPoint delta = IntPos(obj);
+    delta -= IntPos(*this);
     return ::Distance(back, delta) < ::Distance(front, delta);
 }
 
@@ -547,18 +547,6 @@ void TExit::SetExitState(int32_t es)
             st = es;
     }
     SetState(st);
-}
-
-void TExit::Load(RTInputStream is, int32_t version, int32_t objversion)
-{
-    TContainer::Load(is, version, objversion);
-    is >> exitflags;
-}
-
-void TExit::Save(RTOutputStream os)
-{
-    TContainer::Save(os);
-    os << exitflags;
 }
 
 // ***************
@@ -718,7 +706,7 @@ void TLever::Pulse()
     int32_t regx, regy, regz, width, length, height;
     GetExitStrip(regx, regy, regz, width, length, height);
 
-    if (!OnStrip(Player->Pos(), regx, regy, width, length))
+    if (!OnStrip(IntPos(Player), regx, regy, width, length))
     {
         if (exitflags & kExitActivated)
             Unactivate();

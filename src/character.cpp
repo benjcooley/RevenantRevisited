@@ -118,8 +118,8 @@ void ForCharactersNear(int32_t level, const S3DPoint& pos, int32_t range, Visit&
 // character's height, to the character, over the waypoint's level.
 bool WaypointReachable(const TObjectInstance* waypoint, const TObjectInstance* who)
 {
-    const S3DPoint from(waypoint->Pos().x, waypoint->Pos().y, who->Pos().z);
-    return MapPane.LineOfSight(from, who->Pos(), waypoint->GetLevel());
+    const S3DPoint from(IntPos(waypoint).x, IntPos(waypoint).y, IntPos(who).z);
+    return MapPane.LineOfSight(from, IntPos(who), waypoint->GetLevel());
 }
 
 // Retail's three moving actions (walk, combat, bow steps).
@@ -444,16 +444,16 @@ void TCharacter::Pulse()
   // bleeder or not) too. The 1998 build sprayed for "impdecap" instead.
     const bool bleeds = !(chardata->flags & CF_BADBLEEDER) && chardata->bleeder;
     if (doing->Is("decapdeath") && bleeds && frame > 5 && frame < 65 && frame % 5 == 0)
-        SprayBlood(pos, 75, GetFace() - 0x5b, 0x40, 0x5b);
+        SprayBlood(IntPos(*this), 75, IntFacing(*this) - 0x5b, 0x40, 0x5b);
     if (doing->Is("combat to ripinhalfed") && bleeds && frame > 65 && frame < 73 && frame % 2 == 0)
-        SprayBlood(pos, 105, GetFace() - 0x5b, 0x40, 0x5b);
+        SprayBlood(IntPos(*this), 105, IntFacing(*this) - 0x5b, 0x40, 0x5b);
     if (doing->Is("ripkilldeath") && bleeds && frame > 115 && frame < 126)
     {
-        SprayBlood(pos, 130, GetFace() - 0x5b, 0x40, 0x5b);
-        SprayBlood(pos, 130, GetFace() - 0x5b, 0x40, 0x5b);
+        SprayBlood(IntPos(*this), 130, IntFacing(*this) - 0x5b, 0x40, 0x5b);
+        SprayBlood(IntPos(*this), 130, IntFacing(*this) - 0x5b, 0x40, 0x5b);
     }
     if (stricmp(GetName(), "Rand") == 0 && doing->Is("walk to dead") && frame % 5 == 0)
-        SprayBlood(pos, 40, GetFace() - 0x80, 0x20, 0x20);
+        SprayBlood(IntPos(*this), 40, IntFacing(*this) - 0x80, 0x20, 0x20);
 
   // REVSYNC: 0x004c1fa3 -- the impale holds. An impaling attacker lands no
   // killing blow until its "atkimpale to walk" (the player's hold ends with
@@ -615,7 +615,7 @@ void TCharacter::PulseAutoCombat()
     if (IsRunMode() || IsSneakMode() || ((PlayScreen.GameFrame() ^ GetMapIndex()) & 0x1f) != 0)
         return;
     TCharacter* target = nullptr;
-    if (FindCharacters(&target, 1, -1, GetFace(), 0x20, 7) <= 0 || !target)
+    if (FindCharacters(&target, 1, -1, IntFacing(*this), 0x20, 7) <= 0 || !target)
     {
         autocombat = true;
         return;
@@ -628,7 +628,7 @@ void TCharacter::PulseAutoCombat()
         return;
     if (!AutoBeginCombat || !autocombat || !HasSeenAutoCombat(target))
         return;
-    if (Distance(target) >= chardata->combatrangemin || std::abs(AngleDiff(GetFace(), AngleTo(target))) >= 0x30)
+    if (Distance(target) >= chardata->combatrangemin || std::abs(AngleDiff(IntFacing(*this), AngleTo(target))) >= 0x30)
         return;
     if (PlayScreen.IsControlOn() || PlayScreen.IsDemoMode())
         BeginFighting(target, ACTION_COMBAT);
@@ -646,14 +646,14 @@ void TCharacter::PulseImpaleRelease()
         if (!(doing->priority && desired != doing))
         {
             auto* walk = new TActionBlock("walk", ACTION_ANIMATE);
-            walk->angle = GetFace();
+            walk->angle = IntFacing(*this);
           // REVSYNC-DIVERGENCE: retail leaks the block when it is refused.
             if (ForceCommand(walk, 0, 0) != COM_EXECUTING)
                 DropUnheld(walk);
         }
         desired->priority = false;
         auto* walk = new TActionBlock("walk", ACTION_ANIMATE);
-        walk->angle = GetFace();
+        walk->angle = IntFacing(*this);
         if (!SetDesired(walk, 0))
             DropUnheld(walk);
     }
@@ -891,7 +891,7 @@ void TCharacter::Animate(bool draw)
         }
 
         int32_t x, y;
-        WorldToScreen(pos, x, y);
+        WorldToScreen(IntPos(*this), x, y);
 
         PlayScreen.AddPostCharText((char *)doing->data, x, y - 120, &color, r.right - r.left + 1 - 32);
     }
@@ -950,7 +950,7 @@ int32_t FixedTimes(int32_t x, int32_t y)
 // two already overlap (so they can part). `height` gets the ground at
 // newpos, `bychar` the character in the way. MOVE_NOTMOVING asks for the
 // ground under newpos alone.
-bool TCharacter::Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits, int32_t *height, TCharacter* *bychar)
+bool TCharacter::Blocked(const S3DPoint& pos, S3DPoint& newpos, uint32_t bits, int32_t *height, TCharacter* *bychar)
 {
     if (blockedSeam)
         return blockedSeam(this, pos, newpos, bits, bychar);
@@ -1002,7 +1002,7 @@ bool TCharacter::Blocked(S3DPoint &pos, S3DPoint &newpos, uint32_t bits, int32_t
     // (A remote player in a network game is never blocked; offline, nothing.)
     TCharacter* b = CharBlocking(this, newpos, Radius());
     *bychar = b;
-    if (!b || ::Distance(pos, b->Pos()) < b->Radius() + Radius())
+    if (!b || ::Distance(pos, IntPos(b)) < b->Radius() + Radius())
         return false;
     blockedby = EBlockedBy::Character;
     return true;
@@ -1036,7 +1036,7 @@ uint32_t TCharacter::Move()
     {
         bits = MoveStep();
         --steps;
-    } while (movetopos && pos != movepos && (bits & MOVE_MOVED) && steps > 0);
+    } while (movetopos && IntPos(*this) != movepos && (bits & MOVE_MOVED) && steps > 0);
     movetopos = false;
     return bits;
 }
@@ -1058,14 +1058,14 @@ uint32_t TCharacter::MoveStep()
         return MOVE_NOTHING;
 
     uint32_t r = 0;
-    const int32_t ground = MapPane.GetWalkHeight(pos);
-    const int32_t above = pos.z - ground;
+    const int32_t ground = MapPane.GetWalkHeight(IntPos(*this));
+    const int32_t above = IntPos(*this).z - ground;
     if (above < -16)
-        ForcePos(S3DPoint(pos.x, pos.y, ground));       // retail writes pos.z, no SetPos
+        SetIntPos(*this, S3DPoint(IntPos(*this).x, IntPos(*this).y, ground));       // retail writes IntPos(*this).z, no SetPos
     else if (above > 16)
     {
         vel.z = (std::max)(vel.z - GRAVITY, -TERMINAL_VELOCITY);
-        SetPos(S3DPoint(pos.x, pos.y, ground));
+        SetPos(S3DPoint(IntPos(*this).x, IntPos(*this).y, ground));
         r = MOVE_FALLING;
     }
     if (above < 1)
@@ -1080,8 +1080,8 @@ uint32_t TCharacter::MoveStep()
     S3DPoint total;                                     // this tick's move, 1/0x10000 units
     if (movetopos)
     {
-        total = S3DPoint((movepos.x - pos.x) * ROLLOVER, (movepos.y - pos.y) * ROLLOVER,
-                         (movepos.z - pos.z) * ROLLOVER);
+        total = S3DPoint((movepos.x - IntPos(*this).x) * ROLLOVER, (movepos.y - IntPos(*this).y) * ROLLOVER,
+                         (movepos.z - IntPos(*this).z) * ROLLOVER);
         accum = S3DPoint();
         if (total.x == 0 && total.y == 0 && total.z == 0)
             return r | MOVE_NOTMOVING;
@@ -1115,7 +1115,7 @@ uint32_t TCharacter::MoveStep()
         total = accum + next + vel;
     }
 
-    const S3DPoint target(pos.x + total.x / ROLLOVER, pos.y + total.y / ROLLOVER, pos.z + total.z / ROLLOVER);
+    const S3DPoint target(IntPos(*this).x + total.x / ROLLOVER, IntPos(*this).y + total.y / ROLLOVER, IntPos(*this).z + total.z / ROLLOVER);
 
     // Substeps: the longer axis (x on a tie) decides how many.
     int32_t steps = 1;
@@ -1134,14 +1134,14 @@ uint32_t TCharacter::MoveStep()
         while (from + FixedTimes(steps, per) > to)
             per -= kStepCorrection;
     };
-    land(step.x, pos.x, target.x);
-    land(step.y, pos.y, target.y);
-    land(step.z, pos.z, target.z);
+    land(step.x, IntPos(*this).x, target.x);
+    land(step.y, IntPos(*this).y, target.y);
+    land(step.z, IntPos(*this).z, target.z);
 
     for (int32_t i = 0; i < steps; ++i)
     {
         S3DPoint m = step;
-        S3DPoint np = pos;
+        S3DPoint np = IntPos(*this);
         rollover(m.x, np.x);
         rollover(m.y, np.y);
         rollover(m.z, np.z);
@@ -1150,13 +1150,14 @@ uint32_t TCharacter::MoveStep()
         TCharacter* by1;
         const S3DPoint wanted = np;
         EBlockedBy why = EBlockedBy::None;
-        if (Blocked(pos, np, r, &h1, &by1))
+        if (Blocked(IntPos(*this), np, r, &h1, &by1))
         {
             why = blockedby;
             r |= MOVE_BLOCKED;
             int32_t h2;
             TCharacter* by2;
-            Blocked(pos, pos, r, &h2, &by2);             // asks only who stands here
+            S3DPoint here = IntPos(*this);
+            Blocked(here, here, r, &h2, &by2);             // asks only who stands here
             if (by1 && by2)
                 r &= ~MOVE_BLOCKED;                     // already in someone: let him through
         }
@@ -1187,9 +1188,9 @@ uint32_t TCharacter::MoveStep()
                     {
                         S3DPoint v;
                         ConvertToVector((sides[k] + moveangle) & 0xff, d, v);
-                        const S3DPoint c = pos + v;
+                        const S3DPoint c = IntPos(*this) + v;
                         S3DPoint probe = c;
-                        if (Blocked(pos, probe, 0))
+                        if (Blocked(IntPos(*this), probe, 0))
                             break;
                         if (d > best)
                         {
@@ -1201,7 +1202,7 @@ uint32_t TCharacter::MoveStep()
                 if (best > 0)
                 {
                     np = bestpos;
-                    if (!Blocked(pos, np, 0))
+                    if (!Blocked(IntPos(*this), np, 0))
                     {
                         r &= ~MOVE_BLOCKED;
                         shoved = true;
@@ -1210,23 +1211,23 @@ uint32_t TCharacter::MoveStep()
                         i = steps;                      // this was the last substep
                     }
                     else
-                        np = pos;
+                        np = IntPos(*this);
                 }
                 else
                     r |= MOVE_BLOCKED;
             }
             if (r & MOVE_BLOCKED)
             {
-                np = pos;
+                np = IntPos(*this);
                 // Diagnostics: the player's refused step, once per place and reason.
                 static S3DPoint lastpos;
                 static EBlockedBy lastwhy = EBlockedBy::None;
-                if (this == Player && (pos != lastpos || why != lastwhy))
+                if (this == Player && (IntPos(*this) != lastpos || why != lastwhy))
                 {
                     log_debug("[move] %s blocked at (%d,%d,%d) toward (%d,%d,%d), move angle %d: %s%s%s", name,
-                              pos.x, pos.y, pos.z, wanted.x, wanted.y, wanted.z, moveangle, BlockedByName(why),
+                              IntPos(*this).x, IntPos(*this).y, IntPos(*this).z, wanted.x, wanted.y, wanted.z, moveangle, BlockedByName(why),
                               by1 ? " " : "", by1 ? by1->name : "");
-                    lastpos = pos;
+                    lastpos = IntPos(*this);
                     lastwhy = why;
                 }
                 if (retreating)
@@ -1239,9 +1240,9 @@ uint32_t TCharacter::MoveStep()
         }
 
         accum = m;                                      // the fraction left, blocked or not
-        if (np.z < MapPane.GetWalkHeight(pos))
-            np.z = MapPane.GetWalkHeight(pos);          // the ground at the old position
-        if (np != pos)
+        if (np.z < MapPane.GetWalkHeight(IntPos(*this)))
+            np.z = MapPane.GetWalkHeight(IntPos(*this));          // the ground at the old position
+        if (np != IntPos(*this))
             SetPos(np);
         r |= MOVE_MOVED;
         if (shoved && movetopos)
@@ -1431,8 +1432,8 @@ void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
         if (imp && imp->snapdist > 0 && attacker)
         {
             snapticks = imp->snaptime;
-            const int32_t away = (attacker->GetFace() - 0x80) & 0xff;
-            SetRotateZ(away);
+            const int32_t away = (IntFacing(attacker) - 0x80) & 0xff;
+            SetIntFacing(*this, away);
             SetMoveAngle(away);
             S3DPoint p;
             GetSnapPos(attacker, imp->snapdist, p);
@@ -1522,7 +1523,7 @@ SCharAttackImpact* TCharacter::DamageDeath(TActionBlock* given, TActionBlock*& m
     if (attacker)
     {
         const int32_t a = AngleTo(attacker);
-        SetRotateZ(a);
+        SetIntFacing(*this, a);
         SetMoveAngle(a);
     }
     if (!ab)
@@ -1569,7 +1570,7 @@ SCharAttackImpact* TCharacter::DamageImpact(TActionBlock* given, TActionBlock*& 
                 ab = made = new TActionBlock(name, ACTION_FLYBACK);
                 ab->priority = true;
                 ab->impact = nullptr;
-                ab->angle = GetFace();
+                ab->angle = IntFacing(*this);
             }
         }
     }
@@ -1615,7 +1616,7 @@ SCharAttackImpact* TCharacter::DamageImpact(TActionBlock* given, TActionBlock*& 
     if (attacker && attacker->doing)
         ab->attack = attacker->doing->attack;
     ForceDamageBlock(ab, imp);
-    SetRotateZ(ab->angle);
+    SetIntFacing(*this, ab->angle);
     SetMoveAngle(ab->angle);
     return imp;
 }
@@ -1796,7 +1797,7 @@ void TCharacter::AdvanceAngles(int32_t faceang, int32_t moveang, int32_t maxturn
   // Do face angle
     faceang &= 255;
 
-    dif = faceang - GetFace();
+    dif = faceang - IntFacing(*this);
     if (dif > 128)
         dif = dif - 256;
     if (dif < -128)
@@ -1804,9 +1805,9 @@ void TCharacter::AdvanceAngles(int32_t faceang, int32_t moveang, int32_t maxturn
 
     int32_t newfaceang;
     if (dif < 0)
-        newfaceang = (GetFace() + max(dif, -maxturn)) & 255;
+        newfaceang = (IntFacing(*this) + max(dif, -maxturn)) & 255;
     else
-        newfaceang = (GetFace() + min(dif, maxturn)) & 255;
+        newfaceang = (IntFacing(*this) + min(dif, maxturn)) & 255;
 
   // Do move angle
     moveang &= 255;
@@ -1823,8 +1824,8 @@ void TCharacter::AdvanceAngles(int32_t faceang, int32_t moveang, int32_t maxturn
     else
         newmoveang = (GetMoveAngle() + min(dif, maxturn)) & 255;
 
-    if (newfaceang != GetFace())
-        FaceOnly(newfaceang);
+    if (newfaceang != IntFacing(*this))
+        SetIntFacing(*this, newfaceang);
 
     if (newmoveang != GetMoveAngle())
         SetMoveAngle(newmoveang);
@@ -1910,7 +1911,7 @@ int32_t TCharacter::UpdateAngle(int32_t angle)
 
     return ba;
 */
-    int32_t ch = MapPane.GetWalkHeight(pos);
+    int32_t ch = MapPane.GetWalkHeight(IntPos(*this));
     int32_t nudge = 0;
     S3DPoint c;
     c.z = 0;
@@ -1923,19 +1924,19 @@ int32_t TCharacter::UpdateAngle(int32_t angle)
     // no matter what way they are facing it always sends them
     // straight down it.
 
-    for (c.y = pos.y - 32; c.y <= (pos.y + 32); c.y += 16)
-        for (c.x = pos.x - 32; c.x <= (pos.x + 32); c.x += 16)
+    for (c.y = IntPos(*this).y - 32; c.y <= (IntPos(*this).y + 32); c.y += 16)
+        for (c.x = IntPos(*this).x - 32; c.x <= (IntPos(*this).x + 32); c.x += 16)
         {
-            if (c.y == pos.y && c.x == pos.x)
+            if (c.y == IntPos(*this).y && c.x == IntPos(*this).x)
                 continue;
 
             if (absval(MapPane.GetWalkHeight(c) - ch) < 30)
                 continue;
 
-            int32_t dist = (sqr(64) - SQRDIST(c, pos)) / 100;
+            int32_t dist = (sqr(64) - SQRDIST(c, IntPos(*this))) / 100;
             dist = min(50, max(1, dist));
 
-            int32_t ang = ConvertToFacing(pos, c) - GetFace();
+            int32_t ang = ConvertToFacing(IntPos(*this), c) - IntFacing(*this);
 
             int32_t weight = (dist * (64 - absval(ang))) / 100;
 
@@ -1954,8 +1955,8 @@ int32_t TCharacter::UpdateAngle(int32_t angle)
 TObjectInstance* TCharacter::FindObjAhead()
 {
     S3DPoint pos, v;
-    GetPos(pos);
-    ConvertToVector(GetFace(), 60, v);
+    pos = IntPos(*this);
+    ConvertToVector(IntFacing(*this), 60, v);
     pos += v;
 
     int32_t list[MAXFOUNDOBJS];
@@ -2007,7 +2008,7 @@ int32_t TCharacter::ResolveMove(TActionBlock* ab, int32_t bits)
         Halt();
         if (!stricmp(ab->name, root->name))
         {
-            if (GetFace() != ab->angle)
+            if (IntFacing(*this) != ab->angle)
             {
                 AdvanceAngles(ab->angle, ab->angle, ab->turnrate);
                 return COM_DONE;
@@ -2058,9 +2059,9 @@ int32_t TCharacter::ResolveMove(TActionBlock* ab, int32_t bits)
 
     if (ab->target.x != 0 || ab->target.y != 0 || ab->target.z != 0)
     {
-        if (dist(pos.x, pos.y, ab->target.x, ab->target.y) < 8)
+        if (dist(IntPos(*this).x, IntPos(*this).y, ab->target.x, ab->target.y) < 8)
         {
-            ab->target.z = pos.z;
+            ab->target.z = IntPos(*this).z;
             MoveTo(ab->target);
             ab->nowaitdone = true;
             // A Goto's item is picked up on arrival (retail 0x004c6155).
@@ -2071,10 +2072,10 @@ int32_t TCharacter::ResolveMove(TActionBlock* ab, int32_t bits)
             }
             return COM_DONE;
         }
-        ab->angle = ab->moveangle = ConvertToFacing(pos, ab->target);
+        ab->angle = ab->moveangle = ConvertToFacing(IntPos(*this), ab->target);
     }
 
-    SetMoveAngle(GetFace());
+    SetMoveAngle(IntFacing(*this));
     AdvanceAngles(ab->angle, ab->angle, ab->turnrate);
 
     if (commanddone && !ab->stop)
@@ -2109,7 +2110,7 @@ bool TCharacter::ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAtta
     const int32_t angle = FaceAngleTo(targ);
     if (dist < attack->hitminrange || dist > attack->hitmaxrange)
         return false;
-    if (abs(targ->pos.z - pos.z) > MAXZHITRANGE)
+    if (abs(IntPos(targ).z - IntPos(*this).z) > MAXZHITRANGE)
         return false;
     if (abs(angle) > attack->hitangle)
         return false;
@@ -2121,7 +2122,7 @@ bool TCharacter::ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAtta
 
     targ->SetHasSeen(this);
     S3DPoint push;
-    ConvertToVector(GetFace(), 4 * ROLLOVER, push);
+    ConvertToVector(IntFacing(*this), 4 * ROLLOVER, push);
     targ->vel += push;
 
   // A guard counts against a blow the target faces, unless it is a death
@@ -2340,7 +2341,7 @@ int32_t TCharacter::ResolveAttack(TActionBlock* ab, int32_t bits)
         if (!(attack->flags & CA_ONETARGET))
         {
             TCharacter* chars[kMaxHitChars];
-            const int32_t n = FindCharacters(chars, kMaxHitChars, attack->hitmaxrange, GetFace(), attack->hitangle,
+            const int32_t n = FindCharacters(chars, kMaxHitChars, attack->hitmaxrange, IntFacing(*this), attack->hitangle,
                                              FINDCHAR_ENEMY);
             for (int32_t c = 0; c < n; c++)
                 if (chars[c] != targ)
@@ -2398,7 +2399,7 @@ int32_t TCharacter::ResolveAttack(TActionBlock* ab, int32_t bits)
     }
 
     if ((attack->flags & CA_PLAYANIM) && Fighting())
-        SetRotateZ(AngleTo(Fighting()));
+        SetIntFacing(*this, AngleTo(Fighting()));
     return COM_DONE;
 }
 
@@ -2525,7 +2526,7 @@ int32_t TCharacter::ResolveBlock(TActionBlock* ab, int32_t bits)
     if (doing && doing->obj)
     {
         const int32_t a = AngleTo(doing->obj);
-        SetRotateZ(a);
+        SetIntFacing(*this, a);
         SetMoveAngle(a);
     }
     if (ab->wait > 0 && !(doing && doing->stop))
@@ -2619,7 +2620,7 @@ int32_t TCharacter::ResolveCombat(TActionBlock* ab, int32_t bits)
         Halt();
         if (!stricmp(ab->name, root->name))
         {
-            if (GetFace() != ab->angle)
+            if (IntFacing(*this) != ab->angle)
             {
                 AdvanceAngles(ab->angle, ab->moveangle, ab->turnrate);
                 return 0;
@@ -2670,7 +2671,7 @@ int32_t TCharacter::ResolveCombat(TActionBlock* ab, int32_t bits)
     if (!look)
         look = ai_lookat;
     if (look)
-        angle = angle8 = ConvertToFacing(pos, look->Pos());
+        angle = angle8 = ConvertToFacing(IntPos(*this), IntPos(look));
 
     if (ObjClass() == OBJCLASS_PLAYER)
     {
@@ -2684,7 +2685,7 @@ int32_t TCharacter::ResolveCombat(TActionBlock* ab, int32_t bits)
                 auto* step = new TActionBlock(animname, doing->action);
                 step->angle = (angle8 + 15) & 0xe0;
                 step->moveangle = ab->moveangle;
-                const int32_t diff = std::abs(AngleDiff(GetFace(), step->angle));
+                const int32_t diff = std::abs(AngleDiff(IntFacing(*this), step->angle));
                 step->obj = ab->obj;
                 step->turnrate = (std::max)(0, diff - 32) / 32 * 8 + 16;
                 SetMoveAngle(step->moveangle);
@@ -2694,14 +2695,14 @@ int32_t TCharacter::ResolveCombat(TActionBlock* ab, int32_t bits)
         }
         else if (ab->angle != angle8)
         {
-            const int32_t diff = std::abs(AngleDiff(GetFace(), angle8));
+            const int32_t diff = std::abs(AngleDiff(IntFacing(*this), angle8));
             ab->moveangle = ab->angle = angle8;
             ab->turnrate = StepTurnRate(diff);
         }
     }
     else if (ab->angle != angle8)
     {
-        const int32_t diff = std::abs(AngleDiff(GetFace(), angle8 & 0xff));
+        const int32_t diff = std::abs(AngleDiff(IntFacing(*this), angle8 & 0xff));
         ab->angle = angle8;
         ab->turnrate = StepTurnRate(diff);
         ab->moveangle = ab->action == ACTION_COMBATMOVE ? angle8 : GetMoveAngle();
@@ -2728,9 +2729,9 @@ int32_t TCharacter::ResolveCombatMove(TActionBlock* ab, int32_t bits)
         SetDesired(doing);
     if (gotoitem.Get() && ab->walkto && (ab->target.x != 0 || ab->target.y != 0 || ab->target.z != 0))
     {
-        if (dist(pos.x, pos.y, ab->target.x, ab->target.y) < 8)
+        if (dist(IntPos(*this).x, IntPos(*this).y, ab->target.x, ab->target.y) < 8)
         {
-            ab->target.z = pos.z;
+            ab->target.z = IntPos(*this).z;
             MoveTo(ab->target);
             ab->walkto = false;
             ab->nowaitdone = true;
@@ -2738,7 +2739,7 @@ int32_t TCharacter::ResolveCombatMove(TActionBlock* ab, int32_t bits)
             gotoitem = nullptr;
             return 0;
         }
-        ab->moveangle = ConvertToFacing(pos, ab->target);
+        ab->moveangle = ConvertToFacing(IntPos(*this), ab->target);
     }
     return ResolveCombat(ab, bits);
 }
@@ -2750,7 +2751,7 @@ int32_t TCharacter::ResolveBowAim(TActionBlock* ab, int32_t bits)
 {
     Halt(); // Make sure there's no movement
 
-    if (ab->stop && GetFace() == ab->angle)
+    if (ab->stop && IntFacing(*this) == ab->angle)
         return COM_DONE;
 
   // Do turning
@@ -2779,23 +2780,23 @@ int32_t TCharacter::ResolveBowShoot(TActionBlock* ab, int32_t bits)
         // network game isn't ported, so this is always the one shooting.
         if (TObjectInstance* ammo = player->GetEquip(EQ_AMMO))
         {
-            SetRotateZ(ab->angle & 255);
+            SetIntFacing(*this, ab->angle & 255);
             SetMoveAngle(ab->angle);
 
             SObjectDef def{};
             def.objclass = OBJCLASS_AMMO;
             def.objtype = AmmoClass.FindObjType(ammo->GetName());
             def.flags = OF_WEIGHTLESS;
-            def.pos = pos;
+            def.pos = IntPos(*this);
             S3DPoint offset;
-            ConvertToVector((GetFace() + ConvertToFacing(chardata->arrowpos)) & 255, ::Distance(chardata->arrowpos),
+            ConvertToVector((IntFacing(*this) + ConvertToFacing(chardata->arrowpos)) & 255, ::Distance(chardata->arrowpos),
                             offset);
             def.pos.x += offset.x;
             def.pos.y += offset.y;
             def.pos.z += chardata->arrowpos.z;
             def.level = MapPane.GetMapLevel();
-            ConvertToVector(GetFace(), chardata->arrowspeed << 16, def.vel);
-            def.facing = GetFace();
+            ConvertToVector(IntFacing(*this), chardata->arrowspeed << 16, def.vel);
+            def.facing = IntFacing(*this);
             // No arrow made (or not an AMMO one): no ammo spent, no sound.
             TObjectInstance* arrow = MapPane.GetInstance(MapPane.NewObject(&def));
             if (arrow && arrow->ObjClass() == OBJCLASS_AMMO)
@@ -2810,7 +2811,7 @@ int32_t TCharacter::ResolveBowShoot(TActionBlock* ab, int32_t bits)
 
                 char sound[] = "bowshoot*";
                 sound[8] = char('1' + random(0, 5));
-                PlayAt(sound, pos);
+                PlayAt(sound, IntPos(*this));
             }
         }
         lastbowshot = PlayScreen.GameFrame();
@@ -2888,7 +2889,7 @@ int32_t TCharacter::ResolvePivot(TActionBlock* ab, int32_t bits)
 
     if (!stricmp(ab->name, root->name)) // Is a normal root animation we're manually turning...
     {
-        if (GetFace() == ab->angle)
+        if (IntFacing(*this) == ab->angle)
         {
             SetDesired(nullptr);
             return COM_DONE;
@@ -2920,7 +2921,7 @@ void TCharacter::EffectCombatFlash()
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = EffectClass.FindObjType("combatflash");
     def.level = MapPane.GetMapLevel();
-    def.pos = pos + S3DPoint(30, 30, 80);
+    def.pos = IntPos(*this) + S3DPoint(30, 30, 80);
     TObjectInstance* flash = MapPane.GetInstance(MapPane.NewObject(&def));
     if (!flash)
         return;
@@ -2957,7 +2958,7 @@ void TCharacter::EffectBurst(const char *name, int32_t height)
       // the animator wraps it), elevation 3, both spreads 5. The count,
       // random(1, 5), is drawn once the object exists; retail's animator
       // never reads it (effects/retailblood.cpp).
-        def.pos = pos;
+        def.pos = IntPos(*this);
         def.pos.z += height;
 
         def.facing = 0;
@@ -2966,21 +2967,21 @@ void TCharacter::EffectBurst(const char *name, int32_t height)
         TObjectInstance* inst = MapPane.GetInstance(index);
         if (!inst)
             return;
-        const int32_t heading = GetFace() + 0x80;
+        const int32_t heading = IntFacing(*this) + 0x80;
         const int32_t count = random(1, 5);
         if (auto* blood = dynamic_cast<TBloodEffect*>(inst))
             blood->SetParams(height, heading, 3, 5, 5, count);
     }
     else if (!stricmp(name, "sparks"))
     {
-        def.pos = pos;
+        def.pos = IntPos(*this);
 
         int32_t index = MapPane.NewObject(&def);
         TObjectInstance* inst = MapPane.GetInstance(index);
         if (!inst)
             return;
 
-        int32_t ang = (GetFace() + random(-80, 80)) & 0xff;
+        int32_t ang = (IntFacing(*this) + random(-80, 80)) & 0xff;
 
         S3DPoint vect;
         ConvertToVector(ang, 100, vect);
@@ -2990,8 +2991,8 @@ void TCharacter::EffectBurst(const char *name, int32_t height)
             SParticleParams pr = {};
 
             S3DPoint vect0, tpos;
-            doing->obj->GetPos(tpos);
-            ang = ConvertToFacing(pos, tpos);
+            tpos = IntPos(doing->obj);
+            ang = ConvertToFacing(IntPos(*this), tpos);
             int32_t dist = TObjectInstance::Distance(doing->obj);
             ConvertToVector(ang, dist / 2, vect0);
             vect0.z += 45;
@@ -3189,7 +3190,7 @@ void TCharacter::AIAttack(TCharacter* target)
         {
             const bool attacked = RandomAttack(random(1, 100));
           // Someone else in the way and no attack: step aside.
-            TCharacter* blocker = CharBlocking(this, pos, Radius() * 2);
+            TCharacter* blocker = CharBlocking(this, IntPos(*this), Radius() * 2);
             if (blocker && blocker != target && !attacked)
             {
                 const int32_t side = FaceAngleTo(blocker);
@@ -3229,7 +3230,8 @@ void TCharacter::AIMove(TCharacter* target)
       // Standing out of the stance, someone in the way: step aside, and he
       // the other way unless he is the target.
         TCharacter* blocker = nullptr;
-        if (accum.x == 0 && accum.y == 0 && Blocked(pos, pos, 8, nullptr, &blocker) && blocker)
+        S3DPoint here = IntPos(*this);
+        if (accum.x == 0 && accum.y == 0 && Blocked(here, here, 8, nullptr, &blocker) && blocker)
         {
             const char side = FaceAngleTo(blocker) >= 0 ? 'r' : 'l';
             SideStep(side);
@@ -3263,7 +3265,7 @@ void TCharacter::AIMove(TCharacter* target)
             else
                 waypointticks--;
         }
-        target_last_position = target->Pos();
+        target_last_position = IntPos(target);
         doing->angle = AngleTo(ai_lookat && waypointticks ? ai_lookat : target);
         return;
     }
@@ -3282,7 +3284,7 @@ void TCharacter::AIMove(TCharacter* target)
     if (!ai_lookat || Distance(ai_lookat) < 5)
     {
         if (ai_lookat)
-            centre = target->Pos();
+            centre = IntPos(target);
         TObjectInstance* waypoint = NearestWaypoint(centre);
         if (ai_lookat == waypoint)
             ai_lookat = nullptr;
@@ -3292,7 +3294,7 @@ void TCharacter::AIMove(TCharacter* target)
             ai_lookat = waypoint;
         }
     }
-    doing->angle = ai_lookat ? AngleTo(ai_lookat) : ConvertToFacing(pos, centre);
+    doing->angle = ai_lookat ? AngleTo(ai_lookat) : ConvertToFacing(IntPos(*this), centre);
 }
 
 // AI's waypoint search (0x004c9158-0x004c9272): of the first ten helpers
@@ -3330,7 +3332,7 @@ TObjectInstance* TCharacter::NearestWaypoint(const S3DPoint& centre)
     int32_t best = 0, bestdist = 1000;
     for (int32_t i = 0; i < count; ++i)
     {
-        S3DPoint at = waypoints[i]->Pos();
+        S3DPoint at = IntPos(waypoints[i]);
         const int32_t d = ::Distance(centre, at);
         if (d < bestdist)
         {
@@ -3483,14 +3485,14 @@ void TCharacter::WanderPatrol()
     {
         ai_lookat = PickWanderWaypoint();
         if (ai_lookat)
-            Goto(ai_lookat->Pos().x, ai_lookat->Pos().y);
+            Goto(IntPos(ai_lookat).x, IntPos(ai_lookat).y);
         else
             wanderidle = 1000;
         return;
     }
-    Goto(ai_lookat->Pos().x, ai_lookat->Pos().y);
-    const S3DPoint at = ai_lookat->Pos();
-    if (dist(pos.x, pos.y, pos.z, at.x, at.y, at.z) < 25)
+    Goto(IntPos(ai_lookat).x, IntPos(ai_lookat).y);
+    const S3DPoint at = IntPos(ai_lookat);
+    if (dist(IntPos(*this).x, IntPos(*this).y, IntPos(*this).z, at.x, at.y, at.z) < 25)
     {
         TObjectInstance* reached = ai_lookat;
         ai_lookat = PickWanderWaypoint();       // passes over the one reached and the one before it
@@ -3507,7 +3509,7 @@ TObjectInstance* TCharacter::PickWanderWaypoint()
 {
     constexpr int32_t kMaxFound = 10;
     int32_t index[kMaxFound];
-    const int32_t n = (std::min)(MapPane.FindObjectsInRange(pos, GetLevel(), index, 2000, 0, OBJCLASS_HELPER,
+    const int32_t n = (std::min)(MapPane.FindObjectsInRange(IntPos(*this), GetLevel(), index, 2000, 0, OBJCLASS_HELPER,
                                                             kMaxFound, OBJSET_ALL), kMaxFound);
     TObjectInstance* const previous = lastwaypoint.Get();
     TObjectInstance* kept[kMaxFound];
@@ -3516,7 +3518,7 @@ TObjectInstance* TCharacter::PickWanderWaypoint()
     {
         TObjectInstance* o = MapPane.GetInstance(index[i]);
         if (o && !stricmp(o->GetTypeName(), "waypoint") && o != previous && o != ai_lookat &&
-            WaypointReachable(o, this) && ProbeLedge(o->Pos()))
+            WaypointReachable(o, this) && ProbeLedge(IntPos(o)))
             kept[count++] = o;
     }
     if (count == 0)
@@ -3545,12 +3547,12 @@ TObjectInstance* TCharacter::PickWanderWaypoint()
 bool TCharacter::ProbeLedge(const S3DPoint& to)
 {
     constexpr int32_t kLedge = 32;
-    const int32_t stepx = (pos.x - to.x) / 8;
-    const int32_t stepy = (pos.y - to.y) / 8;
+    const int32_t stepx = (IntPos(*this).x - to.x) / 8;
+    const int32_t stepy = (IntPos(*this).y - to.y) / 8;
     const int32_t radius = Radius();
-    int32_t steps = radius > 0 ? dist(pos.x, pos.y, to.x, to.y) / radius : 0;
-    S3DPoint next(pos.x + stepx, pos.y + stepy, pos.z);
-    int32_t h = MapPane.GetWalkHeight(pos, GetLevel());
+    int32_t steps = radius > 0 ? dist(IntPos(*this).x, IntPos(*this).y, to.x, to.y) / radius : 0;
+    S3DPoint next(IntPos(*this).x + stepx, IntPos(*this).y + stepy, IntPos(*this).z);
+    int32_t h = MapPane.GetWalkHeight(IntPos(*this), GetLevel());
     int32_t hnext = MapPane.GetWalkHeight(next, GetLevel());
     for (; steps > 0; --steps)
     {
@@ -3585,11 +3587,11 @@ bool TCharacter::CanSeeCharacter(TCharacter* chr, int32_t angle)
         return canSeeSeam(this, chr, angle);
     if (chr->flags & OF_INVISIBLE)
         return false;
-    S3DPoint from = pos, to = chr->Pos();
+    S3DPoint from = IntPos(*this), to = IntPos(chr);
     from.z += LIGHTINGCHARHEIGHT;
     to.z += LIGHTINGCHARHEIGHT;
     if (angle < 1)
-        angle = GetFace();
+        angle = IntFacing(*this);
     const int32_t dist = ::Distance(from, to);
     const int32_t anglediff = abs(AngleDiff(angle, AngleTo(chr)));
 
@@ -3608,7 +3610,7 @@ bool TCharacter::CanSeeCharacter(TCharacter* chr, int32_t angle)
 int32_t TCharacter::Distance(const TObjectInstance* inst) const
 {
     auto* self = const_cast<TCharacter*>(this);         // Radius() is a stat accessor
-    int32_t d = ::Distance(pos, inst->Pos()) - self->Radius();
+    int32_t d = ::Distance(IntPos(*this), IntPos(inst)) - self->Radius();
     if (inst->IsCharacter())
         d -= const_cast<TCharacter*>(static_cast<const TCharacter*>(inst))->Radius();
     return (std::max)(d, 0);
@@ -3663,7 +3665,7 @@ int32_t TCharacter::FindCharacters(TCharacter* chars[], int32_t maxchars, int32_
 
     int32_t numchars = 0;
     int32_t best = 10000;
-    ForCharactersNear(GetLevel(), pos, range, [&](TCharacter* chr) {
+    ForCharactersNear(GetLevel(), IntPos(*this), range, [&](TCharacter* chr) {
         if (chr == this || chr->IsInvisibleSpell())
             return true;
         if (flags & FINDCHAR_ENEMY)
@@ -3840,12 +3842,12 @@ bool TCharacter::Go(int32_t angle)
 
   // Look 4 ahead before stepping off: always in combat with CombatFace, else
   // only when already (nearly) facing the way.
-    if ((combat && CombatFace) || std::abs(AngleDiff(GetFace(), angle)) < 16)
+    if ((combat && CombatFace) || std::abs(AngleDiff(IntFacing(*this), angle)) < 16)
     {
         S3DPoint ahead;
         ConvertToVector(angle, 4, ahead);
-        ahead += pos;
-        if (Blocked(pos, ahead))
+        ahead += IntPos(*this);
+        if (Blocked(IntPos(*this), ahead))
             return false;
     }
 
@@ -3860,7 +3862,7 @@ bool TCharacter::Go(int32_t angle)
     {
       // Retreating: turn toward the direction held at a speed scaled to
       // the turn (retail's float, 0x004ceb13).
-        const int32_t diff = std::abs(AngleDiff(GetFace(), angle));
+        const int32_t diff = std::abs(AngleDiff(IntFacing(*this), angle));
         auto scaled = [diff](int32_t rate) {
             return (int32_t)((double)rate / ((double)diff * (double)(1.0f / 127.0f)) * (double)2.2f);
         };
@@ -3914,7 +3916,7 @@ bool TCharacter::Go(int32_t angle)
 
         char animname[RESNAMELEN];
         GetAngleMoveAnim(angle, face, root->name, animname, RESNAMELEN);
-        const int32_t diff = std::abs(AngleDiff(GetFace(), face8));
+        const int32_t diff = std::abs(AngleDiff(IntFacing(*this), face8));
 
         if (ObjClass() == OBJCLASS_PLAYER || (diff <= 64 && (doing->action == moveaction || diff <= 32)))
         {
@@ -3943,7 +3945,7 @@ bool TCharacter::Go(int32_t angle)
         if (doing->action == moveaction && doing->moveangle == angle && doing->angle == angle)
             return true;
 
-        const int32_t diff = std::abs(AngleDiff(GetFace(), angle));
+        const int32_t diff = std::abs(AngleDiff(IntFacing(*this), angle));
         if (IsMoveAction(doing) && diff <= 64)
         {
             doing->moveangle = doing->angle = angle;
@@ -3969,7 +3971,7 @@ bool TCharacter::Go(int32_t angle)
             ab->turnrate = StepTurnRate(diff);
         }
         made = true;
-        SetMoveAngle(GetFace());
+        SetMoveAngle(IntFacing(*this));
         ab->obj = doing->obj;
         ab->moveangle = ab->angle = angle;
     }
@@ -4011,12 +4013,12 @@ bool TCharacter::Go(S3DPoint vect)
 // facing the target): the map pane's walk to an item out of reach.
 bool TCharacter::Goto(int32_t x, int32_t y, TObjectInstance* pickup)
 {
-    const int32_t angle = ConvertToFacing(pos, S3DPoint(x, y, pos.z));
+    const int32_t angle = ConvertToFacing(IntPos(*this), S3DPoint(x, y, IntPos(*this).z));
     if (!Go(angle))
         return false;
 
     TActionBlock* ab = desired != root ? desired : doing;
-    ab->target = S3DPoint(x, y, pos.z);
+    ab->target = S3DPoint(x, y, IntPos(*this).z);
     ab->walkto = true;
     if (pickup)
         gotoitem = pickup;
@@ -4179,13 +4181,13 @@ bool TCharacter::Pivot(int32_t angle)
 
     angle = angle & 255;
 
-    if (angle == GetFace())
+    if (angle == IntFacing(*this))
         return true;
 
     char buf[30];
 
   // Get name of pivot animation for this direction
-    int32_t anglediff = AngleDiff(GetFace(), angle);
+    int32_t anglediff = AngleDiff(IntFacing(*this), angle);
     int32_t absdiff = abs(anglediff);
     strcpy(buf, root->name);
     strcat(buf, "pivot");
@@ -4323,7 +4325,7 @@ void TCharacter::DropLoot()
             loot.push_back(i.Item());
     if (loot.empty())
         return;
-    log_info("[loot] %s drops %zu thing(s) at (%d,%d,%d)", GetName(), loot.size(), pos.x, pos.y, pos.z);
+    log_info("[loot] %s drops %zu thing(s) at (%d,%d,%d)", GetName(), loot.size(), IntPos(*this).x, IntPos(*this).y, IntPos(*this).z);
 
     if (TObjectInstance* swag = FindObjInventory("Swag Bag"))
         AddToInventory(swag);
@@ -4332,13 +4334,13 @@ void TCharacter::DropLoot()
     if (sound >= 0 && SoundPlayer.Mount(sound))
         SoundPlayer.Play(sound);
 
-    const S3DPoint body = pos;
+    const S3DPoint body = IntPos(*this);
     const int32_t radiussteps = Radius() / kStep;
     for (TObjectInstance* item : loot)
     {
         if (!stricmp(item->GetTypeName(), "gold"))
         {
-            item->SetPos(S3DPoint{ body.x + kGoldOffset, body.y + kGoldOffset, body.z }, level);
+            item->SetPos(S3DPoint{ body.x + kGoldOffset, body.y + kGoldOffset, body.z }, GetLevel());
             item->RemoveFromInventory();
             item->AddToMap();
             log_info("[loot] %s at its feet", item->GetName());
@@ -4378,7 +4380,7 @@ void TCharacter::DropLoot()
                 break;
         }
 
-        item->SetPos(drop, level);
+        item->SetPos(drop, GetLevel());
         item->RemoveFromInventory();
         item->AddToMap();
         if (item->NeedsAnimator())
@@ -4430,8 +4432,8 @@ namespace {
 int32_t ObjectsAhead(TCharacter* chr, int32_t ahead, int32_t reach, int32_t (&list)[10])
 {
     S3DPoint pos, step;
-    chr->GetPos(pos);
-    ConvertToVector(chr->GetFace(), ahead, step);
+    pos = IntPos(chr);
+    ConvertToVector(IntFacing(chr), ahead, step);
     pos += step;
     return MapPane.FindObjectsInRange(pos, list, reach, 0, -1, 10);
 }
@@ -4663,7 +4665,7 @@ bool TCharacter::DrawBow()
 
     auto* ab = new TActionBlock("bowaim", ACTION_BOWAIM);
     ab->interrupt = true;
-    ab->angle = ab->moveangle = GetFace();
+    ab->angle = ab->moveangle = IntFacing(*this);
     ab->frame = 20;
     SetDesired(ab);
     return true;
@@ -4680,7 +4682,7 @@ bool TCharacter::AimBow(int32_t angle)
         return true;
 
     doing->angle = doing->moveangle = angle;
-    int32_t absdiff = abs(AngleDiff(GetFace(), angle));
+    int32_t absdiff = abs(AngleDiff(IntFacing(*this), angle));
     doing->turnrate = MAKETURNRATE(absdiff);
 
     return true;
@@ -4689,13 +4691,13 @@ bool TCharacter::AimBow(int32_t angle)
 // REVSYNC: 0x004d0dc0
 bool TCharacter::AimBowLeft()
 {
-    return AimBow((GetFace() - chardata->bowaimspeed) & 255);
+    return AimBow((IntFacing(*this) - chardata->bowaimspeed) & 255);
 }
 
 // REVSYNC: 0x004d0de0
 bool TCharacter::AimBowRight()
 {
-    return AimBow((GetFace() + chardata->bowaimspeed) & 255);
+    return AimBow((IntFacing(*this) + chardata->bowaimspeed) & 255);
 }
 
 // REVSYNC: TCharacter::ShootBow @ 0x004d0e00 -- loose an arrow at `angle`:
@@ -4716,7 +4718,7 @@ bool TCharacter::ShootBow(int32_t angle)
   // Inform aim animation that it should stop (will wait for pivot though)
     doing->stop = true;
     doing->angle = doing->moveangle = angle;
-    int32_t absdiff = abs(AngleDiff(GetFace(), angle));
+    int32_t absdiff = abs(AngleDiff(IntFacing(*this), angle));
     doing->turnrate = MAKETURNRATE(absdiff);
 
   // Queue the shoot action (after pivot)
@@ -5074,7 +5076,7 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
           // A held impact snaps the target in front of us: there must be room.
             if ((imp->flags & CAI_INTERACTIVE) && imp->snapdist > 0)
             {
-                S3DPoint from = targ->Pos(), to;
+                S3DPoint from = IntPos(targ), to;
                 GetSnapPos(this, imp->snapdist, to);
                 TCharacter* blocker = nullptr;
                 if (targ->Blocked(from, to, 0, nullptr, &blocker) && blocker != this)
@@ -5266,9 +5268,9 @@ bool TCharacter::DoAttack(int32_t attacknum, int32_t impactnum, int32_t damage, 
         return true;
     }
     if (!(ad->flags & CA_PLAYANIM) && !(charflags & kCharFlagNoTurn))
-        SetMoveAngle(GetFace());
+        SetMoveAngle(IntFacing(*this));
     else if (TCharacter* t = Fighting())
-        SetRotateZ(AngleTo(t));
+        SetIntFacing(*this, AngleTo(t));
     return true;
 }
 
@@ -5287,7 +5289,7 @@ bool TCharacter::ButtonAttack(int32_t button)
     if (!targ)
     {
         TCharacter* found = nullptr;
-        if (FindCharacters(&found, 1, -1, GetFace(), 0x20, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE) > 0)
+        if (FindCharacters(&found, 1, -1, IntFacing(*this), 0x20, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE) > 0)
             targ = found;
     }
 
@@ -5343,7 +5345,7 @@ bool TCharacter::ButtonAction(int32_t button)
     if (Health() <= 0 || InteractiveLocked())
         return false;
     TCharacter* found = nullptr;
-    TCharacter* targ = FindCharacters(&found, 1, 0x200, GetFace(), 0x20, 0) > 0 ? found : nullptr;
+    TCharacter* targ = FindCharacters(&found, 1, 0x200, IntFacing(*this), 0x20, 0) > 0 ? found : nullptr;
     const int32_t dmgpcnt = RollDamagePercent();
     int32_t a = -1, imp = -1, dmg = -1, th = -1, rl = -1;
     if (FindButtonAttack(button, dmgpcnt, a, imp, dmg, th, rl, true, targ))
@@ -5380,7 +5382,7 @@ bool TCharacter::SpecificAttack(int32_t attacknum)
     if (!targ)
     {
         TCharacter* found = nullptr;
-        if (FindCharacters(&found, 1, -1, GetFace(), 0x20, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE) > 0)
+        if (FindCharacters(&found, 1, -1, IntFacing(*this), 0x20, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE) > 0)
             targ = found;
     }
     const int32_t tdist = targ ? Distance(targ) : 10000;
@@ -5418,7 +5420,7 @@ bool TCharacter::Leap(int32_t angle)
 
     static constexpr const char* kSuffix[8] = {"leapf", "leapfr", "leapr", "leapbr",
                                                "leapb", "leapbl", "leapl", "leapfl"};
-    const int32_t octant = ((angle - ((GetFace() + 15) & 0xe0)) & 0xff) / 32;
+    const int32_t octant = ((angle - ((IntFacing(*this) + 15) & 0xe0)) & 0xff) / 32;
     char name[RESNAMELEN];
     snprintf(name, sizeof(name), "%s%s", root->name, kSuffix[octant]);
     if (!HasActionAni(name))
@@ -5488,7 +5490,7 @@ bool TCharacter::Block(int32_t frames)
     SetDesired(ab);
     DropUnheld(ab);
     if (!(charflags & kCharFlagNoTurn))
-        SetMoveAngle(GetFace());
+        SetMoveAngle(IntFacing(*this));
     return true;
 }
 
@@ -5544,7 +5546,7 @@ bool TCharacter::Dodge(int32_t dir)
     if (root->Is("hand"))
         name[0] = 'h';
     if (dir >= 0 && dir <= 7)
-        name[5] = kDodgeRolls[DodgeSector(GetFace())][dir];
+        name[5] = kDodgeRolls[DodgeSector(IntFacing(*this))][dir];
     if (!HasActionAni(name))
         return false;
     auto* ab = new TActionBlock(name, ACTION_DODGE);
@@ -5578,7 +5580,7 @@ bool TCharacter::SideStep(char dir)
     auto* ab = new TActionBlock(name, ACTION_COMBAT);
     ab->obj = doing->obj;
     ab->angle = doing->angle;
-    FaceOnly(doing->angle);
+    SetIntFacing(*this, doing->angle);
     ab->moveangle = (moveangle + (dir == 'l' ? 0x40 : 0xc0)) & 0xff;
     ab->interrupt = false;
     ab->priority = true;
@@ -5612,8 +5614,8 @@ bool TCharacter::Pulp(S3DPoint vel, int32_t piece_count, int32_t blood_count)
     memset(&def, 0, sizeof(SObjectDef));
     def.objclass = OBJCLASS_EFFECT;
     def.level = MapPane.GetMapLevel();
-    def.pos = Pos();
-    def.facing = GetFace();
+    def.pos = IntPos(*this);
+    def.facing = IntFacing(*this);
     def.objtype = EffectClass.FindObjType("PULP");
 
     TPulpEffect* pulpstuff = (TPulpEffect*)MapPane.GetInstance(MapPane.NewObject(&def));
@@ -5645,8 +5647,8 @@ bool TCharacter::Burn()
         memset(&def, 0, sizeof(SObjectDef));
         def.objclass = OBJCLASS_EFFECT;
         def.level = MapPane.GetMapLevel();
-        def.pos = Pos();
-        def.facing = GetFace();
+        def.pos = IntPos(*this);
+        def.facing = IntFacing(*this);
         def.objtype = EffectClass.FindObjType("BURN");
 
         TBurnEffect* burn = (TBurnEffect*)MapPane.GetInstance(MapPane.NewObject(&def));
@@ -5694,9 +5696,9 @@ bool TCharacter::KnockBack(S3DPoint frompos, int32_t variant)
 
     static constexpr const char* kImpacts[5] = {"impk", "imphh", "imph", "implh", "impl"};
     char name[RESNAMELEN];
-    const int32_t bearing = ConvertToFacing(pos, frompos);
+    const int32_t bearing = ConvertToFacing(IntPos(*this), frompos);
     bool back = false;
-    if (std::abs(GetFace() - bearing) > 0x48)
+    if (std::abs(IntFacing(*this) - bearing) > 0x48)
     {
         CombatAnimName(name, "impb");
         back = HasActionAni(name);
@@ -5811,7 +5813,7 @@ bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
         return false;
 
     if (!target)
-        target = FindCharacter(-1, GetFace(), 32, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE);
+        target = FindCharacter(-1, IntFacing(*this), 32, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE);
 
   // REVSYNC: 0x004d3d2d -- a fight starting commits the player's typed line.
     TextBar.CommitInput();
@@ -5849,7 +5851,7 @@ bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
         (action == ACTION_COMBAT && doing->action == ACTION_BOW))
         doing->priority = false;
 
-    ab->angle = (target && !retreating) ? AngleTo(target) : GetFace();
+    ab->angle = (target && !retreating) ? AngleTo(target) : IntFacing(*this);
     ab->moveangle = stepping ? GetMoveAngle() : ab->angle;
 
     if (!SetDesired(ab))
@@ -5909,7 +5911,7 @@ bool TCharacter::EndFighting()
 
   // Make sure moving angle equals face (it doesn't during a combat move)
     if (!(charflags & kCharFlagNoTurn))
-        SetMoveAngle(GetFace());
+        SetMoveAngle(IntFacing(*this));
 
   // Every character seen is now one fought: auto-combat leaves them be.
     SetHasSeenAutoCombat(false);
@@ -6059,10 +6061,10 @@ bool TCharacter::Use(TObjectInstance* user, int32_t with)
 
   // Face each other, then start the DIALOG block with the player as its user.
     S3DPoint upos;
-    user->GetPos(upos);
-    int32_t angle = ConvertToFacing(pos, upos);
+    upos = IntPos(user);
+    int32_t angle = ConvertToFacing(IntPos(*this), upos);
     Face(angle);
-    angle = ConvertToFacing(upos, pos);
+    angle = ConvertToFacing(upos, IntPos(*this));
     user->Face(angle);
 
     if (GetScript())
@@ -6085,7 +6087,7 @@ TCharacter* TCharacter::CharBlocking(TObjectInstance* inst, const S3DPoint& pos,
             return false;
         if ((c->GetAniFlags() & AF_FLY) || (c->flags & OF_INVISIBLE) || c->movetopos)
             return false;
-        if (::Distance(pos, c->Pos()) - radius - c->Radius() > 0)
+        if (::Distance(pos, IntPos(c)) - radius - c->Radius() > 0)
             return false;
         return !(c->ObjClass() == OBJCLASS_PLAYER && (static_cast<TPlayer*>(c)->PlayerState() & 2));
     };
@@ -6101,93 +6103,6 @@ TCharacter* TCharacter::CharBlocking(TObjectInstance* inst, const S3DPoint& pos,
 }
 
 // ------------- Streaming functions ------------------
-
-// REVSYNC: TCharacter::Load @ 0x004d4eb0 (SAVE_GAME.md §11.3).
-void TCharacter::Load(RTInputStream is, int32_t version, int32_t objversion)
-{
-    uint8_t basever = 0;
-    if (objversion >= 3)
-        is >> basever;
-    TComplexObject::Load(is, version, basever);
-
-  // Get saved last pulse values (so we can figure what has happened to char)
-    if (objversion < 1)
-        return;
-
-  // Last time any health/fatigue/mana was recovered
-    is >> lasthealthrecov;
-    is >> lastfatiguerecov;
-    is >> lastmanarecov;
-
-    if (objversion >= 4)
-    {
-        is >> lastpoisondamage;
-    }
-    else
-    {
-        lastpoisondamage = -1;
-    }
-
-    if (objversion >= 2)
-    {
-        is >> teleport_position.x;
-        is >> teleport_position.y;
-        is >> teleport_position.z;
-        is >> teleport_level;
-    }
-    else
-    {
-        teleport_position.x = teleport_position.y = teleport_position.z = -1;
-        teleport_level = -1;
-    }
-
-    if (ObjClass() == OBJCLASS_CHARACTER && chardata)
-    {
-        if (Health() > chardata->health)
-            SetHealth(chardata->health);
-        if (MaxHealth() > chardata->health)
-            SetMaxHealth(chardata->health);
-        if (Fatigue() > chardata->fatigue)
-            SetFatigue(chardata->fatigue);
-        if (MaxFatigue() > chardata->fatigue)
-            SetMaxFatigue(chardata->fatigue);
-        if (Mana() > chardata->mana)
-            SetMana(chardata->mana);
-        if (MaxMana() > chardata->mana)
-            SetMaxMana(chardata->mana);
-    }
-
-  // A character saved dead is removed on its first frame.
-    if (Health() < 1)
-        ResetFlags(flags | OF_KILL);
-
-  // Fully visible, not fading.
-    fade = 100;
-    fade_step = 0;
-    fade_limit = 100;
-    fade_direction = 0;
-}
-
-// REVSYNC: TCharacter::Save @ 0x004d50d0.
-void TCharacter::Save(RTOutputStream os)
-{
-    os << (uint8_t)TComplexObject::ObjVersion();
-    TComplexObject::Save(os);
-
-  // Last time any health/fatigue/mana was recovered
-    os << lasthealthrecov;
-    os << lastfatiguerecov;
-    os << lastmanarecov;
-
-  // Last time poison damage was charged
-    os << lastpoisondamage;
-
-  // Our teleport positions
-    os << teleport_position.x;
-    os << teleport_position.y;
-    os << teleport_position.z;
-    os << teleport_level;
-}
 
 // make a character visible
 void TCharacter::MakeVisible()
@@ -6452,8 +6367,8 @@ bool TCharacter::Flail()
         memset(&def, 0, sizeof(SObjectDef));
         def.objclass = OBJCLASS_EFFECT;
         def.level = MapPane.GetMapLevel();
-        def.pos = Pos();
-        def.facing = GetFace();
+        def.pos = IntPos(*this);
+        def.facing = IntFacing(*this);
         def.objtype = EffectClass.FindObjType("BURN");
 
         TBurnEffect* burn = (TBurnEffect*)MapPane.GetInstance(MapPane.NewObject(&def));

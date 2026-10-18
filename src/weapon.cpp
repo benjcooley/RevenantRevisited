@@ -55,17 +55,3 @@ int32_t TWeapon::CursorType(TObjectInstance* with)
     return CURSOR_NONE;
 }
 
-void TWeapon::Load(RTInputStream is, int32_t version, int32_t objversion)
-{
-    TObjectInstance::Load(is, version, objversion);
-
-    is >> poison;
-}
-
-void TWeapon::Save(RTOutputStream os)
-{
-    TObjectInstance::Save(os);
-
-    os << poison;
-}
-

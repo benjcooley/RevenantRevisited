@@ -274,11 +274,11 @@ void WriteEquipped(JsonOut& out, TPlayer& p)
 void WritePlayer(JsonOut& out, TPlayer& p)
 {
     out.Key("player").Begin('{');
-    const S3DPoint pos = p.Pos();
+    const S3DPoint pos = IntPos(p);
     Point(out, "pos", pos);
     ScreenPos(out, pos);
     out.Field("level", p.GetLevel());
-    out.Field("facing", p.GetFace());
+    out.Field("facing", IntFacing(p));
     out.Field("radius", p.Radius());
     Pair(out, "health", p.Health(), p.MaxHealth());
     Pair(out, "mana", p.Mana(), p.MaxMana());
@@ -463,7 +463,7 @@ void WriteObject(JsonOut& out, TObjectInstance* inst)
     out.FieldString("name", ToUtf8(inst->GetName()));
     out.FieldString("type", ToUtf8(inst->GetTypeName()));
     out.FieldString("class", Lower(inst->GetClassName()));
-    const S3DPoint pos = inst->Pos();
+    const S3DPoint pos = IntPos(inst);
     Point(out, "pos", pos);
     ScreenPos(out, pos);
     if (inst->IsCharacter())
@@ -515,14 +515,14 @@ void WriteObjects(JsonOut& out, int32_t radius)
     out.Key("objects").Begin('[');
     if (Player && radius > 0)
     {
-        const S3DPoint center = Player->Pos();
+        const S3DPoint center = IntPos(Player);
         std::vector<std::pair<int64_t, TObjectInstance*>> near;
         for (TMapIterator i(center, radius, CHECK_NOINVENT | CHECK_MAPRECT); i; i++)
         {
             TObjectInstance* inst = i;
             if (!Listed(inst) || inst->GetLevel() != Player->GetLevel())
                 continue;
-            const S3DPoint pos = inst->Pos();
+            const S3DPoint pos = IntPos(inst);
             const int64_t dx = pos.x - center.x, dy = pos.y - center.y;
             const int64_t d2 = dx * dx + dy * dy;
             if (d2 <= int64_t(radius) * radius)
@@ -556,7 +556,7 @@ void WriteWalkGrid(JsonOut& out, int32_t radius)
 {
     if (!Player || radius < 0)
         return;
-    const S3DPoint center = Player->Pos();
+    const S3DPoint center = IntPos(Player);
     const int32_t gx = (center.x - radius) >> WALKMAPSHIFT;
     const int32_t gy = (center.y - radius) >> WALKMAPSHIFT;
     const int32_t cells = ((2 * radius) >> WALKMAPSHIFT) + 1;
@@ -627,8 +627,8 @@ std::string Observation::CheckFields(uint64_t drawsBase)
     if (Player)
     {
         out.Field("level", Player->GetLevel());
-        Point(out, "pos", Player->Pos());
-        out.Field("facing", Player->GetFace());
+        Point(out, "pos", IntPos(Player));
+        out.Field("facing", IntFacing(Player));
         out.Field("health", Player->Health());
         out.Field("mana", Player->Mana());
         out.Field("fatigue", Player->Fatigue());
@@ -637,7 +637,7 @@ std::string Observation::CheckFields(uint64_t drawsBase)
         if (TCharacter* target = Player->Fighting())
         {
             out.Begin('{');
-            Point(out, "pos", target->Pos());
+            Point(out, "pos", IntPos(target));
             out.Field("health", target->Health());
             out.End('}');
         }

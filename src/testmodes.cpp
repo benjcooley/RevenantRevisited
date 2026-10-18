@@ -46,6 +46,12 @@
 #include "tile.h"
 #include "uidragstate.h"
 #include "uidemoplayer.h"
+#include "gamemap.h"
+#include "mapmanager.h"
+#include "sector.h"
+#include "stream.h"
+
+#include <filesystem>
 #include "uianchortest.h"
 #include "uibottombartest.h"
 #include "uicliptest.h"
@@ -3281,7 +3287,7 @@ TObjectInstance* SceneCommandContext(const std::string& selector) {
 }
 void SceneCommandLogObject(const char* phase, const std::string& selector, TObjectInstance* object) {
     if (!object) { log_info("[scene-command] %s context=%s alive=0", phase, selector.c_str()); return; }
-    const S3DPoint pos = object->Pos();
+    const S3DPoint pos = IntPos(object);
     log_info("[scene-command] %s context=%s alive=1 id=%08x map_index=%d pos=%d,%d,%d amount=%d components=%d state=%d frame=%d",
         phase, selector.c_str(), object->ObjId(), object->GetMapIndex(), pos.x, pos.y, pos.z,
         object->Amount(), object->NumComponents(), object->GetState(), object->GetFrame());
@@ -3344,7 +3350,7 @@ void SceneCommandsTick() {
             ok = sscanf(event.command.c_str(), "@expect %x %d %d %d %127s %d %c", &id, &x, &y, &z,
                         component, &count, &extra) == 6 && object;
             if (ok) {
-                const S3DPoint pos = object->Pos(); int actual = 0;
+                const S3DPoint pos = IntPos(object); int actual = 0;
                 for (int32_t slot = 0; slot < object->NumComponents(); ++slot)
                     if (TObjectComponent* c = object->GetComponent(slot))
                         if (strcmp(c->ComponentName(), component) == 0) ++actual;
@@ -3500,6 +3506,50 @@ static bool UsesDemoPlayer(const char* mode)
             return true;
     return false;
 }
+// --test=sector-dump --level=L --dump-out=DIR: every sector of level L,
+// read through the retail codec and written back as TSector::Save writes
+// it, into DIR/L_X_Y.DAT. The byte-for-byte gate for codec changes: dump
+// before, dump after, diff.
+static bool DumpLevelSectors()
+{
+    int32_t level = 0;
+    if (!StartupLevelId[0] || std::sscanf(StartupLevelId, "%d", &level) != 1 || !StartupDumpOut[0])
+    {
+        log_error("[sector-dump] needs --level=L and --dump-out=DIR");
+        return false;
+    }
+    TGameMap* gmap = MapManager.SetCurrentLevel(level);
+    if (!gmap)
+    {
+        log_error("[sector-dump] level %d: no map", level);
+        return false;
+    }
+    const std::filesystem::path dir(StartupDumpOut);
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+
+    int32_t written = 0;
+    for (TSector* sec : gmap->Sectors())
+    {
+        if (!sec) continue;
+        TOutputStream os(0x8000, 0x3f9c);
+        sec->Serialize(os);
+        char name[64];
+        std::snprintf(name, sizeof(name), "%d_%d_%d.DAT", sec->SectorLevel(), sec->SectorX(), sec->SectorY());
+        FILE* f = std::fopen((dir / name).string().c_str(), "wb");
+        if (!f)
+        {
+            log_error("[sector-dump] cannot write %s", (dir / name).string().c_str());
+            return false;
+        }
+        std::fwrite(os.Buffer(), 1, size_t(os.DataSize()), f);
+        std::fclose(f);
+        ++written;
+    }
+    log_info("[sector-dump] level %d: %d sectors -> %s", level, written, StartupDumpOut);
+    return written > 0;
+}
+
 
 bool Initialize(const char* mode)
 {
@@ -3510,6 +3560,12 @@ bool Initialize(const char* mode)
         return true;
     if (strcmp(mode, "sector") == 0)
         return g_mapRenderer.InitializeFromStartupArgs() && SceneCommandsStart();
+    if (strcmp(mode, "sector-dump") == 0)
+    {
+        const bool result = DumpLevelSectors();
+        sapp_request_quit();
+        return result;
+    }
     if (strcmp(mode, "vfx-review") == 0)
         return VfxReview::Initialize();
     if (strcmp(mode, "fireball-runtime") == 0)

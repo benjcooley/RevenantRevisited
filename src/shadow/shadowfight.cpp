@@ -55,7 +55,7 @@ std::vector<TCharacter*> Attackers()
 {
     std::vector<TCharacter*> found;
     int32_t indices[kMaxFoes];
-    const int32_t n = MapPane.FindObjectsInRange(Player->Pos(), Player->GetLevel(), indices, kFightRange, 0,
+    const int32_t n = MapPane.FindObjectsInRange(IntPos(Player), Player->GetLevel(), indices, kFightRange, 0,
                                                  OBJCLASS_CHARACTER, kMaxFoes, OBJSET_ALL);
     for (int32_t i = 0; i < n; ++i)
         if (auto* who = dynamic_cast<TCharacter*>(MapPane.GetInstance(indices[i])))
@@ -86,7 +86,7 @@ class TFightRunner final : public TShadowStepRunner
                 // is a fight already won; the plan's checks after it say so.
                 // By a type name, the nearest one still standing.
                 TCharacter* foe = dynamic_cast<TCharacter*>(
-                    ShadowFindObject(step.target, Player->GetLevel(), Player->Pos(), true));
+                    ShadowFindObject(step.target, Player->GetLevel(), IntPos(Player), true));
                 if (!foe)
                 {
                     context.log.Event("fight", step.target + " is already down");
@@ -138,7 +138,7 @@ class TFightRunner final : public TShadowStepRunner
         int32_t gold = 0;
         for (TCharacter* foe : foes)
         {
-            places.push_back(foe->Pos());
+            places.push_back(IntPos(foe));
             for (TInventoryIterator i(foe, EInvWalk::Nested); i; i++)
             {
                 const std::string name = Lower(i.Item()->GetName());

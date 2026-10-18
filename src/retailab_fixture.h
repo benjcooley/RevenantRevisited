@@ -393,10 +393,10 @@ class TFixtureChar : public Base, public IFixtureChar
     {
         who = spec["name"].Str();
         this->name = strdup(who.c_str());
-        this->mapindex = (int32_t)spec["id"].Int(0);
+        this->Node()->SetMapIndex((int32_t)spec["id"].Int(0));
         const JsonValue& p = spec["pos"];
-        this->ForcePos(S3DPoint((int32_t)p[0].Int(), (int32_t)p[1].Int(), (int32_t)p[2].Int()));
-        this->SetRotateZ((int32_t)spec["facing"].Int());
+        SetIntPos(this, S3DPoint((int32_t)p[0].Int(), (int32_t)p[1].Int(), (int32_t)p[2].Int()));
+        SetIntFacing(this, (int32_t)spec["facing"].Int());
         this->SetMoveAngle((int32_t)spec["moveangle"].Int(spec["facing"].Int()));
         this->state = (uint16_t)spec["state"].Int(0);
         this->charflags = (uint32_t)spec["charflags"].Int();
@@ -496,7 +496,7 @@ class TFixtureChar : public Base, public IFixtureChar
                                        (int32_t)spec["levelup"][2].Int()});
             for (const JsonValue& e : spec["equipment"].Items())
             {
-                items.push_back(std::make_unique<TFixtureItem>(e));
+                items.push_back(TObjectPtr<TFixtureItem>(new TFixtureItem(e)));
                 Base::SetFixtureEquipment((int32_t)e["slot"].Int(), items.back().get());
             }
         }
@@ -580,7 +580,7 @@ class TFixtureChar : public Base, public IFixtureChar
         j.Begin('{').FieldString("seam", "SetPos").FieldString("who", who);
         j.Key("pos").Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']').End('}');
         Seam(j.str());
-        this->ForcePos(p);
+        SetIntPos(this, p);
         return 1;
     }
 
@@ -1003,7 +1003,7 @@ class TFixtureChar : public Base, public IFixtureChar
     mutable std::map<std::string, int32_t> stats;
     std::map<std::string, int32_t> classstats;
     std::unique_ptr<SCharData> cd;
-    std::vector<std::unique_ptr<TFixtureItem>> items;   // a player's worn items (`equipment`)
+    std::vector<TObjectPtr<TFixtureItem>> items;   // a player's worn items (`equipment`)
 };
 
 // ---- The fixture world ------------------------------------------------------
@@ -1145,8 +1145,8 @@ class TFixtureWorld
         std::vector<TActionBlock*> made;
         j.Key(key).Begin('{');
         j.Field("state", (int16_t)c->TObjectInstance::GetState()).Field("frame", (int32_t)c->GetFrame());
-        j.Field("facing", c->GetFace()).Field("moveangle", c->GetMoveAngle());
-        const S3DPoint p = c->Pos();
+        j.Field("facing", IntFacing(c)).Field("moveangle", c->GetMoveAngle());
+        const S3DPoint p = IntPos(c);
         j.Key("pos").Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']');
         IFixtureChar* fx = fixtures.at(c);
         WriteBlock(j, "root", fx->Root(), made);

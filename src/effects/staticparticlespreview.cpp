@@ -11,7 +11,7 @@
 
 namespace static_particles_preview {
 struct State {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     TSafeRef<> identity;
     int prototype = 0;
     double accumulated = 0;

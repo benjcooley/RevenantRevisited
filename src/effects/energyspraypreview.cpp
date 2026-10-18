@@ -13,7 +13,7 @@
 #include <vector>
 namespace energyspray_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;
+ TObjectPtr<TObjectInstance> owner;
  retail_energyspray::State core;
  MeshHandle mesh[2]{}, triangle_mesh=0;
  std::vector<SMeshVertex> vertices[2];std::vector<uint16_t> faces[2];
@@ -47,7 +47,7 @@ State* Spawn(const S3DPoint& origin){
 bool Alive(State* s){return s && s->core.alive && s->owner && !(s->owner->GetFlags()&OF_KILL);}
 void Advance(State* s,double seconds){if(!s || !std::isfinite(seconds) || seconds<=0)return;s->accumulator+=seconds;while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;if(!Alive(s))return;s->owner->NextFrame();s->owner->Pulse();if(!Alive(s))return;++s->ticks;s->core.Pulse();if(!s->core.alive){s->owner->SetFlags(s->owner->GetFlags()|OF_KILL);return;}s->core.Animate([](int a,int b){return random(a,b);});}}
 void SubmitWorld(State* s){
- if(!Alive(s) || !Renderer || s->rendered==TTime::FrameCount())return;s->rendered=TTime::FrameCount();hmm_mat4 root;const auto& p=s->owner->Pos();if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(s->owner->GetFace()));else root=s->owner->Transform().Matrix();
+ if(!Alive(s) || !Renderer || s->rendered==TTime::FrameCount())return;s->rendered=TTime::FrameCount();hmm_mat4 root;const auto& p=IntPos(s->owner);if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,uint8_t(IntFacing(s->owner)));else root=s->owner->Transform().Matrix();
  auto submit=[&](MeshHandle mesh,const hmm_mat4& local,bool prelit,int part=0,uint32_t color=0){hmm_mat4 world;MtxMultiply(&world,&local,&root);SHelperMeshSubmit draw={};draw.mesh=mesh;draw.retail_lighting=prelit?4:3;draw.retail_source_alpha=true;draw.retail_prelit_rgba5=prelit;draw.retail_software_projection=StartupVfxNativeDomain;draw.retail_alpha_source_quantize=StartupVfxNativeDomain && !prelit;
   if(prelit){draw.retail_prelit_color_uniform=true;draw.retail_prelit_color=((color>>27)<<15)|(((color>>19)&31)<<10)|(((color>>11)&31)<<5)|((color>>3)&31);}
   if(prelit && StartupVfxNativeDomain){draw.retail_flat_depth=true;float farthest=-1e30f;for(const auto& v:s->triangle){hmm_vec3 xyz{v.pos[0],v.pos[1],v.pos[2]},w;MtxTransform(&world,&xyz,&w);const float depth=-.8748177289962769f*(w.X+w.Y)-.7142857909202576f*w.Z;if(depth>farthest)farthest=depth;}draw.retail_flat_depth_offset=farthest;}

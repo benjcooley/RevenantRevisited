@@ -15,8 +15,8 @@
 #include <algorithm>
 namespace ymanadrain_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;
- std::unique_ptr<TCharacter> caster,target;
+ TObjectPtr<TObjectInstance> owner;
+ TObjectPtr<TCharacter> caster,target;
  std::unique_ptr<TSpell> spell;
  ymanadrain_core::State core;
  MeshHandle meshes[2]{};
@@ -25,7 +25,7 @@ struct State {
  double accumulator=0;
  uint64_t initial_draws=0;
  int64_t rendered=-1;
- ~State(){if(caster && target && spell){const auto& p=target->Pos();log_info("[ymanadrain-cleanup] tick=%d alive=%d mana=%d/%d health=%d/%d target=(%d,%d,%d) flags=%x/%x spell_timer=%d",tick,int(core.alive),caster->Mana(),target->Mana(),caster->Health(),target->Health(),p.x,p.y,p.z,caster->Flags(),target->Flags(),spell->TimerValue());}if(auto* effect=dynamic_cast<TEffect*>(owner.get()))effect->SetSpell(nullptr);if(Renderer)for(auto mesh:meshes)if(mesh)Renderer->ReleaseMeshAssetRef(mesh);}
+ ~State(){if(caster && target && spell){const auto& p=IntPos(target);log_info("[ymanadrain-cleanup] tick=%d alive=%d mana=%d/%d health=%d/%d target=(%d,%d,%d) flags=%x/%x spell_timer=%d",tick,int(core.alive),caster->Mana(),target->Mana(),caster->Health(),target->Health(),p.x,p.y,p.z,caster->Flags(),target->Flags(),spell->TimerValue());}if(auto* effect=dynamic_cast<TEffect*>(owner.get()))effect->SetSpell(nullptr);if(Renderer)for(auto mesh:meshes)if(mesh)Renderer->ReleaseMeshAssetRef(mesh);}
 };
 static State* Spawn(const S3DPoint& origin,bool isolated_seed){
  if(!Renderer || !SpellList.Initialize())return nullptr;
@@ -42,7 +42,7 @@ static State* Spawn(const S3DPoint& origin,bool isolated_seed){
   s->meshes[i]=Renderer->RegisterMeshAsset(0x594d414e41440000ull+i,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()),img->GetTextureHandle(object));if(!s->meshes[i])return nullptr;Renderer->AddMeshAssetRef(s->meshes[i]);
  }
  auto* characters=TObjectClass::GetClass(OBJCLASS_CHARACTER);const int actor_type=characters?characters->FindObjType("Acolyte"):-1;if(actor_type<0)return nullptr;
- auto make=[&](S3DPoint p){SObjectDef d={};d.objclass=OBJCLASS_CHARACTER;d.objtype=short(actor_type);d.pos=p;return std::unique_ptr<TCharacter>(dynamic_cast<TCharacter*>(characters->NewObject(&d)));};
+ auto make=[&](S3DPoint p){SObjectDef d={};d.objclass=OBJCLASS_CHARACTER;d.objtype=short(actor_type);d.pos=p;return TObjectPtr<TCharacter>(dynamic_cast<TCharacter*>(characters->NewObject(&d)));};
  s->caster=make({3185,3185,16});s->target=make({3281,3185,16});if(!s->caster || !s->target || !s->caster->BeginFighting(s->target.get()) || s->caster->Fighting()!=s->target.get())return nullptr;
  TObjectInstance* target=s->target.get();S3DPoint offset={0,0,0};s->spell=std::make_unique<TSpell>(s->caster.get(),&target,1,&offset,data,variant);if(auto* effect=dynamic_cast<TEffect*>(s->owner.get()))effect->SetSpell(s->spell.get());else return nullptr;
  const auto& snap=FrameSnap::GetConfig();if(isolated_seed && snap.seed_set)SeedRandom(snap.seed);s->initial_draws=RandomDraws();
@@ -56,7 +56,7 @@ bool Alive(State* s){return s && s->core.alive && !(s->owner->GetFlags()&OF_KILL
 void Advance(State* s,double dt){
  if(!s || !std::isfinite(dt) || dt<=0)return;s->accumulator+=dt;
  while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;if(!Alive(s))return;s->owner->NextFrame();
-  const auto& a=s->caster->Pos();const auto& b=s->target->Pos();
+  const auto& a=IntPos(s->caster);const auto& b=IntPos(s->target);
   s->core.Advance({a.x,a.y,int(RetailSoftwareOwnerZ(a.z))},{b.x,b.y,int(RetailSoftwareOwnerZ(b.z))},ConvertToFacing(a,b),s->minimum,s->maximum,
    [](int low,int high){return random(low,high);},[](manadrain_core::Point x,manadrain_core::Point y){return ::Distance(S3DPoint(x.x,x.y,x.z),S3DPoint(y.x,y.y,y.z));},
    [&](int amount){amount=ymanadrain_core::TransferAmount(s->caster->Mana(),s->caster->MaxMana(),s->target->Mana(),amount);s->caster->SetMana(s->caster->Mana()+amount);s->target->SetMana(s->target->Mana()-amount);return amount;},

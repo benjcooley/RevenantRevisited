@@ -137,7 +137,7 @@ void TShadowZones::Read(const std::string& file)
                 zone.dist = trigger.dist;
                 for (const TObjectInstance* owner : owners)
                 {
-                    zone.centre = owner->Pos();
+                    zone.centre = IntPos(owner);
                     zones.push_back(zone);
                 }
             }

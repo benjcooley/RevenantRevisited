@@ -157,7 +157,7 @@ TMapIterator::TMapIterator(const S3DPoint& pos, int32_t range, int32_t fl, int32
 TMapIterator::TMapIterator(RTObjectInstance oi, int32_t fl, int32_t objset)
 {
     S3DPoint pos;
-    oi.GetPos(pos); 
+    pos = IntPos(oi); 
     SRect r;
     r.left = pos.x - LOCALRANGE; 
     r.top = pos.y - LOCALRANGE;
@@ -287,7 +287,7 @@ TObjectInstance* TMapIterator::NextItem()
             {
                 checked = true;
                 S3DPoint p;
-                item->GetPos(p);
+                p = IntPos(item);
                 good = r.In(SPoint(p.x, p.y));
             }
 
@@ -579,7 +579,7 @@ void TMapPane::SnapWalkDisplay(int32_t mapindex)
     if (inst && inst->GetImagery())
     {
         S3DPoint pos;
-        inst->GetPos(pos);
+        pos = IntPos(inst);
         pos.x >>= WALKMAPSHIFT;
         pos.y >>= WALKMAPSHIFT;
         pos.x %= SECTORWIDTH >> WALKMAPSHIFT;
@@ -805,7 +805,7 @@ void TMapPane::GetMouseMapPos(S3DPoint &p, int32_t zoffset)
 void TMapPane::ScreenToMapPos(int32_t x, int32_t y, S3DPoint &p, int32_t zoffset)
 {
     S3DPoint curpos;
-    Player->GetPos(curpos);
+    curpos = IntPos(Player);
 
     // The map view sits at the screen's top left: the pointer is in its
     // pixels. Retail's x + posx has no bounds: past the view (over the HUD)
@@ -820,7 +820,7 @@ int32_t TMapPane::GetMouseMapAngle()
 {
     S3DPoint curpos, target;
 
-    Player->GetPos(curpos);
+    curpos = IntPos(Player);
     GetMouseMapPos(target);
 
     return ConvertToFacing(curpos, target);
@@ -839,7 +839,7 @@ void TMapPane::UpdateMouseMovement(int32_t x, int32_t y)
 
     S3DPoint curpos, target;
 
-    Player->GetPos(curpos);
+    curpos = IntPos(Player);
     GetMouseMapPos(target, 50);
 
     int32_t angle = ConvertToFacing(curpos, target);
@@ -946,7 +946,7 @@ void TMapPane::MouseClick(int32_t button, int32_t x, int32_t y)
                 if (oi)
                 {
                     S3DPoint pos;
-                    oi->GetPos(pos);
+                    pos = IntPos(oi);
                     WorldToScreen(pos, objx, objy);
                     grabx = posx - objx;
                     graby = posy - objy;
@@ -1165,8 +1165,8 @@ void TMapPane::PlayMouseRelease(int32_t x, int32_t y, bool attackcursor)
     if (on)
     {
         S3DPoint op, pp;
-        on->GetPos(op);
-        Player->GetPos(pp);
+        op = IntPos(on);
+        pp = IntPos(Player);
         log_info("[mapinput] release (%d, %d) on %s at (%d,%d,%d), Locke at (%d,%d,%d), distance %d, pressed on %d",
                  x, y, on->GetName(), op.x, op.y, op.z, pp.x, pp.y, pp.z, on->Distance(Player), onobject);
     }
@@ -1226,7 +1226,7 @@ void TMapPane::DropHeldItem(TObjectInstance* item, int32_t x, int32_t y)
         Player->Equip(nullptr, worn);
 
     S3DPoint start, target;
-    Player->GetPos(start);
+    start = IntPos(Player);
     FindClickPos(x, y, start, target);
     if (item->ObjClass() != OBJCLASS_MONEY)
     {
@@ -1320,7 +1320,7 @@ void TMapPane::ClickWalkTo(int32_t x, int32_t y)
 void TMapPane::WalkToward(int32_t x, int32_t y, TObjectInstance* on)
 {
     S3DPoint start, target;
-    Player->GetPos(start);
+    start = IntPos(Player);
     FindClickPos(x, y, start, target);
 
     const double angle = atan2(double(target.y - start.y), double(target.x - start.x));
@@ -1415,12 +1415,12 @@ void TMapPane::MouseMove(int32_t button, int32_t x, int32_t y)
                         }
                         
                         S3DPoint oldpos;
-                        oi->GetPos(oldpos);
+                        oldpos = IntPos(oi);
 
                         MapPane.MoveObjScreen(StatusBar.GetSelectedObj(), x - objx, y - objy);
 
                         S3DPoint newpos;
-                        oi->GetPos(newpos);
+                        newpos = IntPos(oi);
 
                         // handle z moving here, since it is relative to the object, not the map
                         if (!StatusBar.RestrictZ())
@@ -1442,7 +1442,7 @@ void TMapPane::MouseMove(int32_t button, int32_t x, int32_t y)
                                 continue;
 
                             S3DPoint pos;
-                            inst->GetPos(pos);
+                            pos = IntPos(inst);
                             pos += delta;
                             inst->SetPos(pos);
                         }
@@ -1475,13 +1475,13 @@ void TMapPane::MoveObjScreen(int32_t index, int32_t x, int32_t y)
     if (oi)
     {
         S3DPoint newpos;
-        oi->GetPos(newpos);
+        newpos = IntPos(oi);
 /*
         TObjectInstance* overinst = GetInstance(OnObject(x, y));
         if (overinst)
         {
             S3DPoint opos;
-            overinst->GetPos(opos);
+            opos = IntPos(overinst);
             ScreenToWorld(x + posx, y + posy + opos.z, newpos);
             newpos.z = opos.z;
         }
@@ -1556,7 +1556,7 @@ int32_t TMapPane::NewObject(SObjectDef* def, int32_t imagery)
             DeleteObject(GetInstance(shadowindex));
         // REVSYNC-DIVERGENCE: retail leaked the object it couldn't place;
         // nothing else refers to it, so it is freed here.
-        delete oi;
+        DeleteObject(oi);
     }
 
     return index;
@@ -1580,7 +1580,7 @@ int32_t TMapPane::AddObject(TObjectInstance* oi)
     }
 
     S3DPoint pos;
-    oi->GetPos(pos);
+    pos = IntPos(oi);
 
     int32_t sx = (pos.x >> SECTORWSHIFT);
     int32_t sy = (pos.y >> SECTORHSHIFT);
@@ -1647,7 +1647,7 @@ TObjectInstance* TMapPane::RemoveObject(TObjectInstance* inst)
     // for objects in the map; the port is single player.
     if (inst->IsInInventory() || inst->GetOwner())
         inst->RemoveFromInventory();
-    else if (inst->GetSector())
+    else if (inst->IsSectorMember())
         RemoveFromSector(inst);
 
     return inst;
@@ -1657,7 +1657,7 @@ TObjectInstance* TMapPane::RemoveObject(TObjectInstance* inst)
 void TMapPane::DeleteObject(TObjectInstance* obj)
 {
     RemoveObject(obj);
-    delete obj;
+    ::DeleteObject(obj);
 }
 
 // Causes object to be put into new OBJSET_xxx lists when flags change in game
@@ -1720,7 +1720,7 @@ int32_t TMapPane::AddShadow(TObjectInstance* oi)
         return -1;
 
     def.objtype = objtype;
-    oi->GetPos(def.pos);
+    def.pos = IntPos(oi);
 
     int32_t index = NewObject(&def);
     if (index >= 0)
@@ -1821,7 +1821,7 @@ TObjectInstance* TMapPane::FindClosestObject(const char *name, const S3DPoint& f
         if (found)
         {
             S3DPoint pos;
-            i->GetPos(pos);
+            pos = IntPos(i);
 
             if (SQRDIST(pos, frompos) < closestdist)
             {
@@ -1838,7 +1838,7 @@ TObjectInstance* TMapPane::FindClosestObject(const char *name, const S3DPoint& f
 // level, else the camera's.
 TObjectInstance* TMapPane::FindClosestObject(const char *name, TObjectInstance* from, bool partial, int32_t objset)
 {
-    const S3DPoint frompos = from ? from->Pos() : center;
+    const S3DPoint frompos = from ? IntPos(from) : center;
     return FindClosestObject(name, frompos, from ? from->GetLevel() : level, partial, objset);
 }
 
@@ -1903,7 +1903,7 @@ int32_t TMapPane::FindObjectsInRange(const S3DPoint& pos, int32_t lvl, int32_t* 
     ForObjectsIn(lvl, rect, objset, [&](TObjectInstance* inst) {
         if (inst->IsInInventory() || (objclass != -1 && inst->ObjClass() != objclass))
             return;
-        const S3DPoint& at = inst->Pos();
+        const S3DPoint& at = IntPos(inst);
         const int32_t dx = abs(pos.x - at.x);
         const int32_t dy = abs(pos.y - at.y);
         int32_t d;
@@ -1962,7 +1962,7 @@ TObjectInstance* TMapPane::ObjectInCube(PS3DRect cube, int32_t lvl, int32_t objs
 
     for (TMapIterator i(lvl, &area, CHECK_NOINVENT, objset); i; i++)
     {
-        if (cube->In(i->Pos()))
+        if (cube->In(IntPos(i)))
             return i;
     }
 
@@ -2124,13 +2124,13 @@ void TMapPane::WalkmapHandler(TObjectInstance* oi, int32_t mode)
             imagery->GetWorldBoundBox(oi->GetState(), w, l, h);
             int32_t rx = imagery->GetWorldRegX(oi->GetState());
             int32_t ry = imagery->GetWorldRegY(oi->GetState());
-            if (oi->GetFace() != 0)
+            if (IntFacing(oi) != 0)
             {
                 int32_t nx, ny, nsx, nsy;
                 oi->GetFacingBoundBox(nx, ny, nsx, nsy);
                 rx = nx; ry = ny; w = nsx; l = nsy;
             }
-            S3DPoint pos; oi->GetPos(pos);
+            S3DPoint pos; pos = IntPos(oi);
             const int32_t x = (pos.x >> WALKMAPSHIFT) - rx;
             const int32_t y = (pos.y >> WALKMAPSHIFT) - ry;
             const int32_t startsectx = (x << WALKMAPSHIFT) >> SECTORWSHIFT;
@@ -2180,7 +2180,7 @@ void TMapPane::RedrawWalkmapRect(TObjectInstance* oi, int32_t x, int32_t y, int3
                 ry = imagery->GetWorldRegY(inst->GetState());
 
                 S3DPoint pos;
-                inst->GetPos(pos);
+                pos = IntPos(inst);
 
                 int32_t ix = (pos.x >> WALKMAPSHIFT) - rx;
                 int32_t iy = (pos.y >> WALKMAPSHIFT) - ry;
@@ -2683,7 +2683,7 @@ void TMapPane::UpdateMapPos()
         int32_t targetlevel = newlevel;
         if ((centeron.flags & CENTERON_OBJ) && centeron.obj)
         {
-            target = centeron.obj->Pos();
+            target = IntPos(centeron.obj);
             targetlevel = centeron.obj->GetLevel();
         }
         else if (centeron.flags & CENTERON_POS)
@@ -2857,7 +2857,7 @@ void TMapPane::RedrawAll()
     if (!Editor && Player && !SmoothScroll)
     {
         S3DPoint pos, newpos;
-        Player->GetPos(pos);
+        pos = IntPos(Player);
 
         int32_t x, y;
         WorldToScreen(pos, x, y);
@@ -4234,14 +4234,14 @@ void TMapPane::ClearWindow()
         return;
 
     if (ScrollLock)
-        Player->GetPos(pos);
+        pos = IntPos(Player);
     else
     {
         // find the vector of facing (where's he's currently focusing his eyes)
         ConvertToVector(((PTCharacter)Player)->GetFacingTarget(), 96, pos);
 
         S3DPoint curpos;        // add in current position
-        Player->GetPos(curpos);
+        curpos = IntPos(Player);
         pos += curpos;
     }
 
@@ -4410,7 +4410,7 @@ int32_t TMapPane::CheckPos(TObjectInstance* inst, S3DPoint& newpos, int32_t newl
 
         // Retail clamps to its sector's span plus one: a move past the far
         // edge lands on the next sector's first unit, which then fails below.
-        const S3DPoint cur = inst->Pos();
+        const S3DPoint cur = IntPos(inst);
         const int32_t minx = (cur.x >> SECTORWSHIFT) << SECTORWSHIFT;
         const int32_t miny = (cur.y >> SECTORHSHIFT) << SECTORHSHIFT;
         newpos.x = std::clamp(newpos.x, minx, minx + SECTORWIDTH);

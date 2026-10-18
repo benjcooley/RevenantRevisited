@@ -18,7 +18,7 @@
 namespace speed_authored_preview {
 struct State
 {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     TSafeRef<> identity;
     MeshHandle flare_mesh = 0;
     S3DMaterial flare_material{};
@@ -123,8 +123,8 @@ void SubmitWorld(State* context, EFxDebugMode)
     hmm_mat4 world, native_owner;
     if (StartupVfxNativeDomain)
     {
-        const S3DPoint& position = owner->Pos();
-        BuildRetailSoftwareOwner(native_owner, position.x, position.y, position.z, uint8_t(owner->GetFace()));
+        const S3DPoint& position = IntPos(owner);
+        BuildRetailSoftwareOwner(native_owner, position.x, position.y, position.z, uint8_t(IntFacing(owner)));
     }
     if (!animator->SpeedBaseMeshWorldMatrix(world, StartupVfxNativeDomain ? &native_owner : nullptr)) return;
     for (int row = 0; row < 4; ++row)

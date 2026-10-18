@@ -104,7 +104,7 @@ void TPlayerBot::Enable(bool on)
     state = EState::Idle;
     surveyed = -1000;
     if (Player)
-        lastpos = Player->Pos();
+        lastpos = IntPos(Player);
 }
 
 uint32_t TPlayerBot::Random()
@@ -128,7 +128,7 @@ void TPlayerBot::Tick()
     }
     const S3DPoint before = lastpos;
     See();
-    const S3DPoint me = Player->Pos();
+    const S3DPoint me = IntPos(Player);
   // A way held that goes nowhere (into a wall, a rock, a character the
   // shove can't get round) is left out a second.
     if (heldangle >= 0 && Length2D(me - before) == 0 && !Player->IsDoing(ACTION_ATTACK))
@@ -154,7 +154,7 @@ void TPlayerBot::See()
 {
     SView v;
     v.tick = tick;
-    const S3DPoint me = Player->Pos();
+    const S3DPoint me = IntPos(Player);
     const int32_t moved = Length2D(me - lastpos);
     if (moved > 0 && moved < 64)
         speed = speed * 0.8f + float(moved) * 0.2f;
@@ -168,7 +168,7 @@ void TPlayerBot::See()
             continue;
         SFoe f;
         f.who = c;
-        f.pos = c->Pos();
+        f.pos = IntPos(c);
         f.edge = Player->Distance(c);
         f.bearing = Player->AngleTo(c);
       // Its reach: the longest of its blows (an attack that only plays an
@@ -192,7 +192,7 @@ void TPlayerBot::See()
                 f.swinging = true;
                 f.impact = left;
                 f.hitreach = blow->hitmaxrange;
-                f.aimed = std::abs(AngleDiff(c->GetFace(), c->AngleTo(Player))) <= blow->hitangle;
+                f.aimed = std::abs(AngleDiff(IntFacing(c), c->AngleTo(Player))) <= blow->hitangle;
             }
         }
         v.foes.push_back(f);
@@ -206,14 +206,14 @@ void TPlayerBot::See()
         TObjectInstance* o = i.Item();
         if (!o || o->IsCharacter())
             continue;
-        now.emplace_back(o->GetMapIndex(), o->Pos());
+        now.emplace_back(o->GetMapIndex(), IntPos(o));
         auto it = std::find_if(lastmissiles.begin(), lastmissiles.end(),
                                [&](const auto& p) { return p.first == o->GetMapIndex(); });
         if (it == lastmissiles.end())
             continue;
         SMissile m;
         m.id = o->GetMapIndex();
-        m.pos = o->Pos();
+        m.pos = IntPos(o);
         m.vel = m.pos - it->second;
         const double v2 = double(m.vel.x) * m.vel.x + double(m.vel.y) * m.vel.y;
         if (v2 < 9.0)
@@ -252,7 +252,7 @@ TPlayerBot::SCell* TPlayerBot::Cell(int32_t gx, int32_t gy)
 // the paths to them from where he stands.
 void TPlayerBot::Survey()
 {
-    const S3DPoint me = Player->Pos();
+    const S3DPoint me = IntPos(Player);
     surveyx = CellOf(me.x);
     surveyy = CellOf(me.y);
     surveyed = tick;
@@ -335,7 +335,7 @@ int32_t TPlayerBot::Clearance(const S3DPoint& p)
 bool TPlayerBot::OpenSpot(S3DPoint& spot)
 {
     const SView& v = views.back();
-    const int32_t here = Clearance(Player->Pos());
+    const int32_t here = Clearance(IntPos(Player));
     double best = -1e9;
     int32_t bestcell = -1;
     for (int32_t i = 0; i < int32_t(cells.size()); ++i)
@@ -372,12 +372,12 @@ int32_t TPlayerBot::PathAngle(const S3DPoint& spot)
         i = cells[size_t(i)].from;
     const S3DPoint waypoint((surveyx - kWindow + i % kSpan) * kCell, (surveyy - kWindow + i / kSpan) * kCell,
                             cells[size_t(i)].height);
-    return ConvertToFacing(Player->Pos(), waypoint);
+    return ConvertToFacing(IntPos(Player), waypoint);
 }
 
 int32_t TPlayerBot::Steer(int32_t angle, bool room)
 {
-    const S3DPoint me = Player->Pos();
+    const S3DPoint me = IntPos(Player);
     const SCell* here = Cell(CellOf(me.x), CellOf(me.y));
     const int32_t blocked = DirectionFlag(tick < blockeduntil ? blockedangle : -1);
     int32_t best = -1, bestclear = -1;
@@ -417,7 +417,7 @@ void TPlayerBot::Decide()
 {
     const SView& now = views.back();
     const SView& seen = Seen();
-    const S3DPoint me = Player->Pos();
+    const S3DPoint me = IntPos(Player);
 
   // The foe to fight: the nearest.
     const SFoe* foe = nullptr;

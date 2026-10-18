@@ -10,7 +10,7 @@
 
 namespace poison_original {
 struct State {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     S3DPoint source{};
     double accumulated=0;
 
@@ -26,7 +26,7 @@ State* Spawn(const S3DPoint& source)
     if(!owner || owner->ObjId()!=0xe0a3bc42u || !dynamic_cast<TEffect*>(owner))return nullptr;
     // Controlled coordinates can lie outside loaded map sectors. Establish
     // the explicit fixture transform before creating the animator/controllers.
-    owner->ForcePos(source);owner->Face(0);owner->OnScreen();
+    SetIntPos(owner, source);owner->Face(0);owner->OnScreen();
     auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());auto* animator=dynamic_cast<T3DAnimator*>(owner->GetAnimator());
     if(!image || !animator || !image->HasRetailPoisonProfile() || animator->PartSysUnsupported() || animator->PartSysControllerCount()!=2)return nullptr;
     animator->SetPoisonGround([](int,int,int){return 1;});

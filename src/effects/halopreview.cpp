@@ -21,7 +21,7 @@ namespace halo_preview {
 static int RasterPolicy(){const char* p=std::getenv("REV_HALO_RASTER_DIAGNOSTIC");return p && p[0]>='0' && p[0]<='3' && !p[1]?p[0]-'0':3;}
 struct State {
     State(int total,float step):core(total,step){}
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     halo_core::State core;
     MeshHandle mesh{};
     double accumulator=0;
@@ -71,7 +71,7 @@ void SubmitWorld(State* s) {
     if(!Alive(s) || !Renderer || s->rendered==TTime::FrameCount())return;
     s->rendered=TTime::FrameCount();hmm_mat4 local;
     if(!s->core.Matrix(local))return;
-    const auto& p=s->owner->Pos();hmm_mat4 root,world;
+    const auto& p=IntPos(s->owner);hmm_mat4 root,world;
     if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,0);else root=s->owner->Transform().Matrix();
     MtxMultiply(&world,&local,&root);
     SHelperMeshSubmit draw={};draw.mesh=s->mesh;draw.retail_lighting=3;

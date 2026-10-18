@@ -13,7 +13,7 @@
 #include <cstdlib>
 namespace sgeyser_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;
+ TObjectPtr<TObjectInstance> owner;
  authored_partsys::State particles;
  authored_partsys::TickInputs inputs;
  S3DVertex steam[4]{};MeshHandle blast=0;S3DMat material{};
@@ -55,7 +55,7 @@ void SubmitWorld(State*s){
   for(int c=0;c<3;++c)q.color_rgba[c]=float((int(sample.color[c])&255)>>3)/31.f;q.color_rgba[3]=sample.alpha;
   constexpr int corners[]={0,1,3,2};for(int c=0;c<4;++c){const auto&vert=s->steam[corners[c]];hmm_vec3 w;MtxTransform(&m,&vert.pos,&w);q.world_pos[c][0]=w.X;q.world_pos[c][1]=w.Y;q.world_pos[c][2]=StartupVfxNativeDomain?w.Z:p.Z+(w.Z-p.Z)*WORLD3D_Z_SCALE;q.uv[c][0]=vert.tu;q.uv[c][1]=vert.tv;}Renderer->SubmitFxQuad(q);++draws;
  }
- if(Pose(*s,2,s->owner->GetFrame(),m)){hmm_mat4 root,world;const auto&p=s->owner->Pos();if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,0);else root=s->owner->Transform().Matrix();MtxMultiply(&world,&m,&root);
+ if(Pose(*s,2,s->owner->GetFrame(),m)){hmm_mat4 root,world;const auto&p=IntPos(s->owner);if(StartupVfxNativeDomain)BuildRetailSoftwareOwner(root,p.x,p.y,p.z,0);else root=s->owner->Transform().Matrix();MtxMultiply(&world,&m,&root);
   SHelperMeshSubmit q={};q.mesh=s->blast;q.retail_lighting=1;q.additive_blend=true;q.retail_software_projection=StartupVfxNativeDomain;q.retail_normal_z_scale=StartupVfxNativeDomain?1.f:1.f/WORLD3D_Z_SCALE;const auto&mat=s->material.matdesc;std::memcpy(q.diffuse,&mat.diffuse,16);std::memcpy(q.ambient,&mat.ambient,16);std::memcpy(q.specular,&mat.specular,16);std::memcpy(q.emissive,&mat.emissive,16);q.power=mat.power;for(int row=0;row<4;++row)for(int col=0;col<4;++col)q.world[row*4+col]=world.Elements[col][row];Renderer->SubmitHelperMesh(q);
  }
  log_info("[sgeyser-phase] tick=%d frame=%d particles=%d rng=%llu credit=%.9g",s->ticks,s->owner->GetFrame(),draws,static_cast<unsigned long long>(RandomDraws()-s->initial_draws),s->particles.EmissionCredit());

@@ -382,8 +382,8 @@ struct SState
     SCharacterRig rig;
     // Cached attachment for the current frame, computed by the rig
     // before calling the active effect's submit_attached hook. Effects
-    // that read inst->Pos() get the moving anchor "for free" because
-    // the rig also ForcePos()es the effect's owner instance to the same
+    // that read IntPos(inst) get the moving anchor "for free" because
+    // the rig also SetIntPos(*this, )es the effect's owner instance to the same
     // value (see TickCharacterRig).
     VfxTest::SVfxAttachment current_attach;
 
@@ -743,7 +743,7 @@ bool ResolveAnchor(const VfxTest::SVfxAnchor& a, VfxTest::SVfxAttachment& out)
     {
         case VfxTest::SVfxAnchor::EKind::CharacterRoot:
         {
-            const S3DPoint p = rig.inst->Pos();
+            const S3DPoint p = IntPos(rig.inst);
             out.world_pos[0] = float(p.x);
             out.world_pos[1] = float(p.y);
             out.world_pos[2] = float(p.z);
@@ -755,7 +755,7 @@ bool ResolveAnchor(const VfxTest::SVfxAnchor& a, VfxTest::SVfxAttachment& out)
         }
         case VfxTest::SVfxAnchor::EKind::CharacterBoundsCenter:
         {
-            const S3DPoint p = rig.inst->Pos();
+            const S3DPoint p = IntPos(rig.inst);
             const float half_h = 0.5f *
                 (rig.bbox_max[2] - rig.bbox_min[2]) * rig.scale;
             out.world_pos[0] = float(p.x);
@@ -773,7 +773,7 @@ bool ResolveAnchor(const VfxTest::SVfxAnchor& a, VfxTest::SVfxAttachment& out)
             // animator state mid-render, and gives us a matrix that
             // already chained through the parent hierarchy. Result is
             // in character-local space (instance pos = (0,0,0) for the
-            // rig), so we add inst->Pos() to land in world space.
+            // rig), so we add IntPos(inst) to land in world space.
             const int32_t objnum = rig.img ? rig.img->GetObjectNum(
                 const_cast<char*>(a.bone_name)) : -1;
             if (objnum < 0)
@@ -803,7 +803,7 @@ bool ResolveAnchor(const VfxTest::SVfxAnchor& a, VfxTest::SVfxAttachment& out)
             const float bx = m[0]*lx + m[1]*ly + m[2] *lz + m[3];
             const float by = m[4]*lx + m[5]*ly + m[6] *lz + m[7];
             const float bz = m[8]*lx + m[9]*ly + m[10]*lz + m[11];
-            const S3DPoint p = rig.inst->Pos();
+            const S3DPoint p = IntPos(rig.inst);
             out.world_pos[0] = float(p.x) + (bx - cx) * s;
             out.world_pos[1] = float(p.y) + (by - cy) * s;
             out.world_pos[2] = float(p.z) + (bz - cz) * s;
@@ -932,7 +932,7 @@ void RenderCharacterRigBackground()
     const float cx = 0.5f * (rig.bbox_min[0] + rig.bbox_max[0]);
     const float cy = 0.5f * (rig.bbox_min[1] + rig.bbox_max[1]);
     const float cz = 0.5f * (rig.bbox_min[2] + rig.bbox_max[2]);
-    const S3DPoint root = rig.inst->Pos();
+    const S3DPoint root = IntPos(rig.inst);
 
     for (const auto& sub : rig.subs)
     {
@@ -993,7 +993,7 @@ S3DPoint PickPreviewOrigin(VfxTest::EVfxPreviewStyle style)
         case VfxTest::EVfxPreviewStyle::CharacterCast:
             // The factory is given the *current* anchor world point;
             // the rig updates it every frame via ForcePos (effects that
-            // read inst->Pos() track the bone automatically). If the
+            // read IntPos(inst) track the bone automatically). If the
             // rig isn't loaded yet (first selection of this effect)
             // fall back to origin -- EnsureRigForStyle runs in
             // SpawnActive before the factory is called.
@@ -1653,7 +1653,7 @@ void Render()
         // Resolve attachment for character-attached effects before any
         // retrigger or submit work. The resolved point is also used to
         // re-position the effect's owning instance via ForcePos (effects
-        // that read inst->Pos() in their tick — Halo, Drip, Mist —
+        // that read IntPos(inst) in their tick — Halo, Drip, Mist —
         // track the bone automatically without per-effect code).
         if (IsCharacterAttached(e.preview_style))
         {
@@ -3455,7 +3455,7 @@ void SwipeSubmitAttached(void* cp, EFxDebugMode /*dbg*/,
 
     // The rig draws the model scaled about its bounds' centre, there.
     const float s = rig.scale;
-    const S3DPoint root = rig.inst->Pos();
+    const S3DPoint root = IntPos(rig.inst);
     hmm_mat4 place;
     MtxClear(&place);
     const hmm_vec3 scaling = {s, s, s};
@@ -5122,7 +5122,7 @@ constexpr float kPrefabRetriggerGap = 0.8f;
 TEffect* PrefabStamp(const SPrefab* prefab, const S3DPoint& origin)
 {
     auto* root = new TEffect(static_cast<TObjectImagery*>(nullptr));
-    root->ForcePos(origin);
+    SetIntPos(root, origin);
     root->SetMapIndex(MapPane.MakeIndex());
     auto stamp = std::make_unique<TPrefabComponent>();
     stamp->Configure(prefab);
@@ -5152,7 +5152,7 @@ bool PrefabHasParticles(TEffect* root)
             return true;
     if (auto* prefab = root->GetComponent<TPrefabComponent>())
         for (int32_t n = 0; n < prefab->NodeCount(); ++n)
-            if (TNodeInst* node = prefab->NodeAt(n))
+            if (TNode* node = prefab->NodeAt(n))
                 for (int32_t i = 0; i < node->NumComponents(); ++i)
                     if (auto* particles = dynamic_cast<TParticleEffectComponent*>(node->GetComponent(i)))
                         if (particles->HasParticles())
@@ -5933,7 +5933,7 @@ struct SVfxTestBootstrap {
 
         // --- Character-attached proof: TDripEffect tracked to "rhand" ---
         // Validates the CharacterRig primitive end-to-end. The drip
-        // already reads inst->Pos() inside its tick path each emit, so
+        // already reads IntPos(inst) inside its tick path each emit, so
         // the per-frame ForcePos call from submit_attached drags the
         // emit origin to wherever the character's right-hand bone is —
         // every fresh drop launches from the live hand position, then
@@ -5961,13 +5961,13 @@ struct SVfxTestBootstrap {
                                        const VfxTest::SVfxAttachment& at) {
             auto* ctx = static_cast<SDripCtx*>(c);
             if (!ctx->drip) return;
-            // Re-anchor before tick: the drip's tick path reads Pos()
+            // Re-anchor before tick: the drip's tick path reads IntPos(*this)
             // when respawning a fresh drop, so any new drop launches
             // from the moving rhand. Existing in-flight drops continue
             // under physics (a falling drop doesn't track the hand,
             // which is the correct physical behaviour).
             if (at.resolved)
-                ctx->drip->ForcePos(S3DPoint{ int32_t(at.world_pos[0]),
+                SetIntPos(ctx->drip, S3DPoint{ int32_t(at.world_pos[0]),
                                               int32_t(at.world_pos[1]),
                                               int32_t(at.world_pos[2]) });
             ctx->drip->TickAndSubmitForTest(d);
@@ -5997,14 +5997,14 @@ struct SVfxTestBootstrap {
             auto* ctx = static_cast<STeleCtx*>(c);
             if (!ctx->tele) return;
             // Re-anchor each frame: the teleport's per-frame submit
-            // reads Pos() to position each of its 5 glow flares, so
-            // pinning Pos() to the live CharacterRoot makes the column
+            // reads IntPos(*this) to position each of its 5 glow flares, so
+            // pinning IntPos(*this) to the live CharacterRoot makes the column
             // track the caster as the rig animator moves him (cast
             // anim has minor root motion). The actual mesh draw happens
             // in submit_world below (must run after BeginTilePass clears
             // the transparent_world_queue; see M09_FORENSICS.md §M09b).
             if (at.resolved)
-                ctx->tele->ForcePos(S3DPoint{ int32_t(at.world_pos[0]),
+                SetIntPos(ctx->tele, S3DPoint{ int32_t(at.world_pos[0]),
                                               int32_t(at.world_pos[1]),
                                               int32_t(at.world_pos[2]) });
             TeleTick(c, d);
