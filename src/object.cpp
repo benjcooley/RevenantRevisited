@@ -420,6 +420,7 @@ void TObjectInstance::ClearObject()
 
     frame               = 0;
     framerate           = 1;
+#ifdef _DEBUG
     anim_state_set_count = 0;
     anim_same_state_set_count = 0;
     anim_loop_wrap_count = 0;
@@ -430,6 +431,7 @@ void TObjectInstance::ClearObject()
     anim_last_loop_wrap_state = -1;
     anim_last_loop_wrap_frame = -1;
     anim_last_loop_wrap_game_frame = -1;
+#endif
 
     level = 0;
     vel.x = vel.y = vel.z = 0;
@@ -983,7 +985,7 @@ bool TObjectInstance::SetState(int32_t newstate)
 
     LOCKOBJECTS;   // Prevent update system from drawing objects while we change state
 
-  // Set prevoious values for interpolation system
+#ifdef _DEBUG
     ++anim_state_set_count;
     if (newstate == state)
         ++anim_same_state_set_count;
@@ -991,7 +993,9 @@ bool TObjectInstance::SetState(int32_t newstate)
     anim_last_state_set_to = newstate;
     anim_last_state_set_frame = frame;
     anim_last_state_set_game_frame = PlayScreen.GameFrame();
+#endif
 
+  // Set previous values for interpolation system
     prevstate = state; // Previous state
     prevframe = frame; // Previous state's final frame (NOT THIS STATES PREVIOUS FRAME!!!)
 
@@ -1706,10 +1710,12 @@ void TObjectInstance::NextFrame()
             {
                 if (stateflags & AF_LOOPING)
                 {
+#ifdef _DEBUG
                     ++anim_loop_wrap_count;
                     anim_last_loop_wrap_state = state;
                     anim_last_loop_wrap_frame = frame;
                     anim_last_loop_wrap_game_frame = PlayScreen.GameFrame();
+#endif
                     frame = statesize - 1;
                 }
                 else
@@ -1741,10 +1747,12 @@ void TObjectInstance::NextFrame()
             {
                 if (stateflags & AF_LOOPING)
                 {
+#ifdef _DEBUG
                     ++anim_loop_wrap_count;
                     anim_last_loop_wrap_state = state;
                     anim_last_loop_wrap_frame = frame;
                     anim_last_loop_wrap_game_frame = PlayScreen.GameFrame();
+#endif
                     frame = 0;
                 }
                 else

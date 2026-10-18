@@ -736,7 +736,7 @@ class TObjectInstance : public TNode
 
   // A map object's position goes through SetPos (sector bookkeeping),
   // whoever sets it: a track, the inspector, a prefab.
-    void     SetLocalPos(const hmm_vec3& p) override;
+    void SetLocalPos(const hmm_vec3& p) override;
     void SetName(char *newname);
         // Set context name
     uint32_t ObjId() const { return inf->uniqueid; }
@@ -818,6 +818,9 @@ class TObjectInstance : public TNode
         // Gets the current framerate
     void SetFrameRate(int32_t newframerate) { framerate = newframerate; }
         // Sets the current framerate
+#ifdef _DEBUG
+  // Animation state-change instrumentation (debug builds; the PlayScreen
+  // animation panel reads it)
     uint32_t DebugStateSetCount() const { return anim_state_set_count; }
     uint32_t DebugSameStateSetCount() const { return anim_same_state_set_count; }
     uint32_t DebugLoopWrapCount() const { return anim_loop_wrap_count; }
@@ -828,6 +831,7 @@ class TObjectInstance : public TNode
     int32_t DebugLastLoopWrapState() const { return anim_last_loop_wrap_state; }
     int32_t DebugLastLoopWrapFrame() const { return anim_last_loop_wrap_frame; }
     int32_t DebugLastLoopWrapGameFrame() const { return anim_last_loop_wrap_game_frame; }
+#endif
     TObjectImagery* GetImagery() const;
         // Returns object's imagery
     virtual bool HasAnimator() const { return GetComponent<TObjectAnimator>() != nullptr; }
@@ -1342,16 +1346,20 @@ class TObjectInstance : public TNode
     short frame, framerate;     // Frame number and framerate for object
     uint16_t prevstate;         // Previous state
     short prevframe;            // Previous state's last frame (not previous frame for this state)
-    uint32_t anim_state_set_count;       // Debug: SetState calls after initialization
-    uint32_t anim_same_state_set_count;  // Debug: SetState(newstate == state)
-    uint32_t anim_loop_wrap_count;       // Debug: AF_LOOPING wraps in NextFrame
-    int32_t anim_last_state_set_from;
-    int32_t anim_last_state_set_to;
-    int32_t anim_last_state_set_frame;
-    int32_t anim_last_state_set_game_frame;
-    int32_t anim_last_loop_wrap_state;
-    int32_t anim_last_loop_wrap_frame;
-    int32_t anim_last_loop_wrap_game_frame;
+#ifdef _DEBUG
+  // Animation state-change instrumentation: debug builds only, 40 bytes an
+  // object otherwise
+    uint32_t anim_state_set_count = 0;       // SetState calls after initialization
+    uint32_t anim_same_state_set_count = 0;  // SetState(newstate == state)
+    uint32_t anim_loop_wrap_count = 0;       // AF_LOOPING wraps in NextFrame
+    int32_t anim_last_state_set_from = -1;
+    int32_t anim_last_state_set_to = -1;
+    int32_t anim_last_state_set_frame = -1;
+    int32_t anim_last_state_set_game_frame = -1;
+    int32_t anim_last_loop_wrap_state = -1;
+    int32_t anim_last_loop_wrap_frame = -1;
+    int32_t anim_last_loop_wrap_game_frame = -1;
+#endif
 
     // The animator and visual components live in TNode's component
     // slots (GetAnimator() / GetComponent<TObjectAnimator>()). The

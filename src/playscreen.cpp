@@ -1353,6 +1353,7 @@ static void DrawPlayerStatusOverlay()
                                 d3->DebugPoseUpdateNextFrame(),
                                 d3->DebugPoseUpdateFrameFrac());
                 }
+#ifdef _DEBUG
                 ImGui::Separator();
                 ImGui::Text("sets    : total=%u same=%u",
                             pinst->DebugStateSetCount(),
@@ -1368,6 +1369,7 @@ static void DrawPlayerStatusOverlay()
                             pinst->DebugLastLoopWrapState(),
                             pinst->DebugLastLoopWrapFrame(),
                             pinst->DebugLastLoopWrapGameFrame());
+#endif
                 ImGui::Separator();
                 ImGui::Text("doing   : action=%d name=\"%s\"",
                             pc->DoingAction(), pc->DoingName());
@@ -1579,6 +1581,7 @@ static void DrawClosestMonsterOverlay()
                 cstate, cinst->GetFrame(), clen,
                 cinst->GetPrevState(), cinst->GetPrevFrame(),
                 closest->CommandDone() ? 1 : 0);
+#ifdef _DEBUG
     ImGui::Text("sets    : total=%u same=%u last %d->%d frame=%d gf=%d",
                 cinst->DebugStateSetCount(),
                 cinst->DebugSameStateSetCount(),
@@ -1591,6 +1594,7 @@ static void DrawClosestMonsterOverlay()
                 cinst->DebugLastLoopWrapState(),
                 cinst->DebugLastLoopWrapFrame(),
                 cinst->DebugLastLoopWrapGameFrame());
+#endif
 
     ImGui::Text("doing   : action=%d name=\"%s\"  target=(%d,%d)",
                 closest->DoingAction(), closest->DoingName(),
