@@ -211,7 +211,9 @@ std::string CombatKernels(const Case& c, std::string& error)
         auto point = [](const JsonValue& v) {
             return S3DPoint((int32_t)v[0].Int(), (int32_t)v[1].Int(), (int32_t)v[2].Int(0));
         };
-        TObjectInstance a(nullptr), b(nullptr);
+        TObjectPtr<> ap(new TObjectInstance(nullptr)), bp(new TObjectInstance(nullptr));
+        TObjectInstance& a = *ap;
+        TObjectInstance& b = *bp;
         JsonOut j;
         j.Begin('{').FieldString("schema", "combat.kernels.v1").FieldString("side", "port");
         j.FieldString("kernel", kernel).Key("outputs").Begin('[');

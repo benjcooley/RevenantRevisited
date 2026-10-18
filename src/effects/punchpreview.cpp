@@ -19,7 +19,7 @@
 namespace punch_authored_preview {
 struct State {
     struct Part { int32_t object = -1, texture_slot = -1; MeshHandle mesh = 0; S3DMaterial material{}; };
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     TSafeRef<> identity;
     std::vector<Part> parts;
     double accumulated = 0;

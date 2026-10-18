@@ -14,7 +14,7 @@
 namespace vortex_preview {
 struct State {
  struct Part{int object;MeshHandle mesh;int lighting;std::vector<hmm_vec3> positions;std::vector<uint16_t> indices;S3DMaterial material{};};
- std::unique_ptr<TObjectInstance> owner;std::vector<Part>parts;double accumulated=0;
+ TObjectPtr<TObjectInstance> owner;std::vector<Part>parts;double accumulated=0;
  ~State(){if(Renderer)for(auto p:parts)Renderer->ReleaseMeshAssetRef(p.mesh);}
 };
 State* Spawn(const S3DPoint& origin){

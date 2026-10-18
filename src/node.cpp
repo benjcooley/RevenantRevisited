@@ -1,10 +1,13 @@
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
-// *            node.cpp - TNode + component update list           *
+// *                node.cpp - TNode + the component update list          *
 // *************************************************************************
 
 #include "node.h"
+
+#include "intworld.h"
+#include "object.h"
 
 #include <cctype>
 #include <cmath>
@@ -89,7 +92,7 @@ void TObjectComponent::RunUpdateList()
 
 TObjectInstance* TObjectComponent::OwnerInstance() const
 {
-    return owner ? owner->AsObjectInstance() : nullptr;
+    return node_ ? node_->Object() : nullptr;
 }
 
 // ---- TNode -------------------------------------------------------------
@@ -107,7 +110,32 @@ TNode::TNode(std::string name)
 
 TNode::~TNode()
 {
+    // The object first: its destructor leaves the sector and detaches the
+    // other components while its imagery is still whole. It is destroyed,
+    // not detached, so it keeps its node to the end.
+    if (object_)
+    {
+        std::unique_ptr<TObjectComponent> object = std::move(components_[size_t(object_slot_)]);
+        object_ = nullptr;
+        object_slot_ = -1;
+        object.reset();
+    }
     DetachComponents();
+}
+
+const char* TNode::GetName() const
+{
+    if (node_name_.empty() && object_)
+        return object_->GetName();
+    return node_name_.c_str();
+}
+
+void TNode::SetLocalPos(const hmm_vec3& p)
+{
+    if (object_)
+        object_->SetPos(ToIntPos(p));
+    else
+        transform_.SetLocalPos(p);
 }
 
 hmm_vec3 TNode::LocalRotDeg() const
@@ -130,6 +158,17 @@ TNode* TNode::Parent() const
 void TNode::SetParent(TNode* parent)
 {
     transform_.SetParent(parent ? &parent->transform_ : nullptr);
+    // One tree, one sector: a child is wherever its parent is; detached,
+    // it is nowhere until a sector takes it.
+    SetSector(parent ? parent->sector_ : nullptr);
+}
+
+void TNode::SetSector(TSector* sector)
+{
+    sector_ = sector;
+    for (int32_t i = 0; i < transform_.GetChildCount(); ++i)
+        if (TNode* child = GetChildAt(i))
+            child->SetSector(sector);
 }
 
 TNode* TNode::GetChildAt(int32_t index) const
@@ -190,6 +229,11 @@ int32_t TNode::AddComponent(std::unique_ptr<TObjectComponent> component)
     components_[size_t(slot)] = std::move(component);
 
     raw->Attach(this, slot, ++s_next_component_generation);
+    if (TObjectInstance* object = raw->AsObjectInstance())
+    {
+        object_ = object;
+        object_slot_ = slot;
+    }
     if (ActivatesComponentsOnAdd())
         raw->Activate();
     return slot;
@@ -204,15 +248,36 @@ void TNode::ActivateComponents()
 
 void TNode::DetachComponents()
 {
-    for (const auto& component_ptr : components_)
-        if (TObjectComponent* component = component_ptr.get())
-            component->Detach();
-    components_.clear();
+    // Taken out of the node first, so a nested call (the object's
+    // destructor detaching its siblings) finds nothing. The object
+    // component stays: it goes with the node.
+    std::vector<std::unique_ptr<TObjectComponent>> detached;
+    detached.reserve(components_.size());
+    for (auto& component_ptr : components_)
+    {
+        TObjectComponent* component = component_ptr.get();
+        if (!component || component == object_)
+            continue;
+        component->Detach();
+        detached.push_back(std::move(component_ptr));
+    }
+    if (object_)
+    {
+        std::unique_ptr<TObjectComponent> object = std::move(components_[size_t(object_slot_)]);
+        components_.clear();
+        components_.push_back(std::move(object));
+        object_slot_ = 0;
+    }
+    else
+        components_.clear();
+    // `detached` destroys the components here, newest slot last.
 }
 
 void TNode::RemoveComponent(int32_t component_slot)
 {
     if ((uint32_t)component_slot >= (uint32_t)components_.size())
+        return;
+    if (component_slot == object_slot_)
         return;
     TObjectComponent* component = components_[size_t(component_slot)].get();
     if (component)

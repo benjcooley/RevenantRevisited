@@ -13,8 +13,8 @@
 namespace strike_meteor_preview {
 struct State {
  struct Part {MeshHandle mesh=0;S3DMat material{};int object=0,triangle=0;hmm_vec3 vertices[3]{};};
- std::array<std::unique_ptr<TObjectInstance>,4> owners;
- std::unique_ptr<TCharacter> caster,target;std::unique_ptr<TStrikeSpell> spell;
+ std::array<TObjectPtr<TObjectInstance>,4> owners;
+ TObjectPtr<TCharacter> caster,target;std::unique_ptr<TStrikeSpell> spell;
  TObjectImagery* resource=nullptr;std::vector<Part> parts;strike_meteor::State core;double accumulated=0;uint64_t initial_draws=0;int64_t submitted=-1;
  ~State(){for(auto&o:owners)if(auto*e=dynamic_cast<TEffect*>(o.get()))e->SetSpell(nullptr);if(Renderer)for(auto&p:parts)if(p.mesh)Renderer->ReleaseMeshAssetRef(p.mesh);if(resource)TObjectImagery::FreeImagery(resource);if(spell && caster && target)log_info("[strike-cleanup] tick=%d manager=%d alive=%d health=%d/%d spell_timer=%d",core.tick,core.manager_frame,int(core.alive),caster->Health(),target->Health(),spell->TimerValue());}
 };
@@ -23,7 +23,7 @@ static State* Spawn(const S3DPoint& origin,bool isolated){
  auto* data=SpellList.GetSpellDataByName("Meteor Storm");auto* var=SpellList.GetVariantDataByName("Meteor Storm");const auto* c=var?var->controldata:nullptr;
  if(!data || !var || std::strcmp(var->effect,"StrikeEffect") || !c || std::strcmp(c->name,"Strike") || c->hits!=4 || c->radius!=265 || c->duration!=93 || c->wait!=48 || c->pattern!=SPAT_RANDOM || c->duration2 || c->follow || c->attachset || c->hittarget || c->oncaster || c->repeatdamage || c->multipletargets)return nullptr;
  auto s=std::make_unique<State>();auto* chars=TObjectClass::GetClass(OBJCLASS_CHARACTER);int actor_type=chars?chars->FindObjType("Acolyte"):-1;if(actor_type<0)return nullptr;
- auto actor=[&](S3DPoint pos){SObjectDef def={};def.objclass=OBJCLASS_CHARACTER;def.objtype=short(actor_type);def.pos=pos;return std::unique_ptr<TCharacter>(dynamic_cast<TCharacter*>(chars->NewObject(&def)));};
+ auto actor=[&](S3DPoint pos){SObjectDef def={};def.objclass=OBJCLASS_CHARACTER;def.objtype=short(actor_type);def.pos=pos;return TObjectPtr<TCharacter>(dynamic_cast<TCharacter*>(chars->NewObject(&def)));};
  s->caster=actor(origin);s->target=actor({origin.x+96,origin.y,origin.z});if(!s->caster || !s->target || !s->caster->BeginFighting(s->target.get()))return nullptr;
  TObjectInstance* target=s->target.get();S3DPoint offset={};s->spell=std::make_unique<TStrikeSpell>(s->caster.get(),&target,1,&offset,data,var,nullptr);
  auto* effects=TObjectClass::GetClass(OBJCLASS_EFFECT);int type=effects?effects->FindObjType(0xad92bd32u):-1;auto* info=type>=0?effects->GetObjType(type):nullptr;

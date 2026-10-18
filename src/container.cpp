@@ -333,9 +333,9 @@ bool TContainer::UseCarried(TObjectInstance* user, TObjectInstance* inst)
         if (owner && target && owner->AddToInventoryByUniqueId(target, 1, -1))
         {
             inst->RemoveFromInventory();
-            delete inst;
+            DeleteObject(inst);
             RemoveFromInventory();
-            delete this;    // as a food's use-up deletes the food Use runs on
+            DeleteObject(this);    // as a food's use-up deletes the food Use runs on
             return true;
         }
         return Finish();
@@ -488,7 +488,7 @@ bool TVialRack::Use(TObjectInstance* user, int32_t with)
             // out when it saves to disk.
 
             //MapPane.RemoveObject(with);
-            //delete inst;
+            //DeleteObject(inst);
 
             inst->RemoveFromInventory();
             AddToInventory(inst);

@@ -414,7 +414,7 @@ void TObjectInstance::ClearObject()
     objclass = objtype  = -1;
     flags               = 0;
     notifyflags         = 0;
-    sector              = nullptr;
+    Node()->SetSector(nullptr);
     state               = 0;
     group               = 0;
 
@@ -433,12 +433,12 @@ void TObjectInstance::ClearObject()
     anim_last_loop_wrap_game_frame = -1;
 #endif
 
-    level = 0;
+    Node()->SetLevel(0);
     vel.x = vel.y = vel.z = 0;
     accum.x = accum.y = accum.z = 0;
     invindex = inventnum = -1;
     shadow = -1;
-    mapindex = -1;
+    Node()->SetMapIndex(-1);
     // Fresh generation per construct/clear. Globally unique under our
     // monotonic counter (see TSafeRef contract in object.h). When an
     // id slot is later reused by a new instance, the new gen will not
@@ -459,7 +459,7 @@ void TObjectInstance::ClearObject()
 
     // Origin, no rotation; oldpos differs so the first GetScreenPos projects.
     SetIntPos(*this, S3DPoint{0, 0, 0});
-    transform_.SetLocalRotEuler(hmm_vec3{{ 0.0f, 0.0f, 0.0f }});
+    Transform().SetLocalRotEuler(hmm_vec3{{ 0.0f, 0.0f, 0.0f }});
     oldpos = S3DPoint{1, 1, 1};
     screenx = screeny = screenz = 0;
 
@@ -474,11 +474,21 @@ void TObjectInstance::ClearObject()
     // row only). The renderer's per-instance Z-stretch post-multiply
     // becomes redundant for anything that reads through the bone
     // transform path; it can be dropped in C4.
-    transform_.SetLocalScl(hmm_vec3{ 1.0f, 1.0f, WORLD3D_Z_SCALE });
+    Transform().SetLocalScl(hmm_vec3{ 1.0f, 1.0f, WORLD3D_Z_SCALE });
+}
+
+// The node first: the object is a component of it from the start, so the
+// forwarders work for the rest of construction, derived constructors
+// included. The node owns the object from here on (DeleteObject).
+void TObjectInstance::AdoptNode()
+{
+    TNode* node = new TNode();
+    node->AddComponent(std::unique_ptr<TObjectComponent>(this));
 }
 
 TObjectInstance::TObjectInstance(TObjectImagery* img)
 {
+    AdoptNode();
     ClearObject();
     imagery = img;
 
@@ -496,6 +506,7 @@ TObjectInstance::TObjectInstance(TObjectImagery* img)
 
 TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
 {
+    AdoptNode();
     ClearObject();
 
     // The spawn record's initial state; the record itself is not kept.
@@ -503,7 +514,7 @@ TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
     objtype  = def->objtype;
     flags    = def->flags;
     state    = def->state;
-    level    = def->level;
+    Node()->SetLevel(def->level);
     vel      = def->vel;
     accum    = def->accum;
     group    = def->group;
@@ -569,7 +580,7 @@ void TObjectInstance::SetMapIndex(int32_t newindex)
     // Keep the MapPane mapindex → instance registry in sync. Holders of a
     // mapindex resolve via MapPane.GetInstance(), so any reassignment or
     // clear-to-negative must move the registry entry with the instance.
-    if (newindex == mapindex)
+    if (newindex == GetMapIndex())
         return;
     // Retail allowed several objects to share an id (sector files hold such
     // duplicates); the registry needs unique ones. The object that gives up
@@ -599,21 +610,14 @@ void TObjectInstance::SetMapIndex(int32_t newindex)
         }
     }
     filemapindex = fileid;
-    if (mapindex >= 0)
-        MapPane.UnregisterInstance(mapindex);
-    mapindex = newindex;
-    if (mapindex >= 0)
+    if (GetMapIndex() >= 0)
+        MapPane.UnregisterInstance(GetMapIndex());
+    Node()->SetMapIndex(newindex);
+    if (newindex >= 0)
     {
-        MapPane.RegisterInstance(this, mapindex);
+        MapPane.RegisterInstance(this, newindex);
         ActivateComponents();
     }
-}
-
-// A map object's position goes through SetPos (sector bookkeeping) whoever
-// sets it: a track, the inspector, a prefab.
-void TObjectInstance::SetLocalPos(const hmm_vec3& p)
-{
-    SetPos(ToIntPos(p));
 }
 
 // REVSYNC: ~TObjectInstance @ 0x0046e420
@@ -625,7 +629,7 @@ TObjectInstance::~TObjectInstance()
     // A sector holds a raw pointer to every object in it, so an object is
     // never freed while still in one, whoever deletes it (a sector freeing
     // its own objects unlinks them first, as retail's does).
-    if (sector || owner)
+    if (GetSector() || owner)
         MapPane.RemoveObject(this);
 
     // Raw-pointer holders that don't follow N_DELETINGOBJECT: let go of this
@@ -635,9 +639,9 @@ TObjectInstance::~TObjectInstance()
 
     // Then drop the registry entry — even a partially-constructed instance
     // that stashed a mapindex must be removed before its memory is freed.
-    if (mapindex >= 0) {
-        MapPane.UnregisterInstance(mapindex);
-        mapindex = -1;
+    if (GetMapIndex() >= 0) {
+        MapPane.UnregisterInstance(GetMapIndex());
+        Node()->SetMapIndex(-1);
     }
 
     // Component / imagery / dynamic-light cleanup must run for any instance
@@ -671,7 +675,7 @@ TObjectInstance::~TObjectInstance()
     for (TInventoryIterator i(this); i; i++)
     {
         i.Item()->RemoveFromInventory();
-        delete i.Item();
+        DeleteObject(i.Item());
     }
 
     // Delete the name
@@ -830,19 +834,19 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
     int32_t index = GetMapIndex();
 
     if (newlevel < 0)
-        newlevel = level;
+        newlevel = GetLevel();
 
     const S3DPoint pos = IntPos(*this);
 
   // Didn't move
-    if (newpos == pos && newlevel == level)
+    if (newpos == pos && newlevel == GetLevel())
         return index;                           // no movement, so bail out
 
-  // Isn't in map
-    if (override || !sector || index < 0)
+  // Not a member of a sector's list (not in the map, or contained)
+    if (override || !IsSectorMember() || index < 0)
     {
         SetIntPos(*this, newpos);
-        level = newlevel;
+        ForceLevel(newlevel);
         return index;
     }
 
@@ -874,7 +878,7 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
   // Sets new position
     SetIntPos(*this, to);
     if (flags & OF_NONMAP)
-        level = newlevel;
+        ForceLevel(newlevel);
 
     MapPane.TransferWalkmap(this);
 
@@ -1106,7 +1110,7 @@ bool TObjectInstance::AddToInventory(TObjectInstance* inst, int32_t slot)
 
     if (inst->MergeInto(this))
     {
-        delete inst;
+        DeleteObject(inst);
         if (this == Inventory.GetContainer() || (prevowner && prevowner == Inventory.GetContainer()))
             Inventory.Update();
         return true;
@@ -1146,8 +1150,8 @@ void TObjectInstance::PlaceInInventory(TObjectInstance* inst, int32_t slot)
     inst->owner = this;
 
     SetIntPos(inst, S3DPoint{0, 0, 0});
-    inst->level = 0;
-    inst->sector = nullptr;
+    inst->ForceLevel(0);
+    inst->ForceSector(nullptr);
 
     inst->SignalAddedToInventory();
 }
@@ -1180,7 +1184,7 @@ bool AddNewToInventory(TObjectInstance* owner, TObjectClass* cl, int32_t ot, int
 
     if (owner->AddToInventory(inst, slot))
         return true;
-    delete inst;
+    DeleteObject(inst);
     return false;
 }
 
@@ -1258,7 +1262,7 @@ int32_t TObjectInstance::GiveInventoryTo(TObjectInstance* to, const char *name, 
             TObjectInstance* const from = inst->GetOwner();
             inst->RemoveFromInventory();
             if (!to)
-                delete inst;
+                DeleteObject(inst);
             else if (!to->AddToInventory(inst))
             {
                 from->AddToInventory(inst);
@@ -1359,7 +1363,7 @@ bool TObjectInstance::AddToMap()
 // moved them into an inventory.
 void TObjectInstance::RemoveFromMap()
 {
-    if (sector)
+    if (IsSectorMember())
         MapPane.RemoveFromSector(this);
 }
 
@@ -2296,11 +2300,11 @@ void TObjectInstance::ResetFlags(uint32_t newflags)
 
   // Call map pane to allow object to be placed on new lists if.. say...
   // the OF_ANIMATE or OF_PULSE flags change.
-    if (sector)
+    if (IsSectorMember())
         MapPane.ObjectFlagsChanged(this, oldflags, newflags);
 
   // Update map if object flags change...
-    if (sector != nullptr) // In map
+    if (IsSectorMember())
     {
       // Did walk status of tile change?
         if (!(oldflags & OF_NOWALK) && (flags & OF_NOWALK))

@@ -189,7 +189,7 @@ public:
 protected:
     void OnUpdate() override
     {
-        if(auto* effect=dynamic_cast<TCureEffect_Bespoke*>(Owner())) effect->Advance(TTime::DeltaTime());
+        if(auto* effect=dynamic_cast<TCureEffect_Bespoke*>(OwnerInstance())) effect->Advance(TTime::DeltaTime());
     }
 };
 

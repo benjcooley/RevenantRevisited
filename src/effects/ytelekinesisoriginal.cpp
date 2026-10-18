@@ -14,7 +14,7 @@
 #include <memory>
 namespace ytelekinesis_original {
 struct State {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     ytelekinesis_core::State core;
     struct Part {MeshHandle mesh=0;S3DMat material{};std::vector<SMeshVertex> vertices;std::vector<uint16_t> indices;};
     std::array<Part,4> parts{};

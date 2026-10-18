@@ -14,7 +14,7 @@
 
 namespace antimagic_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;
+ TObjectPtr<TObjectInstance> owner;
  authored_partsys::State particles;
  authored_partsys::TickInputs inputs;
  S3DVertex dust[4]{};

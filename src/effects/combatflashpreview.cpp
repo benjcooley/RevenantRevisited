@@ -28,7 +28,7 @@ struct State
         MeshHandle mesh = 0;
         S3DMaterial material{};
     };
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     TSafeRef<> identity;
     int32_t state = 0;
     std::vector<Flare> flares;   // every authored '#impact' flare with geometry

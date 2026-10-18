@@ -21,7 +21,7 @@ constexpr int32_t kFacing = 0;                   // the bleeder's facing; the sp
 
 struct State
 {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     TSafeRef<> identity;
     double accumulated = 0;
     uint64_t ticks = 0;

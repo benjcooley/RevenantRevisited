@@ -12,7 +12,7 @@
 #include <vector>
 namespace shriek_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;
+ TObjectPtr<TObjectInstance> owner;
  retail_shriek::State core;
  MeshHandle mesh[4]{};
  double accumulator=0;

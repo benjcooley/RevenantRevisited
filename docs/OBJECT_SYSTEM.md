@@ -147,9 +147,16 @@ struct SObjectInfo
 
 **Purpose:** Represents individual game object instances in the world.
 
-**Inheritance Structure** (since 2026-10-18, docs/OBJECT_MODEL_PLAN.md):
+**Structure** (since 2026-10-18, docs/OBJECT_MODEL_PLAN.md §3b): a map object is
+a `TNode` (final: name, soft-ref id, TTransform, children, components, map
+index, sector, level) whose first component is the `TObjectInstance`, the root
+of the object class hierarchy. The node owns the object; `node->Object()` and
+`instance->Node()` are cached pointers. The instance forwards the node-facing
+API, so a `TObjectInstance*` still answers transform, map index, sector and
+components. Delete an object with `DeleteObject(inst)`, own one with
+`TObjectPtr<T>`.
 ```cpp
-class TObjectInstance : public TNode   // name, soft-ref id, TTransform, children, components
+class TObjectInstance : public TObjectComponent
 {
     // Identity in the class system
     short objclass, objtype;         // Class / type indices

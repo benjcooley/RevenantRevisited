@@ -18,7 +18,7 @@
 
 namespace ylose_original {
 struct State {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     struct Part {MeshHandle mesh=0;S3DMat material{};int object=0,slot=0;std::vector<std::array<hmm_vec3,3>> triangles;std::vector<std::array<hmm_vec2,3>> uvs;TTextureHandle texture=kInvalidTexture;};
     std::vector<Part> parts;
     S3DPoint source{};

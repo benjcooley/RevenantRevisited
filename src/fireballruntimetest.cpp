@@ -30,7 +30,7 @@ bool RunFireballRuntimeTest(TMapRenderer& renderer)
     definition.objclass=EffectClass.ClassId();definition.objtype=EffectClass.FindObjType(0x63fd382au);
     definition.level=StartupSceneCamera[0];definition.pos={center.x,center.y,height+128};
     if(definition.objtype<0)return false;
-    std::unique_ptr<TObjectInstance> owned(EffectClass.NewObject(&definition));
+    TObjectPtr<TObjectInstance> owned(EffectClass.NewObject(&definition));
     auto* effect=dynamic_cast<TFireBallEffect*>(owned.get());
     if(!effect||effect->ObjId()!=0x63fd382au)
     {

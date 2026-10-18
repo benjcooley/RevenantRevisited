@@ -11,7 +11,7 @@
 #include <cstring>
 namespace dragonfire_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;retail_dragonfire::State core;MeshHandle meshes[2]{};S3DMat materials[2]{};
+ TObjectPtr<TObjectInstance> owner;retail_dragonfire::State core;MeshHandle meshes[2]{};S3DMat materials[2]{};
  double accumulator=0;int ticks=0;int64_t rendered=-1;uint64_t initial_draws=0;
  ~State(){log_info("[dragonfire-cleanup] tick=%d alive=%d",ticks,int(core.alive));if(Renderer)for(auto m:meshes)if(m)Renderer->ReleaseMeshAssetRef(m);}
 };

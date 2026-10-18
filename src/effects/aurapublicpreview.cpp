@@ -18,7 +18,7 @@ void TAuraEffect::Initialize(){first_time=true;}
 void TAuraEffect::Pulse(){TEffect::Pulse();if(first_time && spell){spell->SetDefense(spell->VariantData()->mindamage);spell->SetOffense(spell->VariantData()->maxdamage);first_time=false;}S3DPoint p=GetCharacter()?IntPos(GetCharacter()):IntPos(*this);SetPos(p);if(spell){spell->SetDefense(spell->VariantData()->mindamage);spell->SetOffense(spell->VariantData()->maxdamage);}}
 namespace aura_public_preview {
 struct State {
- std::unique_ptr<TCharacter>actor;std::unique_ptr<TSpell>spell;std::unique_ptr<TAuraEffect>owner;aura_core::State core;
+ TObjectPtr<TCharacter>actor;std::unique_ptr<TSpell>spell;TObjectPtr<TAuraEffect>owner;aura_core::State core;
  MeshHandle mesh{};double accumulator=0;int64_t rendered=-1;
  ~State(){if(owner)owner->SetSpell(nullptr);if(Renderer && mesh)Renderer->ReleaseMeshAssetRef(mesh);}
 };

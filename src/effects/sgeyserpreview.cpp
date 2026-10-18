@@ -13,7 +13,7 @@
 #include <cstdlib>
 namespace sgeyser_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;
+ TObjectPtr<TObjectInstance> owner;
  authored_partsys::State particles;
  authored_partsys::TickInputs inputs;
  S3DVertex steam[4]{};MeshHandle blast=0;S3DMat material{};

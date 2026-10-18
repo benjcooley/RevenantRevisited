@@ -60,14 +60,14 @@ constexpr float kIntAngleToRad = float(M_PI * 2.0 / 256.0);
 
 [[nodiscard]] inline S3DPoint IntPos(const TNode& node)  { return ToIntPos(node.Transform().Pos()); }
 [[nodiscard]] inline S3DPoint IntPos(const TNode* node)  { return IntPos(*node); }
-template <class T> [[nodiscard]] inline S3DPoint IntPos(const std::unique_ptr<T>& node) { return IntPos(node.get()); }
+template <class T, class D> [[nodiscard]] inline S3DPoint IntPos(const std::unique_ptr<T, D>& node) { return IntPos(node.get()); }
 template <class T> [[nodiscard]] inline S3DPoint IntPos(const TSafeRef<T>& node)        { return IntPos(node.Get()); }
 
 // Writes the world position straight into the transform: no sector,
 // walkmap or notification side effects (those are TObjectInstance::SetPos).
 inline void SetIntPos(TNode& node, const S3DPoint& p) { node.Transform().SetPos(ToWorld(p)); }
 inline void SetIntPos(TNode* node, const S3DPoint& p) { SetIntPos(*node, p); }
-template <class T> inline void SetIntPos(const std::unique_ptr<T>& node, const S3DPoint& p) { SetIntPos(node.get(), p); }
+template <class T, class D> inline void SetIntPos(const std::unique_ptr<T, D>& node, const S3DPoint& p) { SetIntPos(node.get(), p); }
 template <class T> inline void SetIntPos(const TSafeRef<T>& node, const S3DPoint& p)        { SetIntPos(node.Get(), p); }
 
 // ---- Orientation -------------------------------------------------------------
@@ -78,7 +78,7 @@ template <class T> inline void SetIntPos(const TSafeRef<T>& node, const S3DPoint
 [[nodiscard]] inline int32_t IntRotateX(const TNode* node) { return IntRotateX(*node); }
 [[nodiscard]] inline int32_t IntRotateY(const TNode* node) { return IntRotateY(*node); }
 [[nodiscard]] inline int32_t IntFacing(const TNode* node)  { return IntFacing(*node); }
-template <class T> [[nodiscard]] inline int32_t IntFacing(const std::unique_ptr<T>& node) { return IntFacing(node.get()); }
+template <class T, class D> [[nodiscard]] inline int32_t IntFacing(const std::unique_ptr<T, D>& node) { return IntFacing(node.get()); }
 template <class T> [[nodiscard]] inline int32_t IntFacing(const TSafeRef<T>& node)        { return IntFacing(node.Get()); }
 
 inline void SetIntRotateX(TNode& node, int32_t angle)
@@ -102,5 +102,5 @@ inline void SetIntFacing(TNode& node, int32_t angle)
 inline void SetIntRotateX(TNode* node, int32_t angle) { SetIntRotateX(*node, angle); }
 inline void SetIntRotateY(TNode* node, int32_t angle) { SetIntRotateY(*node, angle); }
 inline void SetIntFacing(TNode* node, int32_t angle)  { SetIntFacing(*node, angle); }
-template <class T> inline void SetIntFacing(const std::unique_ptr<T>& node, int32_t angle) { SetIntFacing(node.get(), angle); }
+template <class T, class D> inline void SetIntFacing(const std::unique_ptr<T, D>& node, int32_t angle) { SetIntFacing(node.get(), angle); }
 template <class T> inline void SetIntFacing(const TSafeRef<T>& node, int32_t angle)        { SetIntFacing(node.Get(), angle); }

@@ -12,7 +12,7 @@
 #include <memory>
 namespace quicksand_original {
 struct State {
- std::unique_ptr<TObjectInstance> owner;
+ TObjectPtr<TObjectInstance> owner;
  retail_quicksand::State core;
  MeshHandle meshes[4]{};
  S3DPoint source{};

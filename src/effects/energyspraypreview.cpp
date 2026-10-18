@@ -13,7 +13,7 @@
 #include <vector>
 namespace energyspray_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;
+ TObjectPtr<TObjectInstance> owner;
  retail_energyspray::State core;
  MeshHandle mesh[2]{}, triangle_mesh=0;
  std::vector<SMeshVertex> vertices[2];std::vector<uint16_t> faces[2];

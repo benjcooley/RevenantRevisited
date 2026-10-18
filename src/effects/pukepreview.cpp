@@ -17,7 +17,7 @@ namespace puke_preview {
 // separately retained source-contribution negative control. Default is grid only.
 static int RasterPolicy(){const char* p=std::getenv("REV_PUKE_RASTER_DIAGNOSTIC");return p && p[0]>='0' && p[0]<='3' && !p[1]?p[0]-'0':1;}
 struct State {
- std::unique_ptr<TObjectInstance> owner;
+ TObjectPtr<TObjectInstance> owner;
  retail_puke::State core;
  MeshHandle mesh[3]{};
  double accumulator=0;

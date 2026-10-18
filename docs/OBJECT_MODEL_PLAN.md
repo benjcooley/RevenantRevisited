@@ -1,6 +1,6 @@
 # Object model surgery: TNode → TObjectInstance → TSector
 
-Status: phases 1-3 landed 2026-10-18 (branch feature/objectmodel); 4 and 5 open. Companion to docs/OBJECT_SYSTEM.md (current state) and
+Status: phases 1-3 and 3b landed 2026-10-18 (branch feature/objectmodel, PR #19); 4 and 5 open. Companion to docs/OBJECT_SYSTEM.md (current state) and
 docs/vfx/PREFAB_SYSTEM.md (reflection, packed codec, prefabs). This document is
 the source of truth for the surgery; OBJECT_SYSTEM.md is updated as each phase
 lands.
@@ -155,6 +155,55 @@ identical except:
 Also green: unit tests, tools/test_transient_map.py (stubs updated),
 headless quickstart.
 
+### Phase 3b: the object is a component of its node (landed 2026-10-18)
+
+The question "can TObjectInstance be sealed" had a better answer than
+dicing the class tree: seal the node instead.
+
+```
+class TNode final                                // name, id, transform, children, components,
+                                                 // map membership (map index, sector, level)
+class TObjectInstance : public TObjectComponent  // root of the class hierarchy, unchanged below it
+```
+
+- A map object is a root node in a sector whose first component is a
+  `TObjectInstance` (or a subclass). The node owns the instance like any
+  component; `node->Object()` and `instance->Node()` are cached, never
+  searched. Exactly one object component per node, attached first,
+  destroyed last.
+- The instance keeps its whole API. The node-facing part (transform, map
+  index, sector, level, components) is one-line forwarders to its node, so
+  the ~1500 `TObjectInstance*` sites across the codebase do not change:
+  measured, two thirds of them are other systems asking class, id, state,
+  name, map index, flags or sector, and the instance still answers.
+- What changes is ownership: `delete inst` becomes `DeleteObject(inst)`
+  (deletes the node); holders use `TObjectPtr<T>` (unique_ptr with the
+  node-deleting deleter); the two stack-allocated fixtures go on the heap.
+- Containers (sector lists, the map index registry, inventories, safe
+  refs) keep instance pointers for now; the node is the owner. Switching
+  the sector list to root nodes is a later inch, when the packed format
+  needs it, and the safe-ref id unification with it.
+- Inventory later: a contained item is a child node owned through the
+  tree, the inventory component is the policy over those children.
+  Transform parenting of map objects is a capability, not a goal (retail
+  draws equipment its own way; an elevator is a maybe).
+- Sector rules: a node with a sector is in the map, one without is not; a
+  whole tree shares one sector (`TNode::SetSector` recurses, a child adopts
+  its parent's on attach); only a root may be on a sector's object list,
+  which is what the map pulses and draws. `TObjectInstance::IsSectorMember`
+  is that test; `GetSector` alone means "in the map", directly or through
+  the root. An object can sit at any depth: a contained item is in the map
+  through its chest and is never pulsed by the map.
+- Landed as: `TNode final` with `Object()` cached at attach through one
+  virtual on the component base (`AsObjectInstance`); the node destroys
+  its object first and the rest after, `DetachComponents` re-entrant;
+  `AdoptNode` in every object constructor; `DeleteObject`, `SObjectDeleter`,
+  `TObjectPtr<T>`; the inspector draws the node then each component, undo
+  snapshots node plus components, the clipboard writes node then object
+  props. Gates as for phases 1-3: unit tests, sector dump (same two
+  known diffs), quickstart, editor boot, VFX harness, AddressSanitizer on
+  the quickstart and a sector dump.
+
 ### Phase 4: native packed sector format
 
 - `sectorpack.{h,cpp}`: `Pack(const TSector&)` / `Unpack` over nodepack.
@@ -207,6 +256,9 @@ headless quickstart.
   two or more non-zero rotate bytes. To be checked on the sector scan before
   phase 4; if any exist, the fix is a TTransform rotation order, not a
   second rotation store.
+- 2026-10-18 Sectors are not nodes. The world is a streaming grid of
+  sectors, each holding root nodes; there is no scene graph above a root.
+  An arbitrary 3D scene system is one step too far for this game.
 - 2026-10-18 One PR for phases 1-3 ("bite the bullet"), gated by the
   before/after sector dump rather than file-vs-save identity, because the
   port's writer already diverges from retail's bytes on purpose (inventory

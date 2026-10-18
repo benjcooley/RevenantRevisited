@@ -18,7 +18,7 @@
 namespace fmastery_authored_preview {
 struct State
 {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     TSafeRef<> identity;
     MeshHandle flare_mesh = 0;
     S3DMaterial flare_material{};

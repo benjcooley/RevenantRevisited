@@ -393,7 +393,7 @@ class TFixtureChar : public Base, public IFixtureChar
     {
         who = spec["name"].Str();
         this->name = strdup(who.c_str());
-        this->mapindex = (int32_t)spec["id"].Int(0);
+        this->Node()->SetMapIndex((int32_t)spec["id"].Int(0));
         const JsonValue& p = spec["pos"];
         SetIntPos(this, S3DPoint((int32_t)p[0].Int(), (int32_t)p[1].Int(), (int32_t)p[2].Int()));
         SetIntFacing(this, (int32_t)spec["facing"].Int());
@@ -496,7 +496,7 @@ class TFixtureChar : public Base, public IFixtureChar
                                        (int32_t)spec["levelup"][2].Int()});
             for (const JsonValue& e : spec["equipment"].Items())
             {
-                items.push_back(std::make_unique<TFixtureItem>(e));
+                items.push_back(TObjectPtr<TFixtureItem>(new TFixtureItem(e)));
                 Base::SetFixtureEquipment((int32_t)e["slot"].Int(), items.back().get());
             }
         }
@@ -1003,7 +1003,7 @@ class TFixtureChar : public Base, public IFixtureChar
     mutable std::map<std::string, int32_t> stats;
     std::map<std::string, int32_t> classstats;
     std::unique_ptr<SCharData> cd;
-    std::vector<std::unique_ptr<TFixtureItem>> items;   // a player's worn items (`equipment`)
+    std::vector<TObjectPtr<TFixtureItem>> items;   // a player's worn items (`equipment`)
 };
 
 // ---- The fixture world ------------------------------------------------------

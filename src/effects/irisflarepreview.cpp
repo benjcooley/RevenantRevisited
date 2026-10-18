@@ -11,7 +11,7 @@
 #include <memory>
 #include <vector>
 namespace irisflare_preview {
-struct State{std::unique_ptr<TObjectInstance>owner;irisflare_core::State core;MeshHandle meshes[2]{};double accumulator=0;int64_t rendered=-1;~State(){if(Renderer)for(auto m:meshes)if(m)Renderer->ReleaseMeshAssetRef(m);}};
+struct State{TObjectPtr<TObjectInstance>owner;irisflare_core::State core;MeshHandle meshes[2]{};double accumulator=0;int64_t rendered=-1;~State(){if(Renderer)for(auto m:meshes)if(m)Renderer->ReleaseMeshAssetRef(m);}};
 State*Spawn(const S3DPoint&origin){
  if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);int type=cl?cl->FindObjType(0x120054d1u):-1;if(type<0)return nullptr;SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));auto*im=s->owner?dynamic_cast<T3DImagery*>(s->owner->GetImagery()):nullptr;
  if(!im||s->owner->ObjId()!=0x120054d1u||!irisflare_profile::Matches(im->GetResFilename(),static_cast<SOld3DImageryBody*>(im->GetBody()),im->GetResSize(),im->NumStates(),im->GetAniLength(0),im->GetAniFlags(0)))return nullptr;s->owner->OnScreen();s->owner->Face(-32);

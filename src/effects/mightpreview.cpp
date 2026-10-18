@@ -8,7 +8,7 @@
 #include <memory>
 #include <cmath>
 namespace might_authored_preview {
-struct State{std::unique_ptr<TObjectInstance>owner;TSafeRef<>identity;double accumulated=0;};
+struct State{TObjectPtr<TObjectInstance>owner;TSafeRef<>identity;double accumulated=0;};
 State*Spawn(const S3DPoint&origin){
  if(!Renderer)return nullptr;auto c=std::make_unique<State>();auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);
  const int type=cl?cl->FindObjType(0x5be39ae0u):-1;if(type<0)return nullptr;

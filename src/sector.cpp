@@ -74,7 +74,7 @@ TSector::~TSector()
         if (inst->Flags() & OF_NONMAP) // Don't delete NONMAP objects
             continue;
         else
-            delete inst;
+            DeleteObject(inst);
     }
 }
 
@@ -383,6 +383,11 @@ int32_t TSector::AddObject(TObjectInstance* oi, int32_t item)
 {
     if (!oi)
         return -1;
+    if (!oi->Node()->IsRoot())
+    {
+        log_error("[sector] %s: '%s' is a contained node; only a root can be a sector member", filename, oi->GetName());
+        return -1;
+    }
 
     oi->ForceSector(this);
     oi->ForceLevel(level);

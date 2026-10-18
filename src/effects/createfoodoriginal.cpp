@@ -12,7 +12,7 @@
 #include <vector>
 namespace createfood_original {
 static uint64_t Hash(const void*p,size_t n){uint64_t h=1469598103934665603ull;for(auto*b=static_cast<const uint8_t*>(p);n--;){h^=*b++;h*=1099511628211ull;}return h;}
-struct State{std::unique_ptr<TObjectInstance>owner;retail_createfood::State core;retail_createfood::Lookup lookup;MeshHandle meshes[2]{};S3DMat materials[2]{};double accumulator=0;int64_t rendered=-1;~State(){if(Renderer)for(auto m:meshes)if(m)Renderer->ReleaseMeshAssetRef(m);}};
+struct State{TObjectPtr<TObjectInstance>owner;retail_createfood::State core;retail_createfood::Lookup lookup;MeshHandle meshes[2]{};S3DMat materials[2]{};double accumulator=0;int64_t rendered=-1;~State(){if(Renderer)for(auto m:meshes)if(m)Renderer->ReleaseMeshAssetRef(m);}};
 State*Spawn(const S3DPoint&origin){
  if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);int type=cl?cl->FindObjType(0x838cffbau):-1;if(type<0)return nullptr;SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));auto*im=s->owner?dynamic_cast<T3DImagery*>(s->owner->GetImagery()):nullptr;
  if(!im||s->owner->ObjId()!=0x838cffbau||im->NumStates()!=1||im->GetAniLength(0)!=100||im->GetAniFlags(0)!=0x2001||im->NumObjects()!=2||im->NumTextures()!=2||im->NumMaterials()!=2||im->NumTags()!=0)return nullptr;

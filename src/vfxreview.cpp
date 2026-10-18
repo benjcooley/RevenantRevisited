@@ -55,9 +55,9 @@ struct Entry {
     bool failed = false;
     bool missing_visual = false;
     std::unique_ptr<VfxReviewPreview> preview;
-    std::unique_ptr<TFireBallEffect> projectile;
-    std::unique_ptr<TPhotonEffect_Bespoke> photon;
-    std::unique_ptr<TIceBoltEffect_Bespoke> beam;
+    TObjectPtr<TFireBallEffect> projectile;
+    TObjectPtr<TPhotonEffect_Bespoke> photon;
+    TObjectPtr<TIceBoltEffect_Bespoke> beam;
     std::unique_ptr<lightstrip_original::State,void(*)(lightstrip_original::State*)> strip{nullptr,lightstrip_original::Destroy};
     int projectile_state = -1;
 };
@@ -303,7 +303,7 @@ bool UpdateFloor(const S3DPoint& camera) {
         if(present.count({x,y})) continue;
         SObjectDef def{}; def.objclass=TileClass.ClassId(); def.objtype=ground_type;
         def.level=kLevel; def.pos={x,y,kFloor};
-        std::unique_ptr<TObjectInstance> tile(TileClass.NewObject(&def));
+        TObjectPtr<TObjectInstance> tile(TileClass.NewObject(&def));
         TSector* sector=map->SectorAt(def.pos);
         if(!tile || !sector) return false;
         const int index=MapPane.MakeIndex(); tile->SetMapIndex(index); sector->AddObject(tile.get());

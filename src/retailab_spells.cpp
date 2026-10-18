@@ -1167,7 +1167,7 @@ std::string MissileArrow(const Case& c, std::string& error)
         const JsonValue& v = a["vel"];
         def.vel = S3DPoint((int32_t)v[0].Int(), (int32_t)v[1].Int(), (int32_t)v[2].Int());
         auto* arrow = new TCaseArrow(&def, new TFixtureImagery(TFixtureImagery::Register({}), "arrow", {}, false), a);
-        std::unique_ptr<TCaseArrow> owned(arrow);
+        TObjectPtr<TCaseArrow> owned(arrow);
         arrow->SetMapIndex(-1);
         SetIntPos(arrow, def.pos);
         if (a.Has("shooter") && !a["shooter"].IsNull())
@@ -1323,14 +1323,14 @@ std::string MissileBow(const Case& c, std::string& error)
             }
 
         // The arrow NewObject's id names, when the case gives one.
-        std::unique_ptr<TCaseArrow> arrow;
+        TObjectPtr<TCaseArrow> arrow;
         if (cs.Has("arrow"))
         {
             const JsonValue& a = cs["arrow"];
             SObjectDef def = ItemDef(OBJCLASS_AMMO, a.Has("type") ? a["type"].Str() : "Arrow");
             def.flags = OF_WEIGHTLESS;
-            arrow = std::make_unique<TCaseArrow>(&def, new TFixtureImagery(TFixtureImagery::Register({}), "arrow", {},
-                                                                           false), a);
+            arrow = TObjectPtr<TCaseArrow>(new TCaseArrow(&def, new TFixtureImagery(TFixtureImagery::Register({}), "arrow", {},
+                                                                           false), a));
             arrow->SetMapIndex(-1);
             MapPane.RegisterInstance(arrow.get(), (int32_t)a["id"].Int(900));
         }
@@ -1520,7 +1520,8 @@ std::string MissileFireball(const Case& c, std::string& error)
         else
             def.pos = S3DPoint(1000, 1000, 60);
         const std::vector<SFixtureState> states = ReadStates(JsonValue::Parse(R"(["launch", "fly", "explode"])"));
-        TFireBallEffect fb(&def, new TQuietImagery(TFixtureImagery::Register(states), "fireball", states, false));
+        TObjectPtr<TFireBallEffect> fbp(new TFireBallEffect(&def, new TQuietImagery(TFixtureImagery::Register(states), "fireball", states, false)));
+        TFireBallEffect& fb = *fbp;
         fb.SetMapIndex(-1);
         SetIntPos(fb, def.pos);
         if (cs["spell"].Bool(true))
@@ -1609,8 +1610,8 @@ class SLifeCase
     {
         const int32_t n = ++made;
         const std::string name = "fx" + std::to_string(n);
-        auto fx = std::make_unique<TCaseEffect<Effect>>(
-            def, new TQuietImagery(TFixtureImagery::Register({}), name, {}, false), name);
+        auto fx = TObjectPtr<TCaseEffect<Effect>>(new TCaseEffect<Effect>(
+            def, new TQuietImagery(TFixtureImagery::Register({}), name, {}, false), name));
         TCaseEffect<Effect>* raw = fx.get();
         raw->SetMapIndex(99 + n);
         MapPane.RegisterInstance(raw, 99 + n);
@@ -1636,13 +1637,13 @@ class SLifeCase
                 return fx.get();
         return world.Get(name);
     }
-    const std::vector<std::unique_ptr<TObjectInstance>>& Effects() const { return effects; }
+    const std::vector<TObjectPtr<TObjectInstance>>& Effects() const { return effects; }
 
   private:
     const JsonValue& cs;
     const TFixtureWorld& world;
     TSector sector{0, 0, 0};
-    std::vector<std::unique_ptr<TObjectInstance>> effects;
+    std::vector<TObjectPtr<TObjectInstance>> effects;
     std::map<const TObjectInstance*, std::string> names;
     std::vector<int32_t> fail, sectorless;
     int32_t made = 0;

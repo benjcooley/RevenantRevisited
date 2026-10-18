@@ -1556,7 +1556,7 @@ int32_t TMapPane::NewObject(SObjectDef* def, int32_t imagery)
             DeleteObject(GetInstance(shadowindex));
         // REVSYNC-DIVERGENCE: retail leaked the object it couldn't place;
         // nothing else refers to it, so it is freed here.
-        delete oi;
+        DeleteObject(oi);
     }
 
     return index;
@@ -1647,7 +1647,7 @@ TObjectInstance* TMapPane::RemoveObject(TObjectInstance* inst)
     // for objects in the map; the port is single player.
     if (inst->IsInInventory() || inst->GetOwner())
         inst->RemoveFromInventory();
-    else if (inst->GetSector())
+    else if (inst->IsSectorMember())
         RemoveFromSector(inst);
 
     return inst;
@@ -1657,7 +1657,7 @@ TObjectInstance* TMapPane::RemoveObject(TObjectInstance* inst)
 void TMapPane::DeleteObject(TObjectInstance* obj)
 {
     RemoveObject(obj);
-    delete obj;
+    ::DeleteObject(obj);
 }
 
 // Causes object to be put into new OBJSET_xxx lists when flags change in game

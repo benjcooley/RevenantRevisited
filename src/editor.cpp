@@ -736,13 +736,15 @@ void DrawScenePanel()
 // Render one annotated property row (refl.h). Reads the value through
 // the registry, shows a type-appropriate widget, and writes back when
 // edited (unless the property is read-only).
-void DrawPropertyRow(TNode* node, const refl::SType& type, const refl::SProp& p)
+// `obj` is the node itself or one of its components; `node` is the node
+// the undo system snapshots either way.
+void DrawPropertyRow(TNode* node, void* obj, const refl::SType& type, const refl::SProp& p)
 {
     if (!p.visible_in_editor) return;
 
     const bool read_only = p.read_only;
     SPropValue v;
-    refl::Get(type, node, p.id, v);
+    refl::Get(type, obj, p.id, v);
 
     ImGui::PushID(int(p.id));
     ImGui::TableNextRow();
@@ -759,7 +761,7 @@ void DrawPropertyRow(TNode* node, const refl::SType& type, const refl::SProp& p)
 
     auto commit = [&](const SPropValue& nv) {
         if (read_only) return;
-        refl::Set(type, node, p.id, nv);
+        refl::Set(type, obj, p.id, nv);
         EditorMarkDirty();
     };
 
@@ -862,25 +864,40 @@ void DrawPropertiesPanel()
             ImGui::EndGroup();
             ImGui::Separator();
 
-            // Base properties first (node transform), then the class's own.
-            std::vector<const refl::SType*> chain;
-            for (const refl::SType* t = type; t; t = t->base) chain.push_back(t);
-            int32_t total = 0;
-            for (const refl::SType* t : chain) total += t->prop_count;
-
-            if (total <= 0) {
-                ImGui::TextDisabled("(no annotated properties)");
-            } else if (ImGui::BeginTable("##props", 2,
-                          ImGuiTableFlags_BordersInnerV |
-                          ImGuiTableFlags_Resizable |
-                          ImGuiTableFlags_SizingStretchProp))
+            // The node first (transform), then each component, the object
+            // among them; a component's base chain draws base first.
+            TNode* node = primary->Node();
+            auto draw_target = [&](const char* title, void* obj, const refl::SType* t_obj) {
+                if (!t_obj) return;
+                std::vector<const refl::SType*> chain;
+                for (const refl::SType* t = t_obj; t; t = t->base) chain.push_back(t);
+                int32_t total = 0;
+                for (const refl::SType* t : chain) total += t->prop_count;
+                if (total <= 0) return;
+                ImGui::PushID(obj);
+                if (ImGui::CollapsingHeader(title, ImGuiTreeNodeFlags_DefaultOpen) &&
+                    ImGui::BeginTable("##props", 2,
+                                      ImGuiTableFlags_BordersInnerV |
+                                      ImGuiTableFlags_Resizable |
+                                      ImGuiTableFlags_SizingStretchProp))
+                {
+                    ImGui::TableSetupColumn("Name",  ImGuiTableColumnFlags_WidthStretch, 0.40f);
+                    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.60f);
+                    for (auto it = chain.rbegin(); it != chain.rend(); ++it)
+                        for (int32_t i = 0; i < (*it)->prop_count; ++i)
+                            DrawPropertyRow(node, obj, *t_obj, (*it)->props[i]);
+                    ImGui::EndTable();
+                }
+                ImGui::PopID();
+            };
+            draw_target("Node", node, refl::Of(*node));
+            for (int32_t slot = 0; slot < node->NumComponents(); ++slot)
             {
-                ImGui::TableSetupColumn("Name",  ImGuiTableColumnFlags_WidthStretch, 0.40f);
-                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.60f);
-                for (auto it = chain.rbegin(); it != chain.rend(); ++it)
-                    for (int32_t i = 0; i < (*it)->prop_count; ++i)
-                        DrawPropertyRow(primary, *type, (*it)->props[i]);
-                ImGui::EndTable();
+                TObjectComponent* c = node->GetComponent(slot);
+                if (!c) continue;
+                std::string title = c->ComponentName();
+                if (!c->Label().empty()) title += " " + c->Label();
+                draw_target(title.c_str(), c, refl::Of(*c));
             }
         }
     }
@@ -1096,7 +1113,7 @@ void DrawGameViewPanel()
                             for (int32_t mi : g_selection) {
                                 TObjectInstance* sel = safe_cast<TObjectInstance>(mi);
                                 if (!sel) continue;
-                                EditorUndo::MarkDirty(sel);
+                                EditorUndo::MarkDirty(sel->Node());
                                 if (sel != oi)
                                     s_drag_others.push_back({ mi, IntPos(sel) });
                             }
@@ -1393,7 +1410,7 @@ public:
             const int32_t idx = sec->GetObjIndex(oi);
             if (idx < 0) continue;
             sec->RemoveObject(idx);
-            delete oi;            // ~TObjectInstance unregisters from saferef registry
+            DeleteObject(oi);            // ~TObjectInstance unregisters from saferef registry
         }
         EditorMarkDirty();
     }
@@ -1455,7 +1472,7 @@ public:
             const int32_t idx = sec->GetObjIndex(oi);
             if (idx < 0) continue;
             sec->RemoveObject(idx);
-            delete oi;
+            DeleteObject(oi);
         }
         created_indices_.clear();
         EditorMarkDirty();

@@ -263,7 +263,7 @@ SBucketTextureBinding ResolveBucketTexture(const SParticleBucketEffectDef& bucke
 
     // Owner-imagery path (TorchFlame): use the owner's imagery, demand it
     // exists and has the requested slot populated.
-    TObjectInstance* owner_inst = owner ? owner->AsObjectInstance() : nullptr;
+    TObjectInstance* owner_inst = owner ? owner->Object() : nullptr;
     T3DImagery* img3d = owner_inst ? dynamic_cast<T3DImagery*>(owner_inst->GetImagery()) : nullptr;
     if (!img3d || img3d->NumTextures() <= 0)
         FatalError("[particle] effect requires 3D imagery with at least one texture (set imagery_path= for buckets on nodes without imagery)");
@@ -3897,12 +3897,12 @@ class TWaterReferenceComponent final : public TFlipbookBillboardComponent
     [[nodiscard]] const char* ComponentName() const override { return "water_reference"; }
     void Submit(TRenderer&, const TObjectInstance&) const override
     {
-        if (auto* effect = dynamic_cast<Effect*>(Owner())) effect->Submit(DebugMode());
+        if (auto* effect = dynamic_cast<Effect*>(OwnerInstance())) effect->Submit(DebugMode());
     }
   protected:
     void OnUpdate() override
     {
-        if (auto* effect = dynamic_cast<Effect*>(Owner())) effect->Advance(TTime::DeltaTime());
+        if (auto* effect = dynamic_cast<Effect*>(OwnerInstance())) effect->Advance(TTime::DeltaTime());
     }
 };
 
@@ -6526,7 +6526,7 @@ void TSparkEffect::Submit(TRenderer& renderer, const TObjectInstance& owner,
 class TSparkBurstComponent final : public TFlipbookBillboardComponent
 {
   public:
-    TSparkBurstComponent(std::unique_ptr<TSparkEffect> burst, bool kill_owner)
+    TSparkBurstComponent(TObjectPtr<TSparkEffect> burst, bool kill_owner)
         : burst_(std::move(burst)), kill_owner_(kill_owner) {}
 
     [[nodiscard]] const char* ComponentName() const override { return "spark-burst"; }
@@ -6545,7 +6545,7 @@ class TSparkBurstComponent final : public TFlipbookBillboardComponent
     }
 
   private:
-    std::unique_ptr<TSparkEffect> burst_;
+    TObjectPtr<TSparkEffect> burst_;
     bool kill_owner_ = false;
 };
 
@@ -6556,7 +6556,7 @@ bool TSparkEffect::AttachBurst(TObjectInstance& owner, const SParticleParams& pa
         log_error("[spark] refusing duplicate visual component on instance=%p", (void*)&owner);
         return false;
     }
-    auto burst = std::unique_ptr<TSparkEffect>(SpawnPreview(IntPos(owner), false, &params));
+    auto burst = TObjectPtr<TSparkEffect>(SpawnPreview(IntPos(owner), false, &params));
     if (!burst)
         return false;
     const TTextureHandle texture = burst->texture_;
@@ -8281,7 +8281,7 @@ class TMistReferenceComponent final : public TFlipbookBillboardComponent
   protected:
     void OnUpdate() override
     {
-        if (auto* mist = dynamic_cast<TMistEffect_Bespoke*>(Owner()))
+        if (auto* mist = dynamic_cast<TMistEffect_Bespoke*>(OwnerInstance()))
             mist->Advance(TTime::DeltaTime());
     }
 };
@@ -8812,7 +8812,7 @@ class TSymGlowReferenceComponent final : public TFlipbookBillboardComponent
   protected:
     void OnUpdate() override
     {
-        if (auto* effect = dynamic_cast<TSymGlowEffect_Bespoke*>(Owner()))
+        if (auto* effect = dynamic_cast<TSymGlowEffect_Bespoke*>(OwnerInstance()))
             effect->Advance(TTime::DeltaTime());
     }
 };
@@ -9090,7 +9090,7 @@ class TPixieReferenceComponent final : public TFlipbookBillboardComponent
   protected:
     void OnUpdate() override
     {
-        if (auto* effect=dynamic_cast<TPixieEffect_Bespoke*>(Owner()))
+        if (auto* effect=dynamic_cast<TPixieEffect_Bespoke*>(OwnerInstance()))
             effect->Advance(TTime::DeltaTime());
     }
 };
@@ -10727,7 +10727,7 @@ class TWaterfallReferenceComponent final : public TFlipbookBillboardComponent
   protected:
     void OnUpdate() override
     {
-        if (auto* effect = dynamic_cast<TWaterFallEffect_Bespoke*>(Owner()))
+        if (auto* effect = dynamic_cast<TWaterFallEffect_Bespoke*>(OwnerInstance()))
             effect->Advance(TTime::DeltaTime());
     }
 };
@@ -10963,7 +10963,7 @@ class TLiteralWaterReferenceComponent final : public TFlipbookBillboardComponent
   protected:
     void OnUpdate() override
     {
-        if (auto* effect = dynamic_cast<TWaterEffect_Bespoke*>(Owner()))
+        if (auto* effect = dynamic_cast<TWaterEffect_Bespoke*>(OwnerInstance()))
             effect->Advance(TTime::DeltaTime());
     }
 };
@@ -14266,7 +14266,7 @@ TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const
     const char* path = asset_override ? asset_override : kGlobeImageryPath;
     SLoadedImagery loaded = SparkleLoadImagery(path, "authored-static");
     if (!loaded.img3d) return nullptr;
-    auto eff = std::make_unique<TAuthoredStaticMeshEffect>(loaded.base);
+    auto eff = TObjectPtr<TAuthoredStaticMeshEffect>(new TAuthoredStaticMeshEffect(loaded.base));
     auto* img = loaded.img3d;
     eff->animate_textures_=animate_textures;
     // Mesh queries load the imagery lazily; inspect tags only after loading.
@@ -15960,13 +15960,13 @@ class TFireFlashReferenceComponent final : public TFlipbookBillboardComponent
     const char* ComponentName() const override { return "fireflash_reference"; }
     void Submit(TRenderer&, const TObjectInstance&) const override
     {
-        if (auto* effect = dynamic_cast<TFireFlashEffect_Bespoke*>(Owner()))
+        if (auto* effect = dynamic_cast<TFireFlashEffect_Bespoke*>(OwnerInstance()))
             effect->Submit(DebugMode());
     }
   protected:
     void OnUpdate() override
     {
-        if (auto* effect = dynamic_cast<TFireFlashEffect_Bespoke*>(Owner()))
+        if (auto* effect = dynamic_cast<TFireFlashEffect_Bespoke*>(OwnerInstance()))
             effect->Advance(TTime::DeltaTime());
     }
 };
@@ -16365,7 +16365,7 @@ class TFireConeReferenceComponent final : public TFlipbookBillboardComponent
   protected:
     void OnUpdate() override
     {
-        if (auto* effect = dynamic_cast<TFireConeEffect_Bespoke*>(Owner()))
+        if (auto* effect = dynamic_cast<TFireConeEffect_Bespoke*>(OwnerInstance()))
             effect->Advance(TTime::DeltaTime());
     }
 };
@@ -16914,7 +16914,7 @@ class TStreamerReferenceComponent final : public TFlipbookBillboardComponent
   protected:
     void OnUpdate() override
     {
-        if (auto* effect=dynamic_cast<TStreamerEffect_Bespoke*>(Owner()))
+        if (auto* effect=dynamic_cast<TStreamerEffect_Bespoke*>(OwnerInstance()))
             effect->Advance(TTime::DeltaTime());
     }
 };
@@ -17091,7 +17091,7 @@ class TFireSwarmReferenceComponent final : public TFlipbookBillboardComponent
   protected:
     void OnUpdate() override
     {
-        if (auto* effect=dynamic_cast<TFireSwarmEffect_Bespoke*>(Owner()))
+        if (auto* effect=dynamic_cast<TFireSwarmEffect_Bespoke*>(OwnerInstance()))
             effect->Advance(TTime::DeltaTime());
     }
 };
@@ -17246,7 +17246,7 @@ class TFaultFireReferenceComponent final : public TFlipbookBillboardComponent
   protected:
     void OnUpdate() override
     {
-        if (auto* effect = dynamic_cast<TFaultFireEffect_Bespoke*>(Owner()))
+        if (auto* effect = dynamic_cast<TFaultFireEffect_Bespoke*>(OwnerInstance()))
             effect->Advance(TTime::DeltaTime());
     }
 };
@@ -17551,7 +17551,7 @@ TSparksEffect_Bespoke::~TSparksEffect_Bespoke() = default;
 
 TSparksEffect_Bespoke* TSparksEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
 {
-    auto burst = std::unique_ptr<TSparkEffect>(TSparkEffect::SpawnForTest(origin));
+    auto burst = TObjectPtr<TSparkEffect>(TSparkEffect::SpawnForTest(origin));
     if (!burst)
         return nullptr;
     auto* eff = new TSparksEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
@@ -17856,7 +17856,7 @@ class TMistFogReferenceComponent final : public TFlipbookBillboardComponent
   protected:
     void OnUpdate() override
     {
-        if (auto* fog = dynamic_cast<TFogEffect_Bespoke__MistFog*>(Owner()))
+        if (auto* fog = dynamic_cast<TFogEffect_Bespoke__MistFog*>(OwnerInstance()))
             fog->Advance(TTime::DeltaTime());
     }
 };
@@ -18323,7 +18323,7 @@ class TSetVortexReferenceComponent final : public TFlipbookBillboardComponent
   protected:
     void OnUpdate() override
     {
-        if (auto* effect = dynamic_cast<TSetVortexEffect_Bespoke*>(Owner()))
+        if (auto* effect = dynamic_cast<TSetVortexEffect_Bespoke*>(OwnerInstance()))
             effect->Advance(TTime::DeltaTime());
     }
 };

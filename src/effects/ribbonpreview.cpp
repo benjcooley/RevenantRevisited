@@ -12,7 +12,7 @@
 #include <vector>
 namespace ribbon_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;ribbon_state::State simulation;MeshHandle spark[5]{},tube=0;double accumulator=0;int64_t rendered=-1;
+ TObjectPtr<TObjectInstance> owner;ribbon_state::State simulation;MeshHandle spark[5]{},tube=0;double accumulator=0;int64_t rendered=-1;
  ~State(){if(Renderer){for(auto m:spark)if(m)Renderer->ReleaseMeshAssetRef(m);if(tube)Renderer->ReleaseMeshAssetRef(tube);}}
 };
 State* Spawn(const S3DPoint& origin)

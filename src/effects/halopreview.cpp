@@ -21,7 +21,7 @@ namespace halo_preview {
 static int RasterPolicy(){const char* p=std::getenv("REV_HALO_RASTER_DIAGNOSTIC");return p && p[0]>='0' && p[0]<='3' && !p[1]?p[0]-'0':3;}
 struct State {
     State(int total,float step):core(total,step){}
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     halo_core::State core;
     MeshHandle mesh{};
     double accumulator=0;

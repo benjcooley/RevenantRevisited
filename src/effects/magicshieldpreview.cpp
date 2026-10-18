@@ -22,7 +22,7 @@ public:
 DEFINE_BUILDER("MagicShield",TMagicShieldOriginal)
 REGISTER_BUILDER(TMagicShieldOriginal)
 namespace magicshield_preview {
-struct State {std::unique_ptr<TCharacter>actor;std::unique_ptr<TSpell>spell;std::unique_ptr<TMagicShieldOriginal>owner;magicshield_core::State core;MeshHandle meshes[2]{};S3DMat materials[2]{};double accumulator=0;int tick=0;int64_t rendered=-1;~State(){if(owner)owner->SetSpell(nullptr);if(Renderer)for(auto m:meshes)if(m)Renderer->ReleaseMeshAssetRef(m);}};
+struct State {TObjectPtr<TCharacter>actor;std::unique_ptr<TSpell>spell;TObjectPtr<TMagicShieldOriginal>owner;magicshield_core::State core;MeshHandle meshes[2]{};S3DMat materials[2]{};double accumulator=0;int tick=0;int64_t rendered=-1;~State(){if(owner)owner->SetSpell(nullptr);if(Renderer)for(auto m:meshes)if(m)Renderer->ReleaseMeshAssetRef(m);}};
 State* Spawn(const S3DPoint&origin,bool fire_flash){
  if(!Renderer || !SpellList.Initialize())return nullptr;const char*name=fire_flash?"Fire Flash":"Aura";auto*data=SpellList.GetSpellDataByName(name);auto*variant=SpellList.GetVariantDataByName(name);if(!data||!variant||std::strcmp(variant->name,name)||variant->mindamage!=(fire_flash?50:0))return nullptr;
  auto s=std::make_unique<State>();auto*characters=TObjectClass::GetClass(OBJCLASS_CHARACTER);int type=characters?characters->FindObjType("Acolyte"):-1;if(type<0)return nullptr;SObjectDef d={};d.objclass=OBJCLASS_CHARACTER;d.objtype=short(type);d.pos=origin;s->actor.reset(dynamic_cast<TCharacter*>(characters->NewObject(&d)));if(!s->actor||s->actor->Health()!=102||s->actor->Radius()!=16)return nullptr;s->actor->Face(96);

@@ -13,10 +13,10 @@
 #include <vector>
 namespace paralize_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;
+ TObjectPtr<TObjectInstance> owner;
  paralize_core::State core;
  paralize_core::Vec origin;
- std::unique_ptr<TCharacter> invoker,target;
+ TObjectPtr<TCharacter> invoker,target;
  MeshHandle mesh=0,egg=0;
  float egg_uv=0;
  S3DPoint display_origin={};
@@ -59,7 +59,7 @@ static State* SpawnWithTarget(const S3DPoint& origin,bool isolated_seed)
  const uint64_t setup_draws=RandomDraws();
  auto s=std::unique_ptr<State>(Spawn(origin));if(!s)return nullptr;
  auto* cl=TObjectClass::GetClass(OBJCLASS_CHARACTER);const int type=cl?cl->FindObjType(config.actor_type):-1;if(type<0)return nullptr;
- auto make=[&](S3DPoint p){SObjectDef def={};def.objclass=OBJCLASS_CHARACTER;def.objtype=short(type);def.pos=p;return std::unique_ptr<TCharacter>(dynamic_cast<TCharacter*>(cl->NewObject(&def)));};
+ auto make=[&](S3DPoint p){SObjectDef def={};def.objclass=OBJCLASS_CHARACTER;def.objtype=short(type);def.pos=p;return TObjectPtr<TCharacter>(dynamic_cast<TCharacter*>(cl->NewObject(&def)));};
  s->invoker=make({config.source_x,config.source_y,config.source_z});s->target=make({config.source_x+config.target_dx,config.source_y+config.target_dy,config.source_z+config.target_dz});
  if(s->target)s->target_initial_flags=s->target->Flags();
  if(!s->invoker || !s->target || s->target->Radius()!=config.expected_radius || !s->invoker->BeginFighting(s->target.get()) || s->invoker->Fighting()!=s->target.get())return nullptr;

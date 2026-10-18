@@ -17,10 +17,10 @@ DEFINE_BUILDER("Burn",TBurnEffect)
 REGISTER_BUILDER(TBurnEffect)
 void TBurnEffect::Initialize(){character=nullptr;frame=0;SetNotify(3);}
 void TBurnEffect::Pulse(){TEffect::Pulse();++frame;if(random(0,34)<2 && frame<50){if(spell)spell->Damage(character);else if(character)character->Damage(random(1,2),DT_BURN);}if(character){S3DPoint p;p = IntPos(character);p.z=int(double(p.z)*double(1.4600000381469727f));SetPos(p);}}
-void TBurnEffect::Notify(int32_t notify,void*ptr){if(sector==ptr)return;TObjectInstance::Notify(notify,ptr);if(character && NOTIFY_DELETED(ptr,character)){SetFlags(Flags()|OF_KILL);character->ClearBurn();character=nullptr;}}
+void TBurnEffect::Notify(int32_t notify,void*ptr){if(GetSector()==ptr)return;TObjectInstance::Notify(notify,ptr);if(character && NOTIFY_DELETED(ptr,character)){SetFlags(Flags()|OF_KILL);character->ClearBurn();character=nullptr;}}
 namespace burn_public_preview {
 struct State {
- std::unique_ptr<TCharacter>actor;std::unique_ptr<TBurnEffect>owner;burn_core::State core;
+ TObjectPtr<TCharacter>actor;TObjectPtr<TBurnEffect>owner;burn_core::State core;
  MeshHandle mesh[2]{};double accumulator=0;int64_t rendered=-1;
  ~State(){if(actor)actor->ClearBurn();if(Renderer)for(auto m:mesh)if(m)Renderer->ReleaseMeshAssetRef(m);}
 };

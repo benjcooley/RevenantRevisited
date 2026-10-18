@@ -858,10 +858,10 @@ class TFixtureObject : public Base
         : Base(nullptr)
     {
         this->objclass = (short)objclass;
-        this->level = (uint16_t)level;
+        this->ForceLevel(level);
         SetIntPos(this, pos);
         this->name = _strdup(name.c_str());
-        this->mapindex = id;
+        this->Node()->SetMapIndex(id);
         MapPane.RegisterInstance(this, id);
     }
     ~TFixtureObject() override
@@ -953,7 +953,7 @@ std::string TriggerTest(const Case& c, std::string& error)
     st.priority = std::stoi(t[4]);
 
     // The world.
-    std::vector<std::unique_ptr<TObjectInstance>> objects;
+    std::vector<TObjectPtr<TObjectInstance>> objects;
     std::vector<std::string> ids;
     TObjectInstance* owner = nullptr;
     TFixtureWorld world;
@@ -961,8 +961,8 @@ std::string TriggerTest(const Case& c, std::string& error)
     for (const std::string& spec : Split(c.Field(3), ';'))
     {
         const std::vector<std::string> f = Split(spec, '|');
-        objects.push_back(std::make_unique<TFixtureObject<TObjectInstance>>(
-            FromHex(f.at(1)), std::stoi(f.at(2)), std::stoi(f.at(3)), ParsePoint(f.at(4)), 100 + index++));
+        objects.push_back(TObjectPtr<TFixtureObject<TObjectInstance>>(new TFixtureObject<TObjectInstance>(
+            FromHex(f.at(1)), std::stoi(f.at(2)), std::stoi(f.at(3)), ParsePoint(f.at(4)), 100 + index++)));
         ids.push_back(f[0]);
         world.objects.push_back(objects.back().get());
         if (f[0] == c.Field(4))
@@ -977,11 +977,11 @@ std::string TriggerTest(const Case& c, std::string& error)
     }
 
     // The guard: the object that set off the running trigger, by id.
-    std::unique_ptr<TObjectInstance> guardobject;
+    TObjectPtr<TObjectInstance> guardobject;
     TSafeRef<TObjectInstance> guard;
     if (r[3] == "exists")
     {
-        guardobject = std::make_unique<TFixtureObject<TObjectInstance>>("Guard", 12, 0, S3DPoint{0, 0, 0}, 50);
+        guardobject = TObjectPtr<TFixtureObject<TObjectInstance>>(new TFixtureObject<TObjectInstance>("Guard", 12, 0, S3DPoint{0, 0, 0}, 50));
         guard = guardobject.get();
     }
     else if (r[3] == "gone")

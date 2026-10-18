@@ -281,7 +281,7 @@ TObjectInstance* TLegacyDeserialize::ReadObject(TInputStream& is, int32_t versio
     const bool nonmap_drop = (streamflags & OSTREAM_MAP) && (inst->Flags() & OF_NONMAP);
     if (corrupted || nonmap_drop || inst->ObjClass() == OBJCLASS_MAPSCROLL)
     {
-        delete inst;
+        DeleteObject(inst);
         if (nonmap_drop)
             ++g_loadObjNullNonMapDrop;
         else
@@ -366,13 +366,17 @@ void TLegacyDeserialize::ReadObjectInstance(TObjectInstance& o, TInputStream& is
         {
             uint8_t levelbyte;
             is >> levelbyte;
-            o.level = levelbyte;
+            o.ForceLevel(levelbyte);
         }
         else
-            is >> o.level;
+        {
+            uint16_t level;
+            is >> level;
+            o.ForceLevel(level);
+        }
     }
     else
-        o.level = 0;
+        o.ForceLevel(0);
 
     uint8_t health = 0;
     if (version < 5)
@@ -386,7 +390,7 @@ void TLegacyDeserialize::ReadObjectInstance(TObjectInstance& o, TInputStream& is
         is >> rotatez >> dummy16 >> o.inventnum >> dummy16 >> o.shadow >> dummy8;
 
         o.inventnum = -1;   // ignore inventories in old versions
-        o.mapindex = -1;    // the sector sets old-style indexes after the load
+        o.Node()->SetMapIndex(-1);    // the sector sets old-style indexes after the load
     }
     else
     {
@@ -1023,7 +1027,7 @@ void TLegacySerialize::WriteObjectInstance(TObjectInstance& o, TOutputStream& os
     os << o.state;
 
     if (o.flags & OF_NONMAP)
-        os << o.level;
+        os << (uint16_t)o.GetLevel();
 
     os << o.inventnum << o.invindex << o.shadow <<
         (uint8_t)IntRotateX(o) << (uint8_t)IntRotateY(o) << (uint8_t)IntFacing(o) << o.FileMapIndex();

@@ -12,7 +12,7 @@
 
 namespace kinsecretdoor_still_preview {
 struct State {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     TSafeRef<> identity;
     MeshHandle meshes[2]={};
     S3DMat materials[2]={}; // Full authored descriptors retained; RGB565 SW ignores fabricated emissive/specular.

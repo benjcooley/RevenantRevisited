@@ -12,7 +12,7 @@
 #include <memory>
 namespace arrow_original {
 struct State {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     arrow_core::State core;arrow_core::AttachedCaller attached;bool queen=true;
     arrow_core::State& Core(){return queen?core:attached.core;}
     const arrow_core::State& Core()const{return queen?core:attached.core;}

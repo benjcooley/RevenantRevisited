@@ -12,7 +12,7 @@
 #include <vector>
 namespace windstrip_preview {
 struct State {
- std::unique_ptr<TObjectInstance> owner;retail_windstrip::State core;
+ TObjectPtr<TObjectInstance> owner;retail_windstrip::State core;
  std::vector<SMeshVertex> drop_vertices;std::vector<uint16_t> drop_faces;TTextureHandle strip_texture=kInvalidTexture;MeshHandle halo=0;
  double accumulator=0;int ticks=0;int64_t rendered=-1;
  ~State(){if(Renderer && halo)Renderer->ReleaseMeshAssetRef(halo);}

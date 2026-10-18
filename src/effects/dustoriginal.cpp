@@ -10,7 +10,7 @@
 
 namespace dust_original {
 struct State {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     S3DPoint source{};
     double accumulated=0;
 

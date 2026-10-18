@@ -14,7 +14,7 @@
 namespace generic_static_preview {
 struct State {
  struct Part{int object;MeshHandle mesh;int lighting;};
- std::unique_ptr<TObjectInstance> owner;TSafeRef<> identity;std::vector<Part>parts;double accumulated=0;
+ TObjectPtr<TObjectInstance> owner;TSafeRef<> identity;std::vector<Part>parts;double accumulated=0;
  ~State(){if(Renderer)for(const auto&p:parts)Renderer->ReleaseMeshAssetRef(p.mesh);}
 };
 State* Spawn(const S3DPoint& origin,uint32_t id){

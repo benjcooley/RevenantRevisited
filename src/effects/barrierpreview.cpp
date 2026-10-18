@@ -14,7 +14,7 @@
 
 namespace barrier_preview {
 struct State {
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     retail_barrier::State core;
     MeshHandle mesh=0;
     double accumulated=0;

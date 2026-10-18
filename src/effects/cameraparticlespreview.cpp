@@ -16,7 +16,7 @@ namespace camera_particles_preview {
 struct State
 {
     struct Part {int object=0;MeshHandle mesh=0;S3DMaterial material{};};
-    std::unique_ptr<TObjectInstance> owner;
+    TObjectPtr<TObjectInstance> owner;
     TSafeRef<> identity;
     std::vector<Part> parts;
     double accumulated=0;

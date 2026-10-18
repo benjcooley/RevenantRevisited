@@ -15,7 +15,7 @@
 #include <vector>
 namespace jtele_preview {
 struct State {
- struct Part{int object;MeshHandle mesh;std::vector<std::array<hmm_vec3,3>> triangles;};std::unique_ptr<TObjectInstance>owner;std::vector<Part>parts;authored_partsys::State particles;authored_partsys::TickInputs inputs;S3DVertex trail[4]{};double accumulator=0;int ticks=0;int64_t rendered=-1;
+ struct Part{int object;MeshHandle mesh;std::vector<std::array<hmm_vec3,3>> triangles;};TObjectPtr<TObjectInstance>owner;std::vector<Part>parts;authored_partsys::State particles;authored_partsys::TickInputs inputs;S3DVertex trail[4]{};double accumulator=0;int ticks=0;int64_t rendered=-1;
  ~State(){if(Renderer)for(auto p:parts)Renderer->ReleaseMeshAssetRef(p.mesh);}
 };
 static bool Pose(T3DImagery*im,int object,int frame,hmm_mat4&matrix,hmm_vec3&p,hmm_vec3&r,hmm_vec3&s){

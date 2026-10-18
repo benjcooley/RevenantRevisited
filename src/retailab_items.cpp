@@ -153,7 +153,7 @@ std::string FoodUse(const Case& c, std::string& error)
         int32_t slot = (int32_t)spec["slot"].Int();
         TObjectInstance* owner = user;
         TObjectInstance* item = nullptr;
-        std::unique_ptr<TObjectInstance> onMap;
+        TObjectPtr<TObjectInstance> onMap;
         if (where == "map")
         {
             onMap.reset(NewObjectNamed(spec["type"].Str()));

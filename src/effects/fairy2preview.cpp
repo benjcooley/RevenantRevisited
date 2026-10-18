@@ -29,7 +29,7 @@ static bool ExactResources(T3DImagery* img)
  const uint64_t hashes[]={0x8237bf10191e1de0ull,0xd6001c890aae012dull,0x2d6e7c4f0d54f390ull};for(int i=0;i<3;++i){S3DMat m={};img->GetMaterial(i,&m);if(m.texture!=i-1 || Hash(&m.matdesc.diffuse,17*sizeof(float))!=hashes[i])return false;}return true;
 }
 struct State {
- std::unique_ptr<TObjectInstance> owner;
+ TObjectPtr<TObjectInstance> owner;
  authored_partsys::State particles;
  authored_partsys::TickInputs inputs;
  S3DVertex dust[4]{};

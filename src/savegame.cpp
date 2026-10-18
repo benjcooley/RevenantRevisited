@@ -452,7 +452,7 @@ bool TSaveGame::ReadPlayers(TInputStream& is, const SSaveHeader& header)
         {
             log_warn("[savegame] player entry %d is class %d, not a player; dropped",
                      i, object->ObjClass());
-            delete object;
+            DeleteObject(object);
             continue;
         }
 

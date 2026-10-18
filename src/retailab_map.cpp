@@ -43,7 +43,7 @@ class TStandInObject : public TObjectInstance
     explicit TStandInObject(const JsonValue& spec) : TObjectInstance(nullptr)
     {
         objclass = (short)spec["class"].Int();
-        mapindex = (int32_t)spec["id"].Int();
+        Node()->SetMapIndex((int32_t)spec["id"].Int());
         SetIntPos(*this, ReadPoint(spec["pos"]));
         SetInventNum((short)spec["inventnum"].Int(-1));
     }
@@ -61,13 +61,13 @@ std::string MapCall(const Case& c, std::string& error)
         TFixtureWorld world(cs);
         // Every object by name with the level the map search finds it on,
         // and by map index for the dump.
-        std::vector<std::unique_ptr<TStandInObject>> items;
+        std::vector<TObjectPtr<TStandInObject>> items;
         std::map<std::string, SMapObject> objects;
         for (const JsonValue& spec : cs["chars"].Items())
             objects[spec["name"].Str()] = SMapObject{world.Get(spec["name"].Str()), (int32_t)spec["level"].Int(0)};
         for (const JsonValue& spec : cs["items"].Items())
         {
-            items.push_back(std::make_unique<TStandInObject>(spec));
+            items.push_back(TObjectPtr<TStandInObject>(new TStandInObject(spec)));
             objects[spec["name"].Str()] = SMapObject{items.back().get(), (int32_t)spec["level"].Int(0)};
         }
         std::map<int32_t, std::string> names;

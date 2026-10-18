@@ -4340,7 +4340,7 @@ void TCharacter::DropLoot()
     {
         if (!stricmp(item->GetTypeName(), "gold"))
         {
-            item->SetPos(S3DPoint{ body.x + kGoldOffset, body.y + kGoldOffset, body.z }, level);
+            item->SetPos(S3DPoint{ body.x + kGoldOffset, body.y + kGoldOffset, body.z }, GetLevel());
             item->RemoveFromInventory();
             item->AddToMap();
             log_info("[loot] %s at its feet", item->GetName());
@@ -4380,7 +4380,7 @@ void TCharacter::DropLoot()
                 break;
         }
 
-        item->SetPos(drop, level);
+        item->SetPos(drop, GetLevel());
         item->RemoveFromInventory();
         item->AddToMap();
         if (item->NeedsAnimator())

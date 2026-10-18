@@ -11,7 +11,7 @@
 #include <memory>
 #include <vector>
 namespace smoke_preview {
-struct State {std::unique_ptr<TObjectInstance>owner;retail_smoke::State core;MeshHandle mesh=0;double accumulator=0;int64_t rendered=-1;~State(){if(Renderer&&mesh)Renderer->ReleaseMeshAssetRef(mesh);}};
+struct State {TObjectPtr<TObjectInstance>owner;retail_smoke::State core;MeshHandle mesh=0;double accumulator=0;int64_t rendered=-1;~State(){if(Renderer&&mesh)Renderer->ReleaseMeshAssetRef(mesh);}};
 State* Spawn(const S3DPoint&origin){
  if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);int type=cl?cl->FindObjType(0x224a5cccu):-1;if(type<0)return nullptr;SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));auto*im=s->owner?dynamic_cast<T3DImagery*>(s->owner->GetImagery()):nullptr;
  if(!im||s->owner->ObjId()!=0x224a5cccu||im->NumStates()!=3||!smoke_legacy::Matches(im->GetResFilename(),static_cast<SOld3DImageryBody*>(im->GetBody()),im->GetResSize(),im->NumStates(),im->GetAniLength(0),im->GetAniLength(1),im->GetAniLength(2),im->GetAniFlags(0)))return nullptr;s->owner->OnScreen();

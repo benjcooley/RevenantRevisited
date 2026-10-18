@@ -12,7 +12,7 @@
 
 namespace scroll_water_preview {
 struct State{
- std::unique_ptr<TObjectInstance> owner;TSafeRef<> identity;MeshHandle mesh=0;double accumulator=0;uint64_t ticks=0;
+ TObjectPtr<TObjectInstance> owner;TSafeRef<> identity;MeshHandle mesh=0;double accumulator=0;uint64_t ticks=0;
  ~State(){if(Renderer&&mesh)Renderer->ReleaseMeshAssetRef(mesh);}
 };
 State* Spawn(const S3DPoint& origin,uint32_t type_id)

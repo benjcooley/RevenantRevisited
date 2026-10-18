@@ -5,7 +5,7 @@
 #include "../time.h"
 #include <memory>
 namespace burn_actor_probe {
-struct State {std::unique_ptr<TCharacter> actor;std::unique_ptr<TObjectInstance> effect;};
+struct State {TObjectPtr<TCharacter> actor;TObjectPtr<TObjectInstance> effect;};
 State* Spawn(const S3DPoint& origin) {
  auto s=std::make_unique<State>();auto*cl=TObjectClass::GetClass(OBJCLASS_CHARACTER);const int type=cl?cl->FindObjType("Acolyte"):-1;if(type<0)return nullptr;
  SObjectDef d={};d.objclass=OBJCLASS_CHARACTER;d.objtype=short(type);d.pos=origin;s->actor.reset(dynamic_cast<TCharacter*>(cl->NewObject(&d)));

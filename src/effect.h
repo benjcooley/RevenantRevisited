@@ -2273,7 +2273,7 @@ class TRippleEffect : public TEffect
     std::vector<S3DVertex> ring_vertices_;
     std::vector<S3DVertex> splash_vertices_;
     std::vector<SWaterDrop> splash_drops_;
-    std::vector<std::unique_ptr<TRippleEffect>> spawned_ripples_;
+    std::vector<TObjectPtr<TRippleEffect>> spawned_ripples_;
 };
 
 // *******************
@@ -2359,7 +2359,7 @@ class TDripEffect : public TEffect
     hmm_vec3 drop_vel_ = {};
     TTextureHandle drop_texture_ = kInvalidTexture;
     std::vector<S3DVertex> drop_vertices_;
-    std::vector<std::unique_ptr<TRippleEffect>> spawned_ripples_;
+    std::vector<TObjectPtr<TRippleEffect>> spawned_ripples_;
 };
 
 // *******************
@@ -6499,7 +6499,7 @@ class TSparksEffect_Bespoke : public TEffect
     [[nodiscard]] bool IsAlive() const { return burst_ && burst_->IsAlive(); }
 
   private:
-    std::unique_ptr<TSparkEffect> burst_;
+    TObjectPtr<TSparkEffect> burst_;
 };
 
 _CLASSDEF(TCombatFlashEffect_Bespoke)

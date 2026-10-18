@@ -9,7 +9,7 @@
 #include <cmath>
 #include <cstring>
 namespace fire_installed {
-struct State {std::unique_ptr<TObjectInstance>owner;MeshHandle mesh=0;S3DMat material{};double accumulated=0;int tick=0;int64_t rendered=-1;~State(){if(Renderer&&mesh)Renderer->ReleaseMeshAssetRef(mesh);}};
+struct State {TObjectPtr<TObjectInstance>owner;MeshHandle mesh=0;S3DMat material{};double accumulated=0;int tick=0;int64_t rendered=-1;~State(){if(Renderer&&mesh)Renderer->ReleaseMeshAssetRef(mesh);}};
 State* Spawn(const S3DPoint& origin,uint8_t facing){
  if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);int type=cl?cl->FindObjType(0x119f01e3u):-1;if(type<0)return nullptr;
  SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;d.rotatez=facing;s->owner.reset(cl->NewObject(&d));auto*o=s->owner.get();auto*im=o?dynamic_cast<T3DImagery*>(o->GetImagery()):nullptr;

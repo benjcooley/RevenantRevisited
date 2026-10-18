@@ -16,7 +16,7 @@
 namespace blast_preview {
 struct Part { int object=0, slot=0; MeshHandle mesh=0; std::vector<std::array<hmm_vec3,3>> triangles; };
 struct State {
- std::unique_ptr<TObjectInstance> owner;
+ TObjectPtr<TObjectInstance> owner;
  std::vector<Part> parts;
  double accumulator=0;
  int ticks=0;
