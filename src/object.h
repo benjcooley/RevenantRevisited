@@ -7,7 +7,7 @@
 #pragma once
 
 #include "revenant.h"
-#include "nodeinst.h"
+#include "node.h"
 #include "objectcomponent.h"
 #include "imagery.h"
 #include "invicon.h"
@@ -698,7 +698,7 @@ class SObjectDef
 #define DAMAGE_POISON       20      // taking poison damage
 
 _CLASSDEF(TObjectInstance)
-class TObjectInstance : public TNodeInst, protected SObjectDef
+class TObjectInstance : public TNode, protected SObjectDef
 {
   // Function Members
 
@@ -731,7 +731,7 @@ class TObjectInstance : public TNodeInst, protected SObjectDef
     const TObjectInstance* AsObjectInstance() const override { return this; }
 
   // Annotated properties (editor inspector, undo, clipboard). Ids continue
-  // after TNodeInst's 1..5 -- a derived class must never reuse a base id.
+  // after TNode's 1..5 -- a derived class must never reuse a base id.
     PROP_FN(10, std::string, class,    GetClassName, );
     PROP_FN(11, std::string, type,     GetTypeName,  );
     PROP_FN(12, int32_t,     state,    GetState,     SetState, "Animation state");
@@ -868,7 +868,7 @@ class TObjectInstance : public TNodeInst, protected SObjectDef
     virtual bool DrawShadow() { return false; }
         // Returns true of the object wants a simple alpha-channel circle shadow to follow it
 
-  // Transform / hierarchy / components are inherited from TNodeInst.
+  // Transform / hierarchy / components are inherited from TNode.
   // Phase A: position is the only field driven through transform_;
   // rotation continues to live on the legacy rotatex / rotatey /
   // rotatez fields and is mirrored by SyncTransformRot(). Components
@@ -1394,9 +1394,9 @@ class TObjectInstance : public TNodeInst, protected SObjectDef
     int32_t anim_last_loop_wrap_frame;
     int32_t anim_last_loop_wrap_game_frame;
 
-    // The animator and visual components live in TNodeInst's component
+    // The animator and visual components live in TNode's component
     // slots (GetAnimator() / GetComponent<TObjectAnimator>()). The
-    // spatial transform is TNodeInst::transform_; the legacy `pos` field
+    // spatial transform is TNode::transform_; the legacy `pos` field
     // is kept in lockstep with it by SyncTransformPos() so the 349-odd
     // direct `oi->pos.x` reads scattered across the codebase don't have
     // to change in lockstep.

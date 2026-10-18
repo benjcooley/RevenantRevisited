@@ -4,7 +4,7 @@
 // *           objectcomponent.h - per-instance optional behavior         *
 // *************************************************************************
 //
-// Components are owned by a TNodeInst (TObjectInstance or a plain prefab
+// Components are owned by a TNode (TObjectInstance or a plain prefab
 // node) and are the intended place for optional systems such as
 // specialized visuals, effects, or animation transition logic that should
 // override or extend the class-definition default without adding more
@@ -13,7 +13,7 @@
 //
 // Lifecycle
 //   - Constructed however the caller chooses, then handed to
-//     TNodeInst::AddComponent which records it in the node's component
+//     TNode::AddComponent which records it in the node's component
 //     slot and (unless the node defers it -- TObjectInstance waits for a
 //     map index) calls Activate() -> OnAttach().
 //   - Update() is the externally-callable hook; OnUpdate() is the virtual
@@ -40,7 +40,7 @@
 #include <cstdint>
 #include <string>
 
-_CLASSDEF(TNodeInst)
+_CLASSDEF(TNode)
 _CLASSDEF(TObjectInstance)
 _CLASSDEF(TObjectComponent)
 
@@ -52,7 +52,7 @@ class TObjectComponent
     TObjectComponent() = default;
     virtual ~TObjectComponent() = default;
 
-    [[nodiscard]] TNodeInst* Owner() const { return owner; }
+    [[nodiscard]] TNode* Owner() const { return owner; }
     // The owning map object, or nullptr when the owner is a plain node.
     [[nodiscard]] TObjectInstance* OwnerInstance() const;
     [[nodiscard]] int32_t ComponentSlot() const { return slot; }
@@ -74,8 +74,8 @@ class TObjectComponent
     virtual void OnUpdate() {}
 
   private:
-    friend class TNodeInst;
-    void Attach(TNodeInst* newowner, int32_t newslot, uint32_t newgeneration)
+    friend class TNode;
+    void Attach(TNode* newowner, int32_t newslot, uint32_t newgeneration)
         { owner = newowner; slot = newslot; generation = newgeneration; }
     void Activate()
         { if (!active) { active = true; OnAttach(); } }
@@ -83,7 +83,7 @@ class TObjectComponent
         { if (active) { OnDetach(); active = false; } UnregisterUpdate(nullptr); owner = nullptr; slot = -1; ++generation; }
 
     std::string label_;
-    TNodeInst* owner = nullptr;
+    TNode* owner = nullptr;
     int32_t slot = -1;
     uint32_t generation = 1;
     bool active = false;

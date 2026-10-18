@@ -64,7 +64,7 @@
 class TPackedWriter;
 class TPackedReader;
 struct SPackedField;
-class TNodeInst;
+class TNode;
 class TObjectComponent;
 
 // C++26 annotation (P3394) when the compiler has it; nothing otherwise.
@@ -287,7 +287,7 @@ struct SType
     // DEF_BLOCK / DEF_COMPONENT: the block keyword and a factory. At most
     // one factory is set; which one says what the class is.
     const char*           def_name          = "";
-    TNodeInst*        (*create_node)()      = nullptr;
+    TNode*        (*create_node)()      = nullptr;
     TObjectComponent* (*create_component)() = nullptr;
     void (*post_load)(void* obj)            = nullptr;   // the class's PostLoad(), if any
     // Struct / List access (generated): the nested object, list size,

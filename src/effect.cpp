@@ -228,7 +228,7 @@ struct SBucketTextureBinding
 };
 
 SBucketTextureBinding ResolveBucketTexture(const SParticleBucketEffectDef& bucket_def,
-                                           TNodeInst* owner)
+                                           TNode* owner)
 {
     SBucketTextureBinding binding = {};
     if (!bucket_def.imagery_path.empty())
@@ -277,7 +277,7 @@ SBucketTextureBinding ResolveBucketTexture(const SParticleBucketEffectDef& bucke
 
 SParticleBucketDesc BuildRuntimeBucketDesc(const SParticleEffectDef& effect_def,
                                            const SParticleBucketEffectDef& bucket_def,
-                                           TNodeInst* owner)
+                                           TNode* owner)
 {
     const SBucketTextureBinding tex = ResolveBucketTexture(bucket_def, owner);
     if (tex.handle == kInvalidTexture)
@@ -319,7 +319,7 @@ SParticleBucketDesc BuildRuntimeBucketDesc(const SParticleEffectDef& effect_def,
 void InitializeRuntimeParticle(TParticleBucket& bucket, int32_t particle_index,
                                const SParticleBucketEffectDef& bucket_def,
                                const SParticleEmitterEffectDef& emitter,
-                               TNodeInst* owner)
+                               TNode* owner)
 {
     if (float* draw_pos = bucket.VarPtr(particle_index, EParticleVar::DrawPos))
     {
@@ -374,7 +374,7 @@ void InitializeSelfSpawnParticle(TParticleBucket& bucket, int32_t particle_index
                                  const SParticleBucketEffectDef& bucket_def,
                                  const TParticleExpression& spawn_expr,
                                  bool has_spawn_expr,
-                                 TNodeInst* owner,
+                                 TNode* owner,
                                  int32_t forced_frame = -1)
 {
     const hmm_vec3 p = owner ? owner->Transform().Pos() : hmm_vec3{{0, 0, 0}};
@@ -458,7 +458,7 @@ void InitializeSelfSpawnParticle(TParticleBucket& bucket, int32_t particle_index
 }
 
 void UpdateRuntimeParticles(const SParticleEffectDef& effect_def, float owner_particle_id,
-                            TNodeInst* owner)
+                            TNode* owner)
 {
     if (!owner)
         return;
@@ -496,7 +496,7 @@ TParticleEffectManager::SRuntime* TParticleEffectManager::FindRuntime(
     return nullptr;
 }
 
-void TParticleEffectManager::PulseEffect(const SParticleEffectDef* effect_def, TNodeInst* owner)
+void TParticleEffectManager::PulseEffect(const SParticleEffectDef* effect_def, TNode* owner)
 {
     if (!effect_def || !owner)
         return;
@@ -517,7 +517,7 @@ void TParticleEffectManager::PulseEffect(const SParticleEffectDef* effect_def, T
     UpdateRuntimeParticles(*effect_def, runtime->owner_particle_id, owner);
 }
 
-void TParticleEffectManager::StopEffect(const SParticleEffectDef* effect_def, TNodeInst* owner)
+void TParticleEffectManager::StopEffect(const SParticleEffectDef* effect_def, TNode* owner)
 {
     const int32_t owner_node_id = owner ? owner->NodeId() : -1;
     for (size_t i = 0; i < runtimes.size(); ++i)
@@ -561,7 +561,7 @@ void TParticleEffectManager::Clear()
 // StartRuntime; for spawn_count, called each frame from IntegrateEffect
 // to restock after kill_expr fires. The number to emit is the difference
 // between the target count and how many live particles this runtime owns.
-void TParticleEffectManager::EmitSpawnTopup(SBucketRuntime& brt, TNodeInst* owner, float owner_particle_id)
+void TParticleEffectManager::EmitSpawnTopup(SBucketRuntime& brt, TNode* owner, float owner_particle_id)
 {
     if (!brt.bucket || !brt.bucket_def) return;
 
@@ -614,7 +614,7 @@ TParticleEffectManager::SBucketRuntime* TParticleEffectManager::FindBucketRuntim
 // flier AND spawns one SPLAT into the chain bucket at the impact site.
 // Generic — any "die into X" effect uses the same wire.
 int32_t TParticleEffectManager::EmitChainParticle(SBucketRuntime& chain_brt,
-                                                  TNodeInst* owner,
+                                                  TNode* owner,
                                                   float owner_particle_id,
                                                   const float dying_pos[3],
                                                   const float dying_vel[3])
@@ -728,7 +728,7 @@ int32_t TParticleEffectManager::EmitChainParticle(SBucketRuntime& chain_brt,
 //   tick_hz (e.g. blood_splat's SHRINK comment shows 0.4*1.6s*24Hz = 15.4
 //   ticks).
 void TParticleEffectManager::IntegrateBucket(SRuntime& runtime, SBucketRuntime& brt,
-                                             TNodeInst* owner, float dt_seconds,
+                                             TNode* owner, float dt_seconds,
                                              float owner_particle_id)
 {
     if (!brt.bucket || !brt.bucket_def) return;
@@ -870,7 +870,7 @@ void TParticleEffectManager::IntegrateBucket(SRuntime& runtime, SBucketRuntime& 
         EmitSpawnTopup(brt, owner, owner_particle_id);
 }
 
-void TParticleEffectManager::IntegrateEffect(const SParticleEffectDef* effect_def, TNodeInst* owner, float dt_seconds)
+void TParticleEffectManager::IntegrateEffect(const SParticleEffectDef* effect_def, TNode* owner, float dt_seconds)
 {
     if (!effect_def || !owner) return;
     SRuntime* runtime = FindRuntime(effect_def, owner->NodeId());
@@ -879,7 +879,7 @@ void TParticleEffectManager::IntegrateEffect(const SParticleEffectDef* effect_de
         IntegrateBucket(*runtime, brt, owner, dt_seconds, runtime->owner_particle_id);
 }
 
-void TParticleEffectManager::SubmitEffect(const SParticleEffectDef* effect_def, TNodeInst* owner,
+void TParticleEffectManager::SubmitEffect(const SParticleEffectDef* effect_def, TNode* owner,
                                           EFxDebugMode debug_mode)
 {
     if (!effect_def || !owner || !Renderer) return;
@@ -890,7 +890,7 @@ void TParticleEffectManager::SubmitEffect(const SParticleEffectDef* effect_def, 
             Renderer->SubmitFxParticleBucket(*bucket, debug_mode);
 }
 
-bool TParticleEffectManager::EffectHasParticles(const SParticleEffectDef* effect_def, TNodeInst* owner)
+bool TParticleEffectManager::EffectHasParticles(const SParticleEffectDef* effect_def, TNode* owner)
 {
     if (!effect_def || !owner) return false;
     SRuntime* runtime = FindRuntime(effect_def, owner->NodeId());
@@ -905,7 +905,7 @@ bool TParticleEffectManager::EffectHasParticles(const SParticleEffectDef* effect
     return false;
 }
 
-void TParticleEffectManager::StartRuntime(SRuntime& runtime, TNodeInst* owner)
+void TParticleEffectManager::StartRuntime(SRuntime& runtime, TNode* owner)
 {
     if (!runtime.effect_def || !owner)
         return;

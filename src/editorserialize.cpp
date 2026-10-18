@@ -147,7 +147,7 @@ int32_t InstantiateInstance(const SParsedBlock& blk, bool preserve_refid)
     def.level    = (uint16_t)mr->CameraLevel();
     // The spawn position decides the sector, so it is read before the
     // object exists; the node's `pos` property describes its text form.
-    if (const refl::SType* node_type = refl::Of<TNodeInst>()) {
+    if (const refl::SType* node_type = refl::Of<TNode>()) {
         const refl::SProp* pos_prop = refl::FindProp(*node_type, "pos");
         for (const auto& kv : blk.props) {
             if (kv.first == "pos" && pos_prop) {

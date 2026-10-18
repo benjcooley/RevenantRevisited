@@ -8,7 +8,7 @@
 
 #include "defio.h"
 #include "logging.h"
-#include "nodeinst.h"
+#include "node.h"
 #include "nodepack.h"
 #include "packed.h"
 #include "particlecomponent.h"
@@ -59,8 +59,8 @@ bool TPrefabLibrary::Bake(std::string_view name, std::string_view text, SPrefab&
     // Deserialize the text as data only (no PostLoad -- that belongs to
     // stamping, when the objects are real), serialize it into one buffer,
     // drop the scratch tree. A typo fails here, with a line.
-    TNodeInst scratch{std::string(name)};
-    std::vector<std::unique_ptr<TNodeInst>> owned;
+    TNode scratch{std::string(name)};
+    std::vector<std::unique_ptr<TNode>> owned;
     if (!defio::Read(text, scratch, owned, error, /*post_load=*/false))
         return false;
     TPackedWriter w;

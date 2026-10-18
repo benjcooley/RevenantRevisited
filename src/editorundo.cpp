@@ -6,7 +6,7 @@
 
 #include "editorundo.h"
 
-#include "nodeinst.h"
+#include "node.h"
 #include "refl.h"
 
 #include <unordered_map>
@@ -51,7 +51,7 @@ struct SSnapEntry
 
 using SObjectSnapshot = std::vector<SSnapEntry>;
 
-SObjectSnapshot SnapshotOf(const refl::SType& type, const TNodeInst* node)
+SObjectSnapshot SnapshotOf(const refl::SType& type, const TNode* node)
 {
     SObjectSnapshot snap;
     if (!node) return snap;
@@ -71,7 +71,7 @@ SObjectSnapshot SnapshotOf(const refl::SType& type, const TNodeInst* node)
     return snap;
 }
 
-void ApplyOnto(const refl::SType& type, TNodeInst* node, const SObjectSnapshot& snap)
+void ApplyOnto(const refl::SType& type, TNode* node, const SObjectSnapshot& snap)
 {
     if (!node) return;
     for (const SSnapEntry& e : snap)
@@ -100,7 +100,7 @@ class BatchSnapshotCommand : public IEditorCommand
 public:
     struct SEntry
     {
-        TSafeRef<TNodeInst> node;
+        TSafeRef<TNode> node;
         const refl::SType*  type = nullptr;
         SObjectSnapshot     before;
         SObjectSnapshot     after;
@@ -117,7 +117,7 @@ private:
 
 struct SDirtyEntry
 {
-    TSafeRef<TNodeInst> node;
+    TSafeRef<TNode> node;
     const refl::SType*  type = nullptr;
     SObjectSnapshot     before;
 };
@@ -133,9 +133,9 @@ std::vector<std::unique_ptr<IEditorCommand>>& RedoStack()
     return s;
 }
 
-std::unordered_map<TNodeInst*, SDirtyEntry>& DirtySet()
+std::unordered_map<TNode*, SDirtyEntry>& DirtySet()
 {
-    static std::unordered_map<TNodeInst*, SDirtyEntry> s;
+    static std::unordered_map<TNode*, SDirtyEntry> s;
     return s;
 }
 
@@ -155,17 +155,17 @@ std::string& PendingName()
 
 // ---- Dirty-tracking ------------------------------------------------------
 
-void EditorUndo::MarkDirty(TNodeInst* node)
+void EditorUndo::MarkDirty(TNode* node)
 {
     if (!node) return;
     auto& d = DirtySet();
     if (d.find(node) != d.end()) return;     // idempotent
     const refl::SType* type = refl::Of(*node);
     if (!type) return;
-    d.emplace(node, SDirtyEntry{ TSafeRef<TNodeInst>(node), type, SnapshotOf(*type, node) });
+    d.emplace(node, SDirtyEntry{ TSafeRef<TNode>(node), type, SnapshotOf(*type, node) });
 }
 
-void EditorUndo::DropDirty(TNodeInst* node)
+void EditorUndo::DropDirty(TNode* node)
 {
     DirtySet().erase(node);
 }
@@ -180,7 +180,7 @@ void EditorUndo::ResolveDirty()
     changed.reserve(d.size());
     for (auto& [key, entry] : d)
     {
-        TNodeInst* node = entry.node.Get();
+        TNode* node = entry.node.Get();
         if (!node) continue;                      // deleted mid-transaction
         SObjectSnapshot now   = SnapshotOf(*entry.type, node);
         SObjectSnapshot after = Diff(entry.before, now);

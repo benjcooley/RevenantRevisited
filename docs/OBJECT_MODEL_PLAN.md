@@ -1,4 +1,4 @@
-# Object model surgery: TNodeInst → TObjectInstance → TSector
+# Object model surgery: TNode → TObjectInstance → TSector
 
 Status: plan, 2026-10-18. Companion to docs/OBJECT_SYSTEM.md (current state) and
 docs/vfx/PREFAB_SYSTEM.md (reflection, packed codec, prefabs). This document is
@@ -9,8 +9,8 @@ lands.
 
 Retroactively write the object model we should have had in 1998:
 
-- The core hierarchy is `TNodeInst` → `TObjectInstance`. A sector is a set of
-  root `TObjectInstance`s; each may own a subtree of plain `TNodeInst`s
+- The core hierarchy is `TNode` → `TObjectInstance`. A sector is a set of
+  root `TObjectInstance`s; each may own a subtree of plain `TNode`s
   (prefab stamps, attachment points, effect nodes).
 - `SObjectDef` stops being a base class. It is demoted to a spawn record
   that a caller fills and the instance *applies*. The DEF is a serialization
@@ -25,7 +25,7 @@ Retroactively write the object model we should have had in 1998:
 ## 1. Where we are
 
 ```
-class TObjectInstance : public TNodeInst, protected SObjectDef
+class TObjectInstance : public TNode, protected SObjectDef
 ```
 
 `SObjectDef` (object.h:657) holds `objclass, objtype, flags, state, level,
@@ -39,7 +39,7 @@ re-syncs the transform from the copied ints.
 |---|---|---|---|
 | `SObjectDef::pos` | `S3DPoint` (int wu) | 82 direct writes (`oi->pos.x = ...`), 38 of them in mappane.cpp; SetPos/ForcePos via `WriteTransformPos` | 94 bare reads in object/character/player/effect; sector membership, ordering, collision |
 | `rotatex/y/z` (`facing`) | `uint8_t` 0..255 | SetRotateX/Y/Z, SetFacing, retail Load | 47 sites (facing for AI/anim, rotate for props); `SyncTransformRot` rebuilds the quat |
-| `TNodeInst::transform_` | `TTransform` (float pos, quat+euler rot, scale, cached local/world matrices, parent/children) | kept in lockstep by `WriteTransformPos` and `SyncTransformRot` | **the whole 3D path**: owner matrix `inst->Transform().Matrix()` (3dimage.cpp:4139), root bones parent to `inst->Transform()`, `animobj->transform` is a `TTransform` (3dimage.cpp:2579), `RefreshHierarchy` (3dimage.cpp:4999), prefab stamps, particle anchors |
+| `TNode::transform_` | `TTransform` (float pos, quat+euler rot, scale, cached local/world matrices, parent/children) | kept in lockstep by `WriteTransformPos` and `SyncTransformRot` | **the whole 3D path**: owner matrix `inst->Transform().Matrix()` (3dimage.cpp:4139), root bones parent to `inst->Transform()`, `animobj->transform` is a `TTransform` (3dimage.cpp:2579), `RefreshHierarchy` (3dimage.cpp:4999), prefab stamps, particle anchors |
 
 So yes: the 3D engine already consumes `TTransform` only. The integer `pos`
 and the rotate bytes are the duplicates, kept alive by sync shims and by the
@@ -60,8 +60,8 @@ but is derived from the transform.
 ## 2. Target
 
 ```
-class TNodeInst                      // name, soft-ref id, TTransform, children, components
-class TObjectInstance : public TNodeInst
+class TNode                      // name, soft-ref id, TTransform, children, components
+class TObjectInstance : public TNode
 {
     // identity / registry
     TObjectClass*   cl;   SObjectInfo* inf;   TObjectImagery* imagery;
@@ -81,14 +81,14 @@ class TObjectInstance : public TNodeInst
   verbatim, so 0..255 → radians → 0..255 is lossless). `SetFacing(n)` sets
   euler z only.
 - **Sector = roots.** `TSector::objects` stays a set of `TObjectInstance*`.
-  Child `TNodeInst`s hang off their object's transform and are owned by the
+  Child `TNode`s hang off their object's transform and are owned by the
   component that stamped them (prefab) or by the object; they are never
   sector members, never have a map index, never saved by the retail codec.
 - **SObjectDef = spawn record.** Plain struct, same fields, no inheritance.
   `TObjectInstance(const SObjectDef&, TObjectImagery*)` applies it through
   the setters. Later it is replaced by spawning from a packed message or from
   named reflection sets (§4, phase 5), and the struct is deleted.
-- **Reflection covers the persistent state.** `TNodeInst` owns ids 1-5 (name,
+- **Reflection covers the persistent state.** `TNode` owns ids 1-5 (name,
   pos, rot, scl, active). `TObjectInstance` owns 10+: class/type (names),
   state, frame, mapindex already exist; flags, level, group, vel, accum,
   lightdef, inventory and stats are added as the codecs below need them.

@@ -1,10 +1,10 @@
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
-// *            nodeinst.cpp - TNodeInst + component update list           *
+// *            node.cpp - TNode + component update list           *
 // *************************************************************************
 
-#include "nodeinst.h"
+#include "node.h"
 
 #include <cctype>
 #include <cmath>
@@ -92,65 +92,65 @@ TObjectInstance* TObjectComponent::OwnerInstance() const
     return owner ? owner->AsObjectInstance() : nullptr;
 }
 
-// ---- TNodeInst -------------------------------------------------------------
+// ---- TNode -------------------------------------------------------------
 
-TNodeInst::TNodeInst()
+TNode::TNode()
 {
     transform_.SetNode(this);
 }
 
-TNodeInst::TNodeInst(std::string name)
+TNode::TNode(std::string name)
     : node_name_(std::move(name))
 {
     transform_.SetNode(this);
 }
 
-TNodeInst::~TNodeInst()
+TNode::~TNode()
 {
     DetachComponents();
 }
 
-hmm_vec3 TNodeInst::LocalRotDeg() const
+hmm_vec3 TNode::LocalRotDeg() const
 {
     const hmm_vec3 r = transform_.LocalRotEuler();
     return hmm_vec3{{ r.X * kRadToDeg, r.Y * kRadToDeg, r.Z * kRadToDeg }};
 }
 
-void TNodeInst::SetLocalRotDeg(const hmm_vec3& deg)
+void TNode::SetLocalRotDeg(const hmm_vec3& deg)
 {
     transform_.SetLocalRotEuler(hmm_vec3{{ deg.X * kDegToRad, deg.Y * kDegToRad, deg.Z * kDegToRad }});
 }
 
-TNodeInst* TNodeInst::Parent() const
+TNode* TNode::Parent() const
 {
     const TTransform* p = transform_.Parent();
     return p ? p->Node() : nullptr;
 }
 
-void TNodeInst::SetParent(TNodeInst* parent)
+void TNode::SetParent(TNode* parent)
 {
     transform_.SetParent(parent ? &parent->transform_ : nullptr);
 }
 
-TNodeInst* TNodeInst::GetChildAt(int32_t index) const
+TNode* TNode::GetChildAt(int32_t index) const
 {
     const TTransform* c = transform_.GetChildAt(index);
     return c ? c->Node() : nullptr;
 }
 
-TNodeInst* TNodeInst::FindChild(std::string_view name) const
+TNode* TNode::FindChild(std::string_view name) const
 {
     const int32_t n = GetChildCount();
     for (int32_t i = 0; i < n; ++i)
-        if (TNodeInst* child = GetChildAt(i))
+        if (TNode* child = GetChildAt(i))
             if (IEquals(name, child->GetName()))
                 return child;
     return nullptr;
 }
 
-TNodeInst* TNodeInst::FindPath(std::string_view path) const
+TNode* TNode::FindPath(std::string_view path) const
 {
-    const TNodeInst* cur = this;
+    const TNode* cur = this;
     while (!path.empty())
     {
         const size_t slash = path.find('/');
@@ -162,10 +162,10 @@ TNodeInst* TNodeInst::FindPath(std::string_view path) const
         if (!cur)
             return nullptr;
     }
-    return const_cast<TNodeInst*>(cur);
+    return const_cast<TNode*>(cur);
 }
 
-int32_t TNodeInst::AddComponent(std::unique_ptr<TObjectComponent> component)
+int32_t TNode::AddComponent(std::unique_ptr<TObjectComponent> component)
 {
     if (!component || component->Owner())
         return -1;
@@ -195,14 +195,14 @@ int32_t TNodeInst::AddComponent(std::unique_ptr<TObjectComponent> component)
     return slot;
 }
 
-void TNodeInst::ActivateComponents()
+void TNode::ActivateComponents()
 {
     for (const auto& component_ptr : components_)
         if (TObjectComponent* c = component_ptr.get())
             c->Activate();
 }
 
-void TNodeInst::DetachComponents()
+void TNode::DetachComponents()
 {
     for (const auto& component_ptr : components_)
         if (TObjectComponent* component = component_ptr.get())
@@ -210,7 +210,7 @@ void TNodeInst::DetachComponents()
     components_.clear();
 }
 
-void TNodeInst::RemoveComponent(int32_t component_slot)
+void TNode::RemoveComponent(int32_t component_slot)
 {
     if ((uint32_t)component_slot >= (uint32_t)components_.size())
         return;
@@ -220,7 +220,7 @@ void TNodeInst::RemoveComponent(int32_t component_slot)
     components_[size_t(component_slot)].reset();
 }
 
-TObjectComponent* TNodeInst::GetComponent(int32_t component_slot) const
+TObjectComponent* TNode::GetComponent(int32_t component_slot) const
 {
     if ((uint32_t)component_slot >= (uint32_t)components_.size())
         return nullptr;

@@ -6,7 +6,7 @@
 
 #include "defio.h"
 #include "defdoc.h"
-#include "nodeinst.h"
+#include "node.h"
 
 #include <cstdio>
 #include <cstring>
@@ -96,8 +96,8 @@ bool NodeToValue(const refl::SProp& p, const defdoc::Node& n, SPropValue& v,
 class TReaderSink : public defdoc::Sink
 {
   public:
-    TReaderSink(const refl::SType& root_type, void* root_obj, TNodeInst* root_node,
-                std::vector<std::unique_ptr<TNodeInst>>* owned, bool post_load)
+    TReaderSink(const refl::SType& root_type, void* root_obj, TNode* root_node,
+                std::vector<std::unique_ptr<TNode>>* owned, bool post_load)
         : owned_(owned), post_load_(post_load)
     {
         frames_.push_back({ &root_type, root_obj, root_node });
@@ -204,7 +204,7 @@ class TReaderSink : public defdoc::Sink
                 frames_.push_back({});
                 return;
             }
-            TNodeInst* child = type->create_node();
+            TNode* child = type->create_node();
             child->SetNodeName(label);
             child->SetParent(cur.node);
             owned_->emplace_back(child);
@@ -268,8 +268,8 @@ class TReaderSink : public defdoc::Sink
     {
         const refl::SType* type = nullptr;           // nullptr = skipping
         void*              obj  = nullptr;
-        TNodeInst*         node = nullptr;           // when the object is a node
-        TNodeInst*         attach_to = nullptr;      // component: node to attach to on close
+        TNode*         node = nullptr;           // when the object is a node
+        TNode*         attach_to = nullptr;      // component: node to attach to on close
         std::unique_ptr<TObjectComponent> pending;   // component not yet attached
     };
 
@@ -281,7 +281,7 @@ class TReaderSink : public defdoc::Sink
     }
 
     std::vector<SFrame> frames_;
-    std::vector<std::unique_ptr<TNodeInst>>* owned_ = nullptr;
+    std::vector<std::unique_ptr<TNode>>* owned_ = nullptr;
     bool post_load_ = true;
     std::string error_;
 };
@@ -339,10 +339,10 @@ void WriteComponent(const TObjectComponent& c, std::string& out, int32_t indent)
     Indent(out, indent); out += "}\n";
 }
 
-void WriteNode(const TNodeInst& node, std::string& out, int32_t indent);
+void WriteNode(const TNode& node, std::string& out, int32_t indent);
 
 // A node's body: its properties, then its components, then its children.
-void WriteNodeBody(const TNodeInst& node, std::string& out, int32_t indent)
+void WriteNodeBody(const TNode& node, std::string& out, int32_t indent)
 {
     if (const refl::SType* t = refl::Of(node))
         WriteObject(*t, &node, out, indent);
@@ -350,12 +350,12 @@ void WriteNodeBody(const TNodeInst& node, std::string& out, int32_t indent)
         if (const TObjectComponent* c = node.GetComponent(i))
             WriteComponent(*c, out, indent);
     for (int32_t i = 0; i < node.GetChildCount(); ++i)
-        if (const TNodeInst* child = node.GetChildAt(i))
+        if (const TNode* child = node.GetChildAt(i))
             WriteNode(*child, out, indent);
 }
 
 // A child node as a block: `node <name> { body }`.
-void WriteNode(const TNodeInst& node, std::string& out, int32_t indent)
+void WriteNode(const TNode& node, std::string& out, int32_t indent)
 {
     const refl::SType* t = refl::Of(node);
     if (!t)
@@ -377,8 +377,8 @@ void WriteNode(const TNodeInst& node, std::string& out, int32_t indent)
 
 } // namespace
 
-bool Read(std::string_view text, TNodeInst& root,
-          std::vector<std::unique_ptr<TNodeInst>>& owned, std::string* error, bool post_load)
+bool Read(std::string_view text, TNode& root,
+          std::vector<std::unique_ptr<TNode>>& owned, std::string* error, bool post_load)
 {
     const refl::SType* t = refl::Of(root);
     if (!t)
@@ -566,7 +566,7 @@ void WriteObject(const refl::SType& type, const void* obj, std::string& out, int
     }
 }
 
-std::string Write(const TNodeInst& root)
+std::string Write(const TNode& root)
 {
     // A document is the root's body: top-level statements are the root's
     // own properties, components and children, which is exactly what Read

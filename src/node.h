@@ -1,7 +1,7 @@
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
-// *   nodeinst.h - TNodeInst: a named, soft-ref-able transform node with  *
+// *   node.h - TNode: a named, soft-ref-able transform node with  *
 // *                components. Base of TObjectInstance; the unit a VFX    *
 // *                prefab is built from.                                   *
 // *************************************************************************
@@ -11,10 +11,10 @@
 // components. TObjectInstance derives from it and adds everything that is
 // map-shaped (map index, sector, class / type info, imagery, inventory,
 // script, stats). Prefab nodes (docs/vfx/PREFAB_SYSTEM.md §1) are plain
-// TNodeInsts: never sector members, never saved, never pulsed by MapPane.
+// TNodes: never sector members, never saved, never pulsed by MapPane.
 //
-// Identity: TSafeObjectBase<TNodeInst> gives every node an id + generation
-// in the node registry, so TSafeRef<TNodeInst> and TSafeComponentRef<T>
+// Identity: TSafeObjectBase<TNode> gives every node an id + generation
+// in the node registry, so TSafeRef<TNode> and TSafeComponentRef<T>
 // resolve through it. TObjectInstance keeps its map index as the id for
 // TSafeRef<TObjectInstance> (it hides this contract) because existing code
 // compares TSafeRef::MapIndex() against map indices. The two id spaces
@@ -51,12 +51,12 @@
 
 class TObjectInstance;
 
-class TNodeInst : public TSafeObjectBase<TNodeInst>
+class TNode : public TSafeObjectBase<TNode>
 {
   public:
-    TNodeInst();
-    explicit TNodeInst(std::string name);
-    virtual ~TNodeInst();
+    TNode();
+    explicit TNode(std::string name);
+    virtual ~TNode();
 
     // ---- Identity --------------------------------------------------------
     DEF_BLOCK("node")
@@ -71,9 +71,9 @@ class TNodeInst : public TSafeObjectBase<TNodeInst>
     [[nodiscard]] virtual const char* GetName() const { return node_name_.c_str(); }
     void SetNodeName(std::string name) { node_name_ = std::move(name); }
 
-    // The node-registry id (what TSafeRef<TNodeInst> captures). Distinct
+    // The node-registry id (what TSafeRef<TNode> captures). Distinct
     // from a map object's map index; the particle runtime keys owners by it.
-    [[nodiscard]] int32_t NodeId() const { return TSafeObjectBase<TNodeInst>::SafeRefId(); }
+    [[nodiscard]] int32_t NodeId() const { return TSafeObjectBase<TNode>::SafeRefId(); }
 
     // Checked downcast without RTTI. nullptr for plain nodes.
     [[nodiscard]] virtual TObjectInstance*       AsObjectInstance()       { return nullptr; }
@@ -95,12 +95,12 @@ class TNodeInst : public TSafeObjectBase<TNodeInst>
     [[nodiscard]] const hmm_vec3& LocalScl() const           { return transform_.LocalScl(); }
     virtual void                  SetLocalScl(const hmm_vec3& s) { transform_.SetLocalScl(s); }
 
-    [[nodiscard]] TNodeInst* Parent() const;
-    void                     SetParent(TNodeInst* parent);
+    [[nodiscard]] TNode* Parent() const;
+    void                     SetParent(TNode* parent);
     [[nodiscard]] int32_t    GetChildCount() const { return transform_.GetChildCount(); }
-    [[nodiscard]] TNodeInst* GetChildAt(int32_t index) const;
-    [[nodiscard]] TNodeInst* FindChild(std::string_view name) const;     // direct child, case-insensitive
-    [[nodiscard]] TNodeInst* FindPath(std::string_view path) const;      // "a/b/c" relative to this
+    [[nodiscard]] TNode* GetChildAt(int32_t index) const;
+    [[nodiscard]] TNode* FindChild(std::string_view name) const;     // direct child, case-insensitive
+    [[nodiscard]] TNode* FindPath(std::string_view path) const;      // "a/b/c" relative to this
 
     // ---- Components ------------------------------------------------------
     int32_t AddComponent(std::unique_ptr<TObjectComponent> component);
@@ -170,7 +170,7 @@ class TSafeComponentRef
 
     [[nodiscard]] T* Get() const
     {
-        TNodeInst* node = owner.Get();
+        TNode* node = owner.Get();
         if (!node || component_slot < 0) return nullptr;
         TObjectComponent* component = node->GetComponent(component_slot);
         if (!component || component->Generation() != generation) return nullptr;
@@ -183,7 +183,7 @@ class TSafeComponentRef
     T& operator*() const { return *Get(); }
 
   private:
-    TSafeRef<TNodeInst> owner;
+    TSafeRef<TNode> owner;
     int32_t component_slot = -1;
     uint32_t generation = 0;
 };

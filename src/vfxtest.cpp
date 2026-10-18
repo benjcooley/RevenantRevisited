@@ -5152,7 +5152,7 @@ bool PrefabHasParticles(TEffect* root)
             return true;
     if (auto* prefab = root->GetComponent<TPrefabComponent>())
         for (int32_t n = 0; n < prefab->NodeCount(); ++n)
-            if (TNodeInst* node = prefab->NodeAt(n))
+            if (TNode* node = prefab->NodeAt(n))
                 for (int32_t i = 0; i < node->NumComponents(); ++i)
                     if (auto* particles = dynamic_cast<TParticleEffectComponent*>(node->GetComponent(i)))
                         if (particles->HasParticles())

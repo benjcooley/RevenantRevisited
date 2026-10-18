@@ -300,7 +300,12 @@ uint32_t TSector::StateHash()
 void TSector::Save()
 {
     TOutputStream os(STARTSIZE, GROWSIZE);
+    Serialize(os);
+    SectorStore::Write(filename, static_cast<const uint8_t*>(os.Buffer()), static_cast<size_t>(os.DataSize()));
+}
 
+void TSector::Serialize(TOutputStream& os)
+{
     os << SectrorMapFCC;
     os << (int32_t)MAP_VERSION;
     const int32_t hashpos = os.GetPos();
@@ -315,8 +320,6 @@ void TSector::Save()
     os.SetPos(hashpos);
     os << (uint32_t)statehash;
     os.SetPos(end);
-
-    SectorStore::Write(filename, static_cast<const uint8_t*>(os.Buffer()), static_cast<size_t>(os.DataSize()));
 }
 
 // ****************************

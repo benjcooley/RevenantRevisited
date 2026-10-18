@@ -32,7 +32,7 @@
 #include <string_view>
 #include <vector>
 
-class TNodeInst;
+class TNode;
 class TParticleEffectComponent;
 
 struct SPrefab
@@ -82,10 +82,10 @@ class TPrefabComponent : public TObjectComponent
     void Submit(EFxDebugMode debug_mode);
 
     [[nodiscard]] int32_t NodeCount() const { return int32_t(nodes_.size()); }
-    [[nodiscard]] TNodeInst* NodeAt(int32_t index) const
+    [[nodiscard]] TNode* NodeAt(int32_t index) const
         { return index >= 0 && index < NodeCount() ? nodes_[size_t(index)].get() : nullptr; }
 
   private:
     const SPrefab* prefab_ = nullptr;
-    std::vector<std::unique_ptr<TNodeInst>> nodes_;
+    std::vector<std::unique_ptr<TNode>> nodes_;
 };

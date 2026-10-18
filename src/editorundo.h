@@ -37,7 +37,7 @@
 #include <memory>
 #include <string>
 
-class TNodeInst;
+class TNode;
 
 class IEditorCommand
 {
@@ -55,10 +55,10 @@ namespace EditorUndo {
 // Mark `node` dirty. Idempotent: the first call this transaction snapshots
 // the node's annotated properties; subsequent calls do nothing. Edit code
 // calls this BEFORE writing.
-void MarkDirty(TNodeInst* node);
+void MarkDirty(TNode* node);
 
 // Drop `node` from the dirty set without producing an undo entry.
-void DropDirty(TNodeInst* node);
+void DropDirty(TNode* node);
 
 // Take the current snapshot of every dirty node, diff vs its baseline,
 // and push one undo entry per node that actually changed. Clears the

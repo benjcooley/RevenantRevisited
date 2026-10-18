@@ -15,6 +15,8 @@ extern char StartupTestMode[32];
 extern char StartupSectorId[32];
 // --level=L — which level --test=sector should render, centered on world 0,0.
 extern char StartupLevelId[32];
+// --dump-out=DIR — where --test=sector-dump writes the level's sectors.
+extern char StartupDumpOut[260];
 // --scene-camera=L,X,Y,Z --scene-module=name: reproducible real-map VFX
 // captures through --test=sector, in the retail editor's 640x340 viewport.
 extern int32_t StartupSceneCamera[4];

@@ -109,6 +109,8 @@ class TSector final
       // False if the file is missing, unreadable or malformed; objects read
       // before the failure stay in the sector
     void Save();
+    void Serialize(TOutputStream& os);
+        // The sector file as Save writes it (header, objects, state hash)
     [[nodiscard]] uint32_t StateHash();
         // The hash Save writes into the header (SAVE_GAME.md §11.6)
 

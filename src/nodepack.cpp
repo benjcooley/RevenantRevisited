@@ -5,7 +5,7 @@
 // *************************************************************************
 
 #include "nodepack.h"
-#include "nodeinst.h"
+#include "node.h"
 #include "packed.h"
 #include "refl.h"
 
@@ -13,7 +13,7 @@ namespace nodepack {
 
 namespace {
 
-void PackNode(const TNodeInst& node, TPackedWriter& w)
+void PackNode(const TNode& node, TPackedWriter& w)
 {
     if (const refl::SType* t = refl::Of(node))
         refl::Pack(*t, &node, w);
@@ -37,7 +37,7 @@ void PackNode(const TNodeInst& node, TPackedWriter& w)
 
     for (int32_t i = 0; i < node.GetChildCount(); ++i)
     {
-        const TNodeInst* child = node.GetChildAt(i);
+        const TNode* child = node.GetChildAt(i);
         if (!child) continue;
         TPackedWriter body;
         PackNode(*child, body);
@@ -48,8 +48,8 @@ void PackNode(const TNodeInst& node, TPackedWriter& w)
     }
 }
 
-bool UnpackNode(TPackedReader& r, TNodeInst& node,
-                std::vector<std::unique_ptr<TNodeInst>>& owned, std::string& error,
+bool UnpackNode(TPackedReader& r, TNode& node,
+                std::vector<std::unique_ptr<TNode>>& owned, std::string& error,
                 bool apply_props, bool post_load)
 {
     const refl::SType* t = refl::Of(node);
@@ -107,7 +107,7 @@ bool UnpackNode(TPackedReader& r, TNodeInst& node,
                 if (error.empty()) error = "node type not registered";
                 return false;
             }
-            TNodeInst* child = nt->create_node();
+            TNode* child = nt->create_node();
             child->SetNodeName(name);
             child->SetParent(&node);
             owned.emplace_back(child);
@@ -130,13 +130,13 @@ bool UnpackNode(TPackedReader& r, TNodeInst& node,
 
 } // namespace
 
-void Pack(const TNodeInst& root, TPackedWriter& w)
+void Pack(const TNode& root, TPackedWriter& w)
 {
     PackNode(root, w);
 }
 
-bool Unpack(TPackedReader& r, TNodeInst& root,
-            std::vector<std::unique_ptr<TNodeInst>>& owned, std::string* error,
+bool Unpack(TPackedReader& r, TNode& root,
+            std::vector<std::unique_ptr<TNode>>& owned, std::string* error,
             bool apply_root_props, bool post_load)
 {
     std::string err;

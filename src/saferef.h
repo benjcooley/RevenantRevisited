@@ -12,7 +12,7 @@
 // TSafeObjectBase -- CRTP helper that implements the TSafeRef<T>
 //                    contract automatically via a per-type registry.
 //
-// TSafeComponentRef lives in nodeinst.h because it depends on
+// TSafeComponentRef lives in node.h because it depends on
 // TObjectInstance / TObjectComponent's full definitions.
 // *************************************************************************
 

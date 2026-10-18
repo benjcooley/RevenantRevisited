@@ -736,7 +736,7 @@ void DrawScenePanel()
 // Render one annotated property row (refl.h). Reads the value through
 // the registry, shows a type-appropriate widget, and writes back when
 // edited (unless the property is read-only).
-void DrawPropertyRow(TNodeInst* node, const refl::SType& type, const refl::SProp& p)
+void DrawPropertyRow(TNode* node, const refl::SType& type, const refl::SProp& p)
 {
     if (!p.visible_in_editor) return;
 
