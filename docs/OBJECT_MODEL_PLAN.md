@@ -261,25 +261,126 @@ its instance parameter (21 overrides). Then the playhead (state / frame)
 moves into the animator component, and the imagery and 3D-scene files
 unpark into the engine (docs/SOURCE_LAYOUT.md).
 
-### Phase 4: native packed sector format
+### Phase 4: TObjectDef, the archetype as factory and codec (replaces the old phases 4 and 5)
 
-- `sectorpack.{h,cpp}`: `Pack(const TSector&)` / `Unpack` over nodepack.
-  Reflection props added for the rest of the persistent state (lightdef;
-  inventory and stats as nested lists).
-- Loader: `TSector::LoadSector` tries the overlay packed file, then the
-  retail file. Editor saves packed. Import tool: retail module → packed, for
-  the test that proves retail → packed → instances is state-identical to
-  retail → instances (compare via reflection `Get` over every prop).
-- DEF text of a sector via defio for review diffs (not a load path).
+Revenant initializes an object from its archetype: the CLASS.DEF type
+(`SObjectInfo` in `TObjectClass`: name, builder, imagery, type stats, the
+retail unique id) seeds the instance's fields. With components that seeding
+has more than one target, so the archetype grows into a class of its own
+and does the work in code.
 
-### Phase 5: spawn API, retire SObjectDef
+**Three ways an object comes to exist, and what each is**
 
-- `TObjectClass::NewObject(class, type, const SSpawn&)` or spawn from a
-  packed message (prefab-style). Builders take the instance-to-be or the
-  message; the 135 derived ctors change in one mechanical pass once the
-  record's consumers are gone.
-- The 23 `SObjectDef def; memset` fill sites migrate one at a time to the new
-  call. Delete `SObjectDef`.
+- *Archetype* (Revenant's object type): a definition, shared and immutable,
+  one per CLASS.DEF entry. Instances reference it. Not a prefab: it has a
+  C++ class, it is one record, and it is referenced, never copied.
+- *Prefab*: an authored node tree stamped into copies with remapped identity
+  (docs/vfx/PREFAB_SYSTEM.md). The composition tool for effects. A game
+  object is never a prefab; an archetype may hold a prefab ref as one of
+  its ingredients (an effect type's body), and the stamped subtree is owned
+  by the prefab component and never serialized.
+- *Construction from a record*: the archetype makes the instance whole,
+  then the record's values are applied. Serialize what is authored per
+  instance, regenerate what is derived (visual, light from the type,
+  animator, prefab stamps).
+
+**`SObjectDef`, the record.** The struct Revenant already has, kept, with
+serialization support: PROP annotations, and derived per class with the
+fields that class's retail stream already lists (`SCharacterDef :
+SObjectDef` holds what `TLegacyDeserialize::ReadCharacter` reads;
+`SPlayerDef`, `SContainerDef`, `SExitDef`, ... likewise; a light's values
+sit on the base as they do in the retail stream). The base keeps what it
+holds today (class, type, flags, state, level, position, velocity,
+accumulator, rotation, group) and gains the node uid and name. Plain
+structs, so the packed codec and the DEF text move them generically, and
+an override-only encoding is generic too (pack against the archetype's
+own def, omit what is equal). No live object is ever walked by
+reflection.
+
+Ids are wire tags, append-only, never renumbered, and the tree carves
+ranges so a base can grow: `SObjectDef` 1-99, each first-level class its
+own hundred, second-level classes (`SPlayerDef`) a hundred of their own.
+`gen.py` learns base structs (a derived table is the base's props then its
+own) and fails the build on a duplicate id in a chain or an id outside
+the struct's range. This is what retail lacked: positional fields made
+every added field a file version (0, 1, 4, 15 in legacystream.h); a tag
+reads at its default when absent and skips when unknown, in both
+directions.
+
+**The instance keeps its def.** Retail did this by deriving the instance
+from `SObjectDef`; we hold it as a member: the record the object was
+loaded or spawned from. `Reset()` re-applies it (revert-to-loaded in the
+editor, a generator's respawn in place, a script putting a chest back).
+One record per instance, the cost retail paid.
+
+**`TObjectDef`, the archetype** (`game/object/objectdef.{h,cpp}`), one per
+type, owned by `TObjectClass`, grown out of `SObjectInfo` and
+`TObjectBuilder`. Uid is retail's type unique id (`ObjId()`), already
+stable. It carries the type-level data instances read through
+`Archetype()` (imagery asset ref, type stats, flags defaults, prices, sound
+sets), the type's own default def, and three virtuals a class overrides
+when it needs to (`TCharacterDef : TObjectDef`, ...; most use the base),
+hand-written, engineer-controlled, like a prefab but in code:
+
+- `Create(const SObjectDef&) -> TObjectInstance*`: the factory. A root
+  node with the object instance of the right C++ class and every component
+  the type carries (the visual from the imagery, the light when the type
+  has one, the animator, stats, inventory container); stores the def on
+  the instance; `Apply`. Replaces `TObjectBuilder::Build`, the `SObjectDef`
+  constructors and `NewObject`; a spawn site fills a def exactly as it
+  does today, so the 137 fill sites need no change.
+- `Apply(const SObjectDef&, TObjectInstance&)`: the record's values onto
+  the node and its components (the light's colour onto the light
+  component, the character's onto the character).
+- `Capture(const TObjectInstance&, SObjectDef&)`: the reverse, from the
+  node and components into a record, for save. What a class serializes is
+  what its def struct declares, a decision the class makes that a reader
+  can follow.
+
+Children (inventory items) are records of their own, each constructed from
+its own type; the def handles one node.
+
+**Two codecs, one struct family.** `TLegacyDeserialize` reads retail bytes
+into a def and `TLegacySerialize` writes a def to retail bytes; neither
+touches an instance any more. Retail load is bytes -> def -> `Create`;
+retail save is `Capture` -> def -> bytes; the packed path is the same defs
+through reflection, followed by child records. The retail versions stay
+confined to the legacy codec, which reads the GOG data forever and writes
+the one latest layout for save interop.
+
+**The sector barely changes.** A retail sector file already is a list of
+these records, inventory nested, so the packed sector is a re-encoding
+with tags, plus what retail had nowhere to put (node uid, name, a new
+component's per-instance values). Retail sector files stay a first-class
+load path; a packed sector exists only where an instance carries what
+retail can't store, which is an edited sector in the Revisited overlay.
+The import tool and the identity test (retail -> def -> packed -> def ==
+retail -> def) come with the packed writer. The sector byte gate proves
+the legacy round trip throughout.
+
+**Identity for links.** A serialized link is a 64-bit uid, never a
+runtime soft-ref id. Archetype ref: the type uid. Asset ref: the asset
+cache's `AssetUid`, normally on the archetype. Node ref (an exit's
+destination, a trigger's target, a door's key): a `uid` on `TNode`,
+deterministic for retail-loaded objects (level, sector, slot), random for
+spawned ones, authored in a prefab document and remapped per stamp.
+`EPropType::Ref` carries the uid and a target kind for the inspector's
+picker; a runtime ref type caches the soft ref behind the uid.
+
+**Editor.** A root object's inspector shows its def (the reflected record,
+edits go through `Apply`, refreshes through `Capture`), then the node's
+components, then its child nodes, each as today.
+
+**Migration.** One class at a time: its derived def struct is declared
+from the fields its legacy read lists, its builder macro becomes a def
+class, its `SObjectDef` constructor becomes `Create` + `Apply`, its legacy
+read / write retarget onto the struct, its `inf->` reads move to
+`Archetype()`. Template construction must not touch the world: the
+constructors' "not in a map" path is audited first (script init, sound,
+map registration all happen on AddObject already). First inch: the base
+(`SObjectDef` annotated with ranges, `TObjectDef` with the three virtuals
+for the base class, the retained def and `Reset()`, `NewObject` ->
+`Create`), gated by the sector dump.
 
 ## 5. Out of scope here
 
@@ -289,6 +390,14 @@ unpark into the engine (docs/SOURCE_LAYOUT.md).
 
 ## 6. Decision log
 
+- 2026-10-18 Archetype vs prefab vs record: the archetype is Revenant's
+  object type, grown into `TObjectDef`: `Create` / `Apply` / `Capture`
+  between the live node and the `SObjectDef` record Revenant already has,
+  derived per class with the retail stream's field sets, hand-written.
+  Reflection serializes the record, never the live object; the legacy
+  codec moves the same records; the instance keeps its def (`Reset()`).
+  Id ranges per class level, generator-checked. Prefabs stay the effects'
+  composition tool. A serialized link is a 64-bit uid.
 - 2026-10-18 Sector stays a flat set of root objects; node subtrees are
   never sector members. Keeps retail sector semantics (ordering, objsets,
   flags-changed bookkeeping) untouched.
