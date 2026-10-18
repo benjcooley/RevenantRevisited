@@ -2,12 +2,21 @@
 # the packages to downloads.revenantrevisited.com. Other changes skip those jobs.
 # The three "Build & test" checks gate merges into main. docs/CI.md has the
 # details.
+#
+# A branch in this repository is built on push. A pull request from a fork
+# cannot be, so it is built on the pull_request event instead: the same
+# checks, with no version claimed (the token is read-only) and nothing
+# published. A pull request from a branch in this repository skips the
+# pull_request run, since its push run already reported; that run's jobs
+# carry different names so a skipped duplicate never stands in for a
+# required check.
 
 name: CI
 
 on:
   push:
     branches: ["**"]
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -34,7 +43,9 @@ defaults:
 jobs:
   # Determines whether C++ inputs changed, then claims the build's version.
   version:
-    name: Version
+    name: "${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) && 'Version: covered by the push run' || 'Version' }}"
+    # Pull request runs are for forks only; see the header.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -55,18 +66,20 @@ jobs:
         run: python3 tools/ci/changes.py
 
       - id: claim
-        if: steps.changes.outputs.cpp != 'false'
+        # A fork's pull request builds with BuildInfo.cmake's local version.
+        if: steps.changes.outputs.cpp != 'false' && github.event_name != 'pull_request'
         run: python3 tools/ci/ci.py version
 
   # Static names let each required check report skipped without a runner.
   # Shared steps keep platform builds identical; matrix-level skips would not
   # report the three individually required check names.
   build_osx:
-    name: Build & test (osx)
+    name: "${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) && 'Build & test (osx): covered by the push run' || 'Build & test (osx)' }}"
     needs: version
-    # Only a confirmed unrelated change skips builds. Detection or tag failures
-    # retain the normal build, with BuildInfo.cmake's local version fallback.
-    if: &cpp_build ${{ !cancelled() && needs.version.outputs.cpp != 'false' }}
+    # Only a confirmed unrelated change, or a pull_request run that the push
+    # run already covers, skips builds. Detection or tag failures retain the
+    # normal build, with BuildInfo.cmake's local version fallback.
+    if: &cpp_build ${{ !cancelled() && needs.version.result != 'skipped' && needs.version.outputs.cpp != 'false' }}
     runs-on: macos-latest
     timeout-minutes: 60
     env:
@@ -165,7 +178,7 @@ jobs:
           if-no-files-found: ignore
 
   build_windows:
-    name: Build & test (windows)
+    name: "${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) && 'Build & test (windows): covered by the push run' || 'Build & test (windows)' }}"
     needs: version
     if: *cpp_build
     runs-on: windows-latest
@@ -176,7 +189,7 @@ jobs:
     steps: *cpp_steps
 
   build_linux:
-    name: Build & test (linux)
+    name: "${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) && 'Build & test (linux): covered by the push run' || 'Build & test (linux)' }}"
     needs: version
     if: *cpp_build
     runs-on: ubuntu-24.04
@@ -187,9 +200,11 @@ jobs:
     steps: *cpp_steps
 
   publish:
-    name: Publish & report
+    name: "${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) && 'Publish & report: covered by the push run' || 'Publish & report' }}"
     needs: [version, build_osx, build_windows, build_linux]
-    if: *cpp_build
+    # Never for a pull request: a fork's code is not published and its
+    # token has no secrets.
+    if: ${{ !cancelled() && needs.version.result != 'skipped' && needs.version.outputs.cpp != 'false' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
