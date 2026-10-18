@@ -14,12 +14,12 @@ namespace {
 
 int32_t g_detached = 0;   // counted externally: RemoveComponent destroys the component
 
-struct STestComponent : public TObjectComponent
+struct STestComponent : public TComponent
 {
     int32_t attached = 0, updates = 0;
     const char* ComponentName() const override { return "test"; }
-    void OnAttach() override { ++attached; RegisterUpdate(&TObjectComponent::Update); }
-    void OnDetach() override { ++g_detached; UnregisterUpdate(&TObjectComponent::Update); }
+    void OnAttach() override { ++attached; RegisterUpdate(&TComponent::Update); }
+    void OnDetach() override { ++g_detached; UnregisterUpdate(&TComponent::Update); }
   protected:
     void OnUpdate() override { ++updates; }
 };
@@ -75,7 +75,7 @@ TEST(Node, ComponentsAndSafeRefs)
     EXPECT_EQ(node->GetComponent<STestComponent>(), raw);
     EXPECT_EQ(node->GetComponent(slot), raw);
 
-    TObjectComponent::RunUpdateList();
+    TComponent::RunUpdateList();
     EXPECT_EQ(raw->updates, 1);
 
     TSafeComponentRef<STestComponent> ref(raw);
@@ -87,7 +87,7 @@ TEST(Node, ComponentsAndSafeRefs)
     node->RemoveComponent(slot);                           // detaches and destroys it
     EXPECT_EQ(g_detached, 1);
     EXPECT_FALSE(ref);                                     // slot freed
-    TObjectComponent::RunUpdateList();                     // entry pruned, no crash
+    TComponent::RunUpdateList();                     // entry pruned, no crash
 
     // Slot reuse gets a fresh generation: a stale ref must not resolve.
     auto comp2 = std::make_unique<STestComponent>();

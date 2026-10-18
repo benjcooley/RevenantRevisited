@@ -893,7 +893,7 @@ void DrawPropertiesPanel()
             draw_target("Node", node, refl::Of(*node));
             for (int32_t slot = 0; slot < node->NumComponents(); ++slot)
             {
-                TObjectComponent* c = node->GetComponent(slot);
+                TComponent* c = node->GetComponent(slot);
                 if (!c) continue;
                 std::string title = c->ComponentName();
                 if (!c->Label().empty()) title += " " + c->Label();

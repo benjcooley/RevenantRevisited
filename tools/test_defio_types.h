@@ -2,7 +2,7 @@
 // the way a prefab component will be declared.
 #pragma once
 
-#include "../src/objectcomponent.h"
+#include "../src/component.h"
 #include "../src/refl.h"
 
 #include <HandmadeMath.h>
@@ -16,7 +16,7 @@ enum class ETestMode : uint8_t
     Steady,
 };
 
-class STestGlow : public TObjectComponent
+class STestGlow : public TComponent
 {
   public:
     DEF_COMPONENT("glow")

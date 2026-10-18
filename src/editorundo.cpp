@@ -7,7 +7,7 @@
 #include "editorundo.h"
 
 #include "node.h"
-#include "objectcomponent.h"
+#include "component.h"
 #include "refl.h"
 
 #include <unordered_map>
@@ -59,7 +59,7 @@ void* TargetOf(TNode* node, int32_t slot, const refl::SType*& type)
 {
     if (!node) { type = nullptr; return nullptr; }
     if (slot < 0) { type = refl::Of(*node); return node; }
-    TObjectComponent* c = node->GetComponent(slot);
+    TComponent* c = node->GetComponent(slot);
     type = c ? refl::Of(*c) : nullptr;
     return c;
 }

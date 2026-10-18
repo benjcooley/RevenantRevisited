@@ -145,7 +145,7 @@ class TEffect : public TObjectInstance
 // Diagnostic ladder is per-instance EFxDebugMode; the shader branches per
 // PHASE1_SPINE.md §6 so the same pipeline serves Normal / SolidColor /
 // FullTexture / CurrentFrame.
-class TFlipbookBillboardComponent : public TObjectComponent
+class TFlipbookBillboardComponent : public TComponent
 {
   public:
     [[nodiscard]] const char* ComponentName() const override { return "flipbook_billboard"; }
@@ -172,8 +172,8 @@ class TFlipbookBillboardComponent : public TObjectComponent
     bool SetUvRectExpression(const char* expr, std::string* error = nullptr)
         { return uv_rect_expr.Compile(expr, error); }
 
-    void OnAttach() override { RegisterUpdate(&TObjectComponent::Update); }
-    void OnDetach() override { UnregisterUpdate(&TObjectComponent::Update); }
+    void OnAttach() override { RegisterUpdate(&TComponent::Update); }
+    void OnDetach() override { UnregisterUpdate(&TComponent::Update); }
 
     [[nodiscard]] bool ReplacesDefaultVisual() const { return replaces_default_visual; }
     [[nodiscard]] TTextureHandle Texture() const { return texture_handle; }

@@ -403,7 +403,7 @@ void TObjectInstance::ClearObject()
 {
     SetNotify(N_SCRIPTADDED);
 
-    // animator pointer field removed; animators are TObjectComponents
+    // animator pointer field removed; animators are TComponents
     // stored in the components array and freed via the components dtor.
     lightdef.lightindex = -1;
     lightdef.lightid    = -1;
@@ -483,7 +483,7 @@ void TObjectInstance::ClearObject()
 void TObjectInstance::AdoptNode()
 {
     TNode* node = new TNode();
-    node->AddComponent(std::unique_ptr<TObjectComponent>(this));
+    node->AddComponent(std::unique_ptr<TComponent>(this));
 }
 
 TObjectInstance::TObjectInstance(TObjectImagery* img)
@@ -731,7 +731,7 @@ bool TObjectInstance::CreateAnimator()
         return false;
 
     a->Initialize();
-    AddComponent(std::unique_ptr<TObjectComponent>(a));
+    AddComponent(std::unique_ptr<TComponent>(a));
     return true;
 }
 
@@ -1574,7 +1574,7 @@ void TObjectInstance::Pulse()
         }
     }
 */
-  // Pulse the animator (now stored as a TObjectComponent on the
+  // Pulse the animator (now stored as a TComponent on the
   // instance). Driven explicitly here so per-instance ordering matches
   // the legacy field-pointer path.
     if (TObjectAnimator* a = GetComponent<TObjectAnimator>())

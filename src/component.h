@@ -1,7 +1,7 @@
 // *************************************************************************
 // *                         Cinematix Revenant                            *
 // *                  Revenant Revisited (port) - 2026                     *
-// *           objectcomponent.h - per-instance optional behavior         *
+// *           component.h - per-instance optional behavior         *
 // *************************************************************************
 //
 // Components are owned by a TNode and are the intended place for optional
@@ -43,23 +43,29 @@
 
 _CLASSDEF(TNode)
 _CLASSDEF(TObjectInstance)
-_CLASSDEF(TObjectComponent)
+_CLASSDEF(TComponent)
 
-using TObjectComponentUpdateMethod = void (TObjectComponent::*)();
+using TComponentUpdateMethod = void (TComponent::*)();
 
-class TObjectComponent
+class TComponent
 {
   public:
-    TObjectComponent() = default;
-    virtual ~TObjectComponent() = default;
+    TComponent() = default;
+    virtual ~TComponent() = default;
 
     [[nodiscard]] TNode* Owner() const { return node_; }
     // The map object on the owning node, or nullptr when the node is a
     // plain prefab node.
     [[nodiscard]] TObjectInstance* OwnerInstance() const;
-    // The object component answers itself; every other component nullptr.
-    // Lets TNode cache its object at attach time without a search.
-    [[nodiscard]] virtual TObjectInstance* AsObjectInstance() { return nullptr; }
+    // True for the object component (the game's TObjectInstance), so TNode
+    // can cache it at attach time without a search.
+    [[nodiscard]] virtual bool IsObject() const { return false; }
+    // What the node asks of its object component, so the node itself never
+    // names the game's classes: the name the node goes by when it has none
+    // of its own, and the move that keeps the map consistent (true when the
+    // object moved the node itself; false leaves the plain transform write).
+    [[nodiscard]] virtual const char* OwnerName() const { return nullptr; }
+    virtual bool MoveOwner(const hmm_vec3& local_pos) { (void)local_pos; return false; }
     [[nodiscard]] int32_t ComponentSlot() const { return slot; }
     [[nodiscard]] uint32_t Generation() const { return generation; }
     [[nodiscard]] virtual const char* ComponentName() const { return "component"; }
@@ -74,8 +80,8 @@ class TObjectComponent
     static void RunUpdateList();
 
   protected:
-    void RegisterUpdate(TObjectComponentUpdateMethod method);
-    void UnregisterUpdate(TObjectComponentUpdateMethod method);
+    void RegisterUpdate(TComponentUpdateMethod method);
+    void UnregisterUpdate(TComponentUpdateMethod method);
     virtual void OnUpdate() {}
 
   private:

@@ -13,7 +13,7 @@
 //
 //     TPrefabComponent* c = new TPrefabComponent;
 //     c->Configure(PrefabLibrary().Find("Mist"));
-//     root->AddComponent(std::unique_ptr<TObjectComponent>(c));   // stamps on attach
+//     root->AddComponent(std::unique_ptr<TComponent>(c));   // stamps on attach
 //
 // The root's own transform is left alone on stamp (it is the spawn
 // position); the prefab's child nodes hang under it and are owned by the
@@ -23,7 +23,7 @@
 
 #pragma once
 
-#include "objectcomponent.h"
+#include "component.h"
 #include "renderer.h"      // EFxDebugMode
 
 #include <cstdint>
@@ -63,7 +63,7 @@ class TPrefabLibrary
 
 TPrefabLibrary& PrefabLibrary();
 
-class TPrefabComponent : public TObjectComponent
+class TPrefabComponent : public TComponent
 {
   public:
     [[nodiscard]] const char* ComponentName() const override { return "prefab"; }

@@ -8,7 +8,7 @@
 // A class that wants tweakable / serializable / animatable state does one
 // thing: it annotates members.
 //
-//     class TMeshComponent : public TObjectComponent
+//     class TMeshComponent : public TComponent
 //     {
 //         PROP(1, "Draw this mesh")              bool   visible   = true;
 //         PROP(2, "Material colour")             SRgba  diffuse   = {1, 1, 1, 1};
@@ -65,7 +65,7 @@ class TPackedWriter;
 class TPackedReader;
 struct SPackedField;
 class TNode;
-class TObjectComponent;
+class TComponent;
 
 // C++26 annotation (P3394) when the compiler has it; nothing otherwise.
 #if defined(__cpp_annotations)
@@ -86,7 +86,7 @@ class TObjectComponent;
 #define PROP_FN_HIDDEN(...)
 // Block keyword this class is written as in a DEF / packed document, and
 // a factory so a document can create it by name. DEF_COMPONENT is for
-// TObjectComponent subclasses (created and attached to a node),
+// TComponent subclasses (created and attached to a node),
 // DEF_BLOCK for nodes. Annotations on the class.
 #define DEF_BLOCK(name)
 #define DEF_COMPONENT(name)
@@ -288,7 +288,7 @@ struct SType
     // one factory is set; which one says what the class is.
     const char*           def_name          = "";
     TNode*        (*create_node)()      = nullptr;
-    TObjectComponent* (*create_component)() = nullptr;
+    TComponent* (*create_component)() = nullptr;
     void (*post_load)(void* obj)            = nullptr;   // the class's PostLoad(), if any
     // Struct / List access (generated): the nested object, list size,
     // element, append (returns the new element), clear.

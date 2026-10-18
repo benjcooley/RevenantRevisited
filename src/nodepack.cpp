@@ -20,7 +20,7 @@ void PackNode(const TNode& node, TPackedWriter& w)
 
     for (int32_t i = 0; i < node.NumComponents(); ++i)
     {
-        const TObjectComponent* c = node.GetComponent(i);
+        const TComponent* c = node.GetComponent(i);
         if (!c) continue;
         const refl::SType* ct = refl::Of(*c);
         if (!ct || !*ct->def_name)
@@ -77,7 +77,7 @@ bool UnpackNode(TPackedReader& r, TNode& node,
                 ok = false;
                 continue;
             }
-            std::unique_ptr<TObjectComponent> c(ct->create_component());
+            std::unique_ptr<TComponent> c(ct->create_component());
             c->SetLabel(label);
             if (have_body)
             {

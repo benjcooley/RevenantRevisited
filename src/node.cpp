@@ -6,9 +6,6 @@
 
 #include "node.h"
 
-#include "intworld.h"
-#include "object.h"
-
 #include <cctype>
 #include <cmath>
 
@@ -22,8 +19,8 @@ namespace {
 
 struct SComponentUpdateEntry
 {
-    TSafeComponentRef<TObjectComponent> component;
-    TObjectComponentUpdateMethod method = nullptr;
+    TSafeComponentRef<TComponent> component;
+    TComponentUpdateMethod method = nullptr;
 };
 
 std::vector<SComponentUpdateEntry> g_component_updates;
@@ -46,7 +43,7 @@ bool IEquals(std::string_view a, const char* b)
 
 } // namespace
 
-void TObjectComponent::RegisterUpdate(TObjectComponentUpdateMethod method)
+void TComponent::RegisterUpdate(TComponentUpdateMethod method)
 {
     if (!method || !Owner())
         return;
@@ -61,11 +58,11 @@ void TObjectComponent::RegisterUpdate(TObjectComponentUpdateMethod method)
     g_component_updates.push_back(entry);
 }
 
-void TObjectComponent::UnregisterUpdate(TObjectComponentUpdateMethod method)
+void TComponent::UnregisterUpdate(TComponentUpdateMethod method)
 {
     for (size_t i = 0; i < g_component_updates.size(); )
     {
-        TObjectComponent* component = g_component_updates[i].component.Get();
+        TComponent* component = g_component_updates[i].component.Get();
         if (!component || (component == this && (!method || g_component_updates[i].method == method)))
             g_component_updates.erase(g_component_updates.begin() + ptrdiff_t(i));
         else
@@ -73,12 +70,12 @@ void TObjectComponent::UnregisterUpdate(TObjectComponentUpdateMethod method)
     }
 }
 
-void TObjectComponent::RunUpdateList()
+void TComponent::RunUpdateList()
 {
     for (size_t i = 0; i < g_component_updates.size(); )
     {
         SComponentUpdateEntry entry = g_component_updates[i];
-        TObjectComponent* component = entry.component.Get();
+        TComponent* component = entry.component.Get();
         if (!component || !entry.method)
         {
             g_component_updates.erase(g_component_updates.begin() + ptrdiff_t(i));
@@ -90,7 +87,7 @@ void TObjectComponent::RunUpdateList()
     }
 }
 
-TObjectInstance* TObjectComponent::OwnerInstance() const
+TObjectInstance* TComponent::OwnerInstance() const
 {
     return node_ ? node_->Object() : nullptr;
 }
@@ -115,7 +112,7 @@ TNode::~TNode()
     // not detached, so it keeps its node to the end.
     if (object_)
     {
-        std::unique_ptr<TObjectComponent> object = std::move(components_[size_t(object_slot_)]);
+        std::unique_ptr<TComponent> object = std::move(components_[size_t(object_slot_)]);
         object_ = nullptr;
         object_slot_ = -1;
         object.reset();
@@ -126,16 +123,16 @@ TNode::~TNode()
 const char* TNode::GetName() const
 {
     if (node_name_.empty() && object_)
-        return object_->GetName();
+        if (const char* name = object_->OwnerName())
+            return name;
     return node_name_.c_str();
 }
 
 void TNode::SetLocalPos(const hmm_vec3& p)
 {
-    if (object_)
-        object_->SetPos(ToIntPos(p));
-    else
-        transform_.SetLocalPos(p);
+    if (object_ && object_->MoveOwner(p))
+        return;
+    transform_.SetLocalPos(p);
 }
 
 hmm_vec3 TNode::LocalRotDeg() const
@@ -204,7 +201,7 @@ TNode* TNode::FindPath(std::string_view path) const
     return const_cast<TNode*>(cur);
 }
 
-int32_t TNode::AddComponent(std::unique_ptr<TObjectComponent> component)
+int32_t TNode::AddComponent(std::unique_ptr<TComponent> component)
 {
     if (!component || component->Owner())
         return -1;
@@ -225,13 +222,13 @@ int32_t TNode::AddComponent(std::unique_ptr<TObjectComponent> component)
         components_.push_back(nullptr);
     }
 
-    TObjectComponent* raw = component.get();
+    TComponent* raw = component.get();
     components_[size_t(slot)] = std::move(component);
 
     raw->Attach(this, slot, ++s_next_component_generation);
-    if (TObjectInstance* object = raw->AsObjectInstance())
+    if (raw->IsObject())
     {
-        object_ = object;
+        object_ = raw;
         object_slot_ = slot;
     }
     if (ActivatesComponentsOnAdd())
@@ -242,7 +239,7 @@ int32_t TNode::AddComponent(std::unique_ptr<TObjectComponent> component)
 void TNode::ActivateComponents()
 {
     for (const auto& component_ptr : components_)
-        if (TObjectComponent* c = component_ptr.get())
+        if (TComponent* c = component_ptr.get())
             c->Activate();
 }
 
@@ -251,11 +248,11 @@ void TNode::DetachComponents()
     // Taken out of the node first, so a nested call (the object's
     // destructor detaching its siblings) finds nothing. The object
     // component stays: it goes with the node.
-    std::vector<std::unique_ptr<TObjectComponent>> detached;
+    std::vector<std::unique_ptr<TComponent>> detached;
     detached.reserve(components_.size());
     for (auto& component_ptr : components_)
     {
-        TObjectComponent* component = component_ptr.get();
+        TComponent* component = component_ptr.get();
         if (!component || component == object_)
             continue;
         component->Detach();
@@ -263,7 +260,7 @@ void TNode::DetachComponents()
     }
     if (object_)
     {
-        std::unique_ptr<TObjectComponent> object = std::move(components_[size_t(object_slot_)]);
+        std::unique_ptr<TComponent> object = std::move(components_[size_t(object_slot_)]);
         components_.clear();
         components_.push_back(std::move(object));
         object_slot_ = 0;
@@ -279,13 +276,13 @@ void TNode::RemoveComponent(int32_t component_slot)
         return;
     if (component_slot == object_slot_)
         return;
-    TObjectComponent* component = components_[size_t(component_slot)].get();
+    TComponent* component = components_[size_t(component_slot)].get();
     if (component)
         component->Detach();
     components_[size_t(component_slot)].reset();
 }
 
-TObjectComponent* TNode::GetComponent(int32_t component_slot) const
+TComponent* TNode::GetComponent(int32_t component_slot) const
 {
     if ((uint32_t)component_slot >= (uint32_t)components_.size())
         return nullptr;

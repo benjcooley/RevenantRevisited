@@ -3292,7 +3292,7 @@ void SceneCommandLogObject(const char* phase, const std::string& selector, TObje
         phase, selector.c_str(), object->ObjId(), object->GetMapIndex(), pos.x, pos.y, pos.z,
         object->Amount(), object->NumComponents(), object->GetState(), object->GetFrame());
     for (int32_t slot = 0; slot < object->NumComponents(); ++slot)
-        if (TObjectComponent* component = object->GetComponent(slot))
+        if (TComponent* component = object->GetComponent(slot))
             log_info("[scene-command] component context=%s slot=%d name=%s generation=%u",
                 selector.c_str(), slot, component->ComponentName(), component->Generation());
     if (auto* animator = dynamic_cast<T3DAnimator*>(object->GetAnimator())) {
@@ -3352,7 +3352,7 @@ void SceneCommandsTick() {
             if (ok) {
                 const S3DPoint pos = IntPos(object); int actual = 0;
                 for (int32_t slot = 0; slot < object->NumComponents(); ++slot)
-                    if (TObjectComponent* c = object->GetComponent(slot))
+                    if (TComponent* c = object->GetComponent(slot))
                         if (strcmp(c->ComponentName(), component) == 0) ++actual;
                 ok = object->ObjId() == id && pos.x == x && pos.y == y && pos.z == z && actual == count;
             }

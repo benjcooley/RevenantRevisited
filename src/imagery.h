@@ -9,7 +9,7 @@
 #include "revenant.h"
 
 #include "assetcache.h"
-#include "objectcomponent.h"
+#include "component.h"
 #include "imageres.h"
 
 #include <stdio.h>
@@ -417,7 +417,7 @@ class TObjectImagery : public TAsset
 // * TObjectAnimator *
 // *******************
 
-// TObjectAnimator is a TObjectComponent: stored on the owning instance's
+// TObjectAnimator is a TComponent: stored on the owning instance's
 // component array (one slot, looked up via GetComponent<TObjectAnimator>()).
 // The owning instance drives Pulse() / Animate() explicitly from its own
 // per-frame hooks so ordering relative to other instance work is preserved
@@ -430,7 +430,7 @@ class TObjectImagery : public TAsset
 // the renderer's drawable system already does pose sampling, blending and
 // matrix construction off (state, frame), so most of what the legacy
 // subclasses do here is dead.
-class TObjectAnimator : public TObjectComponent
+class TObjectAnimator : public TComponent
 {
   protected:
     TObjectInstance *inst;      // Instance associated with animator

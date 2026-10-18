@@ -220,9 +220,9 @@ class TReaderSink : public defdoc::Sink
             }
             // Held until the block closes: fields first, PostLoad, then
             // attach (so OnAttach never runs on default fields).
-            std::unique_ptr<TObjectComponent> c(type->create_component());
+            std::unique_ptr<TComponent> c(type->create_component());
             c->SetLabel(label);
-            TObjectComponent* raw = c.get();
+            TComponent* raw = c.get();
             SFrame f;
             f.type = type;
             f.obj = raw;
@@ -270,7 +270,7 @@ class TReaderSink : public defdoc::Sink
         void*              obj  = nullptr;
         TNode*         node = nullptr;           // when the object is a node
         TNode*         attach_to = nullptr;      // component: node to attach to on close
-        std::unique_ptr<TObjectComponent> pending;   // component not yet attached
+        std::unique_ptr<TComponent> pending;   // component not yet attached
     };
 
     void Fail(int line, const std::string& msg)
@@ -321,7 +321,7 @@ void Indent(std::string& out, int32_t indent)
         out += "    ";
 }
 
-void WriteComponent(const TObjectComponent& c, std::string& out, int32_t indent)
+void WriteComponent(const TComponent& c, std::string& out, int32_t indent)
 {
     const refl::SType* t = refl::Of(c);
     if (!t || !*t->def_name)
@@ -347,7 +347,7 @@ void WriteNodeBody(const TNode& node, std::string& out, int32_t indent)
     if (const refl::SType* t = refl::Of(node))
         WriteObject(*t, &node, out, indent);
     for (int32_t i = 0; i < node.NumComponents(); ++i)
-        if (const TObjectComponent* c = node.GetComponent(i))
+        if (const TComponent* c = node.GetComponent(i))
             WriteComponent(*c, out, indent);
     for (int32_t i = 0; i < node.GetChildCount(); ++i)
         if (const TNode* child = node.GetChildAt(i))

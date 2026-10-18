@@ -44,7 +44,7 @@
 
 #pragma once
 
-#include "objectcomponent.h"
+#include "component.h"
 #include "refl.h"
 #include "saferef.h"
 #include "transform.h"
@@ -85,8 +85,10 @@ class TNode final : public TSafeObjectBase<TNode>
     [[nodiscard]] int32_t NodeId() const { return TSafeObjectBase<TNode>::SafeRefId(); }
 
     // The object component, when this node is a map object: cached at
-    // attach, never searched. nullptr for a plain prefab node.
-    [[nodiscard]] TObjectInstance* Object() const { return object_; }
+    // attach, never searched. nullptr for a plain prefab node. The game's
+    // TObjectInstance is opaque to the engine; it derives from TComponent
+    // alone, so the pointer is the same address seen as the game's type.
+    [[nodiscard]] TObjectInstance* Object() const { return reinterpret_cast<TObjectInstance*>(object_); }
 
     // ---- Map membership --------------------------------------------------
     // A node with a sector is in the map; a node without one is not. A whole
@@ -134,7 +136,7 @@ class TNode final : public TSafeObjectBase<TNode>
     [[nodiscard]] TNode* FindPath(std::string_view path) const;      // "a/b/c" relative to this
 
     // ---- Components ------------------------------------------------------
-    int32_t AddComponent(std::unique_ptr<TObjectComponent> component);
+    int32_t AddComponent(std::unique_ptr<TComponent> component);
         // Adds an owned component and returns its component slot, or -1.
         // Activates it at once unless this is a map object without a map
         // index yet.
@@ -151,13 +153,13 @@ class TNode final : public TSafeObjectBase<TNode>
         // the destructor; TObjectInstance calls it earlier in its own
         // teardown so components release resources before the imagery
         // goes. Re-entrant: a nested call finds nothing left to do.
-    [[nodiscard]] TObjectComponent* GetComponent(int32_t component_slot) const;
+    [[nodiscard]] TComponent* GetComponent(int32_t component_slot) const;
     [[nodiscard]] int32_t NumComponents() const { return int32_t(components_.size()); }
     template <class T>
     [[nodiscard]] T* GetComponent() const
     {
         for (const auto& component : components_)
-            if (TObjectComponent* c = component.get())
+            if (TComponent* c = component.get())
                 if (T* typed = dynamic_cast<T*>(c))
                     return typed;
         return nullptr;
@@ -171,9 +173,9 @@ class TNode final : public TSafeObjectBase<TNode>
     TTransform transform_;          // Authoritative spatial state
     std::string node_name_;
     bool active_ = true;
-    std::vector<std::unique_ptr<TObjectComponent>> components_;
-    TObjectInstance* object_ = nullptr;     // the object component, cached at attach
-    int32_t object_slot_ = -1;
+    std::vector<std::unique_ptr<TComponent>> components_;
+    TComponent* object_ = nullptr;          // the object component, cached at attach
+    int32_t     object_slot_ = -1;
     int32_t mapindex_ = -1;
     TSector* sector_ = nullptr;
     int32_t level_ = 0;
@@ -182,7 +184,7 @@ class TNode final : public TSafeObjectBase<TNode>
 // Safe reference to a component owned by a node. Resolves the owner
 // through the node registry, then validates the component slot and
 // generation before returning a pointer.
-template <typename T = TObjectComponent>
+template <typename T = TComponent>
 class TSafeComponentRef
 {
   public:
@@ -206,7 +208,7 @@ class TSafeComponentRef
     {
         TNode* node = owner.Get();
         if (!node || component_slot < 0) return nullptr;
-        TObjectComponent* component = node->GetComponent(component_slot);
+        TComponent* component = node->GetComponent(component_slot);
         if (!component || component->Generation() != generation) return nullptr;
         return static_cast<T*>(component);
     }

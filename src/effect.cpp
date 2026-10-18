@@ -1009,14 +1009,14 @@ void TParticleEffectManager::StopRuntime(size_t runtime_index)
 
 void TParticleEffectComponent::OnAttach()
 {
-    RegisterUpdate(&TObjectComponent::Update);
+    RegisterUpdate(&TComponent::Update);
 }
 
 void TParticleEffectComponent::OnDetach()
 {
     if (ParticleEffectManager)
         ParticleEffectManager->StopEffect(Def(), Owner());
-    UnregisterUpdate(&TObjectComponent::Update);
+    UnregisterUpdate(&TComponent::Update);
 }
 
 void TParticleEffectComponent::OnUpdate()

@@ -22,7 +22,7 @@
 
 #pragma once
 
-#include "objectcomponent.h"
+#include "component.h"
 #include "particledef.h"
 #include "refl.h"
 #include "renderer.h"      // EFxDebugMode
@@ -30,7 +30,7 @@
 class TParticleEffectManager;
 extern TParticleEffectManager* ParticleEffectManager;
 
-class TParticleEffectComponent : public TObjectComponent
+class TParticleEffectComponent : public TComponent
 {
   public:
     DEF_COMPONENT("particles")

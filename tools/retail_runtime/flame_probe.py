@@ -115,10 +115,10 @@ struct TRenderer {SQuadDrawItem last;void SubmitFxQuad(const SQuadDrawItem& i){l
 struct World {hmm_mat4 m;const hmm_mat4& Matrix()const{return m;}};
 constexpr int OBJCLASS_EFFECT=25;bool StartupVfxNativeDomain=false;
 struct TObjectInstance {World world;S3DPoint position;int ObjClass()const{return -1;}uint32_t ObjId()const{return 0;}int GetFace()const{return 0;}const S3DPoint& Pos()const{return position;}const World& Transform()const{return world;}};
-struct TObjectComponent {
+struct TComponent {
     virtual const char* ComponentName()const{return "fixture";}
     virtual void OnAttach(){};virtual void OnDetach(){};
-    void RegisterUpdate(void(TObjectComponent::*)()){};void UnregisterUpdate(void(TObjectComponent::*)()){};
+    void RegisterUpdate(void(TComponent::*)()){};void UnregisterUpdate(void(TComponent::*)()){};
     void Update(){OnUpdate();}protected:virtual void OnUpdate(){}
 };
 struct TTime {static float DeltaTime(){return 1.0f/24.0f;}static int FrameCount(){return 100;}};

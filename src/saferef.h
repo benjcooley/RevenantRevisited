@@ -13,7 +13,7 @@
 //                    contract automatically via a per-type registry.
 //
 // TSafeComponentRef lives in node.h because it depends on
-// TObjectInstance / TObjectComponent's full definitions.
+// TObjectInstance / TComponent's full definitions.
 // *************************************************************************
 
 #pragma once

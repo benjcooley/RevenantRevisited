@@ -163,7 +163,7 @@ dicing the class tree: seal the node instead.
 ```
 class TNode final                                // name, id, transform, children, components,
                                                  // map membership (map index, sector, level)
-class TObjectInstance : public TObjectComponent  // root of the class hierarchy, unchanged below it
+class TObjectInstance : public TComponent  // root of the class hierarchy, unchanged below it
 ```
 
 - A map object is a root node in a sector whose first component is a

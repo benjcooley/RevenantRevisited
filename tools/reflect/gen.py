@@ -532,7 +532,7 @@ def emit(path: Path, out: Path, include: str):
         setf  = ("&refl::Access<%s>::Set" % k.name) if k.members else "nullptr"
         getf  = ("&refl::Access<%s>::Get" % k.name) if k.members else "nullptr"
         cnode = ("[]() -> TNode* { return new %s(); }" % k.name) if k.def_kind == "node" else "nullptr"
-        ccomp = ("[]() -> TObjectComponent* { return new %s(); }" % k.name) if k.def_kind == "component" else "nullptr"
+        ccomp = ("[]() -> TComponent* { return new %s(); }" % k.name) if k.def_kind == "component" else "nullptr"
         loaded = ("&refl::Access<%s>::PostLoad" % k.name) if k.has_postload else "nullptr"
         if nested_members:
             nest = ", ".join("&refl::Access<%s>::%s" % (k.name, fn) for fn in ("Nested", "ListCount", "ListAt", "ListAdd", "ListClear"))

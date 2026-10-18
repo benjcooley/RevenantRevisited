@@ -156,7 +156,7 @@ API, so a `TObjectInstance*` still answers transform, map index, sector and
 components. Delete an object with `DeleteObject(inst)`, own one with
 `TObjectPtr<T>`.
 ```cpp
-class TObjectInstance : public TObjectComponent
+class TObjectInstance : public TComponent
 {
     // Identity in the class system
     short objclass, objtype;         // Class / type indices

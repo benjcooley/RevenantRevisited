@@ -3074,7 +3074,7 @@ static void AppFrame()
         // 2D draw work. Anything in the active screen's Pulse goes through
         // Tick; anything in its Animate goes through DrawFrame.
         CurrentScreen->Tick();
-        TObjectComponent::RunUpdateList();
+        TComponent::RunUpdateList();
     }
     if (Shadow.Active())
         Shadow.StepsDone();

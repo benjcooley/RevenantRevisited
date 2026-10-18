@@ -45,7 +45,7 @@ fix is a base class that holds exactly what a node needs, with
 TNode  : TSafeObjectBase<TNode>
     name            std::string
     transform_      TTransform                 (parent / children / local pos, rot, scl / world matrix)
-    components      std::vector<std::unique_ptr<TObjectComponent>>
+    components      std::vector<std::unique_ptr<TComponent>>
     Parent(), GetChildCount(), GetChildAt(i)   -> TNode*   (via TTransform owner back-pointer)
     FindChild(name), FindPath("a/b/c")
     AddComponent / RemoveComponent / ActivateComponents / GetComponent<T>()
@@ -63,7 +63,7 @@ Measured sizes (2026-10-16, arm64): `TObjectInstance` 560 B of which
 
 Rules of the split:
 
-- **Component owner is the node.** `TObjectComponent::Owner()` returns
+- **Component owner is the node.** `TComponent::Owner()` returns
   `TNode*`. Components that need the map object (today: `TObjectAnimator`,
   `TFlipbookBillboardComponent`, `TParticleEffectComponent`) call
   `Owner()->AsObjectInstance()` and handle null. Three subclasses exist, about
@@ -84,7 +84,7 @@ Rules of the split:
 - **Ownership of nodes** stays with the creator. A stamped prefab owns its
   child node instances and destroys them with the root effect.
 
-Files: `src/node.{h,cpp}` (new), `src/objectcomponent.{h,cpp}`,
+Files: `src/node.{h,cpp}` (new), `src/component.h`,
 `src/object.{h,cpp}`, `src/transform.{h,cpp}`, `src/saferef.h` comment.
 `tools/test_transform.cpp` gains node-tree + path-resolution tests.
 
@@ -98,7 +98,7 @@ or animatable state annotates members and nothing else: no base class,
 no declared overrides, no enum, no switch.
 
 ```cpp
-class TMeshComponent : public TObjectComponent
+class TMeshComponent : public TComponent
 {
     DEF_COMPONENT("mesh")                             // block keyword + factory
     PROP(1, "Draw this mesh")       bool        visible   = true;
@@ -343,7 +343,7 @@ flipbook steps. Static: `entry`, `state` blocks. Properties: `Speed`;
 read-only `Time`, `StateIndex`. C++ API: `SetState(name)`, `State()`.
 
 ### 4.8 `effect` — hand-written behaviour
-A C++ class derived from `TObjectComponent`, registered by name
+A C++ class derived from `TComponent`, registered by name
 (`REGISTER_EFFECT_COMPONENT("IceBolt", TIceBoltEffect)`). Hooks: `OnAttach`
 (resolve siblings by node path once, hold `TSafeComponentRef`s),
 `OnUpdate` (24 Hz accumulator per WAVE_1_LESSONS §1.4 when transcribing
@@ -415,7 +415,7 @@ the `SubmitFx` / `SubmitWorld` component virtuals.
   `--test=vfx` entry (`Prefab:<Name>`), sharing the existing preview styles
   and rig anchors. During migration the shim keeps its entry so
   `tools/vfx/snap_ab.py` pairs them.
-- **Rendering hooks**: `TObjectComponent` gains two optional virtuals,
+- **Rendering hooks**: `TComponent` gains two optional virtuals,
   `SubmitFx(TRenderer&)` (fx queue: billboards, buckets, strips, lights)
   and `SubmitWorld(TRenderer&)` (inside the tile pass: helper meshes).
   maprenderer calls them for every component of every visible instance at

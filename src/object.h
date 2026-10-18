@@ -9,7 +9,7 @@
 #include "revenant.h"
 #include "intworld.h"
 #include "node.h"
-#include "objectcomponent.h"
+#include "component.h"
 #include "imagery.h"
 #include "invicon.h"
 #include "saferef.h"
@@ -67,8 +67,8 @@ TObjectInstance* LookupMapIndex(int32_t mapindex);
 #define MAXOBJECTTYPES 2048
 
 _CLASSDEF(SObjectDef)
-// TObjectComponent + TObjectInstance forward decls and the update-method
-// typedef now live in objectcomponent.h; included above.
+// TComponent + TObjectInstance forward decls and the update-method
+// typedef now live in component.h; included above.
 
 _CLASSDEF(TObjectBuilder)
 class TObjectBuilder
@@ -712,7 +712,7 @@ inline void SetIntFacing(TObjectInstance* o, int32_t angle);
 // index, sector, level, components) forwards to the node so a
 // TObjectInstance* keeps answering everything it always did.
 _CLASSDEF(TObjectInstance)
-class TObjectInstance : public TObjectComponent
+class TObjectInstance : public TComponent
 {
     REFL_FRIEND(TObjectInstance)
     friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
@@ -736,18 +736,20 @@ class TObjectInstance : public TObjectComponent
 
   // ---- The node ----------------------------------------------------------
     [[nodiscard]] TNode* Node() const { return Owner(); }
-    TObjectInstance* AsObjectInstance() override { return this; }
+    bool IsObject() const override { return true; }
     const char* ComponentName() const override { return "object"; }
+    const char* OwnerName() const override { return name; }
+    bool MoveOwner(const hmm_vec3& local_pos) override { SetPos(ToIntPos(local_pos)); return true; }
 
     [[nodiscard]] TTransform&       Transform()       { return Node()->Transform(); }
     [[nodiscard]] const TTransform& Transform() const { return Node()->Transform(); }
     [[nodiscard]] int32_t NodeId() const { return Node()->NodeId(); }
 
-    int32_t AddComponent(std::unique_ptr<TObjectComponent> component) { return Node()->AddComponent(std::move(component)); }
+    int32_t AddComponent(std::unique_ptr<TComponent> component) { return Node()->AddComponent(std::move(component)); }
     void RemoveComponent(int32_t component_slot) { Node()->RemoveComponent(component_slot); }
     void ActivateComponents() { Node()->ActivateComponents(); }
     void DetachComponents() { Node()->DetachComponents(); }
-    [[nodiscard]] TObjectComponent* GetComponent(int32_t component_slot) const { return Node()->GetComponent(component_slot); }
+    [[nodiscard]] TComponent* GetComponent(int32_t component_slot) const { return Node()->GetComponent(component_slot); }
     [[nodiscard]] int32_t NumComponents() const { return Node()->NumComponents(); }
     template <class T> [[nodiscard]] T* GetComponent() const { return Node()->GetComponent<T>(); }
     template <class T> [[nodiscard]] T* FindComponent() const { return Node()->GetComponent<T>(); }
@@ -879,7 +881,7 @@ class TObjectInstance : public TObjectComponent
     virtual bool HasAnimator() const { return GetComponent<TObjectAnimator>() != nullptr; }
         // Returns true if object is an animating object.
     virtual PTObjectAnimator GetAnimator() const { return GetComponent<TObjectAnimator>(); }
-        // Returns object's animator (now a TObjectComponent under the hood).
+        // Returns object's animator (now a TComponent under the hood).
     virtual bool CreateAnimator();
         // Creates Animator
     virtual void FreeAnimator();
