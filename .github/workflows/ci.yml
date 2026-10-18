@@ -2,12 +2,19 @@
 # the packages to downloads.revenantrevisited.com. Other changes skip those jobs.
 # The three "Build & test" checks gate merges into main. docs/CI.md has the
 # details.
+#
+# A branch in this repository is built on push. A pull request from a fork
+# cannot be, so it is built on the pull_request event instead: the same
+# checks, with no version claimed (the token is read-only) and nothing
+# published. A pull request from a branch in this repository skips the
+# pull_request run, since its push run already reported.
 
 name: CI
 
 on:
   push:
     branches: ["**"]
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -35,6 +42,8 @@ jobs:
   # Determines whether C++ inputs changed, then claims the build's version.
   version:
     name: Version
+    # Pull request runs are for forks only; see the header.
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -55,7 +64,8 @@ jobs:
         run: python3 tools/ci/changes.py
 
       - id: claim
-        if: steps.changes.outputs.cpp != 'false'
+        # A fork's pull request builds with BuildInfo.cmake's local version.
+        if: steps.changes.outputs.cpp != 'false' && github.event_name != 'pull_request'
         run: python3 tools/ci/ci.py version
 
   # Static names let each required check report skipped without a runner.
@@ -64,9 +74,10 @@ jobs:
   build_osx:
     name: Build & test (osx)
     needs: version
-    # Only a confirmed unrelated change skips builds. Detection or tag failures
-    # retain the normal build, with BuildInfo.cmake's local version fallback.
-    if: &cpp_build ${{ !cancelled() && needs.version.outputs.cpp != 'false' }}
+    # Only a confirmed unrelated change, or a pull_request run that the push
+    # run already covers, skips builds. Detection or tag failures retain the
+    # normal build, with BuildInfo.cmake's local version fallback.
+    if: &cpp_build ${{ !cancelled() && needs.version.result != 'skipped' && needs.version.outputs.cpp != 'false' }}
     runs-on: macos-latest
     timeout-minutes: 60
     env:
@@ -189,7 +200,9 @@ jobs:
   publish:
     name: Publish & report
     needs: [version, build_osx, build_windows, build_linux]
-    if: *cpp_build
+    # Never for a pull request: a fork's code is not published and its
+    # token has no secrets.
+    if: ${{ !cancelled() && needs.version.result != 'skipped' && needs.version.outputs.cpp != 'false' && github.event_name != 'pull_request' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
