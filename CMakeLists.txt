@@ -58,6 +58,13 @@ if(MSVC)
   add_compile_options(/utf-8 /bigobj /permissive)
 endif()
 
+# clang-cl parses templates late for MSVC compatibility, which C++20
+# deprecates; googletest builds itself with -Werror and fails on the
+# deprecation. Two-phase lookup is what clang does everywhere else.
+if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  add_compile_options(/Zc:twoPhase)
+endif()
+
 
 # Windows: keep <windows.h> from defining min/max macros over revtypes.h's
 # functions, accept the C runtime's classic string functions, and supply
