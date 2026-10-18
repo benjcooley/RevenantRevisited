@@ -54,6 +54,14 @@ other files (like colortable.cpp) and uncomment it.
 // *                   L I G H T I N G   F U N C T I O N S                     *
 // *****************************************************************************
 
+// TODO(port): the software light-table path was never ported; mappane's
+    // unreferenced editor debug-draw path references it, and MSVC debug
+    // builds fail to link without a definition.
+void DrawLightNoNormals(S3DPoint& pos, RSColor color, int32_t intensity, TSurface* surface)
+{
+    (void)pos; (void)color; (void)intensity; (void)surface;
+}
+
 //void DrawLight(S3DPoint& pos, RSColor color, int32_t intensity, TSurface* surface)
 //{
 //  See OLDDLS.CPP for source for this function

@@ -37,7 +37,10 @@ struct SBakedAreaRow {
 };
 
 // BEGIN BAKED AREAS
-static const SBakedAreaRow kBakedAreas[] = {};
+// MSVC cannot compile a zero-size array; the null sentinel row is skipped
+    // in ApplyBakedAreaDefaults below. The generator rewrites this block
+    // when areas are baked.
+    static const SBakedAreaRow kBakedAreas[] = { {nullptr, 0, {}, 0, {}, 0.0, 0.0} };
 // END BAKED AREAS
 
 constexpr const char *kBeginGlobals = "// BEGIN BAKED GLOBALS";
@@ -92,6 +95,7 @@ bool ApplyBakedAreaDefaults(const char *area_name, TArea *area)
     if (!area_name || !*area_name || !area) return false;
     for (const SBakedAreaRow &row : kBakedAreas)
     {
+        if (row.name == nullptr) continue; // zero-size-array sentinel
         if (std::strcmp(row.name, area_name) == 0)
         {
             area->SetClassicLighting(row.amblight, row.ambcolor,

@@ -53,7 +53,7 @@ public:
     void Advance() {
         if(killed)return;done=true;
         constexpr double two_pi=6.283185308;constexpr float two_pi_float=6.2831854820251465f;
-        auto wrap=[](double v){if(v<0)v+=double(two_pi_float);if(v>two_pi)v-=double(two_pi_float);return v;};
+        auto wrap=[two_pi,two_pi_float](double v){if(v<0)v+=double(two_pi_float);if(v>two_pi)v-=double(two_pi_float);return v;};
         for(auto& q:pool) {
             if(q.life<=0)continue;done=false;if(q.start>0){--q.start;continue;}
             q.pos.x+=q.vel.x;q.pos.y+=q.vel.y;q.pos.z+=q.vel.z;--q.life;

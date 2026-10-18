@@ -37,8 +37,9 @@ if(APPLE)
   enable_language(OBJC)
 endif()
 
-# C++ standard
-set(CMAKE_CXX_STANDARD 17)
+# C++ standard. C++20: the editor/UI layer uses designated initializers,
+# which MSVC rejects under C++17 (C7555).
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -48,6 +49,22 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 if(NOT MSVC)
   add_compile_options(-fsigned-char)
 endif()
+
+# MSVC: sources carry UTF-8 literals (e.g. the U+FFFD replacement char in
+# textencoding.h) and some translation units exceed the 65,536 section
+# limit; /permissive keeps the legacy char*-from-literal returns the
+# original codebase relies on (std:c++20 turns /permissive- on).
+if(MSVC)
+  add_compile_options(/utf-8 /bigobj /permissive)
+endif()
+
+# clang-cl parses templates late for MSVC compatibility, which C++20
+# deprecates; googletest builds itself with -Werror and fails on the
+# deprecation. Two-phase lookup is what clang does everywhere else.
+if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  add_compile_options(/Zc:twoPhase)
+endif()
+
 
 # Windows: keep <windows.h> from defining min/max macros over revtypes.h's
 # functions, accept the C runtime's classic string functions, and supply

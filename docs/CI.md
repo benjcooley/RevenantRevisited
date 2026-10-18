@@ -19,6 +19,14 @@ base with `main`: a later Rust-only push cannot hide an earlier C++ failure.
 On `main`, it compares the commits before and after the push. Missing comparison
 history runs the build conservatively; a manual dispatch always runs it.
 
+A pull request from a fork cannot run on push (its pushes land in the fork),
+so the workflow also runs on the `pull_request` event, for fork pull requests
+only: a pull request from a branch in this repository skips that run, since
+its push run already reported. A fork run has the same three build checks,
+claims no version (the fork token is read-only, so the build takes
+`BuildInfo.cmake`'s local fallback) and publishes nothing; its packages are
+the run's artifacts.
+
 The separate [Rust workflow](../.github/workflows/rust.yml) runs for `rust/`
 changes, its own workflow changes, and `src/mappane.cpp`, which its terrain
 comparison test compiles. It runs once per PR update and on pushes to `main`,
@@ -189,7 +197,8 @@ A repository ruleset on `main`:
   included; approvals are not required;
 - `Build & test (osx)`, `Build & test (windows)` and `Build & test (linux)`
   must pass on the pull request's head commit, or report skipped when the
-  branch has no C++ changes;
+  branch has no C++ changes; for a fork's pull request they come from the
+  `pull_request` run;
 - the branch must be up to date with `main` (merge `main` in, push, let CI
   pass);
 - no force pushes, and `main` cannot be deleted.
