@@ -495,7 +495,7 @@ def emit(path: Path, out: Path, include: str):
               if kind_of(m)[0] in ("List", "Struct"):
                   continue
               if m.ctype in TYPE_MAP:
-                  if m.getter and m.ctype in ("hmm_vec3", "SRgba"):
+                  if m.getter and m.ctype in ("hmm_vec3", "SRgba", "S3DPoint"):
                       o.append("        case %d: { const %s _g = %s; %s return true; }\n"
                                % (m.id, m.ctype, read, TYPE_MAP[m.ctype][3].format(m="_g")))
                   else:

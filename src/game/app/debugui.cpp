@@ -5,6 +5,7 @@
 // *************************************************************************
 
 #include "game/app/debugui.h"
+#include "game/world/lightcomponent.h"
 #include "game/world/maprenderer_internal.h"
 
 #include "engine/assets/assetcache.h"
@@ -111,24 +112,24 @@ void TMapRenderer::DrawDebugTab()
     Impl& s = *impl;
     auto lightRadius = [](const SSectorLight& L) {
         TObjectInstance* oi = L.ref.Get();
-        PSLightDef ld = oi ? oi->GetLightDef() : nullptr;
-        return ld ? float(ld->intensity) : 0.0f;
+        const TLightComponent* light = oi ? oi->Light() : nullptr;
+        return light ? float(light->Intensity()) : 0.0f;
     };
     auto lightColor = [](const SSectorLight& L, float rgb[3]) {
         TObjectInstance* oi = L.ref.Get();
-        PSLightDef ld = oi ? oi->GetLightDef() : nullptr;
-        if (ld) {
-            rgb[0] = ld->color.red / 255.0f;
-            rgb[1] = ld->color.green / 255.0f;
-            rgb[2] = ld->color.blue / 255.0f;
+        const TLightComponent* light = oi ? oi->Light() : nullptr;
+        if (light) {
+            rgb[0] = light->Color().red / 255.0f;
+            rgb[1] = light->Color().green / 255.0f;
+            rgb[2] = light->Color().blue / 255.0f;
         } else {
             rgb[0] = rgb[1] = rgb[2] = 0.0f;
         }
     };
     auto lightIntensity = [](const SSectorLight& L) {
         TObjectInstance* oi = L.ref.Get();
-        PSLightDef ld = oi ? oi->GetLightDef() : nullptr;
-        return (!ld || ld->multiplier <= 0) ? 0.0f : float(ld->multiplier) / 10.0f;
+        const TLightComponent* light = oi ? oi->Light() : nullptr;
+        return (!light || light->Multiplier() <= 0) ? 0.0f : float(light->Multiplier()) / 10.0f;
     };
     auto lightClassName = [](const SSectorLight& L) {
         TObjectInstance* oi = L.ref.Get();

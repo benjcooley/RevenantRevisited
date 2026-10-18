@@ -5,6 +5,7 @@
 #include "game/world/classiclighting.h"
 #include "game/world/gamemap.h"
 #include "game/object/object.h"
+#include "game/world/lightcomponent.h"
 #include "engine/render/renderer.h"
 #include "game/app/revenant.h"
 #include "game/world/sector.h"
@@ -647,37 +648,34 @@ struct TMapRenderer::Impl
     {
         TObjectInstance* oi = L.ref.Get();
         if (!oi) return {0,0,0};
-        S3DPoint p = IntPos(oi);
-        if (PSLightDef ld = oi->GetLightDef()) {
-            p.x += ld->pos.x; p.y += ld->pos.y; p.z += ld->pos.z;
-        }
-        return p;
+        const TLightComponent* light = oi->Light();
+        return light ? light->WorldPos() : IntPos(oi);
     }
     float sectorLightRadius(const SSectorLight& L) const
     {
         TObjectInstance* oi = L.ref.Get();
-        PSLightDef ld = oi ? oi->GetLightDef() : nullptr;
-        return ld ? float(ld->intensity) : 0.0f;
+        const TLightComponent* light = oi ? oi->Light() : nullptr;
+        return light ? float(light->Intensity()) : 0.0f;
     }
     void sectorLightColor(const SSectorLight& L, float rgb[3]) const
     {
         TObjectInstance* oi = L.ref.Get();
-        PSLightDef ld = oi ? oi->GetLightDef() : nullptr;
-        if (ld) {
-            rgb[0] = ld->color.red / 255.0f;
-            rgb[1] = ld->color.green / 255.0f;
-            rgb[2] = ld->color.blue / 255.0f;
+        const TLightComponent* light = oi ? oi->Light() : nullptr;
+        if (light) {
+            rgb[0] = light->Color().red / 255.0f;
+            rgb[1] = light->Color().green / 255.0f;
+            rgb[2] = light->Color().blue / 255.0f;
         } else {
             rgb[0] = rgb[1] = rgb[2] = 0.0f;
         }
     }
     // The light's multiplier as retail's light tables use it: the authored
-    // SLightDef.multiplier, or the default table's 28 when it is <= 0.
+    // multiplier, or the default table's 28 when it is <= 0.
     float sectorLightMultiplier(const SSectorLight& L) const
     {
         TObjectInstance* oi = L.ref.Get();
-        const SLightDef* ld = oi ? oi->GetLightDef() : nullptr;
-        return ld ? float(RetailLightMultiplier(ld->multiplier)) : 0.0f;
+        const TLightComponent* light = oi ? oi->Light() : nullptr;
+        return light ? float(RetailLightMultiplier(light->Multiplier())) : 0.0f;
     }
     const char* sectorLightClassName(const SSectorLight& L) const
     {

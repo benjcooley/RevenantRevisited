@@ -60,6 +60,7 @@
 #include "game/effects/fliesprofile.h"
 #include "game/app/revenant.h"
 #include "game/effects/effect.h"
+#include "game/world/lightcomponent.h"
 #include "game/app/gameoptions.h"
 #include "game/effects/fireballquad.h"
 #include "game/effects/fireballring.h"
@@ -1137,18 +1138,19 @@ void TEffect::Pulse()
         color.red = spelldata->light.color[0];
         color.green = spelldata->light.color[1];
         color.blue = spelldata->light.color[2];
-        SetLightColor(color);
-        SetLightIntensity(uint8_t(lightramp.value));
-        SetLightMultiplier(uint8_t(spelldata->light.mult));
-        S3DPoint offset{spelldata->light.pos[0], spelldata->light.pos[1], spelldata->light.pos[2]};
-        SetLightPos(offset);
+        TLightComponent& light = EnsureLight();
+        light.SetColor(color);
+        light.SetIntensity(uint8_t(lightramp.value));
+        light.SetMultiplier(uint8_t(spelldata->light.mult));
+        light.SetOffset(S3DPoint{spelldata->light.pos[0], spelldata->light.pos[1], spelldata->light.pos[2]});
         SetEffectFlags(flags | OF_LIGHT);
     }
     else if (!RealTimeLight && IsLight())
         SetEffectFlags(flags & ~OF_LIGHT);
     if (lit)
-        SetLightIntensity(uint8_t(lightramp.Step(spelldata->light.intensity, spelldata->light.fadein,
-                                                  spelldata->light.fadeout)));
+        if (TLightComponent* light = Light())
+            light->SetIntensity(uint8_t(lightramp.Step(spelldata->light.intensity, spelldata->light.fadein,
+                                                        spelldata->light.fadeout)));
 
     SSpellVariant* variant = spell ? spell->VariantData() : nullptr;
     SSpellControlData* control = variant ? variant->controldata : nullptr;

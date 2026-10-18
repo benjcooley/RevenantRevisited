@@ -9,7 +9,6 @@
 #include "game/app/revenant.h"
 
 #include "game/world/gamemap.h"
-#include "game/object/lightdef.h"
 #include "engine/render/multisurface.h"
 #include "game/ui/screen.h"
 #include "game/world/sector.h"
@@ -742,7 +741,15 @@ class TMapPane : public TPane
     PTMosaicSurface updatemulti;                    // Clone of 16 bit surface for updating
     bool zbufferiscloned;                           // true if zbuffer of unlitmulti is clone of litmulti
 
-    SLightDef dlight;
+    struct SPaneLight                   // the pane's own dynamic light (DrawDLight)
+    {
+        S3DPoint pos = {0, 0, 0};
+        SColor   color = {0, 0, 0};
+        uint8_t  intensity = 0;
+        short    multiplier = -1;
+        int32_t  lightindex = -1;
+    };
+    SPaneLight dlight;
 
     void (*targetcallback)(S3DPoint pos);           // Callback target function
     void (*abortcallback)();                        // Callback on abort

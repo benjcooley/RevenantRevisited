@@ -204,6 +204,30 @@ class TObjectInstance : public TComponent  // root of the class hierarchy, uncha
   known diffs), quickstart, editor boot, VFX harness, AddressSanitizer on
   the quickstart and a sector dump.
 
+### Phase 3c: the light is a component (landed 2026-10-18)
+
+`TLightComponent` (game/world/lightcomponent.{h,cpp}, `DEF_COMPONENT("light")`)
+replaces the `SLightDef` every object carried. A map object has one exactly
+when `OF_LIGHT` is set: `ResetFlags` adds or removes it, the flag is what the
+sector stream records, and the stream reads and writes the component's
+fields (retail's types, so the bytes are unchanged). The object keeps a soft
+ref to it (`Light()`, `EnsureLight()`) and nothing else: the map pane, the
+renderer, the debug UI, the script commands and the effects all talk to the
+component. The component owns the two runtime handles, the 3D scene light
+(entered and left with the owner's on-screen state) and the DLS light-table
+id (acquired when drawn, released off screen), and the move / colour /
+radius / multiplier setters keep both in step as retail's object setters did.
+A prefab node can carry one too. Props: offset, color, intensity,
+multiplier, flags.
+
+### Phase 3d: render components (next)
+
+A `TRenderComponent` base (engine) that the renderer submits through, with
+the sprite (2D imagery) and mesh (I3D) components deriving from it; the map
+renderer walks sector roots and asks each node's render components to
+submit instead of switching on imagery type. This is what unparks the
+imagery and lighting files listed in docs/SOURCE_LAYOUT.md.
+
 ### Phase 4: native packed sector format
 
 - `sectorpack.{h,cpp}`: `Pack(const TSector&)` / `Unpack` over nodepack.

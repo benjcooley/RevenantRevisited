@@ -5,6 +5,7 @@
 // *************************************************************************
 
 #include "game/world/mappane.h"
+#include "game/world/lightcomponent.h"
 #include "game/script/dialog.h"
 
 #include "game/world/gamemap.h"
@@ -291,13 +292,12 @@ TObjectInstance* TMapIterator::NextItem()
                 good = r.In(SPoint(p.x, p.y));
             }
 
-            if (flags & CHECK_LIGHT && item->GetFlags() & OF_LIGHT &&
-                item->GetLightIntensity() != 0)
+            if (flags & CHECK_LIGHT && item->Light() && item->Light()->Intensity() != 0)
             {
                 if (!checked || !good)
                 {
                     checked = true;
-                    item->GetLightRect(ir);
+                    item->Light()->ScreenRect(ir);
                     good = r.Intersects(ir);
                 }
             }
@@ -2899,7 +2899,8 @@ void TMapPane::AddObjectUpdateRect(int32_t index)
     inst->GetScreenRect(ir);
     AddBgUpdateRect(ir);
 
-    inst->RedrawLight();            // in case it's a light
+    if (TLightComponent* light = inst->Light())
+        light->Redraw();
 }
 
 void TMapPane::ReloadImagery()
@@ -3734,7 +3735,8 @@ void TMapPane::GetDrawLights(SRect &r, std::vector<TObjectInstance*> &lights)
             return true;                    // deleted: its destructor gave the id back
         if (in_window(inst->GetSector()))
             return false;
-        inst->ReleaseLightId();
+        if (TLightComponent* light = inst->Light())
+            light->ReleaseTableId();
         return true;
     });
     lightidholders.erase(left, lightidholders.end());
@@ -3743,11 +3745,12 @@ void TMapPane::GetDrawLights(SRect &r, std::vector<TObjectInstance*> &lights)
     for (TMapIterator i(&r, CHECK_RECT|CHECK_LIGHT|CHECK_MOVING|CHECK_INVIS|CHECK_NOINVENT); i; i++)
     {
         TObjectInstance* inst = i.Item();
-        if (!inst->IsLight() || inst->GetLightIntensity() == 0)
+        TLightComponent* light = inst->Light();
+        if (!light || light->Intensity() == 0)
             continue;
-        if (inst->GetLightDef()->lightid == -1)
+        if (light->TableId() == -1)
             lightidholders.push_back(TSafeRef<>(inst));
-        inst->AcquireLightId();
+        light->AcquireTableId();
         lights.push_back(inst);
     }
 }
@@ -3795,7 +3798,8 @@ void TMapPane::DrawStaticLights(SRect &r)
     for (TObjectIterator i(&UpdateObjs); i; i++)
     {
         WaitSingleErr(ObjectMutex);
-        i.Item()->DrawLight(unlitmulti, IsDirty());
+        if (TLightComponent* light = i.Item()->Light())
+            light->Draw(unlitmulti, IsDirty());
 #if 0 // TODO(port): Subsystem 4 — threading
         ReleaseMutex(ObjectMutex);
 #endif

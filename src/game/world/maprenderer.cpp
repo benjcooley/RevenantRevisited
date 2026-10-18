@@ -5,6 +5,7 @@
 // *************************************************************************
 
 #include "game/world/maprenderer.h"
+#include "game/world/lightcomponent.h"
 #include "game/world/maprenderer_internal.h"
 
 #include "game/imagery/animimage.h"
@@ -3093,9 +3094,8 @@ void TMapRenderer::RebuildForCurrentMap()
         for (int32_t i = 0; i < sec->NumItems(); ++i)
         {
             TObjectInstance* oi = sec->GetInstance(i);
-            if (!oi || !oi->IsLight()) continue;
-            PSLightDef ld = oi->GetLightDef();
-            if (!ld || ld->intensity == 0) continue;
+            const TLightComponent* light = oi ? oi->Light() : nullptr;
+            if (!light || light->Intensity() == 0) continue;
             ++resident_lights;
             s.sectorLights.push_back({ TSafeRef<>(oi), true });
         }
@@ -3183,15 +3183,13 @@ static int32_t SubmitRetailDrawLights(int32_t cam_ox, int32_t cam_oy, int32_t vw
     {
         if (n == TRenderer::kMaxPointLights)
             break;
-        const SLightDef& ld = *inst->GetLightDef();
-        S3DPoint at;
-        at = IntPos(inst);
-        at += ld.pos;
+        const TLightComponent& light = *inst->Light();
+        const S3DPoint at = light.WorldPos();
         SColor color;
         int32_t multiplier = 0;
-        GetLightColor(ld.lightid, color, multiplier);
+        GetLightColor(light.TableId(), color, multiplier);
         Renderer->AddRetailPointLight(float(at.x), float(at.y), float(at.z),
-                                      float(ld.intensity) * radius_mul,
+                                      float(light.Intensity()) * radius_mul,
                                       color.red / 255.0f, color.green / 255.0f, color.blue / 255.0f,
                                       float(multiplier) * intensity_mul);
         ++n;

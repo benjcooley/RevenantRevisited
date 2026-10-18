@@ -14,7 +14,6 @@
 #include "game/ui/invicon.h"
 #include "engine/core/saferef.h"
 #include "engine/core/stream.h"
-#include "game/object/lightdef.h"
 #include "engine/scene/transform.h"
 
 #include <atomic>
@@ -54,6 +53,7 @@ int32_t AngleDiff(int32_t angle1, int32_t angle2);
 uint32_t GenerateUniqueID();
 
 _CLASSDEF(TObjectAnimator)
+class TLightComponent;
 
 // Forward-declared free function used by TObjectInstance::SafeRefLookup
 // (and by TSafeRef<TObjectInstance>) to avoid pulling the mappane /
@@ -1105,9 +1105,9 @@ class TObjectInstance : public TComponent
             else GetScreenRect(r);
         return r.In(p); }
         // Returns true if map point is on object
-    virtual void GetScreenRect(SRect &r)
-      { if (flags & OF_LIGHT) GetLightRect(r); else if (imagery) imagery->GetScreenRect(this, r); }
-        // Get screen bounding rectangle for object (in world coordinates)
+    virtual void GetScreenRect(SRect &r);
+        // Get screen bounding rectangle for object (in world coordinates):
+        // a light's lit extent, else the imagery's
     virtual void GetAnimRect(SRect &r) { if (imagery) imagery->GetAnimRect(this, r); }
         // Get animation bounding rect for the object, if different from screen rect
     virtual int32_t BgDrawMode();
@@ -1124,8 +1124,6 @@ class TObjectInstance : public TComponent
         // Causes image to draw selection (hilighting) around itself
     virtual void DrawInvItem(int32_t x, int32_t y) { if (imagery) imagery->DrawInvItem(this, x, y); }
         // Draws inventory icon for object
-    void DrawLight(TSurface* surface, bool resetid = false);
-        // Causes the object to draw light for object
     void RedrawBackground(int32_t bgdraw = -1);
         // Forces the background for the current object rect to be redrawn
         // Allows moving objects to erase and redraw themselves, and redraws lighting
@@ -1210,41 +1208,13 @@ class TObjectInstance : public TComponent
       // If 'nr' is not -1, the number in nr is added to end of soundname (i.e. "sound1")
       // Volume and freq are DirectSound volume and frequency values (-1 is default)
 
-  // Light functions
-    void RedrawLight();
-      // Causes the objects light to be redrawn
-    void GetLightRect(RSRect r);
-      // Gets the extent of the objects lighting rectangle
-    void SetLightIntensity(uint8_t newintensity);
-      // Sets the light intensity
-    uint8_t GetLightIntensity() { return lightdef.intensity; }
-      // Returns objects light intensity
-    void SetLightMultiplier(int32_t mult);
-      // Sets the light intensity
-    short GetLightMultiplier() { return lightdef.multiplier; }
-      // Returns objects light intensity
-    void SetLightPos(S3DPoint& newpos);
-      // Sets light relative position
-    void GetLightPos(S3DPoint& getpos) { getpos = lightdef.pos; }
-      // Gets the light relative position
-    void SetLightColor(SColor color);
-      // Sets the light color
-    void GetLightColor(SColor &color) { color = lightdef.color; }
-      // Returns objects light color
-    void SetLightFlags(uint8_t newflags) { lightdef.flags |= newflags; }
-      // Sets light flags
-    void ResetLightFlags(uint8_t newflags) { lightdef.flags = newflags; }
-      // Resets light flags
-    uint8_t GetLightFlags() { return (uint8_t)lightdef.flags; }
-      // Gets the light flags
-    PSLightDef GetLightDef() { return &lightdef; }
-      // Returns light data for object
-    int32_t AcquireLightId();
-      // The light's light-table id (0-3), allocated when it is first drawn
-    void ReleaseLightId();
-      // Gives the light-table id back (off screen, out of the sector window, deleted)
-    int32_t GetIllumination(TObjectInstance* oi);
-      // Get the amount of illumination from this light to this particular object
+  // Light: a TLightComponent on the node, there exactly when OF_LIGHT is
+  // set (ResetFlags keeps the two in step; the flag is what the sector
+  // stream records). Everything about the light goes through the component.
+    [[nodiscard]] TLightComponent* Light() const;
+        // The light component, or nullptr
+    TLightComponent& EnsureLight();
+        // The light component, added if the object has none yet
     int32_t GetShadow() { return shadow; }
       // Returns shadow index
     void SetShadow(int32_t index) { shadow = index; }
@@ -1420,7 +1390,7 @@ class TObjectInstance : public TComponent
     PTScript script;            // Pointer to object's script elements
 
   // Light
-    SLightDef lightdef;         // Current light definition
+    TSafeComponentRef<TLightComponent> light_;   // the light component, when OF_LIGHT
 
   // Statistics
     TStatisticList stats;       // Stats for object

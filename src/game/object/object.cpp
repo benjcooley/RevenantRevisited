@@ -7,6 +7,7 @@
 #include "game/object/object.h"
 
 #include "engine/scene/intworld.h"
+#include "game/world/lightcomponent.h"
 
 #include "game/world/3dscene.h"
 #include "game/object/animation.h"
@@ -405,9 +406,6 @@ void TObjectInstance::ClearObject()
 
     // animator pointer field removed; animators are TComponents
     // stored in the components array and freed via the components dtor.
-    lightdef.lightindex = -1;
-    lightdef.lightid    = -1;
-    lightdef.multiplier = -1;
     SetCommandDone(false);
     script              = nullptr;
 
@@ -522,6 +520,8 @@ TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
     SetIntRotateX(*this, def->rotatex);
     SetIntRotateY(*this, def->rotatey);
     SetIntFacing(*this, def->rotatez);
+    if (flags & OF_LIGHT)
+        EnsureLight();
 
   // Set imagery
     imagery = img;
@@ -656,14 +656,6 @@ TObjectInstance::~TObjectInstance()
 
     TObjectImagery::FreeImagery(imagery);
     imagery = nullptr;
-
-    if (lightdef.lightindex != -1)
-    {
-        Scene3D.DeleteLight(lightdef.lightindex);
-        lightdef.lightindex = -1;
-    }
-
-    ReleaseLightId();
 
     if (objclass == -1)
         return;
@@ -882,13 +874,9 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
 
     MapPane.TransferWalkmap(this);
 
-  // Update 3D system light
-    if (lightdef.lightindex != -1)
-    {
-        S3DPoint lpos = to;
-        lpos += lightdef.pos;
-        Scene3D.SetLightPosition(lightdef.lightindex, lpos);
-    }
+  // The light follows
+    if (TLightComponent* light = Light())
+        light->OwnerMoved();
 
   // Get new screen rectangle
     SRect newrect;
@@ -1783,28 +1771,6 @@ void TObjectInstance::NextFrame()
         anim->SetNewState(false);
 }
 
-// REVSYNC: TObjectInstance::DrawLight @ 0x00471930 (0x004719af..0x004719cf)
-// -- a light drawn without a light-table id gets one from NewLightIndex
-// (0x0041d890): one of the four colours the DLS light byte can name
-// (docs/LIGHTING_FIDELITY.md §2.6). Retail also re-asked on a full redraw
-// (the pane's dirty flag), after RedrawAll had cleared every id's use.
-int32_t TObjectInstance::AcquireLightId()
-{
-    if (lightdef.lightid == -1)
-        lightdef.lightid = NewLightIndex(lightdef.color, lightdef.multiplier);
-    return lightdef.lightid;
-}
-
-// REVSYNC: FreeLightIndex @ 0x0041d9e0, from OffScreen and the destructor.
-void TObjectInstance::ReleaseLightId()
-{
-    if (lightdef.lightid != -1)
-    {
-        FreeLightIndex(lightdef.lightid);
-        lightdef.lightid = -1;
-    }
-}
-
 void TObjectInstance::OnScreen()
 {
     if (NeedsAnimator())
@@ -1812,15 +1778,8 @@ void TObjectInstance::OnScreen()
     else
         FreeAnimator();
 
-    if (flags & OF_LIGHT)
-    {
-        if (lightdef.lightindex == -1)
-        {
-            S3DPoint lpos = IntPos(*this);
-            lpos += lightdef.pos;
-            lightdef.lightindex = Scene3D.AddLight(lpos, lightdef.color, lightdef.intensity, lightdef.multiplier);
-        }
-    }
+    if (TLightComponent* light = Light())
+        light->EnterScene();
 }
 
 void TObjectInstance::OffScreen()
@@ -1831,12 +1790,11 @@ void TObjectInstance::OffScreen()
     if (HasAnimator() && !IsAnimatorPermanent())
         FreeAnimator();
 
-    if (lightdef.lightindex != -1)
+    if (TLightComponent* light = Light())
     {
-        Scene3D.DeleteLight(lightdef.lightindex);
-        lightdef.lightindex = -1;
+        light->LeaveScene();
+        light->ReleaseTableId();
     }
-    ReleaseLightId();
 }
 
 // Retail-faithful inventory-image lookup.
@@ -2042,174 +2000,31 @@ int32_t TObjectInstance::ParseCommand(const TToken &t)
 
 // *************************** Lighting Functions *****************************
 
-void TObjectInstance::RedrawLight()
+
+TLightComponent* TObjectInstance::Light() const
 {
-    if (flags & OF_LIGHT && lightdef.intensity != 0)
-    {
-        SRect r;
-        GetLightRect(r);
-        MapPane.AddBgUpdateRect(r, BGDRAW_LIGHTS);
-    }
+    return light_.Get();
 }
 
-void TObjectInstance::GetLightRect(RSRect r)
+TLightComponent& TObjectInstance::EnsureLight()
 {
-    S3DPoint wlpos = IntPos(*this);
-    wlpos += lightdef.pos;
-
-    S3DPoint slpos;
-    WorldToScreen(wlpos, slpos);
-
-    r.left = slpos.x - lightdef.intensity;
-    r.top = slpos.y - lightdef.intensity;
-    r.right = r.left + lightdef.intensity + lightdef.intensity;
-    r.bottom = r.top + lightdef.intensity + lightdef.intensity;
+    if (TLightComponent* light = Light())
+        return *light;
+    auto owned = std::make_unique<TLightComponent>();
+    TLightComponent* light = owned.get();
+    AddComponent(std::move(owned));
+    light_.Set(light);
+    return *light;
 }
 
-void TObjectInstance::SetLightIntensity(uint8_t newintensity)
+// A light's extent on screen is its lit square; anything else is its
+// imagery's.
+void TObjectInstance::GetScreenRect(SRect &r)
 {
-    if (!(flags & OF_LIGHT))
-        return;
-
-    LOCKOBJECTS;    // Prevent update system from drawing any lights right now
-
-    bool bigger = newintensity > lightdef.intensity;
-
-    if (!bigger)
-        RedrawLight();
-
-    lightdef.intensity = newintensity;
-
-    if (lightdef.lightindex != -1)
-        Scene3D.SetLightIntensity(lightdef.lightindex, lightdef.intensity);
-
-    if (bigger)
-        RedrawLight();
-
-    UNLOCKOBJECTS; // Allow update system to draw lights now
-}
-
-void TObjectInstance::SetLightMultiplier(int32_t mult)
-{
-    if (!(flags & OF_LIGHT))
-        return;
-
-    LOCKOBJECTS;    // Prevent update system from drawing any lights right now
-
-    lightdef.multiplier = mult;
-
-//  if (lightdef.lightindex != -1)
-//      Scene3D.SetLightIntensity(lightdef.lightindex, lightdef.intensity);
-
-    if (lightdef.lightid != -1)
-    {
-        FreeLightIndex(lightdef.lightid);
-        lightdef.lightid = NewLightIndex(lightdef.color, lightdef.multiplier);
-    }
-
-    RedrawLight();
-
-    UNLOCKOBJECTS; // Allow update system to draw lights now
-}
-
-void TObjectInstance::SetLightPos(S3DPoint& newpos)
-{
-    if (!(flags & OF_LIGHT))
-        return;
-
-    LOCKOBJECTS;     // Prevent update system from drawing any lights right now
-
-    RedrawLight();
-
-    lightdef.pos = newpos;
-
-    if (lightdef.lightindex != -1)
-    {
-        S3DPoint lpos = IntPos(*this);
-        lpos += lightdef.pos;
-        Scene3D.SetLightPosition(lightdef.lightindex, lpos);
-        RedrawLight();
-    }
-
-    UNLOCKOBJECTS;   // Allow update system to draw lights now
-}
-
-void TObjectInstance::SetLightColor(SColor color)
-{
-    if (!(flags & OF_LIGHT) || (color.red == lightdef.color.red &&
-        color.green == lightdef.color.green && color.blue == lightdef.color.blue))
-        return;
-
-    LOCKOBJECTS;     // Prevent update system from drawing any lights right now
-
-    lightdef.color = color;
-
-    if (lightdef.lightindex != -1)
-        Scene3D.SetLightColor(lightdef.lightindex, color);
-
-    if (lightdef.lightid != -1)
-    {
-        FreeLightIndex(lightdef.lightid);
-        lightdef.lightid = NewLightIndex(color, lightdef.multiplier);
-    }
-
-    RedrawLight();
-
-    UNLOCKOBJECTS;   // Allow update system to draw lights now
-}
-
-void TObjectInstance::DrawLight(TSurface* surface, bool resetid)
-{
-    if ((flags & OF_LIGHT) && (lightdef.intensity > 0))
-    {
-        if (imagery)
-            imagery->DrawLight(this, surface);
-
-        S3DPoint wlpos = IntPos(*this);
-        wlpos += lightdef.pos;
-
-        S3DPoint slpos;
-        WorldToScreen(wlpos, slpos);
-
-        if (resetid || lightdef.lightid == -1)
-            lightdef.lightid = NewLightIndex(lightdef.color, lightdef.multiplier);
-
-//      if (NoNormals)
-            DrawStaticLightNoNormals(slpos, lightdef.color, lightdef.intensity, surface, lightdef.lightid);
-//      else if (lightdef.flags & LIGHT_DIR)
-//          DrawStaticDirLight(slpos, lightdef.color, lightdef.intensity, surface, lightdef.lightid);
-//      else
-//          DrawStaticLight(slpos, lightdef.color, lightdef.intensity, surface, lightdef.lightid);
-    }
-}
-
-// DLS brightness routine (gives brightness given distance)
-extern double GetLightBrightness(int32_t dist, int32_t intensity, int32_t multiplier);
-
-// Get the amount of illumination from this light to this particular object
-int32_t TObjectInstance::GetIllumination(TObjectInstance* oi)
-{
-  // Not a light
-    if (!(flags & OF_LIGHT) || (lightdef.intensity <= 0))
-        return 0;
-
-  // Dist from object to light (assumes char, and uses CHARHEIGHT value)
-    S3DPoint p;
-    p = IntPos(oi);
-    p.z += LIGHTINGCHARHEIGHT;
-    p -= IntPos(*this);
-
-  // Out of range
-    if (abs(p.x) > lightdef.intensity || abs(p.y) > lightdef.intensity)
-        return 0;
-
-  // Get distance from light to object
-    float d = (float)sqrt((double)(p.x * p.x + p.y * p.y));
-    d = (float)sqrt((double)(d * d + p.z * p.z));
-
-  // Get total brighness from dls brightness tables
-    return (int32_t)(
-        min(GetLightBrightness((int32_t)d, lightdef.intensity, lightdef.multiplier), 1.0) * 255.0);
+    if (TLightComponent* light = Light())
+        light->ScreenRect(r);
+    else if (imagery)
+        imagery->GetScreenRect(this, r);
 }
 
 // ********************** End of Light Functions ************************
@@ -2297,6 +2112,18 @@ void TObjectInstance::ResetFlags(uint32_t newflags)
 {
     uint32_t oldflags = flags;
     flags = newflags;
+
+  // The light component is there exactly when OF_LIGHT is set
+    if ((oldflags ^ newflags) & OF_LIGHT)
+    {
+        if (newflags & OF_LIGHT)
+            EnsureLight();
+        else if (TLightComponent* light = Light())
+        {
+            RemoveComponent(light->ComponentSlot());
+            light_.Clear();
+        }
+    }
 
   // Call map pane to allow object to be placed on new lists if.. say...
   // the OF_ANIMATE or OF_PULSE flags change.

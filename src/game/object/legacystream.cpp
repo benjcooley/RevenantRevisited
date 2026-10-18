@@ -12,6 +12,7 @@
 // *************************************************************************
 
 #include "game/object/legacystream.h"
+#include "game/world/lightcomponent.h"
 
 #include "game/object/ammo.h"
 #include "game/world/automap.h"
@@ -472,9 +473,10 @@ void TLegacyDeserialize::ReadObjectInstance(TObjectInstance& o, TInputStream& is
 
     if (o.flags & OF_LIGHT)
     {
-        is >> o.lightdef.flags >> o.lightdef.pos.x >> o.lightdef.pos.y >> o.lightdef.pos.z >>
-            o.lightdef.color.red >> o.lightdef.color.green >> o.lightdef.color.blue >>
-            o.lightdef.intensity >> o.lightdef.multiplier;
+        TLightComponent& light = o.EnsureLight();
+        is >> light.flags_ >> light.offset_.x >> light.offset_.y >> light.offset_.z >>
+            light.color_.red >> light.color_.green >> light.color_.blue >>
+            light.intensity_ >> light.multiplier_;
         o.flags |= OF_LIGHT | OF_ANIMATE;
     }
 
@@ -1042,9 +1044,12 @@ void TLegacySerialize::WriteObjectInstance(TObjectInstance& o, TOutputStream& os
         os << o.stats[c] << (uint32_t)(o.cl->ObjStatUniqueId(c) | kStatIdFlag);
 
     if (o.flags & OF_LIGHT)
-        os << o.lightdef.flags << o.lightdef.pos.x << o.lightdef.pos.y << o.lightdef.pos.z <<
-            o.lightdef.color.red << o.lightdef.color.green << o.lightdef.color.blue <<
-            o.lightdef.intensity << o.lightdef.multiplier;
+    {
+        const TLightComponent& light = o.EnsureLight();
+        os << light.flags_ << light.offset_.x << light.offset_.y << light.offset_.z <<
+            light.color_.red << light.color_.green << light.color_.blue <<
+            light.intensity_ << light.multiplier_;
+    }
 }
 
 // REVSYNC: TComplexObject::Save @ 0x004dbb80.

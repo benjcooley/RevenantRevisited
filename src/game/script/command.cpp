@@ -37,6 +37,7 @@ static inline char *strlwr(char *s)
 #include "game/object/inventory.h"
 #include "game/ui/multictrl.h"
 #include "game/script/command.h"
+#include "game/world/lightcomponent.h"
 #include "game/ui/cursor.h"
 #include "game/app/gameflow.h"
 #include "game/script/script.h"
@@ -2201,12 +2202,11 @@ static void AddWhat(TToken& t, S3DPoint pos, int32_t number)
         else
         {
             SColor color = { 255, 255, 255 };
-            MapPane.GetInstance(index)->SetLightIntensity(intensity);
-            MapPane.GetInstance(index)->SetLightColor(color);
-            MapPane.GetInstance(index)->SetLightMultiplier(mult);
-
-            S3DPoint lightpos(0, 0, 0);
-            MapPane.GetInstance(index)->SetLightPos(lightpos);
+            TLightComponent& light = MapPane.GetInstance(index)->EnsureLight();
+            light.SetIntensity(intensity);
+            light.SetColor(color);
+            light.SetMultiplier(mult);
+            light.SetOffset(S3DPoint(0, 0, 0));
             StatusBar.Select(index);
         }
         return;
@@ -3486,24 +3486,21 @@ COMMAND(CmdStat)
             i->GetAnimRegX(s), i->GetAnimRegY(s), i->GetAnimRegZ(s));
     Output(buf);
 
-    if (context->GetFlags() & OF_LIGHT)
+    if (TLightComponent* light = context->Light())
     {
-        PSLightDef def;
-        def = context->GetLightDef();
+        sprintf(buf, "Light: intensity %d, multiplier %d, flags [", light->Intensity(), light->Multiplier());
 
-        sprintf(buf, "Light: intensity %d, multiplier %d, flags [", def->intensity, def->multiplier);
-
-        if (context->GetLightFlags())
-            AppendBitNames(context->GetLightFlags(), lightflags, buf);
+        if (light->Flags())
+            AppendBitNames(light->Flags(), lightflags, buf);
         else
             strcat(buf, "--");
 
         const size_t used = strlen(buf);
         snprintf(buf + used, sizeof(buf) - used, "]\n       color (%d, %d, %d), pos (%d, %d, %d)\n"
                      "       3d index: %d lightid: %d\n",
-                def->color.red, def->color.green, def->color.blue,
-                def->pos.x, def->pos.y, def->pos.z,
-                def->lightindex, def->lightid);
+                light->Color().red, light->Color().green, light->Color().blue,
+                light->Offset().x, light->Offset().y, light->Offset().z,
+                light->SceneIndex(), light->TableId());
         Output(buf);
     }
 
@@ -3961,7 +3958,7 @@ COMMAND(CmdLight)
         if (!Parse(t, "%d", &intensity))
             return CMD_BADPARAMS;
 
-        context->SetLightIntensity(intensity);
+        if (TLightComponent* light = context->Light()) light->SetIntensity(intensity);
         return 0;
     }
 
@@ -3971,9 +3968,9 @@ COMMAND(CmdLight)
         uint32_t oldflags = context->GetFlags();
 
         if (t.Is("on"))
-            context->SetLightFlags(LIGHT_DIR);
+            if (TLightComponent* light = context->Light()) light->AddFlags(LIGHT_DIR);
         else if (t.Is("off"))
-            context->ResetLightFlags(context->GetLightFlags() & (~LIGHT_DIR));
+            if (TLightComponent* light = context->Light()) light->SetFlags(light->Flags() & ~LIGHT_DIR);
         else
         {
             t.WhiteGet();
@@ -3994,7 +3991,7 @@ COMMAND(CmdLight)
         if (!Parse(t, "%d", &intensity))
             return CMD_BADPARAMS;
 
-        context->SetLightIntensity(intensity);
+        if (TLightComponent* light = context->Light()) light->SetIntensity(intensity);
         return 0;
     }
 
@@ -4005,7 +4002,7 @@ COMMAND(CmdLight)
         if (!Parse(t, "%b %b %b", &color.red, &color.green, &color.blue))
             return CMD_BADPARAMS;
 
-        context->SetLightColor(color);
+        if (TLightComponent* light = context->Light()) light->SetColor(color);
         return 0;
     }
 
@@ -4016,7 +4013,7 @@ COMMAND(CmdLight)
         if (!Parse(t, "%d %d %d", &lightpos.x, &lightpos.y, &lightpos.z))
             return CMD_BADPARAMS;
 
-        context->SetLightPos(lightpos);
+        if (TLightComponent* light = context->Light()) light->SetOffset(lightpos);
         return 0;
     }
 
@@ -4027,7 +4024,7 @@ COMMAND(CmdLight)
         if (!Parse(t, "%d", &mult))
             return CMD_BADPARAMS;
 
-        context->SetLightMultiplier(mult);
+        if (TLightComponent* light = context->Light()) light->SetMultiplier(mult);
         return 0;
     }
 
