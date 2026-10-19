@@ -3975,7 +3975,13 @@ void TMapPane::ForEachTickObject(int32_t objset, Visit&& visit)
             visit(inst, nullptr);
         return;
     }
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+
+    // Retail's loops walk the loaded sectors (PulseObjects 0x4580f0 opens
+    // its iterator with flags 0xa0: loaded + no inventory; the port keeps
+    // its 3x3 window), so an object that leaves the window -- a door that
+    // just teleported the player nine sectors away -- still pulses to its
+    // script's `control on` and its animation still finishes.
+    for (TMapIterator i(GetMapLevel(), nullptr, CHECK_NOINVENT, objset); i; i++)
         visit(i.Item(), &i);
 }
 
