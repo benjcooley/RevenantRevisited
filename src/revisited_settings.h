@@ -9,11 +9,14 @@
 // The defaults baked into SRevisitedSettings below double as the engine's
 // retail-mode renderer state: Apply* runs unconditionally so even runs
 // without --revisited get a coherent sun + AO + point-light setup. Only
-// the INI *read* is gated on --revisited.
+// the INI *read* is gated on --revisited, with one exception: the high-res
+// tile art keys, read by TileTexOverride::Init in a plain launch too (that
+// art is a player-side extra, not a Revisited tunable).
 
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 class TMapRenderer;
 class TRenderer;
@@ -78,6 +81,10 @@ struct SRevisitedSettings {
     //      compose multiplicatively on top of these) -----------------------
     double  point_light_int_mul   = 1.0;
     double  point_light_range_mul = 1.0;
+
+    // ---- High-res tile art (see tiletexoverride.h) -------------------------
+    bool        high_res_tiles = true;  // swap a tile's colour for matching art from high_res_tile_root
+    std::string high_res_tile_root;     // tile art tree; empty = <overlay>/Imagery
 };
 
 // The live in-memory copy. Populated by LoadRevisitedSettings on boot; the
@@ -89,6 +96,11 @@ extern SRevisitedSettings RevisitedSettings;
 // Missing keys keep their default; missing file is fine (uses all defaults).
 // No-op when --revisited is off (RevisitedSettings stays at C++ defaults).
 bool LoadRevisitedSettings();
+
+// Reads only [Revisited] HighResTiles / HighResTileRoot. Called by
+// TileTexOverride::Init when --revisited is off, so the local high-res tile
+// art (a player-side extra, not a Revisited tunable) works in a plain launch.
+bool LoadTileArtOverrideSettings();
 
 // Push RevisitedSettings into renderer state. Two split functions so each
 // can be called when its respective owner becomes live (TRenderer in

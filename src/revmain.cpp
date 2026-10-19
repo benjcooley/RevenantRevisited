@@ -6,6 +6,34 @@
 
 #include <stdarg.h>
 
+// Crash triage: debug CRT reports (heap DAMAGE etc.) go to stderr so an
+// unattended run captures them; REV_BREAK_ALLOC=<n> breaks (int3 -> WER dump)
+// right after allocation #n is made, for post-mortem stack analysis.
+#if defined(_DEBUG) && defined(_MSC_VER)
+#include <crtdbg.h>
+#include <stdlib.h>
+namespace {
+struct SForceHeapCheckAlways {
+    SForceHeapCheckAlways()
+    {
+        _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+        _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
+        _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+        // sokol's default SOKOL_LOG is puts() -> line-buffered console /
+        // fully-buffered file; make it drip so a blocked-on-dialog process
+        // still leaves the message on disk.
+        setvbuf(stdout, nullptr, _IONBF, 0);
+        if (const char *ba = getenv("REV_BREAK_ALLOC"))
+            _CrtSetBreakAlloc((long)atol(ba));
+    }
+};
+static SForceHeapCheckAlways g_force_heap_check_always;
+}
+#endif
+
 // For multimonitor support
 #define COMPILE_MULTIMON_STUBS
 #include <algorithm>
@@ -46,6 +74,7 @@
 #include "shadow/shadowrun.h"
 #include "revisited_defaults.h"
 #include "revisited_settings.h"
+#include "tiletexoverride.h"
 #include "testscreen.h"
 #include "cinematicscreen.h"
 #include "death.h"
@@ -2840,6 +2869,7 @@ static bool BootGame()
     // of Apply fires from there.
     GetBakedRevisitedDefaults(RevisitedSettings);
     LoadRevisitedSettings();
+    TileTexOverride::Init();
     ApplyRevisitedSettingsToRenderer(Renderer);
 
     if (StartupTestMode[0])

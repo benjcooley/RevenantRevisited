@@ -61,6 +61,33 @@ Resolution order in `vfs_resolve_revisited_overlay`:
 Empty / missing → no overlay → vanilla retail. The engine logs at
 boot whether an overlay was found and which mode (loose / archive).
 
+## High-res tile art (local override, not an overlay path)
+
+The map tile pass can take a tile's **colour** from an upscaled art tree
+while depth, height min/max, coverage and the walkmap stay retail's
+(`src/tiletexoverride.cpp`). This is a player-side extra: it is *not* the
+overlay's path shadowing, and it does not need `--revisited`.
+
+- `[Revisited] HighResTiles = 1` (default on) and
+  `HighResTileRoot = <dir>` in the overlay's `Revenant.ini`. An empty
+  root means `<overlay>/Imagery`, i.e. **`revisited/resources/Imagery/`**
+  in the dev layout.
+- Entries are named `<NNNN>_<Name>.png`, as `--dumptiles` writes them,
+  and may sit in subdirectories. A copy under a `Final/` directory wins
+  over the 4x base; `original/`, `alpha/`, `depth/` and other names are
+  skipped.
+- Only the still state's albedo is swapped. The override's alpha is
+  clipped to the retail silhouette (nearest 1x sample) so art cannot
+  leak outside the tile.
+- The two keys above are read even without `--revisited`; every other
+  Revisited tunable still needs the flag.
+- Dropping PNGs straight into `revisited/resources/` does **nothing**:
+  that folder shadows retail files by path (`Imagery/`, `Resources/`,
+  `Modules/<module>/`, ...). Put tile art under `Imagery/` (or point
+  `HighResTileRoot` elsewhere) and keep the set out of git;
+  `builders/import_tile_textures.py` mirrors an external art tree into
+  `Imagery/`.
+
 ## Phase plan
 
 - **Phase 1 (current — Demo 1)**: directory exists, empty. Engine

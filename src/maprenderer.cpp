@@ -33,6 +33,7 @@
 #include "mapmanager.h"
 #include "dls.h"
 #include "revisited_settings.h"
+#include "tiletexoverride.h"
 #include "mappane.h"
 #include "playscreen.h"
 #include "math3d.h"
@@ -708,16 +709,28 @@ static bool UploadTileBitmap(PTBitmap bm,
                              bool* out_has_alpha = nullptr,
                              uint32_t* out_bm_flags = nullptr,
                              std::vector<float>* out_cpu_depth_local = nullptr,
-                             std::vector<uint8_t>* out_cpu_opaque = nullptr)
+                             std::vector<uint8_t>* out_cpu_opaque = nullptr,
+                             int32_t override_objtype = -1,
+                             const char* override_name = nullptr)
 {
     if (!Renderer || !out_image_pair || !bm || bm->width <= 0 || bm->height <= 0) return false;
     const bool is_8bit = (bm->flags & BM_8BIT) != 0;
     const bool is_16bit = (bm->flags & (BM_15BIT | BM_16BIT)) != 0;
     const bool has_zbuffer = (bm->flags & BM_ZBUFFER) != 0;
     const bool has_alpha = (bm->flags & BM_ALPHA) != 0;
-    if (!is_8bit && !is_16bit) return false;
+    if (!is_8bit && !is_16bit)
+    {
+        static bool once = false;
+        if (!once) { once = true; log_error("[triage] UploadTileBitmap: neither 8-bit nor 16-bit (flags=0x%x %dx%d)", bm->flags, bm->width, bm->height); }
+        return false;
+    }
     SPalette* pal = (SPalette*)bm->palette.ptr();
-    if (is_8bit && !pal) return false;
+    if (is_8bit && !pal)
+    {
+        static bool once = false;
+        if (!once) { once = true; log_error("[triage] UploadTileBitmap: 8-bit tile without palette (flags=0x%x)", bm->flags); }
+        return false;
+    }
     const int32_t w = bm->width, h = bm->height;
     const size_t npx = size_t(w) * size_t(h);
     const uint8_t key8 = (uint8_t)bm->keycolor;
@@ -832,13 +845,49 @@ static bool UploadTileBitmap(PTBitmap bm,
         z_dump.bbox_x1 = z_dump.bbox_y1 = 0;
     }
     const uint64_t key = RendererSourcePointerKey(1u, bm);
-    const uint64_t gpu_bytes = uint64_t(npx) * (4u + uint64_t(sizeof(float)));
+
+    // High-res tile art (see tiletexoverride.h). The colour is swapped for the
+    // matching upscaled PNG; depth, coverage and every derived value below
+    // stay retail's, and the override's alpha is clipped to the retail
+    // silhouette (nearest 1x sample) so art cannot leak outside the tile.
+    const uint8_t* color_pixels = rgba.get();
+    size_t color_size = npx * 4;
+    int32_t color_w = w, color_h = h;
+    TileTexOverride::SImage override_image;
+    if (override_name && override_objtype >= 0 && Renderer->ImagePairForKey(key) == 0 &&
+        TileTexOverride::Load(override_objtype, override_name, override_image) &&
+        override_image.width > 0 && override_image.height > 0)
+    {
+        const int32_t ow = override_image.width;
+        const int32_t oh = override_image.height;
+        for (int32_t y = 0; y < oh; ++y)
+        for (int32_t x = 0; x < ow; ++x)
+        {
+            const int32_t sx = int32_t((int64_t(x) * w) / ow);
+            const int32_t sy = int32_t((int64_t(y) * h) / oh);
+            if (!rgba[(size_t(sy) * size_t(w) + size_t(sx)) * 4 + 3])
+                override_image.rgba[(size_t(y) * size_t(ow) + size_t(x)) * 4 + 3] = 0;
+        }
+        log_info("[tiletex] %s %dx%d -> %dx%d (%.2fx)", override_name, w, h, ow, oh,
+                 float(ow) / float(w));
+        color_pixels = override_image.rgba.data();
+        color_size = override_image.rgba.size();
+        color_w = ow;
+        color_h = oh;
+    }
+
+    const uint64_t gpu_bytes = uint64_t(color_size) + uint64_t(npx) * uint64_t(sizeof(float));
     *out_image_pair = Renderer->RegisterImagePairAsset(key,
-                                                       rgba.get(), npx * 4,
+                                                       color_pixels, color_size,
                                                        dflt.get(), npx * sizeof(float),
-                                                       w, h, gpu_bytes);
+                                                       w, h, gpu_bytes,
+                                                       color_w, color_h);
     if (!*out_image_pair)
+    {
+        static bool once = false;
+        if (!once) { once = true; log_error("[triage] UploadTileBitmap: RegisterImagePairAsset failed (%dx%d)", w, h); }
         return false;
+    }
     if (out_key) *out_key = key;
     *out_w = w; *out_h = h;
     if (out_z_local_min) *out_z_local_min = z_local_min;
@@ -925,7 +974,9 @@ static int32_t CacheSectorBitmap(std::vector<SSectorTileTex>& cache,
     if (!UploadTileBitmap(bm, &tex.image_pair, &renderer_key, &tex.w, &tex.h,
                           &tex.z_local_min, &tex.z_local_max,
                           &tex.z_dump, &tex.has_alpha, &bm_flags,
-                          &tex.cpu_depth_local, &tex.cpu_opaque))
+                          &tex.cpu_depth_local, &tex.cpu_opaque,
+                          (state == 0 && oi) ? oi->ObjType() : -1,
+                          (state == 0 && oi) ? oi->GetTypeName() : nullptr))
         return -1;
     AddRendererImagePairSourceRef(img, renderer_key, tex.image_pair);
     tex.pixel_count = tex.w * tex.h;
@@ -2914,7 +2965,9 @@ void TMapRenderer::RebuildForCurrentMap()
                 if (!UploadTileBitmap(bm, &t.image_pair, &renderer_key, &t.w, &t.h,
                                       &t.z_local_min, &t.z_local_max,
                                       &t.z_dump, &t.has_alpha, &bm_flags,
-                                      &t.cpu_depth_local, &t.cpu_opaque))
+                                      &t.cpu_depth_local, &t.cpu_opaque,
+                                      st == 0 ? oi->ObjType() : -1,
+                                      st == 0 ? oi->GetTypeName() : nullptr))
                 { ++upload_fail; continue; }
                 AddRendererImagePairSourceRef(img, renderer_key, t.image_pair);
                 t.pixel_count = t.w * t.h;

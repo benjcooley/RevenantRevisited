@@ -2382,10 +2382,14 @@ RendererImagePairHandle TRenderer::RegisterImagePairAsset(uint64_t key,
                                                           size_t depth_bytes,
                                                           int32_t width,
                                                           int32_t height,
-                                                          uint64_t gpu_bytes)
+                                                          uint64_t gpu_bytes,
+                                                          int32_t color_width,
+                                                          int32_t color_height)
 {
     if (!color_rgba8 || !depth_r32f || width <= 0 || height <= 0)
         return 0;
+    if (color_width <= 0) color_width = width;
+    if (color_height <= 0) color_height = height;
 
     if (key != 0)
     {
@@ -2394,9 +2398,21 @@ RendererImagePairHandle TRenderer::RegisterImagePairAsset(uint64_t key,
             return it->second;
     }
 
+    // High-res tile art keeps depth + height min/max at sprite resolution (the
+    // shader's normals and heights are UV-based, so that stays exact) and only
+    // enlarges the colour.
+    //
+    // The colour deliberately has no mip chain. The tile pass samples it with
+    // the implicit LOD, and that LOD comes out several levels deeper than the
+    // tile's actual screen footprint warrants (measured: a 4x tile that era
+    // art drew crisp at 1x turns to mush), while the image desc's max_lod is
+    // not honoured through this sokol/D3D11 build, so the level cannot be
+    // clamped from here. One level keeps the retail look (which is crisply
+    // aliased) and shows the added detail; the upscaled art carries little
+    // energy above 1x resolution, so it shimmers no worse than retail does.
     sg_image_desc color_desc = {};
-    color_desc.width = width;
-    color_desc.height = height;
+    color_desc.width = color_width;
+    color_desc.height = color_height;
     color_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
     color_desc.min_filter = SG_FILTER_LINEAR;
     color_desc.mag_filter = SG_FILTER_LINEAR;
@@ -2444,6 +2460,8 @@ RendererImagePairHandle TRenderer::RegisterImagePairAsset(uint64_t key,
     asset.height_minmax = sg_make_image(&height_desc);
     asset.width = width;
     asset.height = height;
+    asset.color_width = color_width;
+    asset.color_height = color_height;
     asset.height_minmax_mips = height_desc.num_mipmaps;
     asset.tight_proxy_hull_px =
         BuildTileTightProxyHull(static_cast<const float*>(depth_r32f), width, height);
@@ -2471,6 +2489,14 @@ const SRendererImagePairInfo* TRenderer::ImagePairInfo(RendererImagePairHandle h
     if (handle == 0 || handle > image_pair_assets.size())
         return nullptr;
     return &image_pair_assets[handle - 1];
+}
+
+RendererImagePairHandle TRenderer::ImagePairForKey(uint64_t key) const
+{
+    if (key == 0)
+        return 0;
+    auto it = image_pair_by_key.find(key);
+    return it == image_pair_by_key.end() ? 0 : it->second;
 }
 
 void TRenderer::AddImagePairAssetRef(RendererImagePairHandle handle, uint32_t count)

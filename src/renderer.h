@@ -378,8 +378,10 @@ class TParticleBucket;   // forward, see particlefx.h
 struct SRendererImagePairInfo
 {
     uint64_t key = 0;
-    int32_t width = 0;
+    int32_t width = 0;         // sprite (tile) space: depth + height minmax size
     int32_t height = 0;
+    int32_t color_width = 0;   // colour texture size; > width/height when a
+    int32_t color_height = 0;  // high-res tile override supplied bigger art
     int32_t height_minmax_mips = 0;
     uint32_t tight_proxy_points = 0;
     uint64_t gpu_bytes = 0;
@@ -673,8 +675,13 @@ public:
                                                    size_t depth_bytes,
                                                    int32_t width,
                                                    int32_t height,
-                                                   uint64_t gpu_bytes);
+                                                   uint64_t gpu_bytes,
+                                                   int32_t color_width = 0,
+                                                   int32_t color_height = 0);
     const SRendererImagePairInfo* ImagePairInfo(RendererImagePairHandle handle) const;
+    // Handle for an already-registered key, or 0. Lets callers skip work
+    // (e.g. decoding high-res tile art) when the asset is already resident.
+    RendererImagePairHandle ImagePairForKey(uint64_t key) const;
     void AddImagePairAssetRef(RendererImagePairHandle handle, uint32_t count = 1);
     void ReleaseImagePairAssetRef(RendererImagePairHandle handle, uint32_t count = 1);
 
