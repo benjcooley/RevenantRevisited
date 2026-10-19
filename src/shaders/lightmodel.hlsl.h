@@ -215,8 +215,12 @@ surface_light shade_surface(float3 alb, float3 W, float3 N, bool is_mesh, float 
             // (normal_lighting.z: 1 keeps all of it).
             float sat = normal_lighting.z;
             float3 lw = float3(0.299, 0.587, 0.114);
-            base   = lerp(float3(dot(base, lw)), base, sat);
-            points = lerp(float3(dot(points, lw)), points, sat);
+            // Single-argument splat constructors (float3(x)) trip the
+            // d3dcompiler on some systems; spell the components out.
+            float base_lum = dot(base, lw);
+            float points_lum = dot(points, lw);
+            base   = lerp(float3(base_lum, base_lum, base_lum), base, sat);
+            points = lerp(float3(points_lum, points_lum, points_lum), points, sat);
             // Retail's own lighting of its 3D objects (the 3D scene's ambient
             // and key light, untinted by the map's lights), at normal_lighting.w
             // of its strength, on top of the local light's share above.
