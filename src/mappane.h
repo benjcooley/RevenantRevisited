@@ -658,6 +658,18 @@ class TMapPane : public TPane
     void SetNotify( uint32_t newflags) { notifyflags |= newflags; }
     void Notify(uint32_t notify, void *ptr);
 
+    void KeepAlive(TObjectInstance* inst);
+        // Keep an object alive outside the map: a door script waits for the
+        // screen fade before its "control on", and the object it stands in
+        // is in the level the level change releases. The object leaves its
+        // sector (the release would free it with the sector) and is pulsed
+        // here until its script is done.
+    void PulseKeptAlive();
+        // Pulse the objects kept alive, and free the ones whose script ended
+    void FreeKeptAlive(int32_t level);
+        // Free the objects kept alive for a script of that level: their
+        // imagery goes with the level
+
   private:
 
   // Private functions
@@ -707,6 +719,7 @@ class TMapPane : public TPane
     TSafeRef<TGameMap> windowmap;                        // Map the sector window borrows from
     std::vector<TSafeRef<>> lightidholders;              // Lights given a light-table id (GetDrawLights)
     TGameMap::EventListenerId windowlistener = 0;        // Our Unloaded listener on windowmap
+    std::vector<TObjectInstance*> keptalive;             // Objects kept alive outside the map (KeepAlive)
     int32_t oldsectorx, oldsectory;                 // Position of sector in last frame
     int32_t sectorx, sectory;                       // Position of sector in current frame
     int32_t newsectorx, newsectory;                 // Position of sector in next frame

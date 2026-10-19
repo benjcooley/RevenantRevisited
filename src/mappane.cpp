@@ -8,6 +8,7 @@
 #include "dialog.h"
 
 #include "gamemap.h"
+#include "gameflow.h"
 #include "graphics.h"
 #include "mapmanager.h"
 #include "maprenderer.h"
@@ -2806,6 +2807,9 @@ void TMapPane::Pulse()
   // Pulse objects (does object AI)
     PulseObjects();
 
+  // Pulse the objects kept alive outside the map: their scripts still run
+    PulseKeptAlive();
+
   // Moves all objects
     MoveObjects();
 
@@ -4012,6 +4016,59 @@ void TMapPane::ForEachTickObject(int32_t objset, Visit&& visit)
     // script's `control on` and its animation still finishes.
     for (TMapIterator i(GetMapLevel(), nullptr, CHECK_NOINVENT, objset); i; i++)
         visit(i.Item(), &i);
+}
+
+// A door script waits for the screen fade before it gives the control back
+// (the mod's door script does its "control on" after the fade-in), and the
+// object it stands in is in the level the level change releases. The object
+// leaves its sector, so the release leaves it alive, and it is pulsed here
+// until its script ends.
+void TMapPane::KeepAlive(TObjectInstance* inst)
+{
+    if (!inst)
+        return;
+    RemoveFromSector(inst);
+    keptalive.push_back(inst);
+}
+
+void TMapPane::FreeKeptAlive(int32_t level)
+{
+    for (size_t i = 0; i < keptalive.size();)
+    {
+        TObjectInstance* inst = keptalive[i];
+        if (inst && inst->GetLevel() == level)
+        {
+            delete inst;
+            keptalive.erase(keptalive.begin() + i);
+            continue;
+        }
+        ++i;
+    }
+}
+
+void TMapPane::PulseKeptAlive()
+{
+    for (size_t i = 0; i < keptalive.size();)
+    {
+        TObjectInstance* inst = keptalive[i];
+        if (!inst)
+        {
+            keptalive.erase(keptalive.begin() + i);
+            continue;
+        }
+        inst->Pulse();
+        // The animation has to advance too: a script waits for its owner's
+        // action to finish, and the door's action is its closing animation.
+        inst->NextFrame();
+        TScript* script = inst->GetScript();
+        if (!script || !script->Running())
+        {
+            delete inst;
+            keptalive.erase(keptalive.begin() + i);
+            continue;
+        }
+        ++i;
+    }
 }
 
 // REVSYNC: TMapPane::NextFrameObjects @ 0x00457ef0 -- the animate set's

@@ -15,6 +15,7 @@
 #include "player.h"
 #include "revenant.h"
 #include "savegame.h"
+#include "script.h"
 #include "sector.h"
 #include "textbar.h"
 
@@ -24,6 +25,16 @@
 #include <iterator>
 #include <utility>
 #include <vector>
+
+namespace {
+// How long the level the camera left stays loaded after the level change
+// (24 ticks a second): the door script that sent the player across waits
+// for the door's animation to finish, and the animation only runs once the
+// world is held no more -- that is, once the new level is in. The level
+// has to stay loaded that long, or the door's object (and its imagery)
+// go with it.
+constexpr int32_t kReleaseDelayTicks = 60;
+} // namespace
 
 // Progress is retail's loading bar after the same work in
 // TPlayScreen::Initialize (0x0047a660; LoadingScreen_SPEC.md §1): the module
@@ -271,8 +282,59 @@ void TGameSession::ReleaseUnusedLevels(int32_t current) const
     }
     for (const int32_t level : unused)
     {
+        // The objects kept alive for a script of this level go with it:
+        // their imagery is freed with the level.
+        MapPane.FreeKeptAlive(level);
         log_info("[session] level %d released", level);
         MapManager.Evict(level);
+    }
+}
+
+// The level the camera left is released a moment after the level change:
+// the door script that sent the player across waits for the door's
+// animation to finish before its "control on", and the animation only
+// advances once the world is held no more (the new level is in). Releasing
+// the level with the door's object in it freed the object, its imagery and
+// its script, and the player was left frozen without control in the new
+// room.
+void TGameSession::UpdateReleaseDelay()
+{
+    if (releaseDelay <= 0)
+        return;
+    if (--releaseDelay > 0)
+        return;
+    ReleaseUnusedLevels(MapManager.CurrentLevel());
+}
+
+// A door script waits for the door's animation before it gives the control
+// back (the mod's door script does its "control on" after the fade-in), and
+// the object it stands in is in the level the level change leaves: releasing
+// the level frees the sectors, the sectors free the objects, and the object
+// frees its script -- the door script died between "FADESCREENIN" and
+// "CONTROL ON", and the player was left frozen without control in the new
+// room. The portal whose script is still running leaves its sector and
+// stays alive (with its level) until its script ends.
+void TGameSession::KeepWaitingScriptsAlive(int32_t level) const
+{
+    TGameMap* map = MapManager.GetCached(level);
+    if (!map)
+        return;
+    for (TSector* sec : map->Sectors())
+    {
+        if (!sec)
+            continue;
+        for (int32_t i = sec->NumItems() - 1; i >= 0; --i)
+        {
+            TObjectInstance* inst = sec->GetInstance(i);
+            if (!inst || inst->ObjClass() != OBJCLASS_EXIT)
+                continue;
+            TScript* script = inst->GetScript();
+            if (!script || !script->Running())
+                continue;
+            log_info("[session] level %d: '%s' runs a script, kept alive",
+                     level, inst->GetName() ? inst->GetName() : "?");
+            MapPane.KeepAlive(inst);
+        }
     }
 }
 
@@ -285,6 +347,8 @@ void TGameSession::ReleaseUnusedLevels(int32_t current) const
 // player saw either way: nothing moves while the strip fills (EXITS.md §3.2).
 bool TGameSession::EnterLevel()
 {
+    UpdateReleaseDelay();
+
     if (state != EState::Ready)
         return true;
 
@@ -317,9 +381,15 @@ bool TGameSession::EnterLevel()
             log_error("[session] level %d can't be loaded", level);
             return false;
         }
+        const int32_t oldlevel = MapManager.CurrentLevel();
         MapManager.SetCurrentMap(map);
         log_info("[session] entered level %d", level);
-        ReleaseUnusedLevels(level);
+        // The level the camera left waits a moment before it is released
+        // (UpdateReleaseDelay): the door script that sent the player
+        // across is still running on one of its objects, and it needs its
+        // level (and its imagery) alive until it ends.
+        KeepWaitingScriptsAlive(oldlevel);
+        releaseDelay = kReleaseDelayTicks;
         entering = true;
     }
 
