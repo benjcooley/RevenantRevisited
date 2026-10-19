@@ -51,6 +51,14 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
     height = dheight;
     format = SG_PIXELFORMAT_RGBA8;
 
+    // The game lays its UI out against (width, height) but presents into the
+    // window sokol actually opened. On Windows a window as tall as the screen
+    // loses the title bar's height from its client area, so the two can differ
+    // by tens of pixels -- log the mismatch once, it is the first thing to
+    // check when UI lands off the visible area.
+    log_info("[video] display %dx%d, sokol window %dx%d, dpi scale %.2f",
+             width, height, sapp_width(), sapp_height(), (double)sapp_dpi_scale());
+
     // ---- sokol_gfx context ------------------------------------------------
     sg_desc desc = {};
     // Validation failures print to stderr (unbuffered) so an unattended run

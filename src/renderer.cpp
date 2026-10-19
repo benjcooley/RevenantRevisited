@@ -2628,6 +2628,8 @@ void TRenderer::DrawTextureFit(TTextureHandle texture)
     const sg_image img = TextureImage(texture);
     if (!img.id) return;
 
+    // A cinematic fills the window it is shown in, so this one maps against
+    // the real canvas rather than the display.
     const int32_t target_w = sapp_width();
     const int32_t target_h = sapp_height();
     if (target_w <= 0 || target_h <= 0) return;
@@ -4934,8 +4936,12 @@ TTextureHandle TRenderer::BitmapAsTexture(PTBitmap bm, EBitmapDecode decode)
 void TRenderer::DrawBitmap(PTBitmap bm, int32_t x, int32_t y, EBitmapDecode decode)
 {
     if (!bm) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // UI primitives are authored in display pixels (the same space panes are
+    // laid out in), so they map against the display canvas, not the window:
+    // if the window and the display ever differ the whole UI scales into it
+    // instead of running off the right and bottom edges.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     SBitmapAtlasSlice slice;
     if (LookupUIBitmapAtlasSlice(bm, decode, &slice))
     {
@@ -4959,8 +4965,9 @@ void TRenderer::DrawBitmapSubrect(PTBitmap bm,
                                   int32_t src_w, int32_t src_h)
 {
     if (!bm || src_w <= 0 || src_h <= 0) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     SBitmapAtlasSlice slice;
     if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
     {
@@ -4982,8 +4989,9 @@ void TRenderer::DrawBitmapTinted(PTBitmap bm, int32_t x, int32_t y,
                                  float tr, float tg, float tb, float ta)
 {
     if (!bm) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     SBitmapAtlasSlice slice;
     if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
     {
@@ -5010,8 +5018,9 @@ void TRenderer::DrawBitmapSubrectTinted(PTBitmap bm,
                                         float tr, float tg, float tb, float ta)
 {
     if (!bm || src_w <= 0 || src_h <= 0) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     SBitmapAtlasSlice slice;
     if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
     {
@@ -5370,8 +5379,9 @@ void TRenderer::DrawSurface(TSurface* surf, int32_t x, int32_t y)
     if (!surf) return;
     const sg_image img = surf->GetSGImage();
     if (!img.id) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     const int32_t sw = surf->Width();
     const int32_t sh = surf->Height();
     CompositeSwapchain(img, x, y, sw, sh, target_w, target_h,
@@ -5384,8 +5394,9 @@ void TRenderer::DrawSurfaceTinted(TSurface* surf, int32_t x, int32_t y,
     if (!surf) return;
     const sg_image img = surf->GetSGImage();
     if (!img.id) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     const int32_t sw = surf->Width();
     const int32_t sh = surf->Height();
     CompositeSwapchainTinted(img, x, y, sw, sh, target_w, target_h,
@@ -5403,7 +5414,7 @@ void TRenderer::DrawSurfaceSubrectTinted(TSurface* surf,
     const sg_image img = surf->GetSGImage();
     if (!img.id) return;
     CompositeSwapchainTinted(img, dst_x, dst_y, src_w, src_h,
-                             sapp_width(), sapp_height(),
+                             width, height,
                              src_x, src_y, src_w, src_h,
                              surf->Width(), surf->Height(),
                              tr * ta, tg * ta, tb * ta, ta, ECompositeAlpha::Premultiplied);
@@ -5477,8 +5488,9 @@ void TRenderer::DrawSolidRect(int32_t x, int32_t y, int32_t w, int32_t h,
                          (uint32_t(b) <<  8) |  uint32_t(a);
     const sg_image img = GetOrCreateSolidColorImage(key);
     if (!img.id) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     CompositeSwapchain(img, x, y, w, h, target_w, target_h,
                        0, 0, 1, 1, 1, 1);
 }
@@ -5488,8 +5500,9 @@ void TRenderer::FillScreen(float r, float g, float b, float a)
     if (a <= 0.0f) return;
     const sg_image img = GetOrCreateSolidColorImage(0xFFFFFFFFu);
     if (!img.id) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     CompositeSwapchainTinted(img, 0, 0, target_w, target_h, target_w, target_h,
                              0, 0, 1, 1, 1, 1, r, g, b, a);
 }
@@ -5528,8 +5541,9 @@ void TRenderer::DrawNineSlice(PTBitmap bm,
 
     const int32_t sw = bm->width;
     const int32_t sh = bm->height;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
 
     // Clamp insets to half the source (and ensure non-negative) so any
     // crazy caller input stays sane. Same clamp applies to dest pieces.
