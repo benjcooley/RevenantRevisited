@@ -225,6 +225,11 @@ class TMapPane : public TPane
       // is true, in which case the value is set immediately.
     int32_t GetAmbientLight() { return ambient; }
       // Gets the ambient light intensity 
+    void ReapplyAmbientGamma();
+      // Re-applies the current GammaLevel offset to the ambient in effect.
+      // The offset the value already carries comes off first, so pressing
+      // the Options pane's OK repeatedly leaves the map where it is (retail
+      // stacked it: OPTIONS.md, question 93).
     void SetAmbientColor(SColor &color, bool stopfade = true);
       // Sets ambient light color.  If fading, sets target to new value unless stopfade
       // is true, in which case the value is set immediately.
@@ -759,6 +764,8 @@ class TMapPane : public TPane
   // so even uncovered levels (no area.def entry hitting the player's
   // current level) get a usable retail-default tint instead of black.
     int32_t ambient = 30;                           // Ambient light value
+    int32_t ambient_gamma_offset = 0;               // GammaLevel offset the fade
+                                                    // target (or ambient) carries
     SColor ambcolor = {255, 255, 255};              // Ambient light color
     bool ambientchanged = true;                     // true when ambient needs to be reset
     int32_t oldambient = 30, newambient = 30;       // Ambient fade old and new values

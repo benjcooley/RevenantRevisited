@@ -2505,7 +2505,8 @@ void TMapPane::DrawDLight()
 // (0x00453720) stores its target without it, as retail.
 void TMapPane::SetAmbientLight(int32_t light, bool stopfade)
 {
-    light = (std::max)(0, light + GammaAmbientOffset(GammaLevel));
+    ambient_gamma_offset = GammaAmbientOffset(GammaLevel);
+    light = (std::max)(0, light + ambient_gamma_offset);
 
     if (stopfade)
         totambfadeframes = totambfadesteps = 0; // Stop fading
@@ -2522,6 +2523,33 @@ void TMapPane::SetAmbientLight(int32_t light, bool stopfade)
         ambientchanged = true;  // Causes ambient to be reset in next call to DrawBackground()
     }
 }   
+
+// REVSYNC-DIVERGENCE: The Options pane's OK re-sets the ambient so the
+// GammaLevel in effect reaches the map (retail 0x0053afbc hands
+// GetAmbientLight() straight back to SetAmbientLight 0x00453640, which adds
+// the offset to a value that already carries it: every OK pressed it on
+// again, +10 a press at level 3, so the map crept brighter until the next
+// area ambient -- OPTIONS.md §9, question 93, reproduced in the shipped
+// game). Taking the old offset off first makes the call idempotent; the
+// current level's offset still lands, which is what the re-set is for.
+void TMapPane::ReapplyAmbientGamma()
+{
+    const int32_t offset   = GammaAmbientOffset(GammaLevel);
+    const int32_t previous = ambient_gamma_offset;
+    ambient_gamma_offset = offset;
+
+    if (totambfadeframes > 0)   // fading: only the target carries an offset
+    {
+        newambient = (std::max)(0, newambient - previous + offset);
+        return;
+    }
+
+    const int32_t light = (std::max)(0, ambient - previous + offset);
+    if (ambient == light)
+        return;
+    ambient = light;
+    ambientchanged = true;
+}
 
 void TMapPane::SetAmbientColor(SColor &color, bool stopfade)
 {
@@ -2570,6 +2598,7 @@ void TMapPane::FadeAmbient(int32_t light, SColor &color, int32_t frames, int32_t
     oldambcolor = ambcolor;
     newambient = light;
     newambcolor = color;
+    ambient_gamma_offset = GammaAmbientOffset(GammaLevel);
     totambfadeframes = frames;
     totambfadesteps = steps;
     ambfadeframes = 0;
