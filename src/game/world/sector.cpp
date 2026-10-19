@@ -209,6 +209,10 @@ bool TSector::Load(bool lock)
         {
             inst->ForceSector(this);
             inst->ForceLevel(level); // Directly sets the inst's level variable
+            // Retail stored no identity: a retail-loaded object's uid is
+            // where it sits, the same on every load, so a link to it
+            // survives a reload (engine/core/uid.h).
+            inst->Node()->SetUid(TUid::Derived(uint64_t(level), uint64_t(sectorx), uint64_t(sectory), uint64_t(c)));
             KeepInside(inst);
             // World positions stay in tile-Z space (matches the tile
             // draw path). The mesh-only 1.5 scaling lives entirely in

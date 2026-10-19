@@ -110,7 +110,7 @@ class TObjectImagery : public TAsset
     [[nodiscard]] const char* AssetPath() const override;
     [[nodiscard]] const char* AssetName() const override;
     [[nodiscard]] const char* AssetDebugName() const override;
-    [[nodiscard]] TAssetRef<TObjectImagery> AssetRef() const { return TAssetRef<TObjectImagery>(this); }
+    [[nodiscard]] TAssetHandle<TObjectImagery> AssetRef() const { return TAssetHandle<TObjectImagery>(this); }
 
   // Main imagery functions..
     static int32_t RegisterImagery(char *filename, SImageryHeader* header = nullptr, uint32_t headersize = 0);

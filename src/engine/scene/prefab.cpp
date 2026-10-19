@@ -137,6 +137,8 @@ void TPrefabComponent::OnAttach()
     std::string err;
     if (!nodepack::Unpack(r, *Owner(), nodes_, &err, /*apply_root_props=*/false))
         log_warn("[prefab] '%s': %s", prefab_->name.c_str(), err.c_str());
+    // This stamp's nodes are its own: fresh uids, links between them followed.
+    nodepack::Reidentify(*Owner(), nodes_);
     // Child nodes activate their components on add; the root's own
     // components attached here go live with the owner's activation.
 }

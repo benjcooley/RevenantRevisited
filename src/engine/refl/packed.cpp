@@ -20,6 +20,16 @@ void TPackedWriter::PutVarint(uint32_t v)
     buf_.push_back(uint8_t(v));
 }
 
+void TPackedWriter::PutVarint64(uint64_t v)
+{
+    while (v >= 0x80u)
+    {
+        buf_.push_back(uint8_t(v | 0x80u));
+        v >>= 7;
+    }
+    buf_.push_back(uint8_t(v));
+}
+
 void TPackedWriter::Float(uint16_t id, float v)
 {
     Tag(id, EPackedWire::Fixed32);
@@ -61,6 +71,19 @@ bool TPackedReader::GetVarint(uint32_t& out)
     return false;
 }
 
+bool TPackedReader::GetVarint64(uint64_t& out)
+{
+    out = 0;
+    for (int32_t shift = 0; shift < 70 && cur_ < end_; shift += 7)
+    {
+        const uint8_t b = *cur_++;
+        out |= uint64_t(b & 0x7Fu) << shift;
+        if (!(b & 0x80u))
+            return true;
+    }
+    return false;
+}
+
 bool TPackedReader::Next(SPackedField& f)
 {
     if (cur_ >= end_)
@@ -75,8 +98,8 @@ bool TPackedReader::Next(SPackedField& f)
         case EPackedWire::Varint:
         {
             const uint8_t* start = cur_;
-            uint32_t dummy = 0;
-            if (!GetVarint(dummy))
+            uint64_t dummy = 0;             // a uid is up to ten bytes
+            if (!GetVarint64(dummy))
                 return false;
             f.value = start;
             f.size  = uint32_t(cur_ - start);
@@ -128,6 +151,15 @@ int32_t TPackedReader::Int(const SPackedField& f, int32_t fallback)
 {
     uint32_t u = 0;
     return DecodeVarint(f, u) ? TPackedWriter::Unzigzag(u) : fallback;
+}
+
+uint64_t TPackedReader::Uid(const SPackedField& f, uint64_t fallback)
+{
+    if (f.wire != EPackedWire::Varint)
+        return fallback;
+    TPackedReader r(f.value, f.size);
+    uint64_t u = 0;
+    return r.GetVarint64(u) ? u : fallback;
 }
 
 float TPackedReader::Float(const SPackedField& f, float fallback)

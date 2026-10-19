@@ -55,6 +55,8 @@
 
 #pragma once
 
+#include "engine/core/uid.h"
+
 #include <cctype>
 #include <cstdint>
 #include <cstring>
@@ -113,10 +115,19 @@ enum class EPropType : uint8_t
     Vec3,
     Color,      // rgba, 0..1
     Enum,       // int payload; the table names the options
-    Ref,        // soft-ref id of another node
+    Uid,        // the object's own persistent 64-bit identity (TUid)
+    Ref,        // a 64-bit uid naming another node or an asset (SProp::ref_kind)
     Trigger,    // write 1 to fire; reads as 0
     Struct,     // one nested annotated object  (DEF: `key { ... }`)
     List,       // std::vector of nested annotated objects (DEF: repeated `key [name] { ... }`)
+};
+
+// What a Ref names, for the inspector's picker and the prefab remap.
+enum class ERefKind : uint8_t
+{
+    None,
+    Node,       // TNodeRef: a node, by uid
+    Asset,      // TAssetRef<T>: an asset, by the asset cache's uid
 };
 
 // Color as the property system carries it (floats 0..1).
@@ -134,11 +145,12 @@ struct SPropValue
     EPropType type = EPropType::Float;
     union
     {
-        bool    b;
-        int32_t i;
-        float   f;
-        float   v3[3];
-        float   c4[4];
+        bool     b;
+        int32_t  i;
+        uint64_t u;     // Uid / Ref
+        float    f;
+        float    v3[3];
+        float    c4[4];
     };
     std::string_view str;
 
@@ -148,7 +160,8 @@ struct SPropValue
     static constexpr SPropValue Int(int32_t v)             { SPropValue p; p.type = EPropType::Int;     p.i = v;  return p; }
     static constexpr SPropValue Float(float v)             { SPropValue p; p.type = EPropType::Float;   p.f = v;  return p; }
     static constexpr SPropValue Enum(int32_t v)            { SPropValue p; p.type = EPropType::Enum;    p.i = v;  return p; }
-    static constexpr SPropValue Ref(int32_t id)            { SPropValue p; p.type = EPropType::Ref;     p.i = id; return p; }
+    static constexpr SPropValue Uid(uint64_t v)            { SPropValue p; p.type = EPropType::Uid;     p.u = v;  return p; }
+    static constexpr SPropValue Ref(uint64_t uid)          { SPropValue p; p.type = EPropType::Ref;     p.u = uid; return p; }
     static constexpr SPropValue Trigger()                  { SPropValue p; p.type = EPropType::Trigger; p.b = true; return p; }
     static constexpr SPropValue String(std::string_view s) { SPropValue p; p.type = EPropType::String;  p.str = s; return p; }
     static constexpr SPropValue Vec3(float x, float y, float z)
@@ -163,11 +176,12 @@ struct SPropValue
             case EPropType::Bool:
             case EPropType::Trigger: return b ? 1.0f : 0.0f;
             case EPropType::Int:
-            case EPropType::Enum:
-            case EPropType::Ref:     return float(i);
+            case EPropType::Enum:    return float(i);
             case EPropType::Float:   return f;
             case EPropType::Vec3:    return v3[0];
             case EPropType::Color:   return c4[0];
+            case EPropType::Uid:
+            case EPropType::Ref:
             case EPropType::String:
             case EPropType::Struct:
             case EPropType::List:    return 0.0f;
@@ -182,6 +196,8 @@ struct SPropValue
     {
         case EPropType::Vec3:   return 3;
         case EPropType::Color:  return 4;
+        case EPropType::Uid:
+        case EPropType::Ref:
         case EPropType::String:
         case EPropType::Struct:
         case EPropType::List:   return 0;
@@ -221,9 +237,10 @@ inline void PropSetLane(SPropValue& v, int32_t lane, float x)
         case EPropType::Bool:
         case EPropType::Trigger: v.b = x >= 0.5f; break;
         case EPropType::Int:
-        case EPropType::Enum:
-        case EPropType::Ref:     v.i = int32_t(x); break;
+        case EPropType::Enum:    v.i = int32_t(x); break;
         case EPropType::Float:   v.f = x; break;
+        case EPropType::Uid:
+        case EPropType::Ref:
         case EPropType::String:
         case EPropType::Struct:
         case EPropType::List:    break;
@@ -275,6 +292,7 @@ struct SProp
     const SEnumOption* options           = nullptr;   // Enum only
     int32_t            option_count      = 0;
     const char*        elem_type_name    = "";        // Struct / List: the nested class
+    ERefKind           ref_kind          = ERefKind::None;   // Ref only: what it names
 };
 
 // One per annotated class, emitted by the generator and registered at

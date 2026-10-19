@@ -5,6 +5,8 @@
 // *************************************************************************
 
 #include "engine/refl/nodepack.h"
+
+#include <unordered_map>
 #include "engine/scene/node.h"
 #include "engine/refl/packed.h"
 #include "engine/refl/refl.h"
@@ -109,6 +111,10 @@ bool UnpackNode(TPackedReader& r, TNode& node,
             }
             TNode* child = nt->create_node();
             child->SetNodeName(name);
+            // A child the document gives no uid takes one derived from its
+            // parent's and its place, so a document reads the same way
+            // every time; a uid in the body replaces it below.
+            child->SetUid(TUid::Derived(node.Uid().value, uint64_t(node.GetChildCount())));
             child->SetParent(&node);
             owned.emplace_back(child);
             if (have_body)
@@ -143,6 +149,75 @@ bool Unpack(TPackedReader& r, TNode& root,
     const bool ok = UnpackNode(r, root, owned, err, apply_root_props, post_load);
     if (error) *error = err;
     return ok;
+}
+
+namespace {
+
+// Rewrites every node ref in `obj` (nested records included) found in `map`.
+void RemapRefs(const refl::SType& type, void* obj, const std::unordered_map<uint64_t, uint64_t>& map)
+{
+    for (const refl::SType* t = &type; t; t = t->base)
+    {
+        for (int32_t i = 0; i < t->prop_count; ++i)
+        {
+            const refl::SProp& p = t->props[i];
+            if (p.type == EPropType::Struct)
+            {
+                if (const refl::SType* et = refl::ElemType(p))
+                    if (void* n = refl::Nested(type, obj, p.id))
+                        RemapRefs(*et, n, map);
+                continue;
+            }
+            if (p.type == EPropType::List)
+            {
+                const refl::SType* et = refl::ElemType(p);
+                if (!et) continue;
+                const int32_t count = refl::ListCount(type, obj, p.id);
+                for (int32_t k = 0; k < count; ++k)
+                    if (void* e = refl::ListAt(type, obj, p.id, k))
+                        RemapRefs(*et, e, map);
+                continue;
+            }
+            if (p.type != EPropType::Ref || p.ref_kind != ERefKind::Node || p.read_only)
+                continue;
+            SPropValue v;
+            if (!refl::Get(type, obj, p.id, v))
+                continue;
+            auto it = map.find(v.u);
+            if (it != map.end())
+                refl::Set(type, obj, p.id, SPropValue::Ref(it->second));
+        }
+    }
+}
+
+void RemapNode(TNode& node, const std::unordered_map<uint64_t, uint64_t>& map)
+{
+    if (const refl::SType* t = refl::Of(node))
+        RemapRefs(*t, &node, map);
+    for (int32_t i = 0; i < node.NumComponents(); ++i)
+        if (TComponent* c = node.GetComponent(i))
+            if (const refl::SType* ct = refl::Of(*c))
+                RemapRefs(*ct, c, map);
+}
+
+} // namespace
+
+void Reidentify(TNode& root, const std::vector<std::unique_ptr<TNode>>& stamped)
+{
+    std::unordered_map<uint64_t, uint64_t> map;
+    for (const auto& node : stamped)
+    {
+        if (!node) continue;
+        const TUid fresh = TUid::Random();
+        map[node->Uid().value] = fresh.value;
+        node->SetUid(fresh);
+    }
+    if (map.empty())
+        return;
+    RemapNode(root, map);
+    for (const auto& node : stamped)
+        if (node)
+            RemapNode(*node, map);
 }
 
 } // namespace nodepack

@@ -48,4 +48,10 @@ bool Unpack(TPackedReader& r, TNode& root,
             std::vector<std::unique_ptr<TNode>>& owned, std::string* error = nullptr,
             bool apply_root_props = true, bool post_load = true);
 
+// A stamped copy gets identities of its own: every node in `stamped` takes
+// a fresh uid, and every node ref (on those nodes, their components, and
+// `root`'s components) that named one of the old uids is rewritten to the
+// new one. Refs to anything outside the stamp are left alone.
+void Reidentify(TNode& root, const std::vector<std::unique_ptr<TNode>>& stamped);
+
 } // namespace nodepack

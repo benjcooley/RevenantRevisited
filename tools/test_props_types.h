@@ -3,6 +3,8 @@
 #pragma once
 
 #include "../src/engine/refl/refl.h"
+#include "../src/engine/scene/node.h"
+#include "../src/engine/assets/assetcache.h"
 
 #include <HandmadeMath.h>
 
@@ -30,6 +32,15 @@ struct STestMesh
     int32_t changed_count = 0;
     uint16_t last_changed = 0;
     void PropChanged(uint16_t id) { ++changed_count; last_changed = id; }
+};
+
+// Identity and links: a uid of its own, a node ref and an asset ref.
+struct STestLinks
+{
+    PROP(1) TUid                 uid;
+    PROP(2, "What it points at") TNodeRef          target;
+    PROP(3)                      TAssetRef<TAsset> image;
+    PROP(4)                      int32_t           after = 5;
 };
 
 // A class with no annotations is simply not in the registry.

@@ -27,6 +27,7 @@
 #pragma once
 
 #include "engine/core/saferef.h"
+#include "engine/core/uid.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -170,8 +171,10 @@ class TAsset : public TSafeObjectBase<TAsset>
     uint32_t asset_ref_count_ = 0;
 };
 
+// A runtime handle to a loaded asset: the registry soft ref (id and
+// generation), what the cache hands out.
 template <typename T = TAsset>
-using TAssetRef = TSafeRef<T>;
+using TAssetHandle = TSafeRef<T>;
 
 [[nodiscard]] std::string NormalizeAssetPath(std::string_view path);
 [[nodiscard]] std::string NormalizeAssetName(std::string_view name);
@@ -208,33 +211,33 @@ class TAssetCache
     [[nodiscard]] bool IsInitialized() const { return initialized_; }
     [[nodiscard]] size_t AssetCount() const { return assets_by_uid_.size(); }
 
-    [[nodiscard]] TAssetRef<> Find(AssetUid uid) const;
-    [[nodiscard]] TAssetRef<> FindClassic(std::string_view path, std::string_view name) const;
+    [[nodiscard]] TAssetHandle<> Find(AssetUid uid) const;
+    [[nodiscard]] TAssetHandle<> FindClassic(std::string_view path, std::string_view name) const;
 
-    TAssetRef<> RegisterAsset(const SAssetKey& key,
+    TAssetHandle<> RegisterAsset(const SAssetKey& key,
                               std::shared_ptr<void> payload = {},
                               std::type_index payload_type = std::type_index(typeid(void)),
                               size_t payload_bytes = 0);
-    std::vector<TAssetRef<>> RegisterAssets(const std::vector<SAssetKey>& keys);
+    std::vector<TAssetHandle<>> RegisterAssets(const std::vector<SAssetKey>& keys);
 
-    TAssetRef<> GetOrLoadAsset(const SAssetKey& key, const FAssetLoader& loader);
-    std::vector<TAssetRef<>> GetOrLoadAssets(const std::vector<SAssetKey>& keys,
+    TAssetHandle<> GetOrLoadAsset(const SAssetKey& key, const FAssetLoader& loader);
+    std::vector<TAssetHandle<>> GetOrLoadAssets(const std::vector<SAssetKey>& keys,
                                              const FAssetLoader& loader);
 
-    TAssetRef<> RegisterClassic(std::string_view path,
+    TAssetHandle<> RegisterClassic(std::string_view path,
                                 std::string_view name,
                                 EAssetKind kind = EAssetKind::ClassicResource,
                                 std::shared_ptr<void> payload = {},
                                 std::type_index payload_type = std::type_index(typeid(void)),
                                 size_t payload_bytes = 0);
 
-    TAssetRef<> GetOrLoadClassic(std::string_view path,
+    TAssetHandle<> GetOrLoadClassic(std::string_view path,
                                  std::string_view name,
                                  EAssetKind kind,
                                  const FAssetLoader& loader);
 
     template <typename T>
-    TAssetRef<> RegisterClassic(std::string_view path,
+    TAssetHandle<> RegisterClassic(std::string_view path,
                                 std::string_view name,
                                 EAssetKind kind,
                                 std::shared_ptr<T> payload,
@@ -248,10 +251,10 @@ class TAssetCache
                                payload_bytes);
     }
 
-    uint32_t IncrementRef(TAssetRef<> asset, uint32_t count = 1);
-    uint32_t DecrementRef(TAssetRef<> asset, uint32_t count = 1);
-    uint32_t AddRef(TAssetRef<> asset, uint32_t count = 1) { return IncrementRef(asset, count); }
-    uint32_t ReleaseRef(TAssetRef<> asset, uint32_t count = 1) { return DecrementRef(asset, count); }
+    uint32_t IncrementRef(TAssetHandle<> asset, uint32_t count = 1);
+    uint32_t DecrementRef(TAssetHandle<> asset, uint32_t count = 1);
+    uint32_t AddRef(TAssetHandle<> asset, uint32_t count = 1) { return IncrementRef(asset, count); }
+    uint32_t ReleaseRef(TAssetHandle<> asset, uint32_t count = 1) { return DecrementRef(asset, count); }
     void ResetRefCounts();
     size_t ClearUnreferencedAssets();
 
@@ -266,4 +269,46 @@ class TAssetCache
     std::vector<std::unique_ptr<TGenericAsset>> assets_;
     std::unordered_map<AssetUid, TAsset*> assets_by_uid_;
     bool initialized_ = false;
+};
+
+// The shared engine asset cache (defined by the engine).
+extern TAssetCache AssetCache;
+
+// A link to an asset by its uid: what a property holds and a file stores
+// (an archetype's imagery, a sound set). Resolution goes through the cache
+// once and is cached as a handle.
+template <typename T = TAsset>
+class TAssetRef
+{
+  public:
+    TAssetRef() = default;
+    explicit TAssetRef(TUid uid) : uid_(uid) {}
+    explicit TAssetRef(const T* asset) { Set(asset); }
+
+    void Set(const T* asset)
+    {
+        uid_ = asset ? TUid(asset->Uid()) : TUid();
+        cached_ = asset;
+    }
+    void Clear() { uid_ = TUid(); cached_.Clear(); }
+
+    [[nodiscard]] TUid Uid() const { return uid_; }
+    [[nodiscard]] T* Get() const
+    {
+        if (!uid_.IsValid()) return nullptr;
+        if (T* asset = cached_.Get())
+            if (asset->Uid() == uid_.value) return asset;
+        T* asset = static_cast<T*>(AssetCache.Find(uid_.value).Get());
+        cached_ = asset;
+        return asset;
+    }
+    [[nodiscard]] bool IsValid() const { return Get() != nullptr; }
+    explicit operator bool() const { return IsValid(); }
+    T* operator->() const { return Get(); }
+    bool operator==(const TAssetRef& o) const { return uid_ == o.uid_; }
+    bool operator!=(const TAssetRef& o) const { return uid_ != o.uid_; }
+
+  private:
+    TUid uid_;
+    mutable TSafeRef<T> cached_;
 };

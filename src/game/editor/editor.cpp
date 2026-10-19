@@ -53,6 +53,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <unordered_map>
 #include <IconsMaterialSymbols.h>
 // Revenant's legacy revdefs.h defines `COLOR` as a numeric macro, which
@@ -772,10 +773,24 @@ void DrawPropertyRow(TNode* node, void* obj, const refl::SType& type, const refl
             if (ImGui::Checkbox("##v", &b)) commit(SPropValue::Bool(b));
             break;
         }
-        case EPropType::Int:
-        case EPropType::Ref: {
+        case EPropType::Int: {
             int n = v.i;
             if (ImGui::DragInt("##v", &n, 1.0f)) commit(SPropValue::Int(n));
+            break;
+        }
+        case EPropType::Uid:
+        case EPropType::Ref: {
+            // Hex, as the DEF text writes it. A picker for node and asset
+            // refs comes with the packed sector editor.
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "%016llx", (unsigned long long)v.u);
+            if (ImGui::InputText("##v", buf, sizeof(buf),
+                                 ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsHexadecimal |
+                                 (read_only ? ImGuiInputTextFlags_ReadOnly : 0)))
+            {
+                const uint64_t u = std::strtoull(buf, nullptr, 16);
+                commit(p.type == EPropType::Uid ? SPropValue::Uid(u) : SPropValue::Ref(u));
+            }
             break;
         }
         case EPropType::Float: {

@@ -67,6 +67,11 @@ TYPE_MAP = {
     "std::string": ("String", "str", "{m}.assign(v.str.data(), v.str.size());",       "out = SPropValue::String({m});"),
     "hmm_vec3":    ("Vec3",   "v3",  "{m} = hmm_vec3{{{{v.v3[0], v.v3[1], v.v3[2]}}}};", "out = SPropValue::Vec3({m}.X, {m}.Y, {m}.Z);"),
     "SRgba":       ("Color",  "c4",  "{m} = SRgba{{v.c4[0], v.c4[1], v.c4[2], v.c4[3]}};", "out = SPropValue::Color({m}.r, {m}.g, {m}.b, {m}.a);"),
+    # Identity and links: 64-bit uids (engine/core/uid.h). TAssetRef<T> is
+    # looked up by its template name; {t} is the member's full type.
+    "TUid":        ("Uid",    "u",   "{m} = TUid(v.u);",                             "out = SPropValue::Uid({m}.value);"),
+    "TNodeRef":    ("Ref",    "u",   "{m} = TNodeRef(TUid(v.u));",                   "out = SPropValue::Ref({m}.Uid().value);"),
+    "TAssetRef":   ("Ref",    "u",   "{m} = {t}(TUid(v.u));",                        "out = SPropValue::Ref({m}.Uid().value);"),
     # Retail's integer world point rides the Vec3 lanes.
     "S3DPoint":    ("Vec3",   "v3",  "{m} = S3DPoint(int32_t(std::lround(v.v3[0])), int32_t(std::lround(v.v3[1])), int32_t(std::lround(v.v3[2])));",
                                      "out = SPropValue::Vec3(float({m}.x), float({m}.y), float({m}.z));"),
@@ -90,6 +95,14 @@ def snake(name: str) -> str:
     s = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name)
     s = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", "_", s)
     return s.lower()
+
+
+REF_KIND = {"TNodeRef": "Node", "TAssetRef": "Asset"}
+
+
+def base_ctype(ctype):
+    """`TAssetRef<TObjectImagery>` -> `TAssetRef`; anything else unchanged."""
+    return "TAssetRef" if ctype.startswith("TAssetRef<") else ctype
 
 
 class Member:
@@ -374,6 +387,10 @@ def default_expr(m, ptype, path):
         return "SPropValue::Float(%s)" % (init if init else "0.0f")
     if ptype == "String":
         return "SPropValue::String(%s)" % (init if init else '""')
+    if ptype in ("Uid", "Ref"):
+        if init is not None:
+            fail(path, m.line_no, "a uid or ref has no literal default")
+        return "SPropValue::%s(0)" % ptype
     if ptype in ("Vec3", "Color"):
         lanes = 3 if ptype == "Vec3" else 4
         if init is None:
@@ -442,8 +459,8 @@ def emit(path: Path, out: Path, include: str):
 
     def kind_of(m):
         """-> (ptype, elem_class or None)"""
-        if m.ctype in TYPE_MAP:
-            return TYPE_MAP[m.ctype][0], None
+        if base_ctype(m.ctype) in TYPE_MAP:
+            return TYPE_MAP[base_ctype(m.ctype)][0], None
         if m.ctype in enums:
             return "Enum", None
         mv = RE_VECTOR.match(m.ctype)
@@ -467,12 +484,13 @@ def emit(path: Path, out: Path, include: str):
                 opts, nopts = "nullptr", "0"
             if ptype in ("List", "Struct") and m.getter:
                 fail(path, m.line_no, "nested records cannot be accessor-backed (PROP_FN)")
-            o.append('    { %d, "%s", %s, EPropType::%s, %s, %s, %s, %s, %s, %s, "%s" },\n'
+            o.append('    { %d, "%s", %s, EPropType::%s, %s, %s, %s, %s, %s, %s, "%s", ERefKind::%s },\n'
                      % (m.id, m.name, m.desc, ptype,
                         "true" if m.serialized else "false",
                         "true" if m.visible else "false",
                         "true" if m.read_only else "false",
-                        default_expr(m, ptype, path), opts, nopts, elem or ""))
+                        default_expr(m, ptype, path), opts, nopts, elem or "",
+                        REF_KIND.get(base_ctype(m.ctype), "None")))
         o.append("};\n\n")
 
         o.append("} // namespace\n\n")
@@ -499,27 +517,27 @@ def emit(path: Path, out: Path, include: str):
                   o.append("        case %d: return false;   // read-only / nested\n" % m.id)
                   continue
               if m.setter:
-                  if m.ctype in TYPE_MAP:
-                      ptype, _, setexpr, _ = TYPE_MAP[m.ctype]
+                  if base_ctype(m.ctype) in TYPE_MAP:
+                      ptype, _, setexpr, _ = TYPE_MAP[base_ctype(m.ctype)]
                       if ptype == "Float":
                           conv = "float _v; if (v.type == EPropType::Int) _v = float(v.i); else if (v.type == EPropType::Float) _v = v.f; else return false;"
                       elif ptype == "Int":
                           conv = "int32_t _v; if (v.type == EPropType::Float) _v = int32_t(v.f); else if (v.type == EPropType::Int || v.type == EPropType::Enum) _v = v.i; else return false;"
                       else:
-                          conv = "if (v.type != EPropType::%s) return false; %s _v; %s" % (ptype, m.ctype, setexpr.format(m="_v"))
+                          conv = "if (v.type != EPropType::%s) return false; %s _v; %s" % (ptype, m.ctype, setexpr.format(m="_v", t=m.ctype))
                   else:
                       conv = "if (v.type != EPropType::Enum && v.type != EPropType::Int) return false; %s _v = %s(v.i);" % (m.ctype, m.ctype)
                   o.append("        case %d: { %s self.%s(_v); break; }\n" % (m.id, conv, m.setter))
                   continue
               tgt = "self." + m.member
-              if m.ctype in TYPE_MAP:
-                  ptype, _, setexpr, _ = TYPE_MAP[m.ctype]
+              if base_ctype(m.ctype) in TYPE_MAP:
+                  ptype, _, setexpr, _ = TYPE_MAP[base_ctype(m.ctype)]
                   if ptype == "Float":
                       o.append("        case %d: if (v.type == EPropType::Int) %s = float(v.i); else if (v.type == EPropType::Float) %s = v.f; else return false; break;\n" % (m.id, tgt, tgt))
                   elif ptype == "Int":
                       o.append("        case %d: if (v.type == EPropType::Float) %s = int32_t(v.f); else if (v.type == EPropType::Int || v.type == EPropType::Enum) %s = v.i; else return false; break;\n" % (m.id, tgt, tgt))
                   else:
-                      o.append("        case %d: if (v.type != EPropType::%s) return false; %s break;\n" % (m.id, ptype, setexpr.format(m=tgt)))
+                      o.append("        case %d: if (v.type != EPropType::%s) return false; %s break;\n" % (m.id, ptype, setexpr.format(m=tgt, t=m.ctype)))
               else:
                   o.append("        case %d: if (v.type != EPropType::Enum && v.type != EPropType::Int) return false; %s = %s(v.i); break;\n" % (m.id, tgt, m.ctype))
           o.append("        default: return false;\n    }\n")
@@ -534,12 +552,12 @@ def emit(path: Path, out: Path, include: str):
               read = "self." + m.read
               if kind_of(m)[0] in ("List", "Struct"):
                   continue
-              if m.ctype in TYPE_MAP:
+              if base_ctype(m.ctype) in TYPE_MAP:
                   if m.getter and m.ctype in ("hmm_vec3", "SRgba", "S3DPoint"):
                       o.append("        case %d: { const %s _g = %s; %s return true; }\n"
-                               % (m.id, m.ctype, read, TYPE_MAP[m.ctype][3].format(m="_g")))
+                               % (m.id, m.ctype, read, TYPE_MAP[base_ctype(m.ctype)][3].format(m="_g", t=m.ctype)))
                   else:
-                      o.append("        case %d: %s return true;\n" % (m.id, TYPE_MAP[m.ctype][3].format(m=read)))
+                      o.append("        case %d: %s return true;\n" % (m.id, TYPE_MAP[base_ctype(m.ctype)][3].format(m=read)))
               else:
                   o.append("        case %d: out = SPropValue::Enum(int32_t(%s)); return true;\n" % (m.id, read))
           o.append("        default: return false;\n    }\n}\n\n")

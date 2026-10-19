@@ -71,6 +71,8 @@ void TObjectDef::Apply(const SObjectState& state, TObjectInstance& inst) const
     SetIntRotateX(inst, state.rotatex);
     SetIntRotateY(inst, state.rotatey);
     SetIntFacing(inst, state.rotatez);
+    if (state.uid.IsValid())
+        inst.Node()->SetUid(state.uid);
     if (inst.flags & OF_LIGHT)
         inst.EnsureLight();
 }
@@ -89,4 +91,5 @@ void TObjectDef::Capture(const TObjectInstance& inst, SObjectState& state) const
     state.rotatey  = uint8_t(IntRotateY(inst));
     state.rotatez  = uint8_t(IntFacing(inst));
     state.group    = inst.group;
+    state.uid      = inst.Node()->Uid();
 }

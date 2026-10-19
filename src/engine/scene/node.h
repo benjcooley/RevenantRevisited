@@ -74,6 +74,7 @@ class TNode final : public TSafeObjectBase<TNode>
     PROP_FN(3, hmm_vec3,    rot,    LocalRotDeg, SetLocalRotDeg);     // euler, degrees
     PROP_FN(4, hmm_vec3,    scl,    LocalScl,    SetLocalScl, def({1, 1, 1}));
     PROP_FN(5, bool,        active, Active,      SetActive, def(true), "Inactive: subtree neither ticked nor drawn");
+    PROP_FN(6, TUid,        uid,    Uid,         SetUid, "Persistent identity: what a link names");
 
     // The node's own name, or its object's name when it has none of its
     // own (a map object is addressed by the object name).
@@ -83,6 +84,13 @@ class TNode final : public TSafeObjectBase<TNode>
     // The node-registry id (what TSafeRef<TNode> captures). Distinct
     // from a map object's map index; the particle runtime keys owners by it.
     [[nodiscard]] int32_t NodeId() const { return TSafeObjectBase<TNode>::SafeRefId(); }
+
+    // The persistent identity (engine/core/uid.h): random at construction,
+    // then whatever the record or document says. A serialized link names
+    // this; TNodeRef resolves it through the uid registry.
+    [[nodiscard]] TUid Uid() const { return uid_; }
+    void SetUid(TUid uid);
+    [[nodiscard]] static TNode* FindByUid(TUid uid);
 
     // The object component, when this node is a map object: cached at
     // attach, never searched. nullptr for a plain prefab node. The game's
@@ -174,6 +182,7 @@ class TNode final : public TSafeObjectBase<TNode>
 
     TTransform transform_;          // Authoritative spatial state
     std::string node_name_;
+    TUid uid_;                      // Persistent identity, in the uid registry
     bool active_ = true;
     std::vector<std::unique_ptr<TComponent>> components_;
     TComponent* object_ = nullptr;          // the object component, cached at attach
@@ -181,6 +190,44 @@ class TNode final : public TSafeObjectBase<TNode>
     int32_t mapindex_ = -1;
     TSector* sector_ = nullptr;
     int32_t level_ = 0;
+};
+
+// A link to a node by its persistent uid: what a property holds and a file
+// stores. Resolution goes through the uid registry once and is cached as a
+// soft ref, so a hot path pays the soft-ref check, not a hash lookup.
+class TNodeRef
+{
+  public:
+    TNodeRef() = default;
+    explicit TNodeRef(TUid uid) : uid_(uid) {}
+    explicit TNodeRef(const TNode* node) { Set(node); }
+
+    void Set(const TNode* node)
+    {
+        uid_ = node ? node->Uid() : TUid();
+        cached_ = node;
+    }
+    void Clear() { uid_ = TUid(); cached_.Clear(); }
+
+    [[nodiscard]] TUid Uid() const { return uid_; }
+    [[nodiscard]] TNode* Get() const
+    {
+        if (!uid_.IsValid()) return nullptr;
+        if (TNode* node = cached_.Get())
+            if (node->Uid() == uid_) return node;
+        TNode* node = TNode::FindByUid(uid_);
+        cached_ = node;
+        return node;
+    }
+    [[nodiscard]] bool IsValid() const { return Get() != nullptr; }
+    explicit operator bool() const { return IsValid(); }
+    TNode* operator->() const { return Get(); }
+    bool operator==(const TNodeRef& o) const { return uid_ == o.uid_; }
+    bool operator!=(const TNodeRef& o) const { return uid_ != o.uid_; }
+
+  private:
+    TUid uid_;
+    mutable TSafeRef<TNode> cached_;
 };
 
 // Safe reference to a component owned by a node. Resolves the owner

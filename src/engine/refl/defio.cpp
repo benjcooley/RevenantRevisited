@@ -9,6 +9,7 @@
 #include "engine/scene/node.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 namespace defio {
@@ -42,10 +43,27 @@ bool NodeToValue(const refl::SProp& p, const defdoc::Node& n, SPropValue& v,
             v = SPropValue::Bool(n.as_bool());
             return true;
         case EPropType::Int:
-        case EPropType::Ref:
             if (!n.is_number() && !n.is_string()) { why = "expected int"; return false; }
-            v = p.type == EPropType::Int ? SPropValue::Int(int32_t(n.as_int())) : SPropValue::Ref(int32_t(n.as_int()));
+            v = SPropValue::Int(int32_t(n.as_int()));
             return true;
+        case EPropType::Uid:
+        case EPropType::Ref:
+        {
+            // A uid is written as hex (0x...); a plain number is taken too.
+            uint64_t u = 0;
+            if (n.is_string())
+            {
+                const std::string text = n.as_string();
+                char* end = nullptr;
+                u = std::strtoull(text.c_str(), &end, 0);
+                if (!end || *end) { why = "expected a uid (0x...)"; return false; }
+            }
+            else if (n.is_number())
+                u = uint64_t(n.as_int());
+            else { why = "expected a uid (0x...)"; return false; }
+            v = p.type == EPropType::Uid ? SPropValue::Uid(u) : SPropValue::Ref(u);
+            return true;
+        }
         case EPropType::Float:
             if (!n.is_number() && !n.is_string()) { why = "expected number"; return false; }
             v = SPropValue::Float(float(n.as_double()));
@@ -206,6 +224,8 @@ class TReaderSink : public defdoc::Sink
             }
             TNode* child = type->create_node();
             child->SetNodeName(label);
+            // Unauthored uid: derived from the parent's and the child's place (nodepack does the same)
+            child->SetUid(TUid::Derived(cur.node->Uid().value, uint64_t(cur.node->GetChildCount())));
             child->SetParent(cur.node);
             owned_->emplace_back(child);
             frames_.push_back({ type, child, child });
@@ -456,8 +476,15 @@ std::string FormatValue(const refl::SProp& p, const SPropValue& v)
     switch (p.type)
     {
         case EPropType::Bool:    return v.b ? "true" : "false";
-        case EPropType::Int:
-        case EPropType::Ref:     return std::to_string(v.i);
+        case EPropType::Int:     return std::to_string(v.i);
+        case EPropType::Uid:
+        case EPropType::Ref:
+        {
+            // Quoted, so the document parser keeps it a string (Fmt is for %g).
+            char buf[24];
+            std::snprintf(buf, sizeof(buf), "\"0x%016llx\"", (unsigned long long)v.u);
+            return buf;
+        }
         case EPropType::Float:   return Fmt("%g", double(v.f));
         case EPropType::String:
         {

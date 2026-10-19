@@ -120,8 +120,9 @@ bool Equals(const SPropValue& a, const SPropValue& b)
         case EPropType::Bool:
         case EPropType::Trigger: return a.b == b.b;
         case EPropType::Int:
-        case EPropType::Enum:
-        case EPropType::Ref:     return a.i == b.i;
+        case EPropType::Enum:    return a.i == b.i;
+        case EPropType::Uid:
+        case EPropType::Ref:     return a.u == b.u;
         case EPropType::Float:   return a.f == b.f;
         case EPropType::String:  return a.str == b.str;
         case EPropType::Vec3:    return a.v3[0] == b.v3[0] && a.v3[1] == b.v3[1] && a.v3[2] == b.v3[2];
@@ -319,7 +320,8 @@ void Pack(const SType& type, const void* obj, TPackedWriter& w)
                 case EPropType::Bool:    w.Bool(p.id, v.b);      break;
                 case EPropType::Int:     w.Int(p.id, v.i);       break;
                 case EPropType::Enum:    w.Enum(p.id, v.i);      break;
-                case EPropType::Ref:     w.Int(p.id, v.i);       break;
+                case EPropType::Uid:
+                case EPropType::Ref:     w.Uid(p.id, v.u);       break;
                 case EPropType::Float:   w.Float(p.id, v.f);     break;
                 case EPropType::String:  w.String(p.id, v.str);  break;
                 case EPropType::Vec3:    w.Vec3(p.id, v.v3);     break;
@@ -356,7 +358,8 @@ void ApplyPacked(const SType& type, void* obj, const SPackedField& f)
         case EPropType::Bool:    v = SPropValue::Bool(TPackedReader::Bool(f));     break;
         case EPropType::Int:     v = SPropValue::Int(TPackedReader::Int(f));       break;
         case EPropType::Enum:    v = SPropValue::Enum(TPackedReader::Int(f));      break;
-        case EPropType::Ref:     v = SPropValue::Ref(TPackedReader::Int(f));       break;
+        case EPropType::Uid:     v = SPropValue::Uid(TPackedReader::Uid(f));       break;
+        case EPropType::Ref:     v = SPropValue::Ref(TPackedReader::Uid(f));       break;
         case EPropType::Float:   v = SPropValue::Float(TPackedReader::Float(f));   break;
         case EPropType::String:  v = SPropValue::String(TPackedReader::String(f)); break;
         case EPropType::Vec3:    v.type = EPropType::Vec3;  if (!TPackedReader::Vec3(f, v.v3))  return; break;

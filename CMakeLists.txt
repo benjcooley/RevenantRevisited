@@ -306,6 +306,7 @@ target_compile_definitions(test_particlefx PRIVATE REV_ASSETS_DIR="${CMAKE_SOURC
 
 add_executable(test_props
   tools/test_props.cpp
+  src/engine/core/uid.cpp
   src/engine/refl/refl.cpp
   src/engine/refl/packed.cpp)
 target_include_directories(test_props PRIVATE ${HANDMADE_MATH_DIR})
@@ -316,6 +317,7 @@ add_executable(test_defio
   tools/test_defio.cpp
   src/engine/refl/defio.cpp
   src/engine/refl/nodepack.cpp
+  src/engine/core/uid.cpp
   src/engine/scene/node.cpp
   src/engine/scene/transform.cpp
   src/engine/scene/animsystem.cpp
@@ -330,6 +332,8 @@ rev_reflect(test_defio tools/test_defio_types.h src/engine/scene/node.h src/engi
 
 add_executable(test_node
   tools/test_node.cpp
+  src/engine/core/uid.cpp
+  src/engine/refl/nodepack.cpp
   src/engine/scene/node.cpp
   src/engine/scene/transform.cpp
   src/engine/scene/animsystem.cpp

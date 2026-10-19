@@ -8,7 +8,7 @@
 // A message is a run of fields. Each field is a varint tag
 // `(id << 2) | wire` followed by its payload:
 //
-//   wire 0  Varint   bool / int (zigzag) / enum / ref id
+//   wire 0  Varint   bool / int (zigzag) / enum / uid and ref (64-bit)
 //   wire 1  Fixed32  float
 //   wire 2  Bytes    varint length + bytes: string, vec3 (12 B),
 //                    color (16 B), nested message
@@ -48,6 +48,7 @@ class TPackedWriter
     void Bool(uint16_t id, bool v)                 { Varint(id, v ? 1u : 0u); }
     void Int(uint16_t id, int32_t v)               { Varint(id, Zigzag(v)); }
     void Enum(uint16_t id, int32_t v)              { Varint(id, Zigzag(v)); }
+    void Uid(uint16_t id, uint64_t v)              { Tag(id, EPackedWire::Varint); PutVarint64(v); }
     void Float(uint16_t id, float v);
     void Vec3(uint16_t id, const float v[3]);
     void Color(uint16_t id, const float c[4]);
@@ -67,6 +68,7 @@ class TPackedWriter
     void Tag(uint16_t id, EPackedWire wire) { PutVarint((uint32_t(id) << 2) | uint32_t(wire)); }
     void Varint(uint16_t id, uint32_t v)    { Tag(id, EPackedWire::Varint); PutVarint(v); }
     void PutVarint(uint32_t v);
+    void PutVarint64(uint64_t v);
 
     std::vector<uint8_t> buf_;
 };
@@ -91,6 +93,7 @@ class TPackedReader
     // decoder (ids are not reused, but the check is one compare).
     [[nodiscard]] static bool    Bool(const SPackedField& f, bool fallback = false);
     [[nodiscard]] static int32_t Int(const SPackedField& f, int32_t fallback = 0);
+    [[nodiscard]] static uint64_t Uid(const SPackedField& f, uint64_t fallback = 0);
     [[nodiscard]] static float   Float(const SPackedField& f, float fallback = 0.0f);
     static bool Vec3(const SPackedField& f, float out[3]);
     static bool Color(const SPackedField& f, float out[4]);
@@ -98,6 +101,7 @@ class TPackedReader
 
   private:
     bool GetVarint(uint32_t& out);
+    bool GetVarint64(uint64_t& out);
 
     const uint8_t* cur_ = nullptr;
     const uint8_t* end_ = nullptr;

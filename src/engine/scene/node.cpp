@@ -6,6 +6,8 @@
 
 #include "engine/scene/node.h"
 
+#include <unordered_map>
+
 #include <cctype>
 #include <cmath>
 
@@ -94,19 +96,59 @@ TObjectInstance* TComponent::OwnerInstance() const
 
 // ---- TNode -------------------------------------------------------------
 
+// ---- the uid registry ----------------------------------------------------
+//
+// uid -> node, for TNodeRef. A process-lifetime table like the soft-ref
+// registries (never destructed: late destructors must still find it).
+
+namespace {
+
+std::unordered_map<uint64_t, TNode*>& UidRegistry()
+{
+    static auto* m = new std::unordered_map<uint64_t, TNode*>();
+    return *m;
+}
+
+} // namespace
+
+TNode* TNode::FindByUid(TUid uid)
+{
+    if (!uid.IsValid()) return nullptr;
+    auto& m = UidRegistry();
+    auto it = m.find(uid.value);
+    return it != m.end() ? it->second : nullptr;
+}
+
+void TNode::SetUid(TUid uid)
+{
+    if (uid == uid_) return;
+    auto& m = UidRegistry();
+    if (uid_.IsValid())
+    {
+        auto it = m.find(uid_.value);
+        if (it != m.end() && it->second == this) m.erase(it);
+    }
+    uid_ = uid;
+    if (uid_.IsValid())
+        m[uid_.value] = this;      // the newest holder of a uid wins
+}
+
 TNode::TNode()
 {
     transform_.SetNode(this);
+    SetUid(TUid::Random());
 }
 
 TNode::TNode(std::string name)
     : node_name_(std::move(name))
 {
     transform_.SetNode(this);
+    SetUid(TUid::Random());
 }
 
 TNode::~TNode()
 {
+    SetUid(TUid());
     // The object first: its destructor leaves the sector and detaches the
     // other components while its imagery is still whole. It is destroyed,
     // not detached, so it keeps its node to the end.

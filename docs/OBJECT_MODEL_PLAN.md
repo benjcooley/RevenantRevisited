@@ -370,6 +370,16 @@ spawned ones, authored in a prefab document and remapped per stamp.
 `EPropType::Ref` carries the uid and a target kind for the inspector's
 picker; a runtime ref type caches the soft ref behind the uid.
 
+Landed 2026-10-18: `TUid` (engine/core/uid.h: random from its own
+generator, never the game's random stream; `Derived` for retail objects),
+`uid` on `TNode` with a uid registry and `TNodeRef`, `TAssetRef<T>` by
+`AssetUid` (the cache's runtime handle is `TAssetHandle<T>`),
+`EPropType::Uid` / `Ref` as 64-bit varints with `SProp::ref_kind`, hex in
+DEF text, `TUid` / `TNodeRef` / `TAssetRef<T>` as property types,
+`nodepack::Reidentify` after every prefab stamp, `SObjectState::uid`
+(id 13) through `Apply` / `Capture`, and the sector loader deriving a
+retail object's uid from (level, sector, slot).
+
 **Editor.** A root object's inspector shows its def (the reflected record,
 edits go through `Apply`, refreshes through `Capture`), then the node's
 components, then its child nodes, each as today.

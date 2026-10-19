@@ -56,9 +56,9 @@ struct SObjectState
     PROP(3,  "OF_* flags")                                     uint32_t flags    = 0;
     PROP(4,  "Animation state")                                uint16_t state    = 0;
     PROP(5,  "Map level")                                      uint16_t level    = 0;
-    PROP(6,  "Position, the object's exact centre")            S3DPoint pos{0, 0, 0};
-    PROP(7,  "Movement velocity, 1/256 wu per tick")           S3DPoint vel{0, 0, 0};
-    PROP(8,  "Movement integrator carry")                      S3DPoint accum{0, 0, 0};
+    PROP(6,  "Position, the object's exact centre")            S3DPoint pos = {0, 0, 0};
+    PROP(7,  "Movement velocity, 1/256 wu per tick")           S3DPoint vel = {0, 0, 0};
+    PROP(8,  "Movement integrator carry")                      S3DPoint accum = {0, 0, 0};
     PROP(9,  "Rotation about x, 0-255")                        uint8_t  rotatex = 0;
     PROP(10, "Rotation about y, 0-255")                        uint8_t  rotatey = 0;
     union
@@ -67,6 +67,7 @@ struct SObjectState
         uint8_t facing;
     };
     PROP(12, "Object group")                                   uint8_t  group = 0;
+    PROP(13, "Persistent identity; 0 keeps the node's")       TUid     uid;
 };
 
 // The archetype.

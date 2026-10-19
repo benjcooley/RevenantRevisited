@@ -160,6 +160,7 @@ TEST(DefIo, ReadWithoutPostLoadThenBake)
     nodepack::Pack(data, baked);
 
     TNode full("root");
+    full.SetUid(data.Uid());         // same root identity: the children derive theirs from it
     std::vector<std::unique_ptr<TNode>> owned_full;
     ASSERT_TRUE(defio::Read(kDoc, full, owned_full));
     TPackedWriter packed;
@@ -302,4 +303,63 @@ TEST(DefIo, RealEffectsDef)
     refl::Pack(*refl::Of(g), &g, b);
     EXPECT_EQ(a.Buffer(), b.Buffer());
     EXPECT_GT(a.Buffer().size(), 1000u);
+}
+
+// A document with authored uids and a link between two of its nodes: the
+// link reads back, and a stamp's copies get identities of their own with
+// the link following them.
+TEST(DefIo, UidsAndLinksFollowAStamp)
+{
+    const char* doc = R"(
+        node anchor
+        {
+            uid = "0x0000000000000a01"
+        }
+        node core
+        {
+            uid = "0x0000000000000a02"
+            glow
+            {
+                radius = 5
+                target = "0x0000000000000a01"
+            }
+        }
+    )";
+    TNode root("root");
+    std::vector<std::unique_ptr<TNode>> owned;
+    std::string err;
+    ASSERT_TRUE(defio::Read(doc, root, owned, &err)) << err;
+    TNode* anchor = root.FindPath("anchor");
+    TNode* core = root.FindPath("core");
+    ASSERT_NE(anchor, nullptr);
+    ASSERT_NE(core, nullptr);
+    EXPECT_EQ(anchor->Uid(), TUid(0xa01));
+    const STestGlow* glow = core->GetComponent<STestGlow>();
+    ASSERT_NE(glow, nullptr);
+    EXPECT_EQ(glow->target.Get(), anchor);
+
+    // The text form writes the uids back as hex strings.
+    const std::string text = defio::Write(root);
+    EXPECT_NE(text.find("uid = \"0x0000000000000a01\""), std::string::npos) << text;
+    EXPECT_NE(text.find("target = \"0x0000000000000a01\""), std::string::npos) << text;
+
+    // Stamp: the bake, unpacked under a new root, then reidentified.
+    TPackedWriter baked;
+    nodepack::Pack(root, baked);
+    TNode owner("owner");
+    std::vector<std::unique_ptr<TNode>> stamped;
+    TPackedReader r(baked.Buffer());
+    ASSERT_TRUE(nodepack::Unpack(r, owner, stamped, &err, /*apply_root_props=*/false)) << err;
+    nodepack::Reidentify(owner, stamped);
+    TNode* anchor2 = owner.FindPath("anchor");
+    TNode* core2 = owner.FindPath("core");
+    ASSERT_NE(anchor2, nullptr);
+    ASSERT_NE(core2, nullptr);
+    EXPECT_NE(anchor2->Uid(), TUid(0xa01));                      // its own identity
+    EXPECT_EQ(anchor->Uid(), TUid(0xa01));                       // the original keeps its
+    const STestGlow* glow2 = core2->GetComponent<STestGlow>();
+    ASSERT_NE(glow2, nullptr);
+    EXPECT_EQ(glow2->target.Uid(), anchor2->Uid());              // the link followed the copy
+    EXPECT_EQ(glow2->target.Get(), anchor2);
+    EXPECT_EQ(glow->target.Get(), anchor);                       // and the original's didn't move
 }

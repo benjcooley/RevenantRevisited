@@ -4,6 +4,7 @@
 // *************************************************************************
 
 #include "../src/engine/scene/node.h"
+#include "../src/engine/refl/nodepack.h"
 #include "../src/engine/refl/packed.h"
 
 #include <gtest/gtest.h>
@@ -120,6 +121,7 @@ TEST(Node, AnnotatedProperties)
             {
                 const refl::SProp& p = t->props[i];
                 if (p.read_only) continue;              // name: per instance
+                if (p.type == EPropType::Uid) continue; // uid: per instance, random
                 SPropValue v;
                 ASSERT_TRUE(refl::Get(*tp, &fresh, p.id, v)) << p.name;
                 EXPECT_TRUE(refl::Equals(v, p.def)) << p.name << " default does not match a fresh node";
@@ -150,4 +152,65 @@ TEST(Node, AnnotatedProperties)
     EXPECT_FLOAT_EQ(m.LocalScl().Z, 1.5f);
     EXPECT_FALSE(m.Active());
     EXPECT_STREQ(m.GetName(), "other");                   // name is read-only: not packed
+}
+
+TEST(Node, UidsAndNodeRefs)
+{
+    TNode a("a"), b("b");
+    EXPECT_TRUE(a.Uid().IsValid());
+    EXPECT_NE(a.Uid(), b.Uid());                       // random, distinct
+    EXPECT_EQ(TNode::FindByUid(a.Uid()), &a);
+
+    TNodeRef ref(&a);
+    EXPECT_EQ(ref.Get(), &a);
+    a.SetUid(TUid(0x1234));                            // a renamed identity
+    EXPECT_EQ(TNode::FindByUid(TUid(0x1234)), &a);
+    EXPECT_EQ(ref.Get(), nullptr);                     // the old uid names nothing now
+    TNodeRef by_uid(TUid(0x1234));
+    EXPECT_EQ(by_uid.Get(), &a);
+    {
+        TNode c("c");
+        c.SetUid(TUid(0x5678));
+        TNodeRef to_c(&c);
+        EXPECT_EQ(to_c.Get(), &c);
+        // c dies here
+    }
+    EXPECT_EQ(TNode::FindByUid(TUid(0x5678)), nullptr);
+    EXPECT_EQ(TNodeRef(TUid(0x5678)).Get(), nullptr);
+
+    // The uid is a node property: packed with the node and applied back.
+    const refl::SType* t = refl::Of(a);
+    ASSERT_NE(t, nullptr);
+    SPropValue v;
+    ASSERT_TRUE(refl::Get(*t, &a, 6, v));
+    EXPECT_EQ(v.type, EPropType::Uid);
+    EXPECT_EQ(v.u, 0x1234u);
+}
+
+// A prefab-style component holding a ref to a sibling node.
+struct STestPointer : public TComponent
+{
+    TNodeRef target;
+    const char* ComponentName() const override { return "pointer"; }
+};
+
+TEST(Node, ReidentifyRemapsLinksInsideTheStamp)
+{
+    // Can't annotate a struct in a test .cpp (the generator reads headers),
+    // so the remap is exercised through the node's own `uid` prop: a
+    // stamped node's uid changes, a ref to a node outside the stamp doesn't.
+    TNode root("root");
+    std::vector<std::unique_ptr<TNode>> stamped;
+    stamped.emplace_back(new TNode("child"));
+    stamped.back()->SetParent(&root);
+    stamped.back()->SetUid(TUid(0x42));
+    TNode outside("outside");
+    outside.SetUid(TUid(0x99));
+
+    nodepack::Reidentify(root, stamped);
+    EXPECT_NE(stamped[0]->Uid(), TUid(0x42));
+    EXPECT_TRUE(stamped[0]->Uid().IsValid());
+    EXPECT_EQ(TNode::FindByUid(stamped[0]->Uid()), stamped[0].get());
+    EXPECT_EQ(TNode::FindByUid(TUid(0x42)), nullptr);
+    EXPECT_EQ(outside.Uid(), TUid(0x99));
 }

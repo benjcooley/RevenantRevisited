@@ -232,17 +232,17 @@ TAsset* TAssetCache::FindPtr(AssetUid uid) const
     return (it != assets_by_uid_.end()) ? it->second : nullptr;
 }
 
-TAssetRef<> TAssetCache::Find(AssetUid uid) const
+TAssetHandle<> TAssetCache::Find(AssetUid uid) const
 {
-    return TAssetRef<>(FindPtr(uid));
+    return TAssetHandle<>(FindPtr(uid));
 }
 
-TAssetRef<> TAssetCache::FindClassic(std::string_view path, std::string_view name) const
+TAssetHandle<> TAssetCache::FindClassic(std::string_view path, std::string_view name) const
 {
     return Find(MakeClassicAssetUid(path, name));
 }
 
-TAssetRef<> TAssetCache::RegisterAsset(const SAssetKey& in_key,
+TAssetHandle<> TAssetCache::RegisterAsset(const SAssetKey& in_key,
                                        std::shared_ptr<void> payload,
                                        std::type_index payload_type,
                                        size_t payload_bytes)
@@ -254,7 +254,7 @@ TAssetRef<> TAssetCache::RegisterAsset(const SAssetKey& in_key,
         if (payload && !existing->HasPayload())
             if (TGenericAsset* generic = dynamic_cast<TGenericAsset*>(existing))
                 generic->SetPayload(std::move(payload), payload_type, payload_bytes);
-        return TAssetRef<>(existing);
+        return TAssetHandle<>(existing);
     }
 
     auto asset = std::make_unique<TGenericAsset>(std::move(key));
@@ -264,19 +264,19 @@ TAssetRef<> TAssetCache::RegisterAsset(const SAssetKey& in_key,
     TAsset* raw = asset.get();
     assets_by_uid_[raw->Uid()] = raw;
     assets_.push_back(std::move(asset));
-    return TAssetRef<>(raw);
+    return TAssetHandle<>(raw);
 }
 
-std::vector<TAssetRef<>> TAssetCache::RegisterAssets(const std::vector<SAssetKey>& keys)
+std::vector<TAssetHandle<>> TAssetCache::RegisterAssets(const std::vector<SAssetKey>& keys)
 {
-    std::vector<TAssetRef<>> refs;
+    std::vector<TAssetHandle<>> refs;
     refs.reserve(keys.size());
     for (const SAssetKey& key : keys)
         refs.push_back(RegisterAsset(key));
     return refs;
 }
 
-TAssetRef<> TAssetCache::GetOrLoadAsset(const SAssetKey& in_key, const FAssetLoader& loader)
+TAssetHandle<> TAssetCache::GetOrLoadAsset(const SAssetKey& in_key, const FAssetLoader& loader)
 {
     SAssetKey key = NormalizeKey(in_key);
     if (TAsset* existing = FindPtr(key.uid))
@@ -288,7 +288,7 @@ TAssetRef<> TAssetCache::GetOrLoadAsset(const SAssetKey& in_key, const FAssetLoa
             if (loaded.ptr)
                 existing->SetPayload(std::move(loaded.ptr), loaded.type, loaded.bytes);
         }
-        return (!loader || existing->HasPayload() || !generic) ? TAssetRef<>(existing) : TAssetRef<>();
+        return (!loader || existing->HasPayload() || !generic) ? TAssetHandle<>(existing) : TAssetHandle<>();
     }
 
     if (loader)
@@ -302,17 +302,17 @@ TAssetRef<> TAssetCache::GetOrLoadAsset(const SAssetKey& in_key, const FAssetLoa
     return RegisterAsset(key);
 }
 
-std::vector<TAssetRef<>> TAssetCache::GetOrLoadAssets(const std::vector<SAssetKey>& keys,
+std::vector<TAssetHandle<>> TAssetCache::GetOrLoadAssets(const std::vector<SAssetKey>& keys,
                                                       const FAssetLoader& loader)
 {
-    std::vector<TAssetRef<>> refs;
+    std::vector<TAssetHandle<>> refs;
     refs.reserve(keys.size());
     for (const SAssetKey& key : keys)
         refs.push_back(GetOrLoadAsset(key, loader));
     return refs;
 }
 
-TAssetRef<> TAssetCache::RegisterClassic(std::string_view path,
+TAssetHandle<> TAssetCache::RegisterClassic(std::string_view path,
                                          std::string_view name,
                                          EAssetKind kind,
                                          std::shared_ptr<void> payload,
@@ -325,7 +325,7 @@ TAssetRef<> TAssetCache::RegisterClassic(std::string_view path,
                          payload_bytes);
 }
 
-TAssetRef<> TAssetCache::GetOrLoadClassic(std::string_view path,
+TAssetHandle<> TAssetCache::GetOrLoadClassic(std::string_view path,
                                           std::string_view name,
                                           EAssetKind kind,
                                           const FAssetLoader& loader)
@@ -333,13 +333,13 @@ TAssetRef<> TAssetCache::GetOrLoadClassic(std::string_view path,
     return GetOrLoadAsset(SAssetKey::Classic(path, name, kind), loader);
 }
 
-uint32_t TAssetCache::IncrementRef(TAssetRef<> asset, uint32_t count)
+uint32_t TAssetCache::IncrementRef(TAssetHandle<> asset, uint32_t count)
 {
     TAsset* live = asset.Get();
     return live ? live->AddRef(count) : 0;
 }
 
-uint32_t TAssetCache::DecrementRef(TAssetRef<> asset, uint32_t count)
+uint32_t TAssetCache::DecrementRef(TAssetHandle<> asset, uint32_t count)
 {
     TAsset* live = asset.Get();
     return live ? live->ReleaseRef(count) : 0;
