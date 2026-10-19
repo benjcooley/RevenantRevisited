@@ -299,7 +299,7 @@ float4 main_ps(vs_out i) : SV_Target {
     if (i.retail_texture > 0.5) {
         uint width, height; atlas.GetDimensions(width, height);
         int2 size = int2(width, height);
-        int2 xy = min(int2(floor(frac(i.uv) * float2(size))), size - int2(1,1));
+        int2 xy = min(int2(floor(frac(i.uv) * (float2)size)), size - int2(1,1));
         texel = atlas.Load(int3(xy,0));
     }
     if (i.retail_texture > 2.5 && i.retail_texture < 3.5) {
