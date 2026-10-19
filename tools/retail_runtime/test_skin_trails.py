@@ -61,7 +61,7 @@ class SkinTrailTests(unittest.TestCase):
  def test_parser_and_render_history_controls(self):
   with tempfile.TemporaryDirectory()as t:
    p=Path(t);(p/'test.cpp').write_text(CONTROL)
-   subprocess.run(['clang++','-std=c++17','-O1','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),str(p/'test.cpp'),str(ROOT/'src/authoredpartsys.cpp'),str(ROOT/'src/partsysdefinition.cpp'),'-o',str(p/'test')],check=True)
+   subprocess.run(['clang++','-std=c++17','-O1','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),str(p/'test.cpp'),str(ROOT/'src/engine/fx/authoredpartsys.cpp'),str(ROOT/'src/engine/fx/partsysdefinition.cpp'),'-o',str(p/'test')],check=True)
    subprocess.run([str(p/'test')],check=True)
  def test_default_zero_existing_profiles_byte_identical_to_before_change(self):
   with tempfile.TemporaryDirectory()as t:

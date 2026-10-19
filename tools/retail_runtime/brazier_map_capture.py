@@ -70,7 +70,7 @@ def capture(binary, data, output, expect_animation):
                   map_index=1019174967,position=[9678,9614,259],camera=[49,9678,9614,259],
                   command=command,exit_code=process.returncode,elapsed_seconds=time.monotonic()-start,
                   binary_sha256=binary_sha,asset_sha256=hashlib.sha256(asset).hexdigest(),
-                  probe_sha256=digest(__file__),working_tree_map_renderer_sha256=digest(ROOT/'src/maprenderer.cpp'),
+                  probe_sha256=digest(__file__),working_tree_map_renderer_sha256=digest(ROOT/'src/game/world/maprenderer.cpp'),
                   expected_animation=expect_animation,distinct_frames=len(set(hashes)),
                   readonly_layer_samples=samples,frames=[dict(path=str(p),sha256=digest(p),pixel_sha256=h) for p,h in zip(frames,hashes)],
                   log_sha256=digest(output/'run.log'),scope=__doc__)

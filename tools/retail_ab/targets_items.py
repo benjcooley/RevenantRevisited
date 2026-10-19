@@ -5,7 +5,7 @@ every FOOD and POTION type of the shipped class.def, and on the edge cases:
 caps, a stat above its maximum, stacks, the belt, a pouch, an item on the
 map, a dead user, a `with`, a non-player user, a user who isn't the main
 player, the cure. Retail side: tools/retail_runtime/slots/items/food_use.py;
-port side: `Revenant --retail-ab=item-food-use` (src/retailab_items.cpp).
+port side: `Revenant --retail-ab=item-food-use` (src/game/ab/retailab_items.cpp).
 Compared: the return, the stat writes in order, the sounds looked up, the
 text-bar lines, the cure's map scan (square, objset, level) and the item
 afterwards (still held, its amount).
@@ -87,7 +87,7 @@ def food_cases(data: Path, workdir: Path) -> list[dict]:
 
 
 def _fixture_char(user: dict, ident: int) -> dict:
-    """A user as the port fixture's character (src/retailab_fixture.h)."""
+    """A user as the port fixture's character (src/game/ab/retailab_fixture.h)."""
     spec = dict(name=user['name'], type=user['type'], id=ident, pos=user['pos'], facing=0, noai=True,
                 stats=dict(health=user['health'], mana=user['mana'], fatigue=user['fatigue'],
                            poisoned=user['poisoned']),

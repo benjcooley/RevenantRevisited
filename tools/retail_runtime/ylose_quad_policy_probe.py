@@ -5,11 +5,11 @@ import subprocess
 import tempfile
 
 ROOT=Path(__file__).resolve().parents[2]
-source=(ROOT/'src/renderer.cpp').read_text()
+source=(ROOT/'src/engine/render/renderer.cpp').read_text()
 start=source.index('    SQuadDrawItem queued = item;',source.index('void TRenderer::SubmitFxQuad('))
 end=source.index('\n}',start)
 body=source[start:end]
-adapter=(ROOT/'src/effects/yloseoriginal.cpp').read_text()
+adapter=(ROOT/'src/game/effects/legacy/yloseoriginal.cpp').read_text()
 a=adapter.index('SQuadDrawItem item{};');b=adapter.index('for(int corner=',a)
 configuration=adapter[a:b]
 driver=r'''

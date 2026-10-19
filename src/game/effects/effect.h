@@ -1,0 +1,6838 @@
+// *************************************************************************
+// *                         Cinematix Revenant                            *
+// *                    Copyright (C) 1998 Cinematix                       *
+// *                      effect.h - TEffect module                        *
+// *************************************************************************
+
+#pragma once
+
+#include "game/effects/legacy/fog_grid.h"
+#include "game/app/revenant.h"
+
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "game/imagery/3dimage.h"
+#include "game/object/charanimator.h"
+#include "game/effects/effect.h"
+#include "game/effects/effectcomp.h"
+#include "game/object/object.h"
+#include "game/audio/sound.h"
+#include "game/spells/spell.h"
+#include "engine/core/revtime.h"
+
+bool SaveBlendState();
+bool RestoreBlendState();
+bool SetBlendState();
+bool SetAddBlendState();
+void DamageCharactersInRange(TObjectInstance* invoker, S3DPoint& pos, int32_t range, int32_t minamount, int32_t maxamount, int32_t type);
+void BlastCharactersInRange(TObjectInstance* invoker, S3DPoint& pos, int32_t range, int32_t minamount, int32_t maxamount, int32_t type, int32_t interior_range = 0);
+void PulpCharactersInRange(TObjectInstance* invoker, S3DPoint& pos, int32_t range);
+void PulpGuy(PTCharacter ch, S3DPoint pos, S3DPoint blast);
+void RestoreZ(int32_t x, int32_t y, int32_t width, int32_t height);
+
+_CLASSDEF(TEffect)
+_CLASSDEF(TSpellBlock)
+
+#include "engine/fx/particlefx.h"
+#include "engine/fx/particledef.h"
+#include "engine/fx/particlecomponent.h"
+#include "game/effects/photoncore.h"
+#include "game/effects/effectlightramp.h"
+#include "game/effects/iceboltcore.h"
+#include "game/effects/firewindcore.h"
+#include "game/effects/missilestate.h"
+#include "engine/render/renderer.h"   // EFxDebugMode, SBillboardDrawItem, TRenderer
+#include "engine/render/visualcomponent.h"
+
+// ***********
+// * TEffect *
+// ***********
+
+// The object-map point `name` of `target`, as an offset from its position,
+// when it has a 3D animator that knows the point.
+bool ObjectMapOffset(TObjectInstance* target, const char* name, S3DPoint& offset);
+
+// The effect class - individual effects from spells
+// REVSYNC: TEffect::TEffect @ 0x004de770 -- immobile and pulsed (the map
+// pulses it; its spell pulses it only while it is in no sector); retail's
+// OF_NOTIFY comes with every object built from a def.
+class TEffect : public TObjectInstance
+{
+  public:
+    TEffect(TObjectImagery* newim) : TObjectInstance(newim) { flags |= OF_IMMOBILE | OF_PULSE; spell = nullptr; subspell = 0; angle = 0; }
+    TEffect(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) { flags |= OF_IMMOBILE | OF_PULSE; spell = nullptr; subspell = 0; angle = 0; }
+
+    void Pulse() override;
+
+    void SetSpell(PTSpell sp) { spell = sp; lightramp.Reset(); }
+      // REVSYNC: 0x004de7d0 (its light's fade counters cleared too)
+    PTSpell GetSpell() { return spell; }
+
+    void SetSubSpell(int32_t sp) { subspell = sp; }
+    int32_t GetSubSpell() { return subspell; }
+
+    void KillThisEffect();
+      // REVSYNC: TEffect::KillThisEffect @ 0x004defe0 -- a poison spell's
+      // first target is cured, the effect is removed, and its spell ends
+    void Notify(int32_t notify, void* ptr) override;
+      // The object it follows going (N_DELETING) ends it, as Follow's notify
+      // mark asks (0x004def90)
+
+    int32_t GetAngle();         // Returns aiming angle
+
+    // The Strike spells' effects (retail +0xe4..+0x138): what it follows,
+    // where around it, how long it lives.
+    void Follow(TObjectInstance* target, int32_t angle, int32_t dist, bool orbit);
+      // REVSYNC: 0x004def90 -- follow `target` (orbiting at angle and dist when
+      // `orbit`); the attach name is cleared
+    void SetFollowTime(int32_t ticks) { followtime = ticks; }
+    void SetAttachName(const char* name);
+    void SetVisibleWhen(const char* name);
+      // Shown only while the followed character's root state matches `name`
+    void SetLife(int32_t ticks, int32_t blink) { duration = ticks; blinktime = blink; timed = true; }
+      // A timed life of `ticks`, blinking out over the last `blink`
+    void SetStartWait(int32_t ticks) { startwait = ticks; }
+      // Held hidden for `ticks` before it starts
+
+    [[nodiscard]] TObjectInstance* Following() const { return follow.Get(); }
+    [[nodiscard]] int32_t FollowTime() const { return followtime; }
+    [[nodiscard]] const char* AttachName() const { return attachname; }
+    [[nodiscard]] bool Orbits() const { return orbit; }
+    [[nodiscard]] int32_t OrbitAngle() const { return orbitangle; }
+    [[nodiscard]] int32_t OrbitDist() const { return orbitdist; }
+    [[nodiscard]] bool Timed() const { return timed; }
+    [[nodiscard]] int32_t Duration() const { return duration; }
+    [[nodiscard]] int32_t BlinkTime() const { return blinktime; }
+    [[nodiscard]] int32_t StartWait() const { return startwait; }
+
+    [[nodiscard]] const SEffectLightRamp& LightRamp() const { return lightramp; }
+
+  protected:
+    void SetEffectFlags(uint32_t value);
+      // The flags as Pulse changes them: the kill starts the spell light's
+      // fade out; the light's coming and going reach the map's light lists
+      // (retail's ResetFlags 0x00472e90 on OF_LIGHT's edges)
+    PTSpell spell;      // Spellblock which spawned this effect
+    int32_t subspell;           // TEMP TEMP TEMP subspell (psuedo-talisman)
+    int32_t angle;              // The direction we are cast
+
+    TSafeRef<TObjectInstance> follow;   // +0xe4 the object it follows
+    int32_t followtime = 0;             // +0xe8 ticks left following (at 0 it ends)
+    char attachname[0x32] = {};         // +0xec the followed object's object-map point it sits on
+    bool orbit = false;                 // +0x120 placed around it by angle and dist
+    int32_t orbitangle = 0;             // +0x124
+    int32_t orbitdist = 0;              // +0x128
+    int32_t duration = 0;               // +0x12c ticks left when timed
+    bool timed = false;                 // +0x130
+    int32_t blinktime = 0;              // +0x134 the last ticks it blinks out over
+    int32_t startwait = 0;              // +0x138 ticks held hidden before it starts
+    SEffectLightRamp lightramp;         // its spell LIGHT's fade in and out
+    char visiblewhen[RESNAMELEN] = {};  // +0x15c shown only while the followed one's root matches
+};
+
+// Runtime visual component for effects rendered as animated billboard
+// flipbooks. It is not serialized; effect builders attach/configure it from
+// existing object/imagery definitions.
+//
+// Submission path: each frame, MapRenderer's per-instance Submit walk
+// calls Submit(*Renderer, *oi). The component fills out an
+// SBillboardDrawItem (world-space, world-unit size, normalized uv_rect)
+// and hands it to Renderer->SubmitFxBillboard; the renderer's fx_pass
+// drains the queue after RunLightingPass (see docs/vfx/PHASE1_SPINE.md).
+//
+// Diagnostic ladder is per-instance EFxDebugMode; the shader branches per
+// PHASE1_SPINE.md §6 so the same pipeline serves Normal / SolidColor /
+// FullTexture / CurrentFrame.
+class TFlipbookBillboardComponent : public TVisualComponent
+{
+  public:
+    [[nodiscard]] const char* ComponentName() const override { return "flipbook_billboard"; }
+    [[nodiscard]] EVisualKind Kind() const override { return EVisualKind::Billboard; }
+    [[nodiscard]] bool ReplacesDefaultVisual() const override { return replaces_default_visual; }
+
+    void Configure(TTextureHandle texture, int32_t texture_width, int32_t texture_height,
+                   int32_t columns, int32_t rows, int32_t frames,
+                   float width, float height,
+                   bool additive, bool replaces_default)
+    {
+        texture_handle = texture;
+        tex_w = texture_width > 0 ? texture_width : 1;
+        tex_h = texture_height > 0 ? texture_height : 1;
+        cols = columns > 0 ? columns : 1;
+        this->rows = rows > 0 ? rows : 1;
+        frame_count = frames > 0 ? frames : cols * this->rows;
+        size_w = width;
+        size_h = height;
+        additive_blend = additive;
+        replaces_default_visual = replaces_default;
+    }
+    void SetDebugMode(EFxDebugMode mode) { debug_mode = mode; }
+    bool SetFrameExpression(const char* expr, std::string* error = nullptr)
+        { return frame_expr.Compile(expr, error); }
+    bool SetUvRectExpression(const char* expr, std::string* error = nullptr)
+        { return uv_rect_expr.Compile(expr, error); }
+
+    void OnAttach() override { RegisterUpdate(&TComponent::Update); }
+    void OnDetach() override { UnregisterUpdate(&TComponent::Update); }
+
+    [[nodiscard]] TTextureHandle Texture() const { return texture_handle; }
+    [[nodiscard]] float Width() const { return size_w; }
+    [[nodiscard]] float Height() const { return size_h; }
+    [[nodiscard]] bool AdditiveBlend() const { return additive_blend; }
+    [[nodiscard]] EFxDebugMode DebugMode() const { return debug_mode; }
+
+    // Fill an SBillboardDrawItem from current component state and submit
+    // it to the renderer's FX queue. Called from the per-instance Submit
+    // walk in maprenderer.cpp.
+    virtual void Submit(TRenderer& renderer, const TObjectInstance& inst) const;
+    void Submit(TRenderer& renderer) const override;
+
+  protected:
+    void OnUpdate() override
+    {
+        animation_seconds += TTime::DeltaTime();
+    }
+
+  private:
+    [[nodiscard]] int32_t FrameCell() const
+    {
+        // Original TFlameAnimator timing: local 18-frame counter mapped into
+        // an 8-cell 4x2 texture atlas.
+        if (frame_expr.IsValid())
+        {
+            SParticleEvalContext ctx = {};
+            ctx.time_frame = ParticleAtlasTime(animation_seconds, 18, 24.0);
+            const int32_t frame = int32_t(frame_expr.Eval(ctx));
+            return frame_count > 0 ? ((frame % frame_count) + frame_count) % frame_count : 0;
+        }
+        const int32_t cell = int32_t(ParticleAtlasTime(animation_seconds, 18, 24.0) * 11.0f);
+        return frame_count > 0 ? (cell % frame_count) : 0;
+    }
+
+  protected:
+    void UvRect(float out[4]) const
+    {
+        if (uv_rect_expr.IsValid() && uv_rect_expr.ResultLanes() >= 4)
+        {
+            SParticleEvalContext ctx = {};
+            ctx.time_frame = ParticleAtlasTime(animation_seconds, 18, 24.0);
+            uv_rect_expr.Eval(ctx, out, 4);
+            return;
+        }
+
+        const int32_t frame = FrameCell();
+        out[0] = float(frame % cols) / float(cols);
+        out[1] = float(frame / cols) / float(rows);
+        out[2] = 1.0f / float(cols);
+        out[3] = 1.0f / float(rows);
+    }
+
+  private:
+    TTextureHandle texture_handle = kInvalidTexture;
+    int32_t tex_w = 1, tex_h = 1;
+    int32_t cols = 1, rows = 1, frame_count = 1;
+    double animation_seconds = 0.0;
+    TParticleExpression frame_expr;
+    TParticleExpression uv_rect_expr;
+    float size_w = 1.0f, size_h = 1.0f;
+    bool additive_blend = true;
+    bool replaces_default_visual = true;
+    EFxDebugMode debug_mode = EFxDebugMode::Normal;
+};
+
+// Owners are nodes: a map object or a prefab node. Runtimes are keyed by
+// (definition, node id) and emission is anchored at the node's world
+// position. Buckets without an imagery_path take their texture from the
+// owner's imagery, which needs the owner to be a map object.
+class TParticleEffectManager
+{
+  public:
+    void PulseEffect(const SParticleEffectDef* effect_def, TNode* owner);
+    void StopEffect(const SParticleEffectDef* effect_def, TNode* owner);
+    // Per-frame integration tick. Called from TParticleEffectComponent::
+    // DrawPulse via the render-frame walk so each runtime's bucket
+    // expressions (spawn / tick / kill) advance once per frame using the
+    // shared TTime::DeltaTime.
+    void IntegrateEffect(const SParticleEffectDef* effect_def, TNode* owner, float dt_seconds);
+    // Submit the buckets of this owner's runtime to the renderer. The map
+    // walk drains every global bucket once per frame instead; this is for
+    // a standalone driver (the --test=vfx harness) that shows one effect.
+    void SubmitEffect(const SParticleEffectDef* effect_def, TNode* owner, EFxDebugMode debug_mode);
+    // True while any bucket still holds a particle of this owner's runtime
+    // (a one-shot burst that has played out answers false).
+    [[nodiscard]] bool EffectHasParticles(const SParticleEffectDef* effect_def, TNode* owner);
+    void ExpireInactiveEffects();
+    void Clear();
+
+  private:
+    // Per-bucket compiled-expression cache + sim-tick accumulator.
+    // Created lazily when the runtime first encounters a bucket_def with
+    // a non-empty spawn_expr / tick_expr / kill_expr.
+    struct SBucketRuntime
+    {
+        TParticleBucket* bucket = nullptr;
+        const SParticleBucketEffectDef* bucket_def = nullptr;
+        TParticleExpression spawn_expr;     // statement form
+        TParticleExpression tick_expr;      // statement form
+        TParticleExpression kill_expr;      // single expression (boolean)
+        bool spawn_compiled = false;
+        bool tick_compiled = false;
+        bool kill_compiled = false;
+        double sim_accum_ms = 0.0;
+        int32_t spawned_burst = 0;          // tracks one-shot burst so we don't re-emit
+        int32_t burst_frame = -1;           // bucket_def.burst_frame: the cell every particle of this runtime uses
+    };
+
+    struct SRuntime
+    {
+        const SParticleEffectDef* effect_def = nullptr;
+        TSafeRef<TNode> owner;
+        float owner_particle_id = -1.0f;    // the owner's NodeId()
+        uint32_t last_draw_pulse_pass = 0;
+        std::vector<TParticleBucket*> buckets;
+        std::vector<SBucketRuntime> bucket_runtimes;
+    };
+
+    SRuntime* FindRuntime(const SParticleEffectDef* effect_def, int32_t owner_node_id);
+    void StartRuntime(SRuntime& runtime, TNode* owner);
+    void StopRuntime(size_t runtime_index);
+    void IntegrateBucket(SRuntime& runtime, SBucketRuntime& brt, TNode* owner,
+                         float dt_seconds, float owner_particle_id);
+    void EmitSpawnTopup(SBucketRuntime& brt, TNode* owner, float owner_particle_id);
+    // Emit one chain particle into `chain_brt` using `(pos, vel)` as the
+    // chain spawn's emit_pos / emit_vel. Returns the new particle index
+    // (-1 if the chain bucket is full or the chain runtime is missing).
+    int32_t EmitChainParticle(SBucketRuntime& chain_brt, TNode* owner,
+                              float owner_particle_id,
+                              const float dying_pos[3],
+                              const float dying_vel[3]);
+    // Find the sibling bucket runtime within `runtime` by bucket name
+    // (matches SParticleBucketEffectDef::chain_bucket).
+    SBucketRuntime* FindBucketRuntime(SRuntime& runtime, const std::string& bucket_name);
+
+    std::vector<SRuntime> runtimes;
+    uint32_t last_expire_pass = 0;
+};
+
+extern TParticleEffectManager* ParticleEffectManager;
+
+// ***************
+// * TFireEffect *
+// ***************
+
+_CLASSDEF(TFireEffect)
+
+// Number of scatter quads in the ambient-fire patch. Pre-release matches
+// `NUMFIRES` further down (the legacy TFireAnimator declaration).
+// Forensics §6: legacy TFireAnimator::Animate/Render loops over `c < 10`
+// even though `NUMFIRES == 15` — pre-release WIP quirk. The port keeps
+// the full 15-quad scatter as the modern default; INVENTORY F03 gap 7(a)
+// records the legacy 10-loop quirk for traceability.
+inline constexpr int32_t kFireScatterQuads = 15;
+
+// One scatter quad's transient state. Pre-release stored these as parallel
+// arrays `p[NUMFIRES]` / `f[NUMFIRES]` on TFireAnimator; we collapse onto
+// the effect class (matches the H03 / M05 / L02 animator-state collapse).
+struct SFireScatterQuad
+{
+    float   ox = 0.0f;      // x offset from patch origin, in world units
+    float   oy = 0.0f;      // y offset from patch origin, in world units
+    int32_t frame = 0;      // per-quad atlas frame counter (-22..30 cycle)
+};
+
+class TFireEffect : public TEffect
+{
+  public:
+    TFireEffect(TObjectImagery* newim) : TEffect(newim) {}
+    TFireEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+
+    virtual void Pulse();
+
+    // Spawn a standalone TFireEffect for the --test=vfx harness (F03
+    // rig). Per INVENTORY F03 forensics §1: no live retail caller exists
+    // (no spell.def variant invokes the bare "fire" builder, no
+    // ATTACHEFFECT "fire") — this harness path IS the canonical Phase-B
+    // exercise route. Loads the real `Misc\Fire.I3D` asset (F03b — the
+    // 2026-05-16 procedural-gradient stand-in was replaced per
+    // AGENT_GUIDE §4.2.1; helper trace lives in the F03b inventory
+    // sub-section). Caller owns the returned pointer.
+    [[nodiscard]] static TFireEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit for the harness; mirrors F01 / H03 / M05 /
+    // L02. Drives per-quad atlas-frame cycling (sim-tick-gated at 24 Hz
+    // to match other Fire-family cadence) and submits
+    // `kFireScatterQuads` ground-projected (WorldXY) textured billboards
+    // via SubmitFxBillboard each frame, picking the per-quad texture
+    // frame from the real I3D's `framehtexs[]` table. FB pipeline only
+    // — pre-release renders quads directly, no particle bucket
+    // (forensics §6 / F03b §1).
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // True until the harness `delete`s the effect. Pre-release Pulse
+    // self-killed via `spell->GetFire()` damage gate; the standalone rig
+    // is permanently alive (no spell context) so this just mirrors the
+    // alive_ flag for parity with F01 / H03 / M05 / L02. The harness's
+    // SpellGround re-fire cadence rotates fresh instances in.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Pre-release TFireAnimator owned `p[NUMFIRES]` + `f[NUMFIRES]`;
+    // collapsed onto the effect class (same pattern as H03 / M05 / L02).
+    // S3DMat `mat[NUMFIRES]` from pre-release is dropped — material slots
+    // were zeroed on init and never re-touched (legacy effect.cpp:909-925),
+    // which has no analog in the modern FB-billboard pipeline (per-item
+    // additive blend is set via key.blend, not per-material).
+    SFireScatterQuad quads_[kFireScatterQuads] {};
+    bool             alive_ = true;
+    double           sim_accum_ms_ = 0.0;
+    int32_t          rng_seed_ = 0;     // per-instance RNG seed; reseeded each lifetime
+    // Real-asset state (F03b): the Misc\Fire.I3D imagery and the resolved
+    // texture-slot-0 frame array. The imagery is owned by the effect
+    // (FreeImagery in dtor) — same lifecycle pattern as F01 / H04. The
+    // frame texture handle array is a cached snapshot of `framehtexs[0..N)`
+    // captured at SpawnForTest to avoid a virtual GetTexture per quad per
+    // frame in the submit hot path.
+    TObjectImagery*           imagery_ = nullptr;
+    std::vector<TTextureHandle> frame_textures_ {};
+};
+
+// ****************
+// * TSparkEffect *
+// ****************
+//
+// X22 generic spark burst ("sparks" / TSparkAnimator). Faithful direct
+// port of the pre-release particle loop, NOT a re-derivation through the
+// TParticleBucket / effects.def abstraction (which is how a prior attempt
+// drifted into mixed colors / wrong blend). The original is the simplest
+// effect in the game:
+//
+//   spawn  = TCharacter::EffectBurst "sparks" branch (character.cpp:2262-2317)
+//            builds an SParticleParams and calls anim->InitParticles(&pr).
+//   update = TParticle3DAnimator::Animate  (effect_old.cpp:4790-4942).
+//   render = TParticle3DAnimator::Render   (effect_old.cpp:4944-4986).
+//
+// The animator was a fully generic particle system parameterized entirely
+// by SParticleParams; for the spark use only the non-seeking ballistic
+// path runs (seektargets=false). The per-particle arrays
+// (pos/vel/life/start/obj) from TParticle3DAnimator are collapsed onto
+// this effect class (same animator-state-collapse convention as F03 fire
+// / H03 ripple / M05 mist). One-shot burst: random(15,25) particles seeded
+// at once, the object self-destructs (killobj) once all particles expire.
+//
+// Single color per burst: objflags = 1 << (ObjId() & 3) selects exactly
+// ONE of the 4 photon sub-objects (photon / photon01 / photon02 / photon03)
+// of Misc\Sparks.I3D for the WHOLE burst — every particle draws that one
+// sprite. The 4 are NOT mixed.
+//
+// Retail-confirmed param divergences from the snapshot (verified IEEE bit
+// patterns at recon/classes/cls_0x5a7b98.cpp:4640-4664): gravity 0.25
+// (snapshot 0.2), trails 2 (snapshot 1 — each spark draws as a 2-step
+// motion streak), bounce true (snapshot false — sparks bounce off the
+// floor). See forensics SPARKS_TSparkAnimator.md §2.1.
+//
+// Blend = Alpha (SRC_ALPHA / INV_SRC_ALPHA) per the combat-spark Render body
+// (SetBlendState) and forensics §7. (An "additive" hypothesis came from
+// comparing against the GREEN Fountain/Sparkle effect — a different effect;
+// combat sparks are Alpha.) Snapshot-only since the retail
+// TParticle3DAnimator::Render TU was not decompiled; vet against real
+// combat-spark footage. Unlit, TestNoWrite, ScreenAligned.
+
+// Max particles a single burst can hold (caller seeds random(15,25)). The
+// pre-release allocated `new[params.particles]`; the modern port uses a
+// fixed-cap inline array (no heap churn per burst).
+inline constexpr int32_t kSparkMaxParticles = 32;
+
+// One spark particle's transient state. Pre-release stored these as the
+// parallel arrays p[]/v[]/l[]/s[]/o[] on TParticle3DAnimator; collapsed
+// here onto a per-particle struct (life/start are integer ticks in the
+// original — exact whole-valued float counters here; render interpolates
+// between tick states for smooth display-rate-independent motion).
+struct SSparkParticle
+{
+    hmm_vec3 pos   = {0.0f, 0.0f, 0.0f};   // object-local position (wu)
+    hmm_vec3 vel   = {0.0f, 0.0f, 0.0f};   // velocity (wu / sim-tick)
+    float    life  = 0.0f;                 // remaining lifetime, in sim-ticks
+    float    start = 0.0f;                 // start delay, in sim-ticks
+    int32_t  variant = 0;                 // authored photon sub-object
+};
+
+struct SParticleParams;
+
+class TSparkEffect : public TEffect
+{
+  public:
+    TSparkEffect(TObjectImagery* newim) : TEffect(newim) {}
+    TSparkEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+
+    // Spawn a standalone single-burst TSparkEffect for the --test=vfx
+    // harness. Loads the real Misc\Sparks.I3D imagery (NO procedural
+    // stand-in — the authored photon sprite IS the visual identity),
+    // picks one photon variant for the whole burst, and seeds
+    // random(15,25) particles via the ported InitParticles loop. Returns
+    // nullptr if the imagery can't be loaded. Caller owns the pointer.
+    [[nodiscard]] static TSparkEffect* SpawnForTest(const S3DPoint& origin);
+    // Editor-created Sparks has no combat caller: the animator seeds its
+    // documented sample defaults instead. Keep this diagnostic separate.
+    [[nodiscard]] static TSparkEffect* SpawnEditorDefaultForTest(const S3DPoint& origin);
+    // Actual combat map path: generic effect instance owns a typed visual
+    // component, initialized from the caller's recovered particle params.
+    [[nodiscard]] static bool AttachBurst(TObjectInstance& owner, const SParticleParams& params);
+    [[nodiscard]] bool InitParticles(const SParticleParams& params);
+    void Advance(double seconds);
+    void Submit(TRenderer& renderer, const TObjectInstance& owner, EFxDebugMode debug_mode) const;
+
+    // Per-frame tick + submit for the harness. Ports
+    // TParticle3DAnimator::Animate (ballistic integrate + gravity +
+    // bounce + death) and ::Render (one billboard per live particle, plus
+    // trails-1 ghost copies stepped along velocity) directly, converted to
+    // framerate-independent integration (per-tick rates -> per-second via a
+    // 24 Hz sim-tick accumulator). FB pipeline (one Alpha textured
+    // authored quad per draw via SubmitFxQuad).
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // True until the last particle expires (combat uses killobj=true;
+    // editor sample defaults retain an invisible object). The harness can
+    // wait for disappearance before re-triggering.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    [[nodiscard]] static TSparkEffect* SpawnPreview(const S3DPoint& origin, bool editor_default,
+                                                   const SParticleParams* params = nullptr);
+    struct SPhotonVariant
+    {
+        S3DVertex vertices[4] = {};
+    };
+    SPhotonVariant variants_[4] {};
+    SSparkParticle particles_[kSparkMaxParticles] {};
+    int32_t        num_particles_ = 0;
+    float          gravity_       = 0.25f;  // wu / sim-tick^2 (retail)
+    int32_t        trails_        = 2;      // render sub-steps per particle (retail)
+    bool           bounce_        = true;   // retail
+    TTextureHandle texture_       = kInvalidTexture; // chosen photon variant
+    bool           alive_         = true;
+    double         sim_accum_ms_  = 0.0;
+};
+
+class TFlameEffect : public TEffect
+{
+  public:
+    TFlameEffect(TObjectImagery* newim) : TEffect(newim) { InitializeVisualComponent(newim); }
+    // Streamed objects receive their final map index in Load(). Attach through
+    // the imagery builder afterward so the update reference uses that index.
+    TFlameEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+
+    static void AttachVisualComponent(TObjectInstance* inst, TObjectImagery* imagery);
+
+    // Spawn a standalone TFlameEffect for the --test=vfx harness. Loads the
+    // canonical TorchFlame imagery (`Magic\flame.i3d`), constructs a
+    // sector-less instance pinned to world `origin`, and attaches the
+    // authored-quad flipbook component. Returns nullptr if the imagery can't
+    // be loaded (asset missing / not yet ready). The caller owns the
+    // returned pointer and must `delete` it to release the imagery refcount
+    // and the attached components.
+    [[nodiscard]] static TFlameEffect* SpawnForTest(const S3DPoint& origin);
+
+  private:
+    void InitializeVisualComponent(TObjectImagery* imagery);
+};
+
+// **************
+// * TIceEffect *
+// **************
+
+#define ICEDIST     256
+#define ICERATE     16
+
+#define ICE_FLY     0
+#define ICE_IMPACT  1
+
+_CLASSDEF(TIceEffect)
+
+class TIceEffect : public TEffect
+{
+  public:
+    TIceEffect(TObjectImagery* newim) : TEffect(newim) { flags |= OF_MOVING; }
+    TIceEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim)
+        { SetIntPos(*this, IntPos(*this) + S3DPoint(-ICEDIST, ICEDIST, ICEDIST)); flags |= OF_MOVING; }
+
+    virtual void Pulse();
+};
+
+#define LIGHTNING_SOUND     "lightning"
+
+//*// ********************
+//*// * TLightningEffect *
+//*// ********************
+//*
+//*_CLASSDEF(TLightningEffect)
+//*
+//*class TLightningEffect : public TEffect
+//*{
+//*  public:
+//* TLightningEffect(TObjectImagery* newim) : TEffect(newim)
+//*     { flags |= OF_MOVING; firsttime = true; SoundPlayer.Mount(LIGHTNING_SOUND); }
+//* TLightningEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim)
+//*     { flags |= OF_MOVING; firsttime = true; SoundPlayer.Mount(LIGHTNING_SOUND); }
+//* virtual ~TLightningEffect() { SoundPlayer.Unmount(LIGHTNING_SOUND); }
+//*
+//* virtual void Pulse();
+//*
+//*  protected:     
+//* bool firsttime;         // flag for the first time through
+//*};
+
+// ***************
+// * THealEffect *
+// ***************
+
+_CLASSDEF(THealEffect)
+
+class THealEffect : public TEffect
+{
+  private:
+    bool first_time;
+  public:
+    int32_t level;
+
+    THealEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    THealEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+
+    virtual void Initialize();
+    virtual void Pulse();
+};
+
+//*// *********************
+//*// * TLightning2Effect *
+//*// *********************
+//*
+//*_CLASSDEF(TLightning2Effect)
+//*
+//*class TLightning2Effect : public TEffect
+//*{
+//*  public:
+//*    int32_t angle;
+//*
+//*  public:
+//*    TLightning2Effect(TObjectImagery* newim) : TEffect(newim) { }
+//*    TLightning2Effect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
+//*
+//* virtual void Pulse();
+//*};
+
+// *****************
+// * Test Animator *
+// *****************
+
+#define NUMPARTICLES 15
+
+_CLASSDEF(TTest3DAnimator)
+
+class TTest3DAnimator : public T3DAnimator
+{
+  private:
+    hmm_vec3 v[NUMPARTICLES];
+    hmm_vec3 p[NUMPARTICLES];
+    S3DMat mat[NUMPARTICLES];
+
+  public:
+    TTest3DAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TTest3DAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes velocity vectors and positions
+//  virtual void SetupObjects();
+      // Called to create S3DAnimObj's and add to object array
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+};
+
+// ******************
+// * Flare Animator *
+// ******************
+
+#define NUMFLARES 15
+
+_CLASSDEF(TFlareAnimator)
+class TFlareAnimator : public T3DAnimator
+{
+  private:
+    hmm_vec3 v[NUMFLARES];
+    hmm_vec3 p[NUMFLARES];
+    S3DMat mat[NUMFLARES];
+
+  public:
+    TFlareAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TFlareAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes velocity vectors and positions
+//  virtual void SetupObjects();
+      // Called to create S3DAnimObj's and add to object array
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+};
+
+// ***************************
+// * Pulsating Ball Animator *
+// ***************************
+
+#define BALL_MAX_SCALE      10.0f
+#define BALL_SCALE_FACTOR    0.1f
+
+_CLASSDEF(TBallAnimator)
+class TBallAnimator : public T3DAnimator
+{
+  private:
+    hmm_vec3 p;            // where is it at?
+    float scale_factor;  // current scaling measure
+    float scale;         // the scale used
+
+  public:
+    TBallAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TBallAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes velocity vectors and positions
+//  virtual void SetupObjects();
+      // Called to create S3DAnimObj's and add to object array
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+};
+
+
+// *****************
+// * Fire Animator *
+// *****************
+
+#define NUMFIRES 15
+
+_CLASSDEF(TFireAnimator)
+class TFireAnimator : public T3DAnimator
+{
+  private:
+    hmm_vec3 p[NUMFIRES];
+    int32_t f[NUMFIRES];
+    S3DMat mat[NUMFIRES];
+
+  public:
+    TFireAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TFireAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes velocity vectors and positions
+//  virtual void SetupObjects();
+      // Called to create S3DAnimObj's and add to object array
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+};
+
+// ****************
+// * Ice Animator *
+// ****************
+
+#define NUM_ICE_CRYSTALS 10
+#define ICE_SCALE_STEP .25
+
+_CLASSDEF(TIceAnimator)
+class TIceAnimator : public T3DAnimator
+{
+  private:
+    hmm_vec3 p[NUM_ICE_CRYSTALS];
+    float scale[NUM_ICE_CRYSTALS];    // Current scale value of each ice crystal
+    int32_t framenum[NUM_ICE_CRYSTALS];      // Frame counters (used for delays & timing)
+
+  public:
+    TIceAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TIceAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes velocity vectors and positions
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+};
+
+// *****************
+// * Heal Animator *
+// *****************
+
+#define NUM_HEAL_BUBBLES  60
+#define HEAL_SCALE_STEP   .15
+#define HEALING_RADIUS    20
+#define HEAL_DURATION     40
+
+_CLASSDEF(THealAnimator)
+
+class THealAnimator : public T3DAnimator
+{
+  private:
+    hmm_vec3 p[NUM_HEAL_BUBBLES];       // Position of each healing bubble
+    float scale[NUM_HEAL_BUBBLES];    // Current scale value of each healing bubble
+    float rise[NUM_HEAL_BUBBLES];     // Rate at which each bubble rises
+    int32_t framenum[NUM_HEAL_BUBBLES];      // Frame counters (used for delays & timing)
+    int32_t activebubbles;                   // How many bubbles are currently floating up
+    float rotation;
+    int32_t heal_num;
+    int32_t glow_num;
+
+  public:
+    THealAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~THealAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes velocity vectors and positions
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+      // make everything cool
+};
+
+//*// **********************
+//*// * Lightning Animator *
+//*// **********************
+//*
+//*#define LIGHTNING_DURATION      40
+//*#define NUM_LIGHTNING_SEGMENTS  20
+//*
+//*_CLASSDEF(TLightningAnimator)
+//*
+//*class TLightningAnimator : public T3DAnimator
+//*{
+//*  private:
+//*    hmm_vec3 p[NUM_LIGHTNING_SEGMENTS];   // Position of each lightning segment
+//*    int32_t framenum;                          // Keeps track of time
+//*
+//*  public:
+//*    TLightningAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+//*   // Constructor (initialization handled by Initialize)
+//*    virtual ~TLightningAnimator() { Close(); }
+//*   // Call close function
+//*
+//* virtual void Initialize();
+//*   // Initializes velocity vectors and positions
+//* virtual void Animate(bool draw);
+//*   // Called to update frame state
+//* virtual bool Render();
+//*   // Called to render a frame
+//*};
+
+// *****************************
+// * Fountain Sparkle Animator *
+// *****************************
+
+#define NUM_FOUNTAIN_BUBBLES  10
+#define FOUNTAIN_SCALE_STEP   .15
+#define FOUNTAIN_RADIUS       20
+
+_CLASSDEF(TFountainAnimator)
+
+class TFountainAnimator : public T3DAnimator
+{
+  private:
+    hmm_vec3 p[NUM_FOUNTAIN_BUBBLES];       // Position of each fountain bubble
+    float scale[NUM_FOUNTAIN_BUBBLES];    // Current scale value of each fountain bubble
+    float rise[NUM_FOUNTAIN_BUBBLES];     // Rate at which each bubble rises
+    int32_t framenum[NUM_FOUNTAIN_BUBBLES];      // Frame counters (used for delays & timing)
+
+  protected:
+    int32_t colorobj;                            // Which object to use for the desired texture color
+
+  public:
+    TFountainAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TFountainAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes velocity vectors and positions
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void SetColorObject() = 0;
+      // Pure virtual function used to set colorobj
+    virtual void RefreshZBuffer();
+      // Called to update Z buffer information
+};
+
+// **************************
+// * Cyan Fountain Animator *
+// **************************
+
+_CLASSDEF(TCyanFountainAnimator)
+
+class TCyanFountainAnimator : public TFountainAnimator
+{
+  public:
+    TCyanFountainAnimator(TObjectInstance* oi) : TFountainAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+
+    virtual void SetColorObject() { colorobj = 0; }
+};
+
+// *************************
+// * Red Fountain Animator *
+// *************************
+
+_CLASSDEF(TRedFountainAnimator)
+
+class TRedFountainAnimator : public TFountainAnimator
+{
+  public:
+    TRedFountainAnimator(TObjectInstance* oi) : TFountainAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+
+    virtual void SetColorObject() { colorobj = 1; }
+};
+
+// ***************************
+// * Green Fountain Animator *
+// ***************************
+
+_CLASSDEF(TGreenFountainAnimator)
+
+class TGreenFountainAnimator : public TFountainAnimator
+{
+  public:
+    TGreenFountainAnimator(TObjectInstance* oi) : TFountainAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+
+    virtual void SetColorObject() { colorobj = 2; }
+};
+
+// **************************
+// * Blue Fountain Animator *
+// **************************
+
+_CLASSDEF(TBlueFountainAnimator)
+
+class TBlueFountainAnimator : public TFountainAnimator
+{
+  public:
+    TBlueFountainAnimator(TObjectInstance* oi) : TFountainAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+
+    virtual void SetColorObject() { colorobj = 3; }
+};
+
+// *******************
+// * Ribbon Animator *
+// *******************
+
+#define NUM_RIBBONS              3
+#define RIBBON_DURATION          50
+#define NUM_RIBBON_SPARKS        30
+#define RIBBON_RADIUS            35
+#define RIBBON_SPARK_DURATION    24
+#define RIBBON_SPARK_SCALE_STEP  0.25
+
+_CLASSDEF(TRibbonAnimator)
+
+class TRibbonAnimator : public T3DAnimator
+{
+  private:
+    hmm_vec3 p[NUM_RIBBON_SPARKS];       // Position of each ribbon spark
+    hmm_vec3 v[NUM_RIBBON_SPARKS];       // Movement vector for each ribbon spark
+    float scale[NUM_RIBBON_SPARKS];    // Current scale value of each ribbon spark
+    int32_t framenum[NUM_RIBBON_SPARKS];      // Frame counters (used for delays & timing)
+    hmm_vec3 ribpos;                     // Position of the ribbons
+    float rotation[NUM_RIBBONS];       // Current rotation values for each ribbon
+    int32_t ribbontimer;                      // Timer for the entire ribbon effect
+    int32_t numtexframes;                     // How many frames the texture has
+    float ribscale;                    // Scale value for the ribbons
+    float centertilt;
+    float centertilt_dx;
+
+  public:
+    TRibbonAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TRibbonAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes velocity vectors and positions
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+};
+
+// *******************
+// * Shield Animator *
+// *******************
+
+#define SHIELD_SCALE  2.0
+
+_CLASSDEF(TShieldAnimator)
+
+class TShieldAnimator : public T3DAnimator
+{
+  private:
+    hmm_vec3 pos;     // Position of the sphere
+    int32_t framenum;      // Frame counter
+
+  public:
+    TShieldAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TShieldAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes velocity vectors and positions
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+};
+
+// ******************
+// * Flame Animator *
+// ******************
+
+_CLASSDEF(TFlameAnimator)
+
+class TFlameAnimator : public T3DAnimator
+{
+  private:
+    int32_t frame;      // Frame counter
+  
+  public:
+    TFlameAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TFlameAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes velocity vectors and positions
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+};
+
+// ********************
+// * SymGlow Animator *
+// ********************
+
+_CLASSDEF(TSymGlowAnimator)
+
+class TSymGlowAnimator : public T3DAnimator
+{
+  private:
+    float u;      // Current u offset in the texture
+    float zscale;
+    float dz;
+    int32_t timer;
+
+  public:
+    TSymGlowAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TSymGlowAnimator() { Close(); }
+      // Call close function
+
+    virtual void SetupObjects();
+      // Called to create S3DAnimObj's and add to object array
+    virtual void Animate(bool draw);
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+};
+
+// *********************
+// * Particle Animator *
+// *********************
+
+_STRUCTDEF(SParticleParams)
+struct SParticleParams
+{
+    int32_t particles;                  // duh..
+    hmm_vec3 pos, pspread, dir, spread; // direction and spread of particles
+    float gravity;               // gravity value added each tick to vector
+    int32_t trails;                     // number of trailing particles
+    int32_t minstart, maxstart;         // minimum start, maximum start delay for particle
+    int32_t minlife, maxlife;           // number of trail items, minlife, maxlife
+    bool bounce;                    // bounce
+    bool killobj;                   // true if this should kill the object it's made for when done
+    uint32_t objflags;                 // 1 bit set for each object that should randomly be included
+
+    bool seektargets;               // seektargets?
+    bool seekz;                     // seek on the z value (or false to not change z value)
+    int32_t numtargets;                 // number of targets to seek (up to 5)
+    hmm_vec3 targetpos[5];         // positions of targets to seek (if numtargets > 0)
+    float turnang;               // the turn angle per frame (in radians) for seeking targets
+    float seekspeed;                 // speed (vel mag) of seeking particle
+    float autorange;             // "radius" where turning stops, just interpolating
+    float hitrange;              // "radius" where particle has "hit" target, stop
+};
+
+_CLASSDEF(TParticle3DAnimator)
+class TParticle3DAnimator : public T3DAnimator
+{
+  private:
+    SParticleParams params;         // Particle parameters
+    hmm_vec3 *v;                   // current vectors
+    hmm_vec3 *p;                   // current position
+    int32_t *l, *s, *o;                 // Current ticks left for life and start, and cur object
+    int32_t *ti;                        // ti = target index (0 to numtargets - 1)
+
+  public:
+    TParticle3DAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TParticle3DAnimator() { Close(); }
+      // Call close function
+
+    virtual void InitParticles(PSParticleParams nparams);
+      // Sets up particle animator
+    virtual void ResetTargetInfo(SParticleParams nparams);
+      // Change particle seekpeed or targets, etc.
+
+    virtual void Initialize();
+      // Initializes velocity vectors and positions
+    virtual void Close();
+      // Deletes all objects, etc.
+//  virtual void SetupObjects();
+      // Called to create S3DAnimObj's and add to object array
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+
+};
+
+// *****************************
+// * SmokeEffect Animator     *
+// *****************************
+#define NUMSMOKEBALLS 50
+#define SMOKE_GRAV -0.01f
+
+_STRUCTDEF(SSmoke);
+struct SSmoke
+{
+    float x,y,z,size, vx, vy, vz,vsize;
+    float rot; 
+    int32_t life;
+};
+
+
+// ****************
+// * Meteor Storm *
+// ****************
+
+_CLASSDEF(TMeteorStormEffect)
+class TMeteorStormEffect : public TEffect
+{
+  public:
+    TMeteorStormEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TMeteorStormEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    virtual ~TMeteorStormEffect() {}
+
+    virtual void Initialize();          // init
+
+    virtual void Pulse();               // da heartbeat of america...
+};
+
+#define METEOR_STORM_SIZE       20
+#define METEOR_STORM_TICKS      100
+
+_CLASSDEF(TMeteorStormAnimator)
+class TMeteorStormAnimator : public T3DAnimator
+{
+  private:
+    TStormAnimator meteor_storm;        // the meteor storm
+    int32_t ticks;                          // tick, tock --, tick, tock --> see also Mouse, and Clock
+    int32_t tracker;                        // counts meteors in flight
+  public:
+    // construction...
+    TMeteorStormAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+    // destruction!
+    virtual ~TMeteorStormAnimator() { Close(); }
+
+    virtual void Initialize();          // init stuff
+    virtual void Animate(bool draw);    // do the animation
+    virtual bool Render();              // render it to the screen
+    virtual void RefreshZBuffer();      // refresh the z buffer
+};
+
+// VORTEX is a teleport spell of sorts
+/*
+_CLASSDEF(TVortexEffect)
+class TVortexEffect : public TEffect
+{
+  public:
+    TVortexEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TVortexEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    virtual ~TVortexEffect() {}
+
+    virtual void Initialize();          // init
+
+    virtual void Pulse();               // da heartbeat of america...
+};
+
+#define VORTEX_LIFE_SPAN        30
+
+#define VORTEX_STATE_GROW       1
+#define VORTEX_STATE_SHRINK     2
+#define VORTEX_STATE_CONSTANT   3
+
+#define VORTEX_ALPHA_FACTOR     .03f
+#define VORTEX_ALPHA_MAX        1.0f
+
+#define VORTEX_RING             9
+#define VORTEX_COUNT            15
+#define VORTEX_GLOW_SIDE        16
+#define VORTEX_BASE             30
+#define VORTEX_VERTEX           (VORTEX_RING * VORTEX_COUNT + VORTEX_BASE)
+#define VORTEX_GLOW_COUNT       (VORTEX_RING * 4)
+
+#define VORTEX_SCALE_X_MAX      .6f
+#define VORTEX_SCALE_Y_MAX      .6f
+#define VORTEX_SCALE_Z_MAX      1.0f
+#define VORTEX_ROT_MAX          12.0f
+
+#define VORTEX_PARTICLE_COUNT   150
+#define VORTEX_RADIUS           37
+#define VORTEX_HEIGHT           150
+#define VORTEX_SCALE_POINT      25 
+
+struct vortex_particle_info
+{
+    float rot;
+    float rot_inc;
+    float height_inc;
+    float face_rot;
+    float face_rot_inc;
+    float scale;
+    float radius;
+    bool flicker;
+};
+
+_CLASSDEF(TVortexAnimator) 
+class TVortexAnimator : public T3DAnimator 
+{
+  private:
+    hmm_vec3 pos;          // position of vortex
+    hmm_vec3 scale;        // scaling of vortex
+    hmm_vec3 rot;          // rotation of vortex
+    float alpha_blend;   // blending of alpha
+    hmm_vec3 rotation;     // rotation the thing
+    int32_t count;              // the counter
+    int32_t vortex_state;       // the state of the vortex
+    hmm_vec3 scale_factor; // the amount to scale
+    float rot_factor;    // the rotation factor
+    float rot_speed;     // the rotation speed
+    float vertex[VORTEX_VERTEX];// vertex alpha value
+    float glow[VORTEX_GLOW_COUNT];// vertex alpha value
+    int32_t frame;              // the frame of the turn
+    TParticleSystem particle_system;// the particle system
+    vortex_particle_info particle_info[VORTEX_PARTICLE_COUNT];// particle stuff
+    int32_t phase;
+    float fade;
+    int32_t level;
+  public:
+    // constructor
+    TVortexAnimator(TObjectInstance* oi) : T3DAnimator(oi), particle_system(VORTEX_PARTICLE_COUNT) {}
+    //TVortexAnimator(TObjectInstance* oi);
+    // destructor
+    virtual ~TVortexAnimator() { Close(); }
+
+    virtual void Initialize();
+    virtual void Animate(bool draw);
+    virtual bool Render();
+    virtual void RefreshZBuffer();
+};
+*/
+// ******************
+// * Handling Flies *
+// ******************
+
+_CLASSDEF(TFlyEffect)
+
+class TFlyEffect : public TEffect
+{
+  public:
+    TFlyEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TFlyEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    virtual ~TFlyEffect() {}
+
+    virtual void Initialize();          // init
+
+    virtual void Pulse();               // da heartbeat of america...
+};
+
+#define FLY_COUNT       20
+#define FLY_RANGE_X     30
+#define FLY_RANGE_Y     30
+#define FLY_RANGE_Z     30
+
+_CLASSDEF(TFlyAnimator)
+
+class TFlyAnimator : public T3DAnimator
+{
+  protected:
+    TParticleSystem flies;  // the flies    
+  public:
+    // constructor
+    TFlyAnimator(TObjectInstance* oi) : T3DAnimator(oi), flies(FLY_COUNT) {}
+    // destructor
+    virtual ~TFlyAnimator() { Close(); }
+
+    // init
+    virtual void Initialize();
+    // animate
+    virtual void Animate(bool draw);
+    // render
+    virtual bool Render();
+    // refresh the z buffer
+    virtual void RefreshZBuffer();
+};
+
+_CLASSDEF(TFogAnimator)
+
+struct _color_data
+{
+    float c, a;
+};
+
+#define FOG_VERTEX      36
+#define FOG_VERTEX_X    6
+#define FOG_VERTEX_Y    6
+
+class TFogAnimator : public T3DAnimator
+{
+  private:
+    _color_data color[FOG_VERTEX];  // the color of each vertex
+    hmm_vec3 pos[FOG_VERTEX];      // the position of each vertex
+    hmm_vec3 dpos[FOG_VERTEX];     // the change in position of each vertex
+    hmm_vec3 velocity[FOG_VERTEX]; // the velocity of the fog
+    float color_velocity[FOG_VERTEX];// the velocity of the color changing
+    float alpha_velocity[FOG_VERTEX];// the velocity of the color changing
+  public:
+    TFogAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+    virtual ~TFogAnimator() { Close(); }
+
+    virtual void Initialize();
+    virtual void Animate(bool draw);
+    virtual bool Render();
+    virtual void RefreshZBuffer();
+};
+
+// *** PULP GUYS ***
+// like destroy them by blowing up their parts
+
+_STRUCTDEF(SBloodDrop)
+struct SBloodDrop
+{
+    hmm_vec3 pos;
+    hmm_vec3 scl;
+    hmm_vec3 vel;
+    bool used;
+};
+
+_STRUCTDEF(SBloodSplat)
+struct SBloodSplat
+{
+    hmm_vec3 pos;
+    hmm_vec3 scl;
+    hmm_vec3 rot;
+    int32_t frame;
+    bool used;
+};
+
+_STRUCTDEF(SBodyPartPulp)
+struct SBodyPartPulp
+{
+    hmm_vec3 vel;
+    hmm_vec3 rot_vel;
+    hmm_vec3 pos;
+    hmm_vec3 rot;
+    hmm_vec3 scl;
+    bool done;
+    int32_t obj_num;
+    int32_t object;
+};
+
+#define MAX_BODY_PART       5
+#define MAX_BLOOD_DROP      (MAX_BODY_PART)// * 30)
+#define MAX_BLOOD_SPLAT     (MAX_BODY_PART)// * 3)
+#define PULP_GRAVITY        .8f
+#define PULP_SLOW_RATE      .45f
+#define PULP_SIDE_SLOW      .65f
+#define PULP_MISC_SLOW_RATE .75f
+#define PULP_ANG_SLOW_RATE  .6f
+#define PULP_CUTOFF         .1f
+
+_CLASSDEF(TPulpEffect)
+class TPulpEffect : public TEffect
+{
+  private:
+    // pulping info
+    PTCharacter character;
+    PSBloodDrop blood;
+    PSBloodSplat blood_splat;
+    PSBodyPartPulp body_part;
+
+    // size info
+    int32_t blood_count;
+    int32_t blood_splat_count;
+    int32_t body_part_count;
+
+    bool valid;                     // has this be inited
+    int32_t index;                      // a unique id for the character
+  public:
+    // functions
+    TPulpEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TPulpEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    virtual ~TPulpEffect() { if (blood_splat) delete [] blood_splat; if (body_part) delete [] body_part; if (blood) delete [] blood; }
+
+    virtual void Initialize();          // init
+
+    virtual void Pulse();               // da heartbeat of america...
+
+    // specific functions
+    PTCharacter GetCharacter()          { return character; }
+        // get a pointer to the character
+    PSBloodDrop GetBlood(int32_t i)         { if (i < 0 || i >= blood_count) return nullptr; else return &blood[i]; }
+        // get a pointer to the blood
+    PSBloodSplat GetBloodSplat(int32_t i)   { if (i < 0 || i >= blood_splat_count) return nullptr; else return &blood_splat[i]; }
+        // get a pointer to the blood splat
+    PSBodyPartPulp GetBodyPart(int32_t i)   { if (i < 0 || i >= body_part_count) return nullptr; else return &body_part[i]; }
+        // get a pointer to the body parts
+    bool IsDone()                       { if (!valid) return true; else return false; }
+        // get the status
+    void Set(S3DPoint vel, PTCharacter ch, int32_t num_body_part = MAX_BODY_PART, int32_t num_blood = MAX_BLOOD_DROP, int32_t num_splat = MAX_BLOOD_SPLAT);
+
+    virtual void Notify(int32_t notify, void *ptr);
+        // notify that our character has been deleted
+};
+
+_CLASSDEF(TPulpAnimator)
+class TPulpAnimator : public T3DAnimator
+{
+  public:
+    TPulpAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+    virtual ~TPulpAnimator() { Close(); }
+
+        // virtual functions
+    virtual void Initialize();
+    virtual void Animate(bool draw);
+    virtual bool Render();
+    virtual void RefreshZBuffer();
+};
+
+// *********************
+// * TBurnEffect *
+// *********************
+
+_CLASSDEF(TBurnEffect)
+
+class TBurnEffect : public TEffect
+{
+private:    
+    PTCharacter character;
+    int32_t frame;
+public:
+    TBurnEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TBurnEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+
+    virtual void Initialize();
+    virtual void Pulse();
+    PTCharacter GetCharacter()  { return character; }
+    void Set(PTCharacter ch);
+    virtual void Notify(int32_t notify, void *ptr);
+    void ResetFrameCount();
+};
+
+#define BURN_COUNT      70
+
+// ***********************
+// * Burn Animator *
+// ***********************
+
+_CLASSDEF(TBurnAnimator)
+class TBurnAnimator : public T3DAnimator
+{
+  private:
+    TParticleSystem fire;
+    TParticleSystem smoke;
+    int32_t size;
+    int32_t frame;
+    int32_t to_add;
+  public:
+    TBurnAnimator(TObjectInstance* oi) : T3DAnimator(oi), fire(BURN_COUNT), smoke(BURN_COUNT) {}
+    virtual ~TBurnAnimator() { Close(); }
+
+    virtual void Initialize();
+    virtual void Animate(bool draw);
+    virtual bool Render();
+    virtual void RefreshZBuffer();
+    virtual void ResetFrameCount() { frame = 0; }
+};
+
+// *********************
+// * TAuraEffect *
+// *********************
+
+_CLASSDEF(TAuraEffect)
+
+class TAuraEffect : public TEffect
+{
+private:    
+    PTCharacter character;
+    bool first_time;
+public:
+    TAuraEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TAuraEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+
+    virtual void Initialize();
+    virtual void Pulse();
+    PTCharacter GetCharacter()  { if (spell) return (PTCharacter)spell->GetInvoker(); else return nullptr;}
+};
+
+#define AURA_COUNT      100
+
+// ***********************
+// * Aura Animator *
+// ***********************
+
+_CLASSDEF(TAuraAnimator)
+class TAuraAnimator : public T3DAnimator
+{
+  private:
+    TParticleSystem fire;
+    int32_t size;
+    int32_t frame;
+    int32_t to_add;
+  public:
+    TAuraAnimator(TObjectInstance* oi) : T3DAnimator(oi), fire(AURA_COUNT) {}
+    virtual ~TAuraAnimator() { Close(); }
+
+    virtual void Initialize();
+    virtual void Animate(bool draw);
+    virtual bool Render();
+    virtual void RefreshZBuffer();
+};
+
+// ***********************
+// * TIceBoltEffect *
+// ***********************
+
+_CLASSDEF(TIceBoltEffect)
+
+class TIceBoltEffect : public TEffect
+{
+  private:
+  public:
+    TIceBoltEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TIceBoltEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    virtual ~TIceBoltEffect() {}
+
+    virtual void Initialize();
+    virtual void Pulse();
+};
+
+// **************************
+// * Electric Bolt Animator *
+// **************************
+
+//#define NUM_EBOLT_SPARKS  25
+
+_CLASSDEF(TIceBoltAnimator)
+
+/*class TIceBoltAnimator : public T3DAnimator
+{
+  private:
+    int32_t angle;                          // moving at this angle
+    hmm_vec3 p[NUM_EBOLT_SPARKS];      // Position of each spark
+    hmm_vec3 v[NUM_EBOLT_SPARKS];      // Direction of each spark
+    int32_t frame[NUM_EBOLT_SPARKS];        // delay before spark appears
+    float size[NUM_EBOLT_SPARKS];       // size of spark
+    int32_t initexplode;                    // start exploding!
+    int32_t frameon;                        // frame on... (for timing)
+    TShockAnimator ring;                // da ring!
+
+  public:
+    TIceBoltAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TIceBoltAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes velocity vectors and positions
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+      // make everything cool
+    void AddSparks(S3DPoint pos, int32_t angle);
+};*/
+
+#define MAX_FROST_PARTICLES     50
+#define MAX_SNOW_PARTICLES      50
+class TIceBoltAnimator : public T3DAnimator
+{
+  private:
+    int32_t frameon;                        // frame on... (for timing)
+    int32_t angle;
+    float length,
+        spherescale[2],
+        cylscale,
+        ringout,
+        spiralang,
+        spiralscale,
+        cy;//, sws, rx, ry, rz;
+    hmm_vec3 p[MAX_FROST_PARTICLES], v[MAX_FROST_PARTICLES];
+    float s[MAX_FROST_PARTICLES], t[MAX_FROST_PARTICLES];
+    //PTParticle3DAnimator particleanim;
+
+    float h[MAX_SNOW_PARTICLES], th[MAX_SNOW_PARTICLES], r[MAX_SNOW_PARTICLES],
+        rs[MAX_SNOW_PARTICLES], sz[MAX_SNOW_PARTICLES];
+    
+  public:
+    TIceBoltAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TIceBoltAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes velocity vectors and positions
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();    
+};
+
+// ***************
+// * TIcedEffect *
+// ***************
+
+// The ice arrow's freeze (builder "Iced"): its target held paralysed and
+// iced, and stopped every pulse, until it thaws.
+_CLASSDEF(TIcedEffect)
+class TIcedEffect : public TEffect
+{
+  public:
+    TIcedEffect(TObjectImagery* newim) : TEffect(newim) {}
+    TIcedEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+
+    void Set(TObjectInstance* victim);
+      // REVSYNC: 0x004ec930 -- freeze `victim`: paralysed and iced,
+      // "FREEZECUBE" played at it (the ice arrow's burst calls it)
+    void Pulse() override;
+      // REVSYNC: 0x004ec890 -- the effect's pulse, a tick more; the target
+      // stopped; one no longer iced, or dead, thaws now; at tick 240 its
+      // paralysis and ice come off
+    void Animate(bool draw) override;
+      // What retail's Iced animator does for the effect's life
+
+    [[nodiscard]] TObjectInstance* Target() const { return target.Get(); }
+    [[nodiscard]] int32_t Ticks() const { return ticks; }
+
+    static constexpr int32_t kThawTicks = 240;  // retail 0xf0: ten seconds of ice
+
+  private:
+    TSafeRef<TObjectInstance> target;           // +0x184 the one frozen
+    int32_t ticks = 0;                          // +0x188 pulses since made
+};
+
+// *****************
+// * Iced Animator *
+// *****************
+
+_CLASSDEF(TIcedAnimator)
+
+#define MAX_ICED_CHUNKS     30
+class TIcedAnimator : public T3DAnimator
+{
+  private:
+    int32_t frameon;                        // frame on... (for timing)
+    float angle;
+    int32_t donebouncing;
+    hmm_vec3 p[MAX_ICED_CHUNKS], v[MAX_ICED_CHUNKS], t[MAX_ICED_CHUNKS], w[MAX_ICED_CHUNKS];
+    hmm_vec3 s[MAX_ICED_CHUNKS];
+    int32_t l[MAX_ICED_CHUNKS];
+    TObjectInstance* icedchar;
+    
+  public:
+    TIcedAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TIcedAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+
+    void InitIced(TObjectInstance* iceme);
+      // Tell who to ice!
+};
+
+// ********************
+// * TQuicksandEffect *
+// ********************
+
+_CLASSDEF(TQuicksandEffect)
+
+class TQuicksandEffect : public TEffect
+{
+  private:
+    bool first_time;
+  public:
+    TQuicksandEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TQuicksandEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    virtual ~TQuicksandEffect() {}
+
+    virtual void Initialize();
+    virtual void Pulse();
+};
+
+// **********************
+// * Quicksand Animator *
+// **********************
+
+_CLASSDEF(TQuicksandAnimator)
+
+class TQuicksandAnimator : public T3DAnimator
+{
+  private:
+    float scalesize, cylscale, cylheight, cylrot, cylcount;
+    int32_t stage, count;
+    TObjectInstance* quicksandchar;
+    float ang;
+    float zscalefactor;
+  protected:
+    void SetAnimFrame(int32_t frame_num, PS3DAnimObj obj);
+      // Called to change texture frame
+    
+  public:
+    int32_t frameon;                        // frame on... (for timing)
+    int32_t z_level;
+    float target_rotation;
+    int32_t level;
+    PTCharacter target[10];
+    int32_t num_targets;
+    S3DPoint target_position[10];
+
+    TQuicksandAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TQuicksandAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+
+    void InitQuicksand(TObjectInstance* quicksandme, int32_t delay);
+      // Tell who to quicksand!
+};
+
+// ********************
+// * TSandswirlEffect *
+// ********************
+
+_CLASSDEF(TSandswirlEffect)
+
+class TSandswirlEffect : public TEffect
+{
+  private:
+  public:
+    TSandswirlEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TSandswirlEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    virtual ~TSandswirlEffect() {}
+
+    virtual void Initialize();
+    virtual void Pulse();
+};
+
+// **********************
+// * Sandswirl Animator *
+// **********************
+
+_CLASSDEF(TSandswirlAnimator)
+
+class TSandswirlAnimator : public T3DAnimator
+{
+  private:
+    int32_t frameon;                        // frame on... (for timing)
+    int32_t angle;
+    PTParticle3DAnimator particleanim;
+    
+  public:
+    TSandswirlAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TSandswirlAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+
+//void SetParticles(TObjectInstance* inst) { particles = inst; }
+//TObjectInstance* GetParticles(void) { return particles; }
+};
+
+// ********************
+// * TTornadoEffect *
+// ********************
+
+_CLASSDEF(TTornadoEffect)
+
+class TTornadoEffect : public TEffect
+{
+  private:
+  public:
+    TTornadoEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TTornadoEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    virtual ~TTornadoEffect() {}
+
+    virtual void Initialize();
+    virtual void Pulse();
+};
+
+// **********************
+// * Tornado Animator *
+// **********************
+
+_CLASSDEF(TTornadoAnimator)
+
+_STRUCTDEF(STornadoParticle)
+struct STornadoParticle
+{
+    hmm_vec3 pos;
+    float scl, dscl, th, dth, h, dh, r, dr;
+    int32_t count;
+};
+
+_STRUCTDEF(SIceChunkParticle)
+struct SIceChunkParticle
+{
+    hmm_vec3 pos, vel, w, th, scl;
+    int32_t time, stage;
+};
+
+_STRUCTDEF(SFlameParticle)
+struct SFlameParticle
+{
+    hmm_vec3 pos, vel;
+    float scl, dscl;
+};
+
+class TTornadoAnimator : public T3DAnimator
+{
+  private:
+    int32_t flameon;                        // frame on... (for timing)
+    PSTornadoParticle torn;
+    PSIceChunkParticle ice;
+    PSFlameParticle flame;
+        
+  public:
+    int32_t frameon;
+    TTornadoAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TTornadoAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+
+    virtual void InitTornadoParticle(int32_t i);
+    virtual void InitIceParticle(int32_t i);
+    virtual void InitFlameParticle(float _x, float _y, float _z, float _vx, float _vy, float _vz, int32_t sc);
+};
+
+// ********************
+// * TStreamerEffect *
+// ********************
+
+_CLASSDEF(TStreamerEffect)
+
+class TStreamerEffect : public TEffect
+{
+  private:
+    bool first_time;
+  public:
+    TStreamerEffect(TObjectImagery* newim) : TEffect(newim) { Initialize();}
+    TStreamerEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize();}
+    virtual ~TStreamerEffect() {}
+
+    virtual void Initialize();
+    virtual void Pulse();
+};
+
+// **********************
+// * Streamer Animator *
+// **********************
+
+_CLASSDEF(TStreamerAnimator)
+
+_STRUCTDEF(SStreamerParticle)
+struct SStreamerParticle
+{
+    hmm_vec3 pos;
+    float scl;
+    int32_t count;
+};
+
+#define STREAMER_MAXSTREAMS     4
+
+class TStreamerAnimator : public T3DAnimator
+{
+  private:
+    int32_t frameon;                        // frame on... (for timing)
+    float dscl[STREAMER_MAXSTREAMS], scl[STREAMER_MAXSTREAMS], th[STREAMER_MAXSTREAMS],
+        dth[STREAMER_MAXSTREAMS], h[STREAMER_MAXSTREAMS], dh[STREAMER_MAXSTREAMS];
+    PSStreamerParticle stream[STREAMER_MAXSTREAMS];
+        
+  public:
+    TStreamerAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TStreamerAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+
+    virtual void AddStreamer(int32_t num, hmm_vec3 pos, float scl);
+      // Add/Update a particle to a trail
+    virtual void InitStreamer(int32_t x);
+      // Move a trail/Initialize pos/scl
+};
+
+// ********************
+// * TFireSwarmEffect *
+// ********************
+
+_CLASSDEF(TFireSwarmEffect)
+
+class TFireSwarmEffect : public TEffect
+{
+  private:
+  public:
+    TFireSwarmEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TFireSwarmEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    virtual ~TFireSwarmEffect() {}
+
+    virtual void Initialize();
+    virtual void Pulse();
+};
+
+// **********************
+// * FireSwarm Animator *
+// **********************
+
+_CLASSDEF(TFireSwarmAnimator)
+
+class TFireSwarmAnimator : public T3DAnimator
+{
+  private:
+    int32_t frameon;                        // frame on... (for timing)
+    float cylhscl, cylvscl, cylth;
+            
+  public:
+    TFireSwarmAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TFireSwarmAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+
+};
+
+// ***************
+// * THaloEffect *
+// ***************
+
+_CLASSDEF(THaloEffect)
+
+class THaloEffect : public TEffect
+{
+  private:
+      float halostep = 0.0f;
+      int32_t totframes = 0;
+  public:
+    THaloEffect(TObjectImagery* newim) : TEffect(newim) { }
+    THaloEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    virtual ~THaloEffect() {}
+
+    virtual void Initialize();
+    virtual void Pulse();
+
+    virtual void InitParams(int32_t totalframes, float step) { totframes = totalframes; halostep = step; }
+    virtual int32_t GetTotalFrames() { return totframes; }
+    virtual float GetHaloStep() { return halostep; }
+
+    // Spawn a standalone THaloEffect for the --test=vfx harness. No
+    // imagery lookup — the halo's radial-gradient texture is built
+    // procedurally via `Renderer->RegisterTextureAsset` (no
+    // `Magic\halo.i3d` ships in data/ — see INVENTORY L02 gap 7.2).
+    // Constructs a sector-less instance pinned to world `origin`,
+    // stamps a fresh map index, seeds InitParams(totframes, halostep)
+    // for the triangle-wave envelope. Returns nullptr if the renderer
+    // isn't ready. Caller owns the returned pointer and `delete`s it.
+    [[nodiscard]] static THaloEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit for the harness; mirrors F01 / H03 / M05.
+    // Drives the pre-release triangle-wave scale envelope (grow for
+    // totframes/2 ticks then shrink linearly back to zero), submits one
+    // screen-aligned additive billboard via SubmitFxBillboard (FB
+    // pipeline) AND re-adds one dynamic point light via AddPointLight
+    // (LS pipeline coupling — INVENTORY L02 §4). Self-killed when
+    // `frameon > totframes`.
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // True until the halo's `frameon > totframes` condition fires
+    // (matching pre-release THaloAnimator::Animate's KillThisEffect
+    // gate). The harness uses this to early-out after death.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Per-instance animator state. Pre-release split this across
+    // THaloEffect (halostep / totframes) + THaloAnimator (haloscale /
+    // frameon). For the standalone test-harness port we collapse the
+    // animator state onto the effect class (matches H03 collapse).
+    float   haloscale_   = 0.0f;     // current scale; triangle-wave envelope
+    int32_t frameon_     = 0;        // monotonic frame counter (sim-tick-gated)
+    bool    alive_       = true;
+    double  sim_accum_ms_ = 0.0;     // sim-tick gate accumulator
+};
+
+// *****************
+// * Halo Animator *
+// *****************
+
+_CLASSDEF(THaloAnimator)
+
+class THaloAnimator : public T3DAnimator
+{
+  private:
+    float haloscale;
+    int32_t frameon;
+            
+  public:
+    THaloAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~THaloAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+};
+
+// ***********************
+// * TTeleporterEffect *
+// ***********************
+//
+// M09 — Misthaven recall + Player Teleport + 12+ monster-summoning
+// variants (16 callers in spell.def). Pre-release source lives at
+// src/effect_old.cpp:5444-5880 (TTeleporterEffect + TTeleporterAnimator,
+// both intact). Recon: not extracted (only Teleporter string XREFs at
+// 0x004e6a20 / 0x004e6a40 are visible). Forensics: docs/vfx/M09_FORENSICS.md.
+//
+// Port shape (M09b, real mesh draw): loads the variant's I3D imagery
+// (Magic\teleportation.I3D or Magic\gvortex.I3D), pulls sub-object 1
+// (the cylinder geometry) via ExtractSubMesh, registers it as a single
+// MeshHandle, then stamps it 5x per frame via SubmitHelperMesh in the
+// additive-blended helper pass — pre-release's
+// `for (z=0..4) RenderObject(obj)` loop with rot.z = rotation + z*0.5
+// (radians) and per-flare scale envelope. Visual primitive; gameflow
+// wires the actual character SetPos payload separately via GetPhase()
+// polling of the OUT→MOVE transition. See M09_FORENSICS.md §3, §7.6,
+// and the M09b section for the I3D draw path.
+//
+// Lifecycle: INIT (1 tick) → OUT (50) → MOVE (1, payload) → IN (≤49)
+// at 24 Hz; total ~4.17 s.
+
+_CLASSDEF(TTeleporterEffect)
+
+// Pre-release state-machine phase identifiers (effect_old.cpp:5448-5451).
+// kept as an enum class so call sites read cleanly; the int32_t values
+// are stable across versions in case any serialization path lands.
+enum class ETeleporterPhase : int32_t
+{
+    Init = 1,    // resolve spell variant (1 tick)
+    Out  = 2,    // grow rotating column over 50 sim ticks (caster fade-out)
+    Move = 3,    // single-tick payload (the actual SetPos happens here in-game)
+    In   = 4,    // shrink rotating column over ≤49 sim ticks at destination
+};
+
+class TTeleporterEffect : public TEffect
+{
+  public:
+    TTeleporterEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TTeleporterEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    // M09b: destructor releases the per-instance entry in the mesh-
+    // binding side table (defined in effect.cpp). Not =default so the
+    // header doesn't drag in the imagery API.
+    ~TTeleporterEffect() override;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    virtual void Initialize();
+    virtual void Pulse();
+
+    // Spawn a standalone TTeleporterEffect for the --test=vfx harness.
+    // Loads `imagery_path` (default: gvortex.I3D, the Misthaven recall
+    // asset — the user's headline ask) and pulls the cylinder mesh out
+    // for later per-frame stamping. Constructs a sector-less instance
+    // pinned to world `origin`, stamps a fresh map index, seeds the
+    // per-flare position table from the pre-release Initialize body.
+    // Returns nullptr if the renderer isn't ready or the imagery can't
+    // be loaded. Caller owns the returned pointer and `delete`s it.
+    [[nodiscard]] static TTeleporterEffect* SpawnForTest(
+        const S3DPoint& origin,
+        const char* imagery_path = "Magic\\gvortex.I3D");
+
+    // Per-frame sim-tick advance: drains the 24 Hz sim accumulator into
+    // pre-release Animate kinematics (rotation, iteration morph, p[i]
+    // squeeze) and ticks Pulse() for the phase state machine. Called
+    // first each frame by the harness, before the tile pass opens.
+    void TickForTest();
+
+    // Per-frame mesh submission. Stamps the loaded I3D cylinder asset
+    // 5x with per-flare rot.z + scale (the pre-release
+    // `for(z=0..4) RenderObject(obj)` loop), each through
+    // SubmitHelperMesh (additive, double-sided). MUST be called after
+    // Renderer->BeginTilePass — that call clears the
+    // transparent_world_queue which holds pending SubmitHelperMesh
+    // entries. The vfxtest harness routes this through SEffect::
+    // submit_world; see vfxtest.cpp Render() Step 3.
+    void SubmitWorldForTest(EFxDebugMode debug_mode);
+
+    // Convenience wrapper: TickForTest + SubmitWorldForTest in sequence.
+    // Useful for callers that don't care about the tile-pass split (e.g.
+    // headless harness probes). NOT used by the vfxtest browser path
+    // because the tile-pass timing matters there.
+    void TickAndSubmitForTest(EFxDebugMode debug_mode)
+    {
+        TickForTest();
+        SubmitWorldForTest(debug_mode);
+    }
+
+    // Phase enum for gameflow's payload coupling. Gameflow polls this
+    // and fires its caster->SetPos(destination) on the OUT→MOVE
+    // transition (single tick), then SetFade(0,-10) on the caster as
+    // we enter IN. See M09_FORENSICS.md §7.6.
+    [[nodiscard]] ETeleporterPhase GetPhase() const { return phase_; }
+
+    // True until life >= 100 sim ticks (pre-release animator self-kill
+    // gate at effect_old.cpp:5818). The harness checks this for early-out.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // --- Pre-release effect-side state (effect_old.cpp:5459-5463) ---
+    ETeleporterPhase phase_       = ETeleporterPhase::Init;
+    int32_t          life_        = 0;
+    int32_t          spell_level_ = 1;       // 0=VortexM/Misthaven recall, 1=Teleport, 2=Teleport2
+    bool             alive_       = true;
+
+    // --- Pre-release animator-side state (effect_old.cpp:5478-5482) -
+    // Collapsed onto the effect class for the harness port (matches
+    // the H03 / L02 / F03 collapse). The 5 per-flare positions p[i]
+    // morph over the OUT phase per Animate's iteration logic; we
+    // store them as the live values (initialized in SpawnForTest).
+    float   flare_p_x_[5]    = {0,0,0,0,0};
+    float   flare_p_z_[5]    = {0,0,0,0,0};
+    int32_t iterations_      = 0;    // OUT-phase morph counter (caps at 50)
+    int32_t ticks_           = 0;    // render-envelope clock (`% 100` per pre-release)
+    float   rotation_rad_    = 0.0f; // continuous spin, +0.1 rad / sim tick
+
+    // sim-tick gate accumulator (same pattern as F01 / H03 / M05 / L02 / F03).
+    double  sim_accum_ms_    = 0.0;
+};
+
+// *********************
+// * Teleporter Animator *
+// *********************
+//
+// Legacy declaration kept to satisfy the existing in-game animator-
+// registry comments (`REGISTER_3DANIMATOR("Teleporter", TTeleporterAnimator)`
+// at effect.cpp:29). The pre-release body lives at
+// src/effect_old.cpp:5474-5880 and is the source-of-truth for behaviour;
+// in the modern port the animator state is collapsed onto
+// TTeleporterEffect (M09 forensics §1, §7.4). This stub exists so the
+// vtable links if any caller still references the class name; calling
+// Animate / Render on it is a no-op until the real I3D mesh port (M09b)
+// lands. Per-instance ports should drive the effect via
+// TTeleporterEffect::TickAndSubmitForTest, not this stub.
+
+_CLASSDEF(TTeleporterAnimator)
+
+class TTeleporterAnimator : public T3DAnimator
+{
+  public:
+    TTeleporterAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
+    ~TTeleporterAnimator() override { Close(); }
+
+    void Initialize() override {}                  // M09b: port pre-release body
+    void Animate(bool /*draw*/) override {}        // M09b: port pre-release body
+    bool Render() override { return true; }        // M09b: port pre-release body
+};
+
+// *****************
+// * TRippleEffect *
+// *****************
+
+_CLASSDEF(TRippleEffect)
+
+class TRippleEffect : public TEffect
+{
+  public:
+    TRippleEffect(TObjectImagery* newim) : TEffect(newim) {}
+    TRippleEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TRippleEffect() override = default;
+    void Initialize();
+    void Pulse() override;
+    [[nodiscard]] int32_t GetLength() const { return len; }
+    void SetLength(int32_t length) { len = length > 0 ? length : 1; }
+    // Actual Magic\\ripples.I3D ring and splash quads; caller owns result.
+    [[nodiscard]] static TRippleEffect* SpawnForTest(const S3DPoint& origin);
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+    // Composite parents advance only the elapsed time since child creation;
+    // submission never advances the child's simulation a second time.
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
+    [[nodiscard]] bool IsAlive() const { return alive_ || !spawned_ripples_.empty(); }
+
+  private:
+    bool native_domain_ = false;
+    bool ring_argb4444_ = false, splash_argb4444_ = false;
+    struct SWaterDrop
+    {
+        hmm_vec3 pos = {};
+        hmm_vec3 vel = {};
+        bool dead = false;
+    };
+    int32_t len = 96;
+    int32_t frameon_ = 0;
+    int32_t ripframe_ = 0;
+    bool alive_ = true;
+    bool has_splashed_ = false;
+    double tick_fraction_ = 0.0;
+    TTextureHandle ring_texture_ = kInvalidTexture;
+    TTextureHandle splash_texture_ = kInvalidTexture;
+    std::vector<S3DVertex> ring_vertices_;
+    std::vector<S3DVertex> splash_vertices_;
+    std::vector<SWaterDrop> splash_drops_;
+    std::vector<TObjectPtr<TRippleEffect>> spawned_ripples_;
+};
+
+// *******************
+// * Ripple Animator *
+// *******************
+
+_STRUCTDEF(SDropParticle)
+struct SDropParticle
+{
+    hmm_vec3 pos;
+    hmm_vec3 vel;
+    bool dead;
+};
+
+_CLASSDEF(TRippleAnimator)
+
+class TRippleAnimator : public T3DAnimator
+{
+  private:
+    int32_t length, ripframe, frameon, numdrops;                // frame on... (for timing)
+    float scale;
+    bool hassplashed;
+
+    PSDropParticle drops;
+
+  protected:
+    void SetAnimFrame(int32_t frame_num, PS3DAnimObj obj);
+      // Called to change texture frame
+    
+  public:
+    TRippleAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TRippleAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+
+    virtual void AddNewRipple(int32_t x, int32_t y, int32_t z, int32_t len);
+};
+
+// *****************
+// * TDripEffect *
+// *****************
+
+_CLASSDEF(TDripEffect)
+
+class TDripEffect : public TEffect
+{
+    friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
+    friend class TLegacySerialize;
+  public:
+    TDripEffect(TObjectImagery* newim) : TEffect(newim) {}
+    TDripEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TDripEffect() override;
+    void Initialize();
+    void Pulse() override;
+    void SetParams(int32_t ri, int32_t he, int32_t pe) { ripplesize = ri; height = he; period = pe; }
+    void GetParams(int32_t* ri, int32_t* he, int32_t* pe) { *ri = ripplesize; *he = height; *pe = period; }
+    // Loads the authored Magic\\drip.i3d quad; defaults64/128/48 are
+    // unchanged. Short A/B demos must explicitly SetParams(64,128,1).
+    [[nodiscard]] static TDripEffect* SpawnForTest(const S3DPoint& origin);
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
+
+  private:
+    bool native_domain_ = false;
+    bool drop_argb4444_ = false;
+    int32_t ripplesize = 64;
+    int32_t height = 128;
+    int32_t period = 48;
+    bool dead_ = true;
+    int32_t time_ = 0;
+    double tick_fraction_ = 0.0;
+    hmm_vec3 drop_pos_ = {};
+    hmm_vec3 drop_vel_ = {};
+    TTextureHandle drop_texture_ = kInvalidTexture;
+    std::vector<S3DVertex> drop_vertices_;
+    std::vector<TObjectPtr<TRippleEffect>> spawned_ripples_;
+};
+
+// *******************
+// * Drip Animator *
+// *******************
+
+_CLASSDEF(TDripAnimator)
+
+class TDripAnimator : public T3DAnimator
+{
+  private:
+    hmm_vec3 pos;
+    hmm_vec3 vel;
+    bool dead;
+    int32_t time, ripplesize, height, period;
+
+  protected:
+    
+  public:
+    TDripAnimator(TObjectInstance* oi) : T3DAnimator(oi) { ripplesize = 64; height = 128; period = 48;}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TDripAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+
+    virtual void AddNewRipple(int32_t x, int32_t y, int32_t z, int32_t len);
+};
+
+// ********************
+// * TFaultFireEffect *
+// ********************
+
+_CLASSDEF(TFaultFireEffect)
+
+class TFaultFireEffect : public TEffect
+{
+  private:
+  public:
+    TFaultFireEffect(TObjectImagery* newim) : TEffect(newim) { }
+    TFaultFireEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    virtual ~TFaultFireEffect() {}
+
+    virtual void Initialize();
+    virtual void Pulse();
+};
+
+// **********************
+// * FaultFire Animator *
+// **********************
+
+#define FF_GROUPS   10
+
+_CLASSDEF(TFaultFireAnimator)
+
+//static bool ff_init = false;
+class TFaultFireAnimator : public T3DAnimator
+{
+  private:
+    float th, tvs[4];
+    //static float per[FF_GROUPS], phase[FF_GROUPS];
+  public:
+    TFaultFireAnimator(TObjectInstance* oi) : T3DAnimator(oi) {}
+      // Constructor (initialization handled by Initialize)
+    virtual ~TFaultFireAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+
+    virtual void SetupObjects();
+};
+
+// *****************
+// * TBloodEffect *
+// *****************
+//
+// B01 generic blood spray ("Blood" / TBloodAnimator / TBloodSystem).
+// FAITHFUL DIRECT PORT of the pre-release particle loop — same model the
+// SPARKS port follows. The original is a 30-particle directional-spray
+// ballistic system embedded inside TBloodAnimator, and its three bodies:
+//
+//   spawn  = TCharacter::EffectBurst "blood" branch (character.cpp:2225-2261)
+//            + TCharacter::ResolveAttack decap squirts (character.cpp:231-256);
+//            Init is TBloodSystem::Init (effectcomp.cpp:1182-1307).
+//   update = TBloodSystem::Animate (effectcomp.cpp:1309-1370) — 3-stage
+//            FLY → SPLAT → SHRINK state machine, 24 Hz sim-tick cadence.
+//   render = TBloodSystem::Render (effectcomp.cpp:1415-1530) — each used
+//            droplet drawn TWICE (Alpha base pass + ONE/ONE additive overlay
+//            pass) with one of the 8 box sub-objects of Misc\Blood.I3D
+//            per pass-set.
+//
+// The per-particle arrays from TBloodSystem are collapsed onto this effect
+// class (same animator-state-collapse convention as F03 / H03 / M05 / X22).
+// One-shot burst: Init seeds num + trail-fill droplets at once; the object
+// self-destructs when every droplet expires.
+//
+// Retail-confirmed param divergences from the snapshot (forensics §2.1):
+// for attack/impale path use hspread=32 / vspread=5 (NOT snapshot's 80/20);
+// the retail ResolveAttack immediates for the live impale squirt are
+// (height=40, hangle=face-128, vangle=32, hspread=32, vspread=5, num=1) per
+// recon/discovered/cls_0x5a7b98_TCharacter_ResolveAttack_4c1bb0.cpp:190.
+//
+// Blend = TWO passes per droplet:
+//   pass 0 = Alpha       (SetBlendState: SRC_ALPHA / INV_SRC_ALPHA) — the
+//            solid dark-red droplet body, sub-objects {box05..box08}.
+//   pass 1 = AdditiveStraight (ONE/ONE) with MODULATE texture stage — the
+//            self-luminous wet sheen, sub-objects {box01..box04}.
+// Scene-LIT (LitFlat) so blood darkens in shadow per forensics §7 / §10.
+// TestNoWrite depth. FLY droplets are tipped ground-flat (WorldXY-ish)
+// + 45° in-plane spin; SPLAT/SHRINK keep authored facing. Forensics §7.
+
+// MAX_BLOODS particles per burst — matches retail TBloodSystem (effectcomp.cpp:374).
+// Kept as a reference constant for the legacy bespoke loop preserved under
+// `#if 0` in effect.cpp; the engine-particle rework uses the bucket
+// `spawn_burst` value declared in effects.def instead.
+inline constexpr int32_t kBloodMaxParticles = 30;
+
+_CLASSDEF(TBloodEffect)
+
+// B01 TBloodEffect — engine-particle rework per the resettled forensics.
+// The 1998 TBloodSystem-style per-particle array + 3-stage state machine
+// (FLY -> SPLAT -> SHRINK) is now modelled in effects.def as two engine
+// particle buckets (`blood_fly` + `blood_splat`) with a reflection-plane
+// chain wiring FLY -> SPLAT on ground impact. The bespoke C++ port is
+// preserved under `#if 0` in effect.cpp for reference.
+class TBloodEffect : public TEffect
+{
+  private:
+    // Retail SetParams payload (spray descriptor) — kept for the eventual
+    // in-game caller. The harness path (SpawnForTest + effects.def) reads
+    // its spray params from the bucket's spawn_expr; in-game wiring will
+    // need to forward these via a per-effect override pass (B01a).
+    int32_t height = 0;
+    int32_t hangle = 0;
+    int32_t vangle = 0;
+    int32_t hspread = 0;
+    int32_t vspread = 0;
+    int32_t num = 0;
+
+    // Bucket cursors -- populated at SpawnForTest. Both reference engine-
+    // owned global buckets that outlive this effect (the engine manages
+    // particle storage; we just hold the owner_id used to scope reaping
+    // when the effect is destroyed).
+    TParticleBucket* fly_bucket_     = nullptr;
+    TParticleBucket* splat_bucket_   = nullptr;
+    float            owner_particle_id_ = -1.0f;
+
+  public:
+    TBloodEffect(TObjectImagery* newim) : TEffect(newim) {  }
+    TBloodEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    ~TBloodEffect() override;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    virtual void Initialize();
+    virtual void Pulse();
+
+    virtual void SetParams(int32_t he, int32_t ha, int32_t va, int32_t hs, int32_t vs, int32_t nu) { height = he; hangle = ha; vangle = va; hspread = hs, vspread = vs; num = nu; }
+    virtual void GetParams(int32_t *he, int32_t *ha, int32_t *va, int32_t *hs, int32_t *vs, int32_t *nu) { *he = height; *ha = hangle; *va = vangle; *hs = hspread; *vs = vspread; *nu = num; }
+
+    // Spawn a standalone single-burst TBloodEffect for the --test=vfx
+    // harness. Loads the real Misc\Blood.I3D imagery and attaches a
+    // TParticleEffectComponent configured with the "Blood" effects.def
+    // entry, then pulses it once so the engine seeds the 10-droplet FLY
+    // burst. Returns nullptr if the imagery can't be loaded. Caller owns
+    // the returned pointer.
+    [[nodiscard]] static TBloodEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit for the harness. Drives the engine's
+    // per-frame integration via TParticleEffectComponent::DrawPulse,
+    // then submits both buckets (FLY droplets + SPLAT decals) to the
+    // FX queue.
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+
+    // True until both FLY and SPLAT buckets have drained of this effect's
+    // particles. The harness uses this to know when a burst has fully
+    // played out before re-triggering for clean single-instance
+    // verification.
+    [[nodiscard]] bool IsAlive() const;
+};
+
+// *************************************************************************
+// * TBloodEffect_Bespoke — A/B reference (faithful direct C++ port)        *
+// *************************************************************************
+//
+// Pre-engine-rework reference implementation of B01 blood: the 1998
+// TBloodSystem-style 30-particle per-class state machine, three-stage
+// FLY -> SPLAT -> SHRINK lifecycle, two-pass per-droplet draw (Alpha base
+// + AdditiveStraight overlay) using the 8 box sub-objects of
+// Misc\Blood.I3D. Lives alongside the engine port as a side-by-side A/B
+// verification baseline driven by --test=vfx --vfx=TBloodEffect_BESPOKE
+// (see tools/vfx/snap_ab.py for the filmstrip capture). The math /
+// constants / sub-object resolution are the snapshot port preserved per
+// project preserve-old-code rule.
+
+// One blood droplet's transient state. Pre-release stored these as
+// SBloodParticle (effectcomp.h:357) inside TBloodSystem; we collapse
+// onto a per-particle struct on the bespoke effect class. stage is one
+// of kBloodStageFly / kBloodStageSplat / kBloodStageShrink.
+struct SBloodParticleEx
+{
+    hmm_vec3 pos   = {0.0f, 0.0f, 0.0f};   // object-local position (wu)
+    hmm_vec3 vel   = {0.0f, 0.0f, 0.0f};   // velocity (wu / sim-tick)
+    float    scl   = 0.0f;                 // current scale multiplier
+    int32_t  size  = 0;                    // 0=small, 1=med, 2=big (collapses to small)
+    int32_t  stage = 0;                    // kBloodStageFly / Splat / Shrink
+    int32_t  delay = 0;                    // ticks until this particle starts integrating
+    int32_t  count = 0;                    // sub-stage tick counter (SPLAT hold etc.)
+    bool     used  = false;                // active slot?
+};
+
+// One sub-object's resolved draw data — captured at SpawnForTest from the
+// authored UVs and htextures[] slot for that sub-object. The 8 boxes map:
+//   index 0..3 = box01..box04 = pass 1 (AdditiveStraight overlay)
+//   index 4..7 = box05..box08 = pass 0 (Alpha base)
+// Within each set: [0]=small, [1]=med, [2]=big, [3]=splat (DEAD).
+struct SBloodSubObject
+{
+    TTextureHandle texture    = kInvalidTexture;
+    float          uv_rect[4] = {0.0f, 0.0f, 1.0f, 1.0f};   // x,y,w,h normalized
+    float          size_wu    = 16.0f;                       // billboard size in wu
+};
+
+_CLASSDEF(TBloodEffect_Bespoke)
+
+class TBloodEffect_Bespoke : public TEffect
+{
+  public:
+    TBloodEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TBloodEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TBloodEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    // Spawn a standalone single-burst bespoke blood reference for the
+    // --test=vfx harness. Loads Misc\Blood.I3D, resolves the 8 box
+    // sub-objects, then runs TBloodSystem::Init (effectcomp.cpp:1182-1307)
+    // verbatim against an internal 30-particle array. Returns nullptr if
+    // the imagery can't be loaded. Caller owns the returned pointer.
+    [[nodiscard]] static TBloodEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+
+    // Per-frame tick + submit. Ports TBloodSystem::Animate
+    // (effectcomp.cpp:1309-1370) + ::Render (effectcomp.cpp:1415-1483)
+    // directly, integrated via a 24 Hz sim-tick accumulator for
+    // framerate-independent motion. Two billboard draws per live droplet
+    // (Alpha base box05..box08 then AdditiveStraight overlay box01..box04).
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    // True until the last droplet finishes its FLY → SPLAT → SHRINK
+    // lifecycle. The harness uses this to know when a burst has fully
+    // played out before re-triggering for clean single-instance
+    // verification.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    SBloodParticleEx particles_[kBloodMaxParticles] {};
+    SBloodSubObject  subobjs_[8] {};
+    float            height_local_  = 0.0f;     // emit height (wu, from height param)
+    bool             alive_         = true;
+    double           sim_accum_ms_  = 0.0;      // 24 Hz sim-tick gate
+};
+
+// *************************************************************************
+// * TFlameEffect_Bespoke — legacy preview IDs for authored Flame          *
+// *************************************************************************
+// Base, blue and green previews use the same authored quad, literal retail
+// Euler transform, 18-tick clock and 4x2 atlas UV mapping as TFlameEffect.
+// Keeping a second guessed billboard/clock here caused variant-only drift.
+
+_CLASSDEF(TFlameEffect_Bespoke)
+
+class TFlameEffect_Bespoke : public TEffect
+{
+  public:
+    TFlameEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFlameEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFlameEffect_Bespoke() override = default;
+
+    // Load the selected Flame imagery and attach the shared authored-quad
+    // component for this legacy preview ID. Caller owns the returned pointer.
+    [[nodiscard]] static TFlameEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                    const char* asset_override = nullptr);
+
+    // Submit the shared authored Flame component. Its registered update
+    // runs on the normal frame clock; this call does not advance it twice.
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    // Always alive (snapshot has no kill condition) — present for parity
+    // with the bespoke family signature.
+    [[nodiscard]] bool IsAlive() const { return true; }
+
+};
+
+// *************************************************************************
+// * TFireEffect_Bespoke — F03 A/B reference (faithful direct C++ port)     *
+// *************************************************************************
+//
+// Line-by-line port of the snapshot TFireAnimator (legacy
+// walkcode/effect.cpp:886-991): NUMFIRES=15 scatter quads, per-quad random
+// XY offset in +/-50 wu patch, per-quad startup frame in (-22..-2), each
+// tick `f[c]++` and respawn at `f[c] >= 30`; per quad selects
+// `framehtexs[f]` from Misc\Fire.I3D's frame array. Blend = Alpha (DECAL
+// default; snapshot SetBlendState). Orientation = WorldXY per
+// rot.x=-π/2; preserving the snapshot's per-quad rot.z=-π/4 (45° in-plane
+// spin) via SParticleDrawItem's rotation_rad — the F03c gap noted in the
+// batch brief.
+//
+// Lives alongside the existing TFireEffect as an A/B reference for the
+// --test=vfx --vfx=TFireEffect_BESPOKE harness entry.
+
+_CLASSDEF(TFireEffect_Bespoke)
+
+class TFireEffect_Bespoke : public TEffect
+{
+  public:
+    TFireEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFireEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFireEffect_Bespoke() override = default;
+
+    [[nodiscard]] static TFireEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    SFireScatterQuad            quads_[kFireScatterQuads] {};
+    bool                        alive_         = true;
+    double                      sim_accum_ms_  = 0.0;
+    TObjectImagery*             imagery_       = nullptr;
+    std::vector<TTextureHandle> frame_textures_ {};
+};
+
+// *************************************************************************
+// * TFireSwarmEffect_Bespoke — F05 A/B reference (faithful direct port)    *
+// *************************************************************************
+//
+// Shipped FireSwarm object1/tube01 has174 vertices/192 triangles and uses
+// texture1. Source initializes scales(.4,.4,30), then expands XY by.4,
+// shrinks Z by.4 and rotates Z by.5 radians per24Hz tick. It dies after
+// tick75. Actual retail software diagnostics leave accumulated trails;
+// source geometry/state correction is not retail visual acceptance.
+_CLASSDEF(TFireSwarmEffect_Bespoke)
+class TFireSwarmEffect_Bespoke : public TEffect
+{
+  public:
+    TFireSwarmEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFireSwarmEffect_Bespoke(SObjectState* def,TObjectImagery* newim) : TEffect(def,newim) {}
+    ~TFireSwarmEffect_Bespoke() override = default;
+    void OffScreen() override { KillThisEffect(); }
+    [[nodiscard]] static TFireSwarmEffect_Bespoke* SpawnForTest_BESPOKE(
+        const S3DPoint& origin,const char* asset_override=nullptr);
+    void Initialize(bool attach_runtime_component=true);
+    void Advance(double elapsed_seconds);
+    void SetNativeDomainForTest(bool enabled);
+    void Submit(EFxDebugMode debug_mode) const;
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+  private:
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
+    int32_t frameon_=0;
+    float cylhscl_=0.4f,cylvscl_=30.0f,cylth_=0.0f;
+    TTextureHandle texture_=kInvalidTexture;
+    std::vector<SMeshVertex> vertices_;
+    std::vector<uint16_t> indices_;
+    bool initialized_=false,runtime_owned_=false,alive_=false;
+    double sim_accum_ms_=0.0;
+};
+
+// *************************************************************************
+// * TBurnEffect_Bespoke — M04 A/B reference (faithful direct port)         *
+// *************************************************************************
+//
+// Line-by-line port of the snapshot TBurnAnimator
+// (src/effect_old.cpp:3292-3473). Forensics doc:
+// docs/vfx/forensics/M04_TBurnEffect.md — composite particle status
+// overlay attached to a burning character. Two TParticleSystem instances
+// (fire + smoke), each capacity BURN_COUNT=70, both seeded from
+// Magic\burnbabyburn.I3D's two sub-objects (smoke01 / smoke). Per tick:
+//   1. Promote any fire particle with life == life_span -> smoke
+//      (life_span = (old*2)/3, scl *= 1.25).
+//   2. Animate each system (integrate pos += vel, vel *= acc).
+//   3. Spawn `to_add` new fire particles at random character bones
+//      with random scale [0.15,0.4], pure-upward vel [3.0,7.5], life
+//      [5,15], rot=(-90,0,-45).
+//   4. Decay each live particle scl *= BURN_DEC (=0.97).
+// `to_add` ramps 0->8 over ticks 0-50, then 8->0 over ticks 50-58.
+// Kill when frame>=BURN_FRAME (=50) and to_add==0 and all particles done.
+// Blend = AdditiveStraight (snapshot SetAddBlendState, fire-family).
+//
+// Iter1 NOTE: the harness has no live TCharacter rig wired for the
+// random-bone emit, so the snapshot's `ca->GetObjectMatrix(j) * MakeMatrix`
+// chain is approximated by synthesising a vertical array of "bone"
+// positions (12 anchors spaced along Z=[0..96]) that stand in for a
+// humanoid actor's mesh sub-objects. Each spawn picks a random index j
+// in [0, size_-1] and uses bones_[j] as the bone world position, then
+// applies ±BURN_SPREAD jitter on each axis (snapshot :3387-3389). The
+// per-tick physics (velocity, life, decay, fire→smoke promotion) is
+// preserved verbatim. Full CharacterRig integration replaces the
+// synthetic bones once preview_style=CharacterIdle is wired through.
+
+constexpr int32_t kBurnBespokeCount = 70;     // BURN_COUNT (effect.h:1526)
+
+// Number of synthetic "bones" used to scatter spawns vertically in the
+// harness when no live CharAnimator is available (Iter1 fix #2).
+constexpr int32_t kBurnBespokeSyntheticBones = 12;
+
+// One particle slot — collapsed from SParticleSystemInfo
+// (src/effectcomp.h:357-372) into a compact bespoke record. `system`
+// disambiguates fire vs smoke (the snapshot stores them in separate
+// TParticleSystem arrays; we use a single flat array tagged with the
+// owning system so the fire→smoke promotion is just a tag flip).
+struct SBurnBespokeParticle
+{
+    hmm_vec3 pos        = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 vel        = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 scl        = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 acc        = {1.0f, 1.0f, 1.0f};
+    int32_t  life       = 0;
+    int32_t  life_span  = 0;
+    int32_t  system     = 0;       // 0 = fire (smoke01), 1 = smoke (smoke)
+    bool     used       = false;
+};
+
+_CLASSDEF(TBurnEffect_Bespoke)
+
+class TBurnEffect_Bespoke : public TEffect
+{
+  public:
+    TBurnEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TBurnEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TBurnEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    // Spawn a single BURN overlay at `origin` for the --test=vfx
+    // harness. Loads Magic\burnbabyburn.I3D, resolves the texture slots
+    // for the two sub-objects (smoke01 -> fire system, smoke -> smoke
+    // system per forensics §4), seeds the empty particle array and
+    // ramp envelope from the snapshot Initialize body (effect_old.cpp
+    // :3292-3313). Returns nullptr on asset failure.
+    [[nodiscard]] static TBurnEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+
+    // Per-frame tick + submit. Ports TBurnAnimator::Animate verbatim
+    // through a 24 Hz sim-tick accumulator, then submits one
+    // AdditiveStraight billboard per live particle (texture switches by
+    // particle.system) per the SetAddBlendState bracket
+    // (effect_old.cpp:3449-3460).
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    SBurnBespokeParticle particles_[kBurnBespokeCount * 2] {};   // fire + smoke arenas (flat)
+    // Synthetic bone positions (world-space deltas off the effect's own
+    // origin) — populated in SpawnForTest_BESPOKE to stand in for
+    // `ca->GetObjectMatrix(j)`. See class comment above. (Iter1 fix #2.)
+    hmm_vec3             bones_[kBurnBespokeSyntheticBones] {};
+    int32_t              frame_         = 0;     // snapshot's animator-side frame counter
+    int32_t              to_add_        = 0;     // per-tick spawn cap (ramps 0..8..0)
+    int32_t              size_          = kBurnBespokeSyntheticBones;  // ca->NumObjects() — synthetic in harness
+    TTextureHandle       tex_fire_      = kInvalidTexture;       // smoke01 sub-object
+    TTextureHandle       tex_smoke_     = kInvalidTexture;       // smoke sub-object
+    // Authored I3D quad size in world units — burnbabyburn.I3D's quads
+    // are approximately character-height (~80wu) per forensics §4. The
+    // snapshot's per-particle scl ∈ [0.15, 0.40] then yields per-quad
+    // 12–32 wu, which matches the reference column width (Iter1).
+    float                base_size_wu_  = 80.0f;
+    bool                 alive_         = true;
+    double               sim_accum_ms_  = 0.0;
+};
+
+// *************************************************************************
+// * Strip/Ribbon family bespoke first-pass A/B references                 *
+// *                                                                       *
+// * Four faithful direct ports of the pre-release snapshot animator       *
+// * bodies for Wave 2 batch wave-bespoke-06-strip-ribbon:                 *
+// *                                                                       *
+// *   S04 TLightningAnimator_Bespoke  — composite lightning bolt (strip   *
+// *                                     of jittered anchors).             *
+// *   S05 TShockAnimator_Bespoke      — expanding shockwave ring          *
+// *                                     (animator-only, EMBEDDED in I21   *
+// *                                     in retail; here a self-contained  *
+// *                                     test effect).                     *
+// *   S07 TStreamerEffect_Bespoke     — trailing streamer/ribbon (the     *
+// *                                     hemispherical 4-stream spiral).   *
+// *   X11 TRibbonAnimator_Bespoke     — slow-grow ribbon disc + sparks    *
+// *                                     (revive halo).                    *
+// *                                                                       *
+// * Each lives alongside any future engine port as an A/B baseline. The   *
+// * math / constants / per-tick step are translated line-for-line from    *
+// * the snapshot bodies (effect_old.cpp / effectcomp.cpp); only the       *
+// * render API is adapted (RenderObject -> SubmitFxBillboard /            *
+// * SubmitFxStrip). Pipelines: S04 = SR strip + FB glow; S05/S07/X11 =    *
+// * FB billboard composites (no I3D asset bound yet — first-pass uses    *
+// * a procedural white glow texture). See src/effect.cpp.                *
+// *************************************************************************
+
+// --- S04 TLightningAnimator_Bespoke ---------------------------------------
+// Faithful port of the pre-release TLightningAnimator strip body (the
+// jittered bolt; snapshot in src/stripeffect.cpp `#if 0` :822-915 +
+// :534-662). Drives a TStripAnimator-shaped anchor ring expanding along
+// the caster facing direction, with per-tick smoothing-jitter on every
+// SMOOTH_SIZE-th anchor + cubic-shaped interpolation in between,
+// SetAddBlendState (-> AdditiveStraight) for the strip render, plus a
+// procedural-glow halo placeholder (no Lightning Spark.I3D asset bound
+// here yet — would land alongside a real imagery load in a follow-up).
+//
+// One-shot lifecycle: LAUNCH(1 tick) -> FLY(STRIP_FLY_DURATION ticks of
+// grow-and-fly) -> EXPLODE(STRIP_EXPLODE_TICKS ticks of tail-shrink) ->
+// dead. Harness Combat cadence re-fires.
+_CLASSDEF(TLightningAnimator_Bespoke)
+class TLightningAnimator_Bespoke : public TEffect
+{
+  public:
+    TLightningAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TLightningAnimator_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TLightningAnimator_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TLightningAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    // iter8: SubmitHelperMesh has to be called from the submit_world
+    // callback (inside BeginTilePass scope), NOT from the normal submit
+    // path where the helper-mesh queue gets cleared. Mirrors the sister
+    // TIceBoltEffect_Bespoke's SubmitWorldMeshes_BESPOKE method
+    // (src/effect.cpp:8280+). Called by LightningBespokeSubmitWorld
+    // in vfxtest.cpp.
+    void SubmitWorldMeshes_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Lifecycle phases (mirror retail STRIP_LAUNCH / STRIP_FLY / STRIP_EXPLODE).
+    enum { kLaunch = 0, kFly = 1, kExplode = 2 };
+
+    // One strip anchor along the bolt — world-space position + per-tick
+    // jitter offset (px, pz in retail's local frame; here applied perp to
+    // the bolt's XY forward axis).
+    struct SBoltAnchor
+    {
+        float pos[3]    = {0.0f, 0.0f, 0.0f};
+        float jitter[2] = {0.0f, 0.0f};
+    };
+
+    SBoltAnchor    anchors_[100] {};    // STRIP_MAX_POINTS = 100 in retail
+    int32_t        numpoints_      = 0;
+    int32_t        maxpoints_      = 0;
+    int32_t        state_          = kLaunch;
+    int32_t        duration_       = 20;       // STRIP_FLY_DURATION
+    float          forward_dir_[3] = {1.0f, 0.0f, 0.0f};
+    float          glow_scale_     = 3.4f;     // retail initial
+    float          rotdegree_      = 0.0f;     // glow rot accumulator (degrees, mod 360)
+    float          morrotdegree_   = 0.0f;     // counter-rot accumulator
+    float          u_scroll_       = 0.0f;     // ScrollTexture(-0.1)/tick accumulator
+    bool           alive_          = true;
+    double         sim_accum_ms_   = 0.0;      // 24 Hz sim-tick gate
+    // Asset textures from Magic\NewLightStrip.I3D — resolved at spawn,
+    // cached for the lifetime of the effect. The retail asset has 3
+    // sub-objects (`start`/`sparks`/`end` per forensics §4); the strip
+    // body samples the strip texture, the glow halos sample a glow/end
+    // texture. kInvalidTexture means "asset bind failed, do not render
+    // a stand-in" per AGENT_GUIDE §4.2.1 (no procedural substitutes).
+    TTextureHandle strip_tex_      = kInvalidTexture;
+    TTextureHandle glow_tex_       = kInvalidTexture;
+    // Flipbook plumbing — kept after iter5 even though the bound retail
+    // asset is single-frame (strip_tex 64×64, nframes=1). Documents that
+    // the 8-frame flipbook hypothesis was investigated and disproven by
+    // asset inspection.
+    int32_t        frame_idx_      = 0;
+    int32_t        num_frames_     = 1;
+    // iter5 glow-mesh path: real sub-object mesh for the snapshot's
+    // glow halo (stripfly / retail `end`) registered with the renderer
+    // at spawn and submitted via SubmitHelperMesh twice per render with
+    // the counter-rotating matrix chain from stripeffect.cpp:861-902.
+    // Replaces the iter4 SubmitFxBillboard stand-in. 0 = registration
+    // failed; the render path falls back to the iter4 billboard pass.
+    MeshHandle     glow_mesh_      = 0;
+    // Per-sub-object material colour from the I3D — fed to SubmitHelper
+    // Mesh::diffuse so the helper-mesh shader's `base = tex * diffuse`
+    // produces the authored hue. Snapshot wrote no per-vertex colour on
+    // the glow, so the material's authored diffuse is the ground truth.
+    float          glow_diffuse_[4]  = {1.0f, 1.0f, 1.0f, 1.0f};
+    float          glow_emissive_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+};
+
+// --- S05 TShockAnimator_Bespoke -------------------------------------------
+// Faithful port of TShockAnimator (effectcomp.cpp:609-770) — the expanding
+// shockwave ring used as an embedded member by I21 TIceBoltAnimator. The
+// retail member animates a TStripAnimator-style ring object; here we
+// stand it up as a self-contained test effect spawning a "ring" of
+// billboards procedurally arrayed in a circle, with the same scale
+// state machine (grow → optional shrink-via-flag → done), same alpha
+// fade ramp (when SHOCKWAVE_FLAG_FADE), and same per-ring colour
+// (ARGB packed in the snapshot; here flattened to one ring of N
+// vertices). Default flags = SHRINK | FADE (the I21 ring usage).
+//
+// Blend = Alpha (snapshot SetBlendState = SRC_ALPHA / INV_SRC_ALPHA).
+_CLASSDEF(TShockAnimator_Bespoke)
+class TShockAnimator_Bespoke : public TEffect
+{
+  public:
+    TShockAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TShockAnimator_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TShockAnimator_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TShockAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return !done_; }
+
+  private:
+    enum { kGrow = 0, kShrink = 1 };
+    enum {
+        kFlagShrink      = 1 << 0,   // SHOCKWAVE_FLAG_SHRINK
+        kFlagFade        = 1 << 1,   // SHOCKWAVE_FLAG_FADE
+        kFlagStartShrink = 1 << 2,   // SHOCKWAVE_FLAG_START_SHRINK
+    };
+
+    // SShockParam mirror, retail names preserved (effectcomp.h:206-216).
+    int32_t   flags_         = kFlagShrink | kFlagFade;
+    hmm_vec3  pos_           = {0.0f, 0.0f, 0.0f};
+    hmm_vec3  rot_           = {0.0f, 0.0f, 0.0f};
+    hmm_vec3  scale_         = {0.05f, 0.05f, 0.05f};
+    hmm_vec3  scale_factor_  = {1.10f, 1.10f, 1.10f};
+    hmm_vec3  shrink_factor_ = {0.92f, 0.92f, 0.92f};
+    hmm_vec3  max_size_      = {2.0f, 2.0f, 2.0f};
+    hmm_vec3  min_size_      = {0.05f, 0.05f, 0.05f};
+    hmm_vec3  init_scale_    = {0.05f, 0.05f, 0.05f};
+
+    // Single ring of N vertices for the SR-equivalent. The retail
+    // SetRingColor packs ARGB8 per ring; we store one ring (RGBA float).
+    static constexpr int32_t kRingVertices = 24;
+    float     ring_color_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+
+    bool      done_          = false;
+    int32_t   grow_          = kGrow;       // SHOCKWAVE_GROW (== 0)
+    double    sim_accum_ms_  = 0.0;
+};
+
+// --- S07 TStreamerEffect_Bespoke ------------------------------------------
+// Faithful port of TStreamerAnimator (effect_old.cpp:10258-10434) — the
+// hemispherical 4-stream spiral. Each tick spawns ~STREAMER_SKIP*(4-j)
+// new particles per stream (4 streams total); the angles th/h advance by
+// dth/dh, and a sphere-mapped parametric position is plotted along a
+// scaled radius. Particle scale ramps down via dscl. Lifetime is gated
+// by STREAMER_DURATION = 100 ticks (per-stream h going past PI also
+// short-circuits via frameon=DURATION+1).
+//
+// Blend = AdditiveStraight (snapshot SetAddBlendState in Render).
+_CLASSDEF(TStreamerEffect_Bespoke)
+class TStreamerEffect_Bespoke : public TEffect
+{
+  public:
+    TStreamerEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TStreamerEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TStreamerEffect_Bespoke() override;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TStreamerEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void Initialize(bool attach_runtime_component=true);
+    void Advance(double elapsed_seconds);
+    void SetNativeDomainForTest(bool enabled);
+    void Submit(EFxDebugMode debug_mode=EFxDebugMode::Normal) const;
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    bool BindMeshes() const;
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
+    // Retail constants (preserved names; values from effect_old.cpp:10252-10256).
+    static constexpr int32_t kStreamerMaxParticles = 50;   // STREAMER_MAXPARTICLES
+    static constexpr int32_t kStreamerMaxStreams   = 4;    // STREAMER_MAXSTREAMS (from effect.h:1960)
+    static constexpr int32_t kStreamerDuration     = 100;  // STREAMER_DURATION
+    static constexpr int32_t kStreamerModifier     = 40;   // STREAMER_MODIFIER
+    static constexpr int32_t kStreamerModifierV    = 50;   // STREAMER_MODIFIERV
+    static constexpr int32_t kStreamerSkip         = 1;    // STREAMER_SKIP
+
+    // SStreamerParticle mirror (effect.h:1953-1958).
+    struct SStreamerParticleEx
+    {
+        hmm_vec3 pos   = {0.0f, 0.0f, 0.0f};
+        float    scl   = 0.0f;
+        int32_t  count = 0;
+    };
+
+    SStreamerParticleEx stream_[kStreamerMaxStreams][kStreamerMaxParticles] {};
+    float    dscl_[kStreamerMaxStreams] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float    scl_init_[kStreamerMaxStreams] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float    th_[kStreamerMaxStreams] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float    dth_[kStreamerMaxStreams] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float    h_[kStreamerMaxStreams] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float    dh_[kStreamerMaxStreams] = {0.0f, 0.0f, 0.0f, 0.0f};
+    int32_t  frameon_   = 0;
+    bool     alive_     = false;
+    bool     initialized_ = false;
+    bool     runtime_owned_ = false;
+    struct SAuthoredStream {
+        std::vector<SMeshVertex> vertices;
+        std::vector<uint16_t> indices;
+        TTextureHandle texture = kInvalidTexture;
+        mutable MeshHandle mesh = 0;
+    };
+    SAuthoredStream authored_[kStreamerMaxStreams];
+    double   sim_accum_ms_ = 0.0;
+
+    // Helper: pre-tick "InitStreamer(x)" snapshot — adds one particle to
+    // stream x at the next parametric (th, h) point, scaled by modif and
+    // stream index.
+    void InitStreamerSnap(int32_t x);
+    void AddStreamerSnap(int32_t num, const hmm_vec3& pos, float scl);
+};
+
+// --- X11 TRibbonAnimator_Bespoke ------------------------------------------
+// Faithful port of TRibbonAnimator (effect_old.cpp:4069-4321) — the
+// revive-spell ground halo: a slow-growing central spark (scaled by
+// ribscale) + NUM_RIBBONS=3 outer ribbons rotating around it, plus
+// NUM_RIBBON_SPARKS=30 small sparks orbiting + lifting upward. Pre-
+// release used REVIVE_STARTTICKS for the grow window; we use a literal
+// here (no TReviveEffect available in harness — pass through the GROW
+// branch with ribscale incrementing every tick).
+//
+// Blend = Alpha (snapshot SetBlendState in Render).
+_CLASSDEF(TRibbonAnimator_Bespoke)
+class TRibbonAnimator_Bespoke : public TEffect
+{
+  public:
+    TRibbonAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TRibbonAnimator_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TRibbonAnimator_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TRibbonAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                      const char* asset_override = nullptr);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot constants (effect.h:1001-1006). NUM_RIBBONS=3, NUM_RIBBON_SPARKS=30
+    // are macros — we re-use them where in scope.
+    static constexpr int32_t kRibbonGrowFrames = 24;  // REVIVE_STARTTICKS placeholder
+    static constexpr int32_t kRibbonLifeTicks  = 80;  // harness one-shot duration
+
+    hmm_vec3 p_[NUM_RIBBON_SPARKS] {};
+    hmm_vec3 v_[NUM_RIBBON_SPARKS] {};
+    float    scale_spark_[NUM_RIBBON_SPARKS] = {0.0f};
+    int32_t  framenum_[NUM_RIBBON_SPARKS] = {0};
+    hmm_vec3 ribpos_     = {0.0f, 0.0f, 0.0f};
+    float    rotation_[NUM_RIBBONS] = {0.0f, 2.0f, 4.0f};
+    int32_t  ribbontimer_ = 0;
+    float    ribscale_    = 0.05f;   // RIBBON_MINSCALE
+    float    centertilt_     = 0.0f;
+    float    centertilt_dx_  = 0.001f;
+    bool     alive_       = true;
+    double   sim_accum_ms_ = 0.0;
+};
+
+// *************************************************************************
+// * TMissileEffect_Bespoke — S08 base infrastructure (faithful direct port)*
+// *************************************************************************
+//
+// The TMissileEffect base class is a pure 3-state LAUNCH -> FLY -> EXPLODE
+// state machine: no rendering of its own (each leaf supplies its own
+// animator). The same machine is shared by:
+//   F07  TFireBallEffect   (Magic\NewFireBall.I3D)
+//   M07  TPhotonEffect      (Magic\Photon.I3D)
+//   X19  TYFireBallEffect   (Magic\YellowFireBall.I3D)
+//   F09  TFireColumnEffect  (vestigial)
+//   F11  TFlameDiscEffect   (vestigial)
+//
+// Snapshot source of truth: src/missileeffect.cpp:31-141 (the entire
+// `#if 0` body), TMissileEffect::Initialize / SetSpeed / Pulse / OffScreen.
+// Retail recon: cls_0x5a50e8 (base) — referenced by cls_0x5b4290 (FireBall)
+// which inherits from it. See F07 forensics doc §6.1 for the per-tick
+// LAUNCH/FLY/EXPLODE pseudocode.
+//
+// This bespoke base is the foundation that M07 (batch 5) and X19 (later
+// wave) inherit from. F07 is already shipped with the state machine
+// folded onto its leaf (TFireBallEffect in src/effect.h:3060+); leaving
+// F07 alone per the skip list.
+//
+// Harness rendering: TMissileEffect has no visual on its own. To prove
+// the state-machine ticks LAUNCH -> FLY -> EXPLODE, the bespoke port
+// submits ONE marker billboard at the missile world-pos each frame,
+// colored by state (LAUNCH=yellow, FLY=orange, EXPLODE=red). The marker
+// uses the renderer's white texture so no I3D imagery is required.
+
+// MISSILE_LAUNCH / FLY / EXPLODE — verbatim mirror of missileeffect.h:20-24.
+inline constexpr int32_t kMissileLaunch  = 0;
+inline constexpr int32_t kMissileFly     = 1;
+inline constexpr int32_t kMissileExplode = 2;
+
+// missileeffect.h:26-27 — snapshot defaults shared by every missile leaf.
+inline constexpr int32_t kMissileSpeedDefault = 16;
+inline constexpr int32_t kMissileRangeDefault = 2;
+
+// 24 Hz sim cadence (family-consistent with B01/F07): the per-tick
+// integration runs once per accumulated sim tick so motion is
+// framerate-independent.
+inline constexpr int32_t kMissileSimTickMs = 1000 / 24;
+
+// Harness-only LAUNCH-hold so the visible transition is observable in
+// --test=vfx (the in-game caller leaves this at 0). The animator drives
+// SetStatus(true) on the very first tick in retail, so without this hold
+// the LAUNCH frame is invisible. Same trick TFireBallEffect uses.
+inline constexpr int32_t kMissileHarnessLaunchHoldTicks = 12;
+inline constexpr float   kMissileHarnessSpeedScale      = 0.4f;
+
+// Marker billboard size in world units (harness visualization only).
+// Picked to read clearly against the test scene (~64 wu wall sprites).
+inline constexpr float   kMissileMarkerSizeWu          = 24.0f;
+
+_CLASSDEF(TMissileEffect_Bespoke)
+
+class TMissileEffect_Bespoke : public TEffect
+{
+  public:
+    TMissileEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TMissileEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    ~TMissileEffect_Bespoke() override = default;
+
+    // missileeffect.cpp:137-141 — MissileEffects stay on-screen until the
+    // effect is finished (only OffScreen when EXPLODE done AND status).
+    // For the harness we keep it simple: pure base path lets the engine
+    // do its thing.
+    void OffScreen() override
+    {
+        if ((state_ == kMissileExplode) && status_)
+            TObjectInstance::OffScreen();
+    }
+
+    // Faithful port of missileeffect.cpp:31-40.
+    virtual void Initialize();
+
+    // Faithful port of missileeffect.cpp:52-135. Drives the 3-state
+    // LAUNCH -> FLY -> EXPLODE machine. Called from TickAndSubmitForTest's
+    // sim-tick gate (and in-game directly from the engine's Pulse walk).
+    void Pulse() override;
+
+    // missileeffect.cpp:42-50.
+    int32_t GetSpeed() const { return speed_ / ROLLOVER; }
+    void    SetSpeed(int32_t newspeed) { speed_ = newspeed * ROLLOVER; }
+    int32_t GetMissileSpeed() const { return speed_; }
+    void    SetStatus(bool newstatus) { status_ = newstatus; }
+    int32_t GetMissileState() const { return state_; }
+
+    // Spawn a standalone TMissileEffect_Bespoke for the --test=vfx
+    // harness. No imagery required (the marker billboard uses the
+    // renderer's white texture). Returns nullptr if the renderer isn't
+    // initialized.
+    [[nodiscard]] static TMissileEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+
+    // Per-frame tick + submit. Ports TMissileEffect::Pulse via a 24 Hz
+    // sim-tick accumulator, then submits ONE marker billboard at the
+    // missile world-pos colored by state.
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    // True until the EXPLODE phase ages out (~24 ticks after EXPLODE
+    // entry). Harness uses this to know when to re-fire.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  protected:
+    // --- TMissileEffect base-class state (missileeffect.h:33-37) -------
+    int32_t state_    = kMissileLaunch;  // MISSILE_LAUNCH / FLY / EXPLODE
+    int32_t range_    = 32768;           // ticks left until self-explode
+    int32_t speed_    = 0;               // wu/tick * ROLLOVER
+    bool    status_   = false;           // animator -> base "launch now" handshake
+    int32_t aim_angle_ = 0;              // 0..255 byte-angle (snapshot `angle`)
+
+    // Per-tick velocity in world wu/tick (set on LAUNCH->FLY transition).
+    // The snapshot uses S3DPoint vel on TObjectInstance and integrates it
+    // via Move(); for the harness we integrate here so the marker moves
+    // without engine collision involvement.
+    hmm_vec3 vel_     = {0.0f, 0.0f, 0.0f};
+
+    // Harness-only LAUNCH-hold counter (see
+    // kMissileHarnessLaunchHoldTicks). In-game this stays at 0.
+    int32_t launch_hold_ticks_remaining_ = kMissileHarnessLaunchHoldTicks;
+
+    // Post-explode lifetime so the harness shows the EXPLODE frame
+    // before re-firing.
+    int32_t explode_ticks_remaining_ = 24;
+
+    // Lifecycle
+    bool   alive_         = true;
+    double sim_accum_ms_  = 0.0;   // 24 Hz sim-tick gate
+};
+
+// *******************
+// * Blood Animator *
+// *******************
+//
+// The 1998 snapshot's animator around TBloodSystem (bodies archived in
+// effect_old.cpp). The shipped TBloodAnimator differs and is ported in
+// effects/blood.{h,cpp}; this declaration is kept for reference only.
+#ifdef UNUSED
+_CLASSDEF(TBloodAnimator)
+
+class TBloodAnimator : public T3DAnimator
+{
+  private:
+    TBloodSystem bloods;
+
+  protected:
+
+  public:
+    TBloodAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
+      // Constructor (initialization handled by Initialize)
+    virtual ~TBloodAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+};
+#endif // UNUSED: snapshot TBloodAnimator
+
+// ******************
+// * TFizzleEffect *
+// ******************
+//
+// X21 spell-failure puff ("Fizzle" / TFizzleAnimator / TParticleSystem).
+// FAITHFUL DIRECT PORT of the pre-release per-tick particle loop — same
+// model SPARKS / BLOOD follow. The original is three small `TParticleSystem`
+// instances (blue/red/purple) owned by `TFizzleAnimator`, each binding one
+// of the 3 sub-objects (box01/02/03) of `Magic\Fizzle.I3D` (a 32x32
+// ARGB4444 dust sprite); each tick the animator spawns ~1.5 particles for
+// the first 15 ticks, runs a grow→shrink scale state machine + in-plane
+// spin, and self-destructs when emission is done AND every particle's
+// scale cycle has finished. See forensics docs/vfx/forensics/X21_TFizzleEffect.md.
+//
+// Three bodies (snapshot, retail animator body not extracted — §2.1):
+//
+//   spawn  = TPlayer::InvokeQuickSpell -> CastByName("Fizzle")
+//            (player.cpp:547-574; spell.def:253-263)
+//   update = TFizzleAnimator::Animate (effect_old.cpp:12361-12487) — owns
+//            the cadence, scale state machine (life_span = 100 -> 200 -> 0
+//            phase tag), spin, flicker re-roll, self-kill.
+//   render = TFizzleAnimator::Render (effect_old.cpp:12489-12502) +
+//            TParticleSystem::Render (effectcomp.cpp:1070-1109) — Alpha
+//            blend, ground-tipped WorldXY, per-particle Z-axis spin,
+//            +1.5x flicker scale boost.
+//
+// The per-particle arrays from the 3 TParticleSystems are collapsed onto
+// this effect class (same convention as SSparkParticle / SBloodParticleEx).
+// One-shot fixed-duration burst, emission window = 15 sim-ticks.
+//
+// Retail fidelity: registration + trigger + asset visual payload are
+// retail-confirmed (forensics §2.1(2)(3)(4)); the per-tick DUST_* constants
+// and the animator body are snapshot-only (§2.1(1)). The shipped fizzle.i3d
+// has identical decoded texture pixels and identical 3-subobj geometry.
+//
+// Caveats (forensics §13.2 / §13.3):
+//   - life_span is OVERLOADED as a phase tag (100=GROW, 200=SHRINK, 0=DEAD),
+//     NOT a tick-countdown — the real lifetime is the grow+shrink scale
+//     cycle ((temp.z/0.05) + (temp.z/0.02) ticks per particle).
+//   - The original spawn has a dead `rot.z = random(0,359)` immediately
+//     overwritten to 0; do NOT port the dead line.
+//
+// Blend = Alpha (SRC_ALPHA / INV_SRC_ALPHA), Unlit, TestNoWrite,
+// orientation = WorldXY (lies flat on ground, RotateX(-pi/2) tip).
+
+// Per-system cap = DUST_COUNT (effect_old.cpp:12293). Emission caps at
+// ~1.5/tick × 15 ticks ≈ 22-23 total split across the 3 systems, so DUST_COUNT
+// is never reached in practice — but the pre-release allocated this many
+// slots per system, so we hold the same capacity per system for fidelity.
+inline constexpr int32_t kFizzleParticlesPerSystem = 30;
+
+// Three systems (blue/red/purple) × DUST_COUNT each. Particles join a
+// random system at spawn (random(1,3)). We collapse onto a single
+// fixed-cap inline array — no heap churn per burst.
+inline constexpr int32_t kFizzleNumSystems     = 3;
+inline constexpr int32_t kFizzleMaxParticles   =
+    kFizzleParticlesPerSystem * kFizzleNumSystems;
+
+// One fizzle particle's transient state. Pre-release stored these as
+// SParticleSystemInfo (effectcomp.h:308-325) inside the per-system arrays;
+// we collapse onto a per-particle struct on the effect class. system_idx
+// records which of the 3 systems (= which sub-object texture) it draws from.
+// The 24Hz cadence (DUST_*) integrates via the same sim-tick accumulator
+// the sparks/blood ports use — converted to per-second wall-clock via
+// TickAndSubmitForTest's accumulator, so motion stays framerate-independent.
+struct SFizzleParticle
+{
+    hmm_vec3 pos       = {0.0f, 0.0f, 0.0f};   // object-local position (wu)
+    hmm_vec3 vel       = {0.0f, 0.0f, 0.0f};   // velocity (wu / sim-tick)
+    hmm_vec3 scl       = {0.0f, 0.0f, 0.0f};   // current scale (grow/shrink)
+    float    rot_z_deg = 0.0f;                 // in-plane spin angle (degrees)
+    float    spin_rate = 0.0f;                 // deg / sim-tick (temp.y)
+    float    max_scl   = 0.0f;                 // peak scale 0.05..0.25 (temp.z)
+    int32_t  phase     = 0;                    // 100 GROW, 200 SHRINK, 0 DEAD
+    int32_t  system    = 0;                    // 0=blue, 1=red, 2=purple
+    bool     used      = false;                // active slot?
+    bool     flicker   = false;                // re-rolled each tick (×1.5 scale)
+};
+
+// One sub-object's authored corners, UVs, diffuse material and texture slot.
+// The three systems map to box01/box03/box02 (blue/red/purple).
+struct SFizzleSubObject
+{
+    TTextureHandle texture    = kInvalidTexture;
+    float          uv_rect[4] = {0.0f, 0.0f, 1.0f, 1.0f};  // x,y,w,h normalized
+    S3DVertex      vertices[4] = {};                        // authored corners and UVs
+    float          diffuse[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TFizzleEffect)
+
+class TFizzleEffect : public TEffect
+{
+  public:
+    TFizzleEffect(TObjectImagery* newim) : TEffect(newim) {}
+    TFizzleEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFizzleEffect() override = default;
+
+    // Spawn a standalone single-burst TFizzleEffect for the --test=vfx
+    // harness. Loads the real Magic\Fizzle.I3D imagery (NO procedural
+    // stand-in — the 3 colored dust sprites ARE the visual identity per
+    // forensics §10), resolves each of the 3 box sub-objects (box01/blue,
+    // box02/purple, box03/red — note the index↔label crossing from
+    // effect_old.cpp:12354-12356) to its authored geometry/material. Resets
+    // the per-burst counters; particles are seeded by the per-tick
+    // emission loop inside TickAndSubmitForTest (not at spawn — the
+    // original emits over the first 15 ticks, not all at once). Returns
+    // nullptr if the imagery can't be loaded. Caller owns the pointer.
+    [[nodiscard]] static TFizzleEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit for the harness. Ports
+    // TFizzleAnimator::Animate (effect_old.cpp:12361-12487) +
+    // TParticleSystem::Animate/Render (effectcomp.cpp:1041-1109) directly,
+    // converted to framerate-independent integration via the 24 Hz sim-tick
+    // accumulator (same pattern as sparks/blood). SubmitFxQuad preserves
+    // authored corners/UVs and the source's full rotation order.
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+    // Explicit isolated-preview owner/projector; ordinary runtime stays common-world.
+    void SetNativeDomainForTest(bool enabled);
+
+    // True until the last particle's scale cycle has finished (mirrors
+    // TFizzleAnimator self-destruct via KillThisEffect when frame_count
+    // >= 15 AND every used particle is done — effect_old.cpp:12482-12485).
+    // The harness uses this to gate non-overlapping re-fires.
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Per-particle state (faithful collapse of the 3 TParticleSystem
+    // arrays onto the class — same pattern as SSparkParticle in sparks,
+    // SBloodParticleEx in blood).
+    SFizzleParticle particles_[kFizzleMaxParticles] {};
+    // Resolved sub-object textures + UV sub-rects. Indexed by particle's
+    // `system` field (0=blue/box01, 1=red/box03, 2=purple/box02).
+    SFizzleSubObject subobjs_[kFizzleNumSystems] {};
+
+    // Emission cadence — directly mirrors `add`/`frame_count` in
+    // TFizzleAnimator (effect_old.cpp:12313-12314).
+    float   emit_add_       = 0.0f;
+    int32_t frame_count_    = 0;
+    // 24Hz sim-tick accumulator (ms) — same as sparks/blood.
+    double  sim_accum_ms_   = 0.0;
+    bool    alive_          = true;
+    bool    native_domain_  = false;
+    hmm_mat4 native_owner_  = {};
+};
+
+// ********************
+// * TFireBallEffect *
+// ********************
+//
+// F07 fireball — TMissileEffect : TEffect base + TFireBallEffect leaf.
+// FAITHFUL DIRECT PORT of the pre-release `TMissileEffect::Pulse`
+// (src/missileeffect.cpp:52-135) + `TFireBallAnimator::Animate` /
+// `::Render` body (src/missileeffect.cpp:549-1085). Doc:
+// docs/vfx/forensics/F07_TFireBallEffect.md.
+//
+// Visual shape: 3-state machine LAUNCH→FLY→EXPLODE.
+//   LAUNCH (~25 ticks): ball grows above caster, animator hands off
+//                       to TMissileEffect::Pulse with SetStatus(true).
+//   FLY:                ball travels along aim, grows to MAX_SIZE,
+//                       sheds a 10-slot mesh-trail ring buffer + 30
+//                       photon-spark particles per tick.
+//   EXPLODE:            single-tick blast (`firsttime`) spawns 10
+//                       burst quads + 4-ring shockwave + 40-spark
+//                       burst; subsequent ticks shrink the burst and
+//                       fade the ring; effect self-destructs when all
+//                       sub-systems are quiet.
+//
+// Asset: real `Magic\NewFireBall.I3D` (forensics §4). 3 sub-objects:
+//   box01      (idx 0) — fire-ball quad, reused for ball/glow/trail/burst
+//                        via 4×4 atlas UV cell selection (`SetAnimFrame`).
+//   box02      (idx 1) — spark quad handed to the spark trail.
+//   cylinder01 (idx 2) — shockwave ring geometry, drawn as helper-mesh.
+//
+// Pipeline split (forensics §7):
+//   - box01 head/glow → authored quad corners and literal retail matrix/UV
+//     operations verified by the moving thin-runtime render fixture.
+//   - trail/burst + box02 sparks retain their earlier particle adapters;
+//     geometry, ordering and complete retail lifecycle parity remain open.
+//   - cylinder01 (ring) → helper-mesh (`SubmitHelperMesh`, additive),
+//     same primitive M09b TTeleporterEffect uses.
+//
+// Per-instance per-frame state (animator class collapse, same convention
+// as SParkS/Blood/Teleporter): the `FireBallData` head + 10-slot trail +
+// 10-slot burst + spark-trail array all live on this class.
+
+// 24 Hz sim cadence — the per-tick rates (FIREBALL_GROW_RATE 0.05/tick,
+// trail shrink 0.85/slot/tick, ring scale 1.085/tick, burst shrink 0.90/
+// tick, spark gravity 0.37/tick²) are integrated once per accumulated
+// sim tick (family-consistent with F03/H03/M05/X22/B01).
+inline constexpr double kFireBallSimTickMs = 1000.0 / 24.0;
+
+// Forensics §3 constants — kept side-by-side with the doc's spelling.
+inline constexpr float   kFireBallSpeed         = 8.0f;            // pos-units/tick (pre-ROLLOVER), §3 FIREBALL_SPEED
+inline constexpr float   kFireBallSpawnLiftZ    = 50.0f;           // ball spawned +50 wu above caster
+inline constexpr float   kFireBallGrowRate      = 0.05f;           // FLY/EXPLODE scale step / tick
+inline constexpr float   kFireBallMaxSize       = 0.60f;           // scale cap
+inline constexpr float   kFireBallTrailScale    = 0.85f;           // per-slot trail shrink
+inline constexpr int32_t kFireBallTrailSize     = 10;              // ring-buffer length
+inline constexpr int32_t kFireBallMaxFrame      = 16;              // 4x4 atlas frame count
+inline constexpr int32_t kFireBallGlowFrame     = 3;               // reserved glow cell
+inline constexpr int32_t kFireBallMaxSpark      = 40;              // spark trail cap
+inline constexpr int32_t kFireBallNormSpark     = 30;              // FLY spark target
+inline constexpr int32_t kFireBallMaxBurst      = 10;              // impact burst quad count
+inline constexpr float   kFireBallSparkScale    = 0.15f;           // initial spark scale
+inline constexpr float   kFireBallSparkScaleDec = 0.90f;           // spark scale decay / tick
+inline constexpr float   kFireBallSparkGravity  = 0.37f;           // wu / tick²
+inline constexpr int32_t kFireBallSparkMinLife  = 15;              // spark life range (ticks)
+inline constexpr int32_t kFireBallSparkMaxLife  = 20;
+inline constexpr float   kFireBallSparkFlicker  = 1.75f;           // flicker scale boost
+inline constexpr int32_t kFireBallBlastRadius   = 150;             // wu (BlastCharactersInRange)
+inline constexpr float   kFireBallRingScale     = 25.0f;           // ring init scale (all axes)
+inline constexpr float   kFireBallRingFactor    = 1.085f;          // ring grow factor / tick
+inline constexpr float   kFireBallRingMaxSize   = 120.0f;          // ring scale cap
+inline constexpr int32_t kFireBallRingRings     = 4;               // shockwave ring count
+inline constexpr int32_t kFireBallRingVerts     = 24;              // ring vertex count
+inline constexpr int32_t kFireBallFlyRangeTicks = 60;              // (240*MISSILE_RANGE)/FIREBALL_SPEED
+                                                                    // = (240*2)/8 = 60 ticks of flight
+// Preview and actual runtime use the same verified full-speed trajectory.
+// A camera fixture must accommodate the missile, rather than slowing it.
+// Earlier unverified trail/burst adapter dimension only. Head/glow no longer
+// use this guessed size; they use the shipped box01 vertices and matrices.
+inline constexpr float   kFireBallBaseQuadWu    = 192.0f;
+// Spark quad world-unit size — small enough that the 30-40 sparks
+// visibly separate against the moving ball, large enough to read as a
+// flicker. The original draws box02 at the I3D's authored scale; this is
+// the engine equivalent.
+inline constexpr float   kFireBallSparkQuadWu   = 6.0f;
+// Spell-carried point-light parameters (forensics §9, spell.def LIGHT
+// directive). Color (255,130,0) is RETAIL-CONFIRMED; intensity / radius
+// are tuned to match the warm flicker on the scene without saturating.
+inline constexpr float   kFireBallLightR        = 1.0f;       // 255/255
+inline constexpr float   kFireBallLightG        = 0.51f;      // 130/255
+inline constexpr float   kFireBallLightB        = 0.0f;
+inline constexpr float   kFireBallLightRadiusWu = 320.0f;     // MULT 20 family default
+inline constexpr float   kFireBallLightInt      = 1.5f;       // baseline; multiplied by glow flicker
+
+// One slot in the head trail / burst ring buffer. Mirrors `FireBallData`
+// (missileeffect.h:179-187). `rotation` is the per-instance in-plane
+// spin (degrees) the snapshot accumulates on the ball head (+2/tick) and
+// PROPAGATES into trail copies + burst quads via `trail[0] = fireball`
+// / `burst[i].rotation = 0`. The per-trail-slot stale-snapshot of
+// rotation is what gives the trail its tumbling/streak look — every
+// card freezes at whatever rotation the ball had when that slot got
+// recorded. Drawn through the FB-particle pipeline (SubmitFxParticle)
+// with WorldXY orientation + per-instance rotation_rad so the same
+// world-space matrix tilt the original used (rotZ(spin) * rotX(-30°) *
+// rotY(+60°) * rotZ(facing)) lands as a ground-tipped tumble trail,
+// not a camera-facing swirl.
+struct SFireBallData
+{
+    hmm_vec3 pos      = {0.0f, 0.0f, 0.0f};   // world-space (trail) or local (head)
+    float    scale    = 0.0f;                  // draw scale
+    float    glow     = 1.0f;                  // flicker multiplier (×1.0..1.75)
+    float    frame    = 0.0f;                  // atlas cell index
+    float    rotation = 0.0f;                  // in-plane spin (degrees, +2/tick on head)
+    bool     used     = false;                 // burst slot active?
+};
+
+// One spark in the photon-spark trail (collapses TSubParticleAnimator's
+// per-particle arrays onto the effect class — same convention as
+// SSparkParticle / SBloodParticleEx).
+struct SFireBallSpark
+{
+    hmm_vec3 pos   = {0.0f, 0.0f, 0.0f};   // world-space
+    hmm_vec3 vel   = {0.0f, 0.0f, 0.0f};   // wu / tick
+    float    scale = 0.0f;                  // current scale (×0.90/tick decay)
+    int32_t  life  = 0;                     // remaining ticks
+    bool     used  = false;
+    bool     flicker_status = false;       // Original per-live RNG sample, not life parity.
+};
+
+_CLASSDEF(TFireBallEffect)
+
+// Asset binding state captured at SpawnForTest. Held as a private member
+// rather than a side-table because the F07 port is single-file (no
+// imagery-API leakage in the header is preserved by keeping the type
+// internal; the file that defines TFireBallEffect::SpawnForTest owns
+// the binding semantics).
+struct SFireBallAssetBind
+{
+    TTextureHandle box01_tex     = 0;     // ball / glow / trail / burst sprite atlas
+    TTextureHandle box02_tex     = 0;     // spark quad sprite
+    S3DVertex box01_vertices[4] = {};     // Original authored geometry, not damage-rect dimensions.
+    bool has_box01_quad = false;
+    bool box01_argb4444 = false;
+    S3DVertex box02_vertices[4] = {};
+    bool has_box02_quad = false;
+    bool box02_argb4444 = false;
+    std::vector<S3DVertex> ring_vertices;
+    std::vector<S3DFace> ring_faces;
+    // Authoring scale of the box01 quad (atlas-cell size in normalized
+    // texture coords). The original uses a 4×4 grid (0.25 × 0.25).
+    float          atlas_cell_w  = 0.25f;
+    float          atlas_cell_h  = 0.25f;
+};
+
+class TFireBallEffect : public TEffect
+{
+  public:
+    TFireBallEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TFireBallEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    ~TFireBallEffect() override = default;
+
+    void OffScreen() override { /* MissileEffect-family stays simulating until EXPLODE done */ }
+
+    // No `override` — TEffect doesn't declare Initialize() as virtual
+    // (the family pattern is to define Initialize() on each leaf as a
+    // plain virtual). Pulse IS virtual on TEffect, so override there.
+    virtual void Initialize();
+    void Pulse() override;
+    // REVSYNC: TFireBallEffect::Pulse @ 0x00510c10 (YFireBall's 0x00513140 the
+    // same) -- the missile's step (TMissileEffect::Pulse 0x00510220), then the
+    // blast: the first tick it is exploding, a spell's fireball hurts its
+    // caster's enemies within 150 of the ball (AreaDamage, the variant's
+    // damage, the spell's type). Pulse runs it, then the animator's step.
+    void PulseMissile();
+    // Pulse owns original missile integration. The generic map movement walk
+    // reads its last result instead of moving the same projectile twice.
+    uint32_t Move() override { return GetMoveBits(); }
+    bool SetProjectileEndpoints(const S3DPoint& source,const S3DPoint& destination);
+    // Standalone fixtures can supply a target collision without a character.
+    void SetPreviewTargetCollision(bool enabled) { preview_target_collision_=enabled; }
+    const missile_state::State& ProjectileState() const { return missile_motion_; }
+    [[nodiscard]] bool DamageArmed() const { return damage_armed_; }
+
+    // Spawn a standalone TFireBallEffect for the --test=vfx harness.
+    // Loads `Magic\NewFireBall.I3D`, resolves the 3 sub-object textures +
+    // the cylinder01 ring mesh, picks a random horizontal aim direction
+    // (the harness has no caster/target geometry — gameflow's in-game
+    // caller will supply the actual aim via TSpell::Timer).
+    // Returns nullptr if the imagery can't be loaded.
+    [[nodiscard]] static TFireBallEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Per-frame tick + submit. Ports the 3-state Pulse + the animator's
+    // Animate/Render bodies directly to the FB pipeline (box01/box02
+    // billboards) + helper-mesh additive pass (cylinder01 ring). Drives
+    // the spell light via Renderer->AddPointLight each tick while alive.
+    //
+    // The mesh draws (cylinder01 ring) must be submitted AFTER the
+    // tile-pass opens (same convention as TTeleporterEffect::
+    // SubmitWorldForTest). The harness wires `submit` for the
+    // billboard+tick path and `submit_world` for the ring.
+    void TickAndSubmit(EFxDebugMode debug_mode);
+    void SubmitWorldRing(EFxDebugMode debug_mode);
+
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  protected:
+    static TFireBallEffect* SpawnForTestWithAsset(const S3DPoint& origin,
+        const char* asset_path,TFireBallEffect* (*factory)(TObjectImagery*));
+    void SetYFireBallRingPalette() { y_ring_palette_=true; }
+    void SetPreviewLightColor(float r,float g,float b) { light_color_={r,g,b}; }
+
+  private:
+    hmm_vec3 light_color_{kFireBallLightR,kFireBallLightG,kFireBallLightB};
+    // --- TMissileEffect base-class state (forensics §6.1) -----------
+    // The original carries these on TMissileEffect; we fold them onto the
+    // leaf for the single-file port. The semantics are unchanged: 3-state
+    // machine, byte-angle aim, integer-tick range countdown.
+    int32_t state_      = 0;            // MISSILE_LAUNCH=0 / FLY=1 / EXPLODE=2
+    int32_t range_      = 32768;        // ticks left until self-explode
+    bool    status_     = false;        // animator → base "launch now" handshake
+    int32_t aim_angle_  = 0;            // 0..255 byte-angle (horizontal facing)
+    bool    damage_armed_ = true;       // +0x194: the blast is still to come (Initialize 0x00510bd0 sets it)
+    missile_state::State missile_motion_{};
+    S3DPoint projectile_destination_{};
+    bool has_projectile_destination_=false;
+    bool preview_mode_=false;
+    bool native_domain_=false;
+    bool y_ring_palette_=false;
+    bool preview_target_collision_=false;
+
+    // Per-tick velocity in world wu/tick (set on LAUNCH→FLY transition).
+    hmm_vec3 vel_       = {0.0f, 0.0f, 0.0f};
+
+    // --- TFireBallAnimator state (forensics §6.2) -------------------
+    SFireBallData  fireball_;                                     // ball head
+    SFireBallData  trail_[kFireBallTrailSize];                    // 10-slot mesh-trail ring buffer
+    SFireBallData  burst_[kFireBallMaxBurst];                     // 10-slot impact burst
+    SFireBallSpark sparks_[kFireBallMaxSpark];                    // 40-slot photon-spark trail
+    int32_t        frame_count_  = kFireBallMaxFrame;             // atlas total frames
+    int32_t        glow_frame_   = kFireBallGlowFrame;            // reserved glow cell
+    int32_t        old_state_    = 0;                              // state-edge tracker
+    int32_t        firsttime_    = 0;                              // edge for explode-once
+    int32_t        explode_      = 0;                              // 0 pre / 1 first-tick / -1 after
+
+    // --- Ring kinematics (forensics §6.3) ---------------------------
+    bool           ring_active_  = false;
+    float          ring_scale_   = kFireBallRingScale;
+    bool           ring_done_    = true;
+    hmm_vec3       ring_pos_     = {0.0f, 0.0f, 0.0f};
+
+    // --- Asset binding (resolved at SpawnForTest) --------------------
+    mutable SFireBallAssetBind asset_;
+
+    // --- Lifecycle -----------------------------------------------------
+    bool           alive_        = true;
+    double         sim_accum_ms_ = 0.0;
+
+    // Internal helpers (translate the body line-by-line; private so they
+    // can mutate state without polluting the public API).
+    void StepMissilePulse();      // TMissileEffect::Pulse (forensics §6.1)
+    void StepAnimate();           // TFireBallAnimator::Animate (forensics §6.2)
+    void SubmitBillboards(EFxDebugMode debug_mode) const;
+    bool EnsureAuthoredQuad() const;
+    void SubmitAuthoredCard(const SFireBallData& pose,int32_t frame,bool glow,EFxDebugMode debug_mode) const;
+    void SubmitAuthoredBurst(EFxDebugMode debug_mode) const;
+    void SubmitAuthoredTrail(EFxDebugMode debug_mode) const;
+    bool EnsureAuthoredSpark() const;
+    void SubmitAuthoredSpark(const SFireBallSpark& spark,EFxDebugMode debug_mode) const;
+    [[nodiscard]] bool IsTrailDraining() const;
+    [[nodiscard]] bool AnyBurstAlive() const;
+    [[nodiscard]] int32_t LiveSparkCount() const;
+    void FillAtlasUv(int32_t frame_idx, float out_uv[4]) const;
+};
+
+// *****************
+// * TMistEffect *
+// *****************
+
+_CLASSDEF(TMistEffect)
+
+class TMistEffect : public TEffect
+{
+  private:
+    // --- Phase 2 (M05) PE-pipeline scaffold -----------------------------
+    // Bucket borrowed from the global TParticleManager — same model as
+    // B01 TBloodEffect. The bucket itself outlives this effect; per-
+    // instance drops are disambiguated by `owner_particle_id_` and
+    // killed off in the destructor via TParticleBucket::KillParticlesByOwner.
+    //
+    // Unlike B01 (one-shot 10-droplet burst), Mist is a **continuous
+    // ambient emitter**: the 50 drops are seeded once at SpawnForTest
+    // and then respawn-in-place on death. The bucket sees no churn at
+    // the count level — same 50 particles tick forever, just with
+    // recycled state. See INVENTORY M05 forensics §3 for the cadence.
+    TParticleBucket* bucket_           = nullptr;
+    float            owner_particle_id_ = -1.0f;
+    double           sim_accum_ms_     = 0.0;   // 24 Hz sim-tick gate (forensics §7.4)
+
+  public:
+    TMistEffect(TObjectImagery* newim) : TEffect(newim) {  }
+    TMistEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    ~TMistEffect() override;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    virtual void Initialize();
+    void Pulse() override;
+
+    // Spawn a standalone TMistEffect for the --test=vfx harness. Loads
+    // `Magic\mist.i3d` (the canonical mist sprite at
+    // legacy/Imagery/Magic/mist.i3d), allocates / reuses a global PE
+    // bucket keyed off the mist texture, seeds 50 drops with retail-
+    // faithful pos + upward velocity envelope, and stamps the instance
+    // with a fresh map index so its particles can be tracked by owner.
+    // Returns nullptr if the imagery can't be loaded. The caller owns
+    // the returned pointer and must `delete` it to release the imagery
+    // refcount and evict its particles.
+    //
+    // PE-pipeline scope: validates the bucket/submit path end-to-end
+    // through the real effect class lineage with a long-lived
+    // continuous-emitter pattern (B01 = burst, M05 = continuous).
+    [[nodiscard]] static TMistEffect* SpawnForTest(const S3DPoint& origin);
+
+    // Drive the owned bucket forward by one sim tick (Euler integrate
+    // + gravity + respawn-in-place on landing), then submit to the FX
+    // queue. Idempotent if the effect has no bucket yet.
+    void TickAndSubmitForTest(EFxDebugMode debug_mode);
+};
+
+// *******************
+// * Mist Animator *
+// *******************
+
+_CLASSDEF(TMistAnimator)
+
+class TMistAnimator : public T3DAnimator
+{
+  private:
+    PSDropParticle drops;
+    int32_t numdrops;   
+
+  protected:
+    
+  public:
+    TMistAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
+      // Constructor (initialization handled by Initialize)
+    virtual ~TMistAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+
+    virtual void AddNewRipple(int32_t x, int32_t y, int32_t z, int32_t len);
+};
+
+// *****************
+// * TWaterFallEffect *
+// *****************
+
+_CLASSDEF(TWaterFallEffect)
+
+class TWaterFallEffect : public TEffect
+{
+  private:
+    
+  public:
+    TWaterFallEffect(TObjectImagery* newim) : TEffect(newim) {  }
+    TWaterFallEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    virtual ~TWaterFallEffect() {}
+
+    virtual void Initialize();
+    virtual void Pulse();
+};
+
+// *******************
+// * WaterFall Animator *
+// *******************
+
+_STRUCTDEF(SWaterParticle)
+struct SWaterParticle
+{
+    hmm_vec3 pos;
+    hmm_vec3 vel;
+    hmm_vec3 scale;
+    int32_t time;
+};
+
+_CLASSDEF(TWaterFallAnimator)
+class TWaterFallAnimator : public T3DAnimator
+{
+  private:
+    PSWaterParticle drops;
+    int32_t numdrops;
+    S3DPoint eff;
+
+  protected:
+    
+  public:
+    TWaterFallAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
+      // Constructor (initialization handled by Initialize)
+    virtual ~TWaterFallAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+
+    virtual void InitParticle(int32_t i);
+    virtual void UpdateStuff();
+    virtual void DoLighting(float x, float y, float z, PS3DAnimObj object);
+};
+
+// *****************
+// * TWaterEffect *
+// *****************
+
+_CLASSDEF(TWaterEffect)
+
+class TWaterEffect : public TEffect
+{
+  private:
+    
+  public:
+    TWaterEffect(TObjectImagery* newim) : TEffect(newim) {  }
+    TWaterEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    virtual ~TWaterEffect() {}
+
+    virtual void Initialize();
+    virtual void Pulse();
+};
+
+// *******************
+// * Water Animator *
+// *******************
+
+_CLASSDEF(TWaterAnimator)
+class TWaterAnimator : public T3DAnimator
+{
+  private:
+    PSWaterParticle drops;
+    int32_t numdrops;
+    S3DPoint eff;
+
+  protected:
+    
+  public:
+    TWaterAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
+      // Constructor (initialization handled by Initialize)
+    virtual ~TWaterAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+
+    virtual void InitParticle(int32_t i);
+    virtual void UpdateStuff();
+    virtual void DoLighting(float x, float y, float z, PS3DAnimObj object);
+};
+
+// *************************************************************************
+// * Literal Waterfall — source state and authored-quad runtime reference  *
+// *************************************************************************
+// Evidence: docs/vfx/forensics/H02_WATERFALL_RUNTIME.md.
+_CLASSDEF(TWaterFallEffect_Bespoke)
+class TWaterFallEffect_Bespoke : public TEffect
+{
+  public:
+    TWaterFallEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TWaterFallEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TWaterFallEffect_Bespoke() override;
+    // Persistent environmental owner: normal offscreen cleanup never kills it.
+    void OffScreen() override { TObjectInstance::OffScreen(); }
+    void Initialize(bool attach_runtime_component = true);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode) const;
+    [[nodiscard]] static TWaterFallEffect_Bespoke* SpawnForTest_BESPOKE(
+        const S3DPoint& origin, const char* asset_override = nullptr);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled);
+    [[nodiscard]] bool IsAlive() const { return true; }
+  private:
+    void InitParticle(int32_t i);
+    void UpdateStuff();
+    SWaterParticle* drops_ = nullptr;
+    int32_t numdrops_ = 0;
+    TTextureHandle texture_ = kInvalidTexture;
+    std::vector<S3DVertex> authored_vertices_;
+    float material_diffuse_[4] = {1,1,1,1};
+    double sim_accum_seconds_ = 0.0;
+    int32_t ticks_ = 0;
+    bool initialized_ = false;
+    bool logged_tick_ = false;
+    uint32_t runtime_id_ = 0; // previews have no class/type identity
+    mutable MeshHandle software_mesh_ = 0;
+    bool exact_water_mesh_ = false, native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
+};
+
+// *************************************************************************
+// * TWaterEffect_Bespoke — H01 first-pass faithful port (snapshot)         *
+// *************************************************************************
+//
+// Direct C++ port of TWaterAnimator::Initialize / UpdateStuff / Render
+// (src/effect_old.cpp:11911-12062). Ambient horizontal-stream water spray.
+// Particles travel along +X at WATER_SPEED * ((i%2)+1) until they cross
+// WATER_LENGTH/2 then respawn. Same constants, same per-tick math, same
+// render order. Snapshot Render() writes SRCBLEND/DESTBLEND=ONE/ONE
+// (additive) — emit AdditiveStraight verbatim.
+
+_CLASSDEF(TWaterEffect_Bespoke)
+
+class TWaterEffect_Bespoke : public TEffect
+{
+  public:
+    TWaterEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TWaterEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TWaterEffect_Bespoke() override;
+
+    void OffScreen() override
+    {
+        if (literal_geometry_ || (ObjClass() == OBJCLASS_EFFECT && ObjId() == 0x1903abcdu))
+            TObjectInstance::OffScreen();
+        else KillThisEffect(); // unaudited alternate preview behavior is unchanged
+    }
+
+    [[nodiscard]] static TWaterEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                    const char* asset_override = nullptr);
+    void Initialize(bool attach_runtime_component = true);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode) const;
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    void SetNativeDomain(bool enabled);
+    [[nodiscard]] bool IsAlive() const { return true; }   // persistent
+
+  private:
+    void InitParticle(int32_t i);
+    void UpdateStuff();
+
+    SWaterParticle* drops_     = nullptr;
+    int32_t         numdrops_  = 0;
+    TTextureHandle  texture_   = kInvalidTexture;
+    float           uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+    float           size_wu_   = 16.0f;
+    double          sim_accum_ms_ = 0.0;
+    // Only the exact literal Water asset has the native quad contract. Keep
+    // unaudited alternate-asset delegates on their prior research path.
+    bool            literal_geometry_ = false;
+    bool            initialized_ = false;
+    std::vector<S3DVertex> authored_vertices_;
+    float           material_diffuse_[4] = {1,1,1,1};
+    double          sim_accum_seconds_ = 0.0;
+    int64_t         ticks_ = 0;
+    mutable MeshHandle software_mesh_ = 0;
+    bool exact_water_mesh_ = false, native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
+};
+
+// *****************
+// * TPixieEffect *
+// *****************
+
+_CLASSDEF(TPixieEffect)
+
+class TPixieEffect : public TEffect
+{
+  private:
+    
+  public:
+    TPixieEffect(TObjectImagery* newim) : TEffect(newim) {  }
+    TPixieEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    virtual ~TPixieEffect() {}
+
+    virtual void Initialize();
+    virtual void Pulse();
+};
+
+// *******************
+// * Pixie Animator *
+// *******************
+
+_CLASSDEF(TPixieAnimator)
+class TPixieAnimator : public T3DAnimator
+{
+  private:
+    PSWaterParticle pix;
+    int32_t charnear;
+    S3DPoint origpos;
+
+  protected:
+    
+  public:
+    TPixieAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
+      // Constructor (initialization handled by Initialize)
+    virtual ~TPixieAnimator() { Close(); }
+      // Call close function
+
+    virtual void Initialize();
+      // Initializes
+    virtual void Animate(bool draw);
+      // Called to update frame state
+    virtual bool Render();
+      // Called to render a frame
+    virtual void RefreshZBuffer();
+
+};
+
+// *** Ambient Sound Effect...
+
+#define SOUNDNAME_LEN       (32)
+
+_CLASSDEF(TAmbSoundEffect)
+
+class TAmbSoundEffect : public TEffect
+{
+  protected:
+    char sound_name[SOUNDNAME_LEN]; // the name of the sound effect
+    int32_t id;                         // the sound's id
+    int32_t sample_length;              // the number of frames (FRAMES, PEOPLE, ***FRAMES***) in the sound sample
+    int32_t ticks;                      // our current tick count...
+
+  public:
+    TAmbSoundEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
+    TAmbSoundEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    virtual ~TAmbSoundEffect() { if (id > 0) SoundPlayer.Unmount(id); }
+
+    virtual void Initialize();
+    virtual void Pulse();
+
+    virtual void GetParams(char *name, int32_t *len) { strcpy(name, sound_name); *len = sample_length; }
+        // gets the current settings for this speaker object
+    virtual void SetParams(char *name, int32_t len);
+        // sets the sound name and length of that sample... used by the editor
+};
+
+
+// *** Ambient Sound Animator...
+
+_CLASSDEF(TAmbSoundAnimator)
+class TAmbSoundAnimator : public T3DAnimator
+{
+  public:
+    TAmbSoundAnimator(TObjectInstance* oi) : T3DAnimator(oi) { }
+    void Initialize();
+    void Animate(bool);
+    bool Render();
+    void RefreshZBuffer();
+};
+
+// *************************************************************************
+// * Ice family bespoke ports (wave-bespoke-03-ice)                         *
+// *************************************************************************
+//
+// Three sister effects in the player's frost-spell chain:
+//   I20 TIceEffect      — shard-burst impact effect (NO ported body —
+//                         needs forensics doc first; STUB returns nullptr)
+//   I21 TIceBoltEffect  — stationary caster->target freeze beam, ~5 s
+//                         lifetime, composite Magic\icebolt.I3D draw +
+//                         50 frost + 50 snow billboards. Posts I22.
+//   I22 TIcedEffect     — 10 s frozen-victim overlay, then 30-chunk
+//                         shatter. Posted by I21.
+//
+// All three follow the TBloodEffect_Bespoke template: T<Class>_Bespoke
+// subclass of TEffect, SpawnForTest_BESPOKE static factory, and
+// TickAndSubmitForTest_BESPOKE per-frame driver. Forensics:
+//   docs/vfx/forensics/I21_TIceBoltEffect.md
+//   docs/vfx/forensics/I22_TIcedEffect.md
+// Snapshot bodies: src/effect_old.cpp:8015-8688 (I21), :8749-8953 (I22).
+
+// --- I20 TIceEffect bespoke stub --------------------------------------
+// I20 has only header declarations (effect.h:607-615). No Animate/Render
+// body exists in src/effect_old.cpp or src/effectcomp.cpp — the snapshot
+// shipped just TIceEffect / TIceAnimator decls + a constructor-only
+// `flags |= OF_MOVING; pos += ICEDIST` ctor (no Pulse body, no animator
+// body). The brief flags this as "needs forensics doc first — DO NOT
+// port code blind". SpawnForTest returns nullptr + log_warn; harness
+// renders nothing for this id. Re-enable once a forensics doc exists.
+_CLASSDEF(TIceEffect_Bespoke)
+
+class TIceEffect_Bespoke : public TEffect
+{
+  public:
+    TIceEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TIceEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TIceEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    // BLOCKED: returns nullptr — no snapshot body and no forensics doc.
+    [[nodiscard]] static TIceEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return false; }
+};
+
+// --- I21 TIceBoltEffect bespoke ---------------------------------------
+// Original Initialize4eb570/Pulse4eba00/Render4ebea0: stationary beam,
+// four normal-lit untextured cylinders, authored spirals/rings/glows,
+// 50 frost and 50 snow particles. Controlled endpoint/world boundary;
+// natural spell damage and posted Iced victim caller remain external.
+_CLASSDEF(TIceBoltEffect_Bespoke)
+class TIceBoltEffect_Bespoke : public TEffect, private icebolt_core::State
+{
+  public:
+    TIceBoltEffect_Bespoke(TObjectImagery* image):TEffect(image){}
+    TIceBoltEffect_Bespoke(SObjectState* def,TObjectImagery* image):TEffect(def,image){}
+    ~TIceBoltEffect_Bespoke() override;
+    void OffScreen() override {}
+    void Pulse() override;
+    static TIceBoltEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode mode);
+    void SubmitWorldMeshes_BESPOKE(EFxDebugMode mode);
+    bool SetBeamEndpoints(const S3DPoint& source,const S3DPoint& destination);
+    void SetNativeDomain(bool enabled){native_domain_=enabled;}
+    bool IsAlive()const{return alive_;}
+  private:
+    bool BindMeshes();
+    struct Part {MeshHandle mesh=0;S3DMat material{};int lighting=0;
+        std::vector<SMeshVertex> vertices;std::vector<uint16_t> indices;};
+    std::array<Part,7> parts_{};
+    bool alive_=true,native_domain_=false;
+    double sim_accum_=0;
+};
+
+// --- I22 TIcedEffect bespoke -------------------------------------------
+// FAITHFUL DIRECT PORT of TIcedAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:8749-8953). 3-phase state machine:
+//   Phase A — HOLD: frameon < ICED_DURATION (240 ticks ≈ 10s @ 24Hz).
+//     Reveal face01..face43 sub-objects 4/frame over paralyzed victim.
+//   Phase B — SHATTER: frameon == ICED_DURATION. Seed MAX_ICED_CHUNKS=30
+//     cube chunks in 4 quadrants × 5 rows.
+//   Phase C — TUMBLE: integrate p+=v, v.z-=ICED_CHUNK_GRAVITY(0.25),
+//     spin t+=w, bounce at p.z<=16 (v.z*=-0.5, spin x2), die after
+//     random(2,3) bounces. KillThisEffect when all chunks dead.
+//
+// Blend = Alpha, Lit-mode = Unlit (asset color), Depth = TestNoWrite.
+// Posted by I21 (and retail-only TStormAnimator) — harness drives this
+// effect standalone (no victim coupling: `icedchar` stays nullptr,
+// SetParalize/IsIced/IsDead branches are guarded out for sector-less
+// preview, lifecycle runs purely on frameon).
+inline constexpr double kIcedSimTickMs = 1000.0 / 24.0;
+inline constexpr int32_t kIcedDuration  = 24 * 10;   // ICED_DURATION (effect_old.cpp:8720)
+inline constexpr float   kIcedChunkGravity = 0.25f;  // ICED_CHUNK_GRAVITY (effect_old.cpp:8721)
+inline constexpr int32_t kIcedRevealCap = 50;        // min(frameon*4, 50) (effect_old.cpp:8909)
+
+// One shatter chunk (snapshot: p[], v[], t[], w[], s[], l[] member
+// arrays of size MAX_ICED_CHUNKS). Re-flattened per family convention.
+struct SIcedChunk
+{
+    hmm_vec3 pos = {0.0f, 0.0f, 0.0f};   // p[i]
+    hmm_vec3 vel = {0.0f, 0.0f, 0.0f};   // v[i]
+    hmm_vec3 rot = {0.0f, 0.0f, 0.0f};   // t[i] (angular position)
+    hmm_vec3 ang = {0.0f, 0.0f, 0.0f};   // w[i] (angular velocity)
+    hmm_vec3 scl = {0.0f, 0.0f, 0.0f};   // s[i]
+    int32_t  life = 0;                    // l[i] (bounces left)
+};
+
+_CLASSDEF(TIcedEffect_Bespoke)
+
+class TIcedEffect_Bespoke : public TEffect
+{
+  public:
+    TIcedEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TIcedEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TIcedEffect_Bespoke() override;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TIcedEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                  const char* asset_override = nullptr);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode) const;
+    void SetNativeDomainForTest(bool enabled);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    SIcedChunk chunks_[MAX_ICED_CHUNKS] {};
+    float   angle_         = 0.0f;       // random(0,359)*TORADIAN, Z-axis spin for reveal facets
+    int32_t frameon_       = 0;
+    int32_t donebouncing_  = 0;
+
+    struct MeshPart {
+        std::vector<SMeshVertex> vertices;
+        std::vector<uint16_t> indices;
+        S3DMat material{};
+        TTextureHandle texture = kInvalidTexture;
+        mutable MeshHandle mesh{};
+    };
+    std::vector<MeshPart> parts_;
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_{};
+
+    bool   alive_        = true;
+    double sim_accum_ms_ = 0.0;
+};
+
+// *************************************************************************
+// * Magic family — wave-bespoke-04 first-pass bespoke ports                *
+// * (M01 TAuraEffect, M03 THealEffect, M05 TMistEffect, X09 TShieldEffect) *
+// *************************************************************************
+//
+// Faithful direct ports of the snapshot animator bodies for the magic
+// family. Each effect ships as T<Name>Effect_Bespoke + SpawnForTest_BESPOKE
+// + TickAndSubmitForTest_BESPOKE + a harness entry "T<Name>_BESPOKE".
+// Pattern mirrors TBloodEffect_Bespoke at src/effect.cpp:1690-2065.
+//
+// Snapshot sources (per-batch translation rules):
+//   M01: TAuraEffect/TAuraAnimator   src/effect_old.cpp:3482-3688
+//   M03: THealEffect/THealAnimator   src/effect_old.cpp:464-849
+//   M05: TMistEffect/TMistAnimator   src/effect_old.cpp:11342-11515
+//   X09: TShieldAnimator             src/effect_old.cpp:4336-4392
+//
+// Translation rules applied (per task brief):
+//   1. Per-tick math + variable names + constants from the snapshot.
+//   2. Blend mode preserved AS WRITTEN: `SetAddBlendState` -> AdditiveStraight,
+//      `SetBlendState` -> Alpha.
+//   3. Two-pass shape preserved if present (no dead-code drop).
+//   4. Animation uses the 24Hz sim-tick accumulator pattern (B01/H03/M05).
+//   5. Render-path API adapted to Sokol (SubmitFxBillboard); mesh-based
+//      RenderObject calls in the snapshot draw as billboards positioned at
+//      the original sub-object pos/rot/scl — first-pass visual.
+
+_CLASSDEF(TAuraEffect_Bespoke)
+
+// M01: character aura particle system. Snapshot:
+// src/effect_old.cpp:3535-3667 (TAuraAnimator). Emits particles uniformly
+// distributed across the character's animator sub-objects with random
+// upward velocity; particles shrink (scl *= 0.97) until the AURA_FRAME
+// window closes. SetAddBlendState -> AdditiveStraight.
+class TAuraEffect_Bespoke : public TEffect
+{
+  public:
+    TAuraEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TAuraEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TAuraEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TAuraEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot constants — AURA_COUNT=100; AURA_PART_MIN/MAX=50;
+    // AURA_ADD=2; AURA_SPREAD=2; AURA_MIN_SCL=25, AURA_MAX_SCL=60;
+    // AURA_MIN_Z=5, AURA_MAX_Z=30; AURA_MIN_LIFE=15, AURA_MAX_LIFE=30;
+    // AURA_DEC=0.97; AURA_SEC=30; AURA_FRAME=AURA_SEC*24=720.
+    static constexpr int32_t kAuraCount    = 100;
+    static constexpr int32_t kAuraAdd      = 2;
+    static constexpr int32_t kAuraSpread   = 2;
+    static constexpr int32_t kAuraMinScl   = 25;
+    static constexpr int32_t kAuraMaxScl   = 60;
+    static constexpr int32_t kAuraMinZ     = 5;
+    static constexpr int32_t kAuraMaxZ     = 30;
+    static constexpr int32_t kAuraMinLife  = 15;
+    static constexpr int32_t kAuraMaxLife  = 30;
+    static constexpr float   kAuraDec      = 0.97f;
+    static constexpr int32_t kAuraFrameCap = 30 * 24;   // AURA_SEC * 24Hz
+    static constexpr int32_t kAuraSimTickMs = 1000 / 24;
+
+    struct SAuraParticle
+    {
+        bool     used = false;
+        hmm_vec3 pos  = {0.0f, 0.0f, 0.0f};
+        hmm_vec3 vel  = {0.0f, 0.0f, 0.0f};
+        hmm_vec3 scl  = {0.0f, 0.0f, 0.0f};
+        int32_t  life_span = 0;
+    };
+
+    SAuraParticle  particles_[kAuraCount] {};
+    int32_t        frame_         = 0;
+    int32_t        to_add_        = 0;
+    double         sim_accum_ms_  = 0.0;
+    bool           alive_         = true;
+    TTextureHandle texture_       = kInvalidTexture;
+    float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(THealEffect_Bespoke)
+
+// M03: healing spell visual. Snapshot:
+// src/effect_old.cpp:628-833 (THealAnimator). 60 bubbles rising from
+// player's feet over HEAL_DURATION=40 ticks + a cylindrical glow at the
+// feet that grows then shrinks. SetBlendState -> Alpha.
+class THealEffect_Bespoke : public TEffect
+{
+  public:
+    THealEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    THealEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~THealEffect_Bespoke() override;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static THealEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode) const;
+    void SetNativeDomainForTest(bool enabled);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kHealBubbles    = 60;
+    static constexpr float   kHealScaleStep  = 0.15f;
+    static constexpr int32_t kHealingRadius  = 20;
+    static constexpr int32_t kHealDuration   = 40;
+    static constexpr double kHealSimTickMs  = 1000.0 / 24.0;
+
+    hmm_vec3 p_[kHealBubbles]        {};
+    float    scale_[kHealBubbles]    {};
+    float    rise_[kHealBubbles]     {};
+    int32_t  framenum_[kHealBubbles] {};
+    int32_t  activebubbles_ = 0;
+    float    rotation_     = 0.0f;
+    int32_t  heal_num_     = 0;     // bubble sub-object index (0/2/4/6)
+    int32_t  glow_num_     = 1;     // glow sub-object index (1/3/5/7)
+    double   sim_accum_ms_ = 0.0;
+    bool     alive_        = true;
+    std::vector<SMeshVertex> vertices_[2];
+    std::vector<uint16_t> indices_[2];
+    S3DMat materials_[2]{};
+    mutable MeshHandle meshes_[2]{};
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_{};
+    TTextureHandle bubble_tex_  = kInvalidTexture;
+    TTextureHandle glow_tex_    = kInvalidTexture;
+};
+
+_CLASSDEF(TMistEffect_Bespoke)
+
+// M05: continuous ambient mist emitter. Snapshot:
+// src/effect_old.cpp:11376-11502 (TMistAnimator). 50 drops with retail
+// pos/vel envelope; ascends, falls under gravity, respawns-in-place on
+// landing (steady-state flux). SetAddBlendState -> AdditiveStraight.
+// BESPOKE pivot per BESPOKE_WAVE_ROADMAP (engine TMistEffect is the legacy
+// path; this bespoke class is canonical for first-pass).
+class TMistEffect_Bespoke : public TEffect
+{
+  public:
+    TMistEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TMistEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TMistEffect_Bespoke() override = default;
+
+    // Environmental map instances use the normal owner/animator lifecycle.
+    // Leaving the view must not kill a persistent Mist placement.
+    void Initialize(bool attach_runtime_component = true);
+    void Advance(double elapsed_seconds);
+    void Submit(EFxDebugMode debug_mode, bool software_alpha_diagnostic = false) const;
+
+    [[nodiscard]] static TMistEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    // Explicit alpha diagnostic for the modern renderer policy. The normal
+    // additive request is also decoded as original4444 alpha-over when the
+    // renderer's audited software policy is active.
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode,
+                                    bool software_alpha_diagnostic = false);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kMistMaxDrops    = 50;
+    static constexpr int32_t kMistLength      = 64;
+    static constexpr int32_t kMistWidth       = 20;
+    static constexpr int32_t kMistHeight      = 4;
+    static constexpr float   kMistScale       = 0.7f;
+    static constexpr float   kMistGravity     = 0.37f;     // RIPPLE_GRAVITY
+    static constexpr float   kMistSpawnZ      = 5.0f;      // snapshot literal
+    static constexpr double  kMistSimTickMs   = 1000.0 / 24.0;
+
+    struct SMistDrop
+    {
+        hmm_vec3 pos  = {0.0f, 0.0f, 0.0f};
+        hmm_vec3 vel  = {0.0f, 0.0f, 0.0f};
+        bool     dead = false;
+    };
+
+    SMistDrop      drops_[kMistMaxDrops] {};
+    double         sim_accum_ms_  = 0.0;
+    bool           alive_         = true;
+    bool           initialized_   = false;
+    TTextureHandle texture_       = kInvalidTexture;
+    bool retail_argb4444_ = false;
+    std::vector<S3DVertex> authored_vertices_;
+};
+
+_CLASSDEF(TShieldEffect_Bespoke)
+
+// X09: shield bubble. Snapshot:
+// src/effect_old.cpp:4336-4392 (TShieldAnimator). Animator-only in
+// pre-release (bridges via TEffect on caster object). Renders a single
+// I3D sphere mesh at pos.z=40 above the character with SHIELD_SCALE=2.0
+// and a fixed -π/3 X-rotation + -π/4 Z-rotation. SetBlendState -> Alpha.
+// First-pass: a single Alpha billboard at the same pos/scale; mesh
+// rendering is a future upgrade.
+class TShieldEffect_Bespoke : public TEffect
+{
+  public:
+    TShieldEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TShieldEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TShieldEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TShieldEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kShieldScale     = 2.0f;     // SHIELD_SCALE
+    static constexpr float   kShieldLiftZ     = 40.0f;    // snapshot pos.z = 40
+    static constexpr float   kShieldSizeWu    = 96.0f;
+    static constexpr int32_t kShieldSimTickMs = 1000 / 24;
+
+    hmm_vec3       pos_           = {0.0f, 0.0f, 40.0f};   // snapshot init
+    int32_t        framenum_      = 0;
+    double         sim_accum_ms_  = 0.0;
+    bool           alive_         = true;
+    TTextureHandle texture_       = kInvalidTexture;
+    float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// *************************************************************************
+// * wave-bespoke-05: sparkle/glow family — flare / sym-glow / photon /     *
+// * pixie. Faithful direct ports of the snapshot animator bodies for the   *
+// * --test=vfx harness, mirroring the TBloodEffect_Bespoke pattern at      *
+// * effect.cpp:1690-2065. Each class loads its real .I3D imagery (no       *
+// * procedural stand-in per feedback_no_standins) and runs the snapshot's  *
+// * per-tick state machine LINE BY LINE against an internal state array.  *
+// * Pipeline + blend preserved verbatim — SetBlendState in the snapshot    *
+// * means Alpha here; SetAddBlendState means AdditiveStraight; no          *
+// * reinterpretation. Each effect couples a point light (LS) where the     *
+// * family cross-check says it should. Framerate-independent via a 24Hz    *
+// * sim-tick accumulator (per feedback_framerate_independent_anim).        *
+// *************************************************************************
+
+// ----- X03 TFlareAnimator -------------------------------------------------
+//
+// "Flare" — 10 small ground-flat textured quads bouncing on the floor.
+// REGISTER_3DANIMATOR("Flare", TFlareAnimator) (effect_old.cpp:515).
+// Animate (effect_old.cpp:557-582): each of 10 sparks integrates straight
+// gravity-only physics; when a spark hits z=0 it bounces (vel.z *= -0.5)
+// and once damped (|vel.z|<0.4) respawns with a fresh launch velocity.
+// Render (effect_old.cpp:584-611): sub-object 0 drawn 10 times, each at
+// rot=(-pi/2, 0, -pi/4) (ground-flat) and scl=4. SetBlendState (= Alpha,
+// not additive — per feedback_retail_first + family cross-check with the
+// existing FlareSpawn placeholder at vfxtest.cpp:2257 which DOES use
+// Additive, but the SNAPSHOT writes SetBlendState which translates to
+// Alpha; we preserve the snapshot verbatim per the no-reinterpretation
+// rule).
+//
+// LS coupling: family note + "Sparkle/glow family" + L01 lightsource
+// note in roadmap. The snapshot animator doesn't call any light API
+// directly (that lives on the parent TEffect via spell.def coupling),
+// so we re-add one point light per frame in TickAndSubmitForTest at the
+// effect origin, warm-yellow, modest radius. Verified by L02 / X17
+// pattern.
+//
+// Asset: Misc\IrisFlare.I3D (the only "Flare-like" imagery registered in
+// Class.Def with a TFlareAnimator-class animator — also used by
+// "Teleporter" / "IrisFlare").
+
+inline constexpr int32_t kFlareBespokeNumSparks = 10;   // hard-coded loop limit (effect_old.cpp:562)
+inline constexpr int32_t kFlareBespokeSimTickMs = 1000 / 24;
+inline constexpr float   kFlareBespokeScale     = 4.0f;
+inline constexpr float   kFlareBespokeBaseSizeWu = 12.0f;
+inline constexpr float   kFlareBespokeLightRadiusWu  = 240.0f;
+inline constexpr float   kFlareBespokeLightIntensity = 1.0f;
+
+struct SFlareBespokeSpark
+{
+    hmm_vec3 p = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 v = {0.0f, 0.0f, 0.0f};
+};
+
+_CLASSDEF(TFlareEffect_Bespoke)
+
+class TFlareEffect_Bespoke : public TEffect
+{
+  public:
+    TFlareEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFlareEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFlareEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    // Standalone spawn for the --test=vfx harness. Loads Misc\IrisFlare.I3D,
+    // resolves sub-object 0 (the single flare quad), seeds the 10-spark
+    // array. Returns nullptr if the imagery can't be loaded.
+    [[nodiscard]] static TFlareEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                    const char* asset_override = nullptr);
+
+    // Per-frame tick + submit. Ports TFlareAnimator::Animate +
+    // TFlareAnimator::Render directly. 10 alpha-blended billboards drawn
+    // per frame + 1 point light re-added at effect origin.
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    // Always alive for the harness — TFlareAnimator self-respawns each
+    // spark on bounce-decay, so the effect never naturally ends.
+    [[nodiscard]] bool IsAlive() const { return true; }
+
+  private:
+    SFlareBespokeSpark sparks_[kFlareBespokeNumSparks] {};
+    TTextureHandle     texture_      = kInvalidTexture;
+    float              uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+    float              size_wu_      = kFlareBespokeBaseSizeWu;
+    double             sim_accum_ms_ = 0.0;
+};
+
+// ----- X10 TSymGlowAnimator -----------------------------------------------
+//
+// Authored 66-vertex cylinder (Misc\SymGlow.I3D). Original effect.cpp
+// SetupObjects shifts V by -0.01 once. At 24Hz Animate reverses dz every
+// 40 ticks and clamps Z scale to [2,5]; Render scrolls U by random(2,8)/100
+// and draws with XY scale 1.4, alpha blending and no depth writes.
+// The original renderer does not add a point light here.
+// Runtime initialization waits for the final map identity and texture.
+
+inline constexpr double  kSymGlowBespokeSimTickMs    = 1000.0 / 24.0;
+inline constexpr float   kSymGlowBespokeScaleXY      = 1.4f;
+inline constexpr float   kSymGlowBespokeZMin         = 2.0f;
+inline constexpr float   kSymGlowBespokeZMax         = 5.0f;
+inline constexpr float   kSymGlowBespokeDzInit       = 0.1f;
+inline constexpr int32_t kSymGlowBespokeFlipTicks    = 40;
+inline constexpr int32_t kSymGlowBespokeUScrollMin   = 2;       // /100
+inline constexpr int32_t kSymGlowBespokeUScrollMax   = 8;       // /100
+
+_CLASSDEF(TSymGlowEffect_Bespoke)
+
+class TSymGlowEffect_Bespoke : public TEffect
+{
+  public:
+    TSymGlowEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TSymGlowEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TSymGlowEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TSymGlowEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void Initialize(bool attach_runtime_component = true);
+    void Advance(double elapsed_seconds);
+    void Submit(EFxDebugMode debug_mode) const;
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+
+  private:
+    TTextureHandle texture_      = kInvalidTexture;
+    bool retail_argb4444_ = false;
+    mutable std::vector<SMeshVertex> vertices_;
+    std::vector<uint16_t> indices_;
+    bool initialized_ = false;
+    float u_step_ = 0.0f;
+    mutable int32_t uv_timer_ = -1;
+    float          zscale_       = 2.0f;
+    float          dz_           = kSymGlowBespokeDzInit;
+    int32_t        timer_        = 0;
+    double         sim_accum_ms_ = 0.0;
+};
+
+// ----- M07 Photon: original moving controller and authored five-frame quad -----
+_CLASSDEF(TPhotonEffect_Bespoke)
+class TPhotonEffect_Bespoke : public TEffect
+{
+  public:
+    TPhotonEffect_Bespoke(TObjectImagery* image) : TEffect(image) { Initialize(); }
+    TPhotonEffect_Bespoke(SObjectState* definition,TObjectImagery* image) : TEffect(definition,image) { Initialize(); }
+    void OffScreen() override { }
+    void Pulse() override;
+    uint32_t Move() override { return GetMoveBits(); }
+    bool SetProjectileEndpoints(const S3DPoint& source,const S3DPoint& destination);
+    void SetPreviewTargetCollision(bool enabled) { preview_target_collision_=enabled; }
+    void SetNativeDomain(bool enabled) { native_domain_=enabled; }
+    void PrimeLaunchForTest(); // Explicit alternate original Animate-before-Pulse sequencing.
+    const missile_state::State& ProjectileState() const { return missile_; }
+    [[nodiscard]] bool IsAlive() const { return !particles_.Finished(missile_.state); }
+    [[nodiscard]] static TPhotonEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+  private:
+    void Initialize();
+    void AdvanceTick();
+    bool EnsureAsset();
+    void Submit(EFxDebugMode debug_mode);
+    photon_core::State particles_;
+    missile_state::State missile_;
+    S3DPoint destination_{};
+    bool has_destination_=false,preview_mode_=false,native_domain_=false;
+    bool preview_target_collision_=false;
+    std::array<S3DVertex,4> authored_{};
+    std::vector<TTextureHandle> texture_frames_;
+    bool argb4444_=false;
+    double sim_accum_=0;
+};
+
+// ----- M08 TPixieEffect (Bespoke) ------------------------------------------
+//
+// "Pixie" — small swarm of 25 twinkling particles (fairy dust) attached to
+// the effect origin. DEFINE_OBJECT_DEF("Pixie", TPixieEffect) (effect_old.cpp:
+// 12082), REGISTER_3DANIMATOR("Pixie", TPixieAnimator) (:12099). The
+// animator (effect_old.cpp:12109-12277) seeds 25 per-particle slots with
+// random pos in [-32, 32]^3 and random vel/25; each tick the particles
+// drift, the velocity gets a centring restorative force (PIX_ACC=0.4),
+// scale jitters in [0.06, 0.08], time flips on a 1/49 chance, and the
+// pixies flee from any nearby character. SetBlendState (Alpha) renders
+// the sub-object selected by `pix[i].time` (0 or 1 — two variants of the
+// glow). Per-particle: scale uniform, rotZ = -face_byteangle * TORADIAN
+// (in-game), translate to (pos.x*charnear/100, pos.y*charnear/100,
+// PIX_HEIGHT + pos.z).
+//
+// Runtime preserves nearby-character fleeing and return-to-original XY.
+// Manual preview has no live map query. The source adds no point light.
+//
+// Asset: Misc\Pixies.I3D (Class.Def-registered).
+
+inline constexpr int32_t kPixieBespokeNumParts        = 25;     // PIX_NUMPARTS
+inline constexpr float   kPixieBespokeAcc             = 0.4f;   // PIX_ACC
+inline constexpr int32_t kPixieBespokeHeight          = 32;     // PIX_HEIGHT
+inline constexpr float   kPixieBespokeMinScale        = 0.06f;  // PIX_MINSCALE
+inline constexpr float   kPixieBespokeMaxScale        = 0.08f;  // PIX_MAXSCALE
+inline constexpr double  kPixieBespokeSimTickMs       = 1000.0 / 24.0;
+
+// One pixie particle's transient state. Pre-release stored these as
+// SWaterParticle (effectcomp.h) inside the animator's heap array; we
+// inline a per-particle struct to match the SBloodParticleEx pattern.
+struct SPixieParticle
+{
+    hmm_vec3 scale = {kPixieBespokeMinScale, kPixieBespokeMinScale, kPixieBespokeMinScale};
+    hmm_vec3 pos   = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 vel   = {0.0f, 0.0f, 0.0f};
+    int32_t  time  = 0;     // 0 or 1 — selects sub-object texture (two glow variants)
+};
+
+_CLASSDEF(TPixieEffect_Bespoke)
+
+class TPixieEffect_Bespoke : public TEffect
+{
+  public:
+    TPixieEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TPixieEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TPixieEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TPixieEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void Initialize(bool attach_runtime_component=true);
+    void Advance(double elapsed_seconds);
+    void Submit(EFxDebugMode debug_mode=EFxDebugMode::Normal) const;
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }   // ambient swarm — never dies
+
+  private:
+    SPixieParticle pix_[kPixieBespokeNumParts] {};
+    int32_t        charnear_     = 100;          // 100 = 1.0x scale (no nearby char)
+    TTextureHandle textures_[2]  = {kInvalidTexture, kInvalidTexture};
+    std::vector<SMeshVertex> vertices_[2];
+    std::vector<uint16_t> indices_[2];
+    S3DPoint       original_position_ = {0,0,0};
+    bool           initialized_ = false;
+    bool           runtime_owned_ = false;
+    double         sim_accum_ms_ = 0.0;
+};
+
+// ----- X04/X05/X06/X07/X08 TFountainAnimator (Bespoke) --------------------
+//
+// "Fountain" sparkle column — 10 colored sparkle billboards rising from a
+// 40x40 wu ground disc, shrinking linearly to nothing, then respawning at
+// the floor on death. Continuous loop with no kill-on-done; scripted
+// `.delete` terminates in-game. Despite the class name "Fountain", the
+// live in-game usage is the Sabu witch vanish/appear puff (REDFONT) and
+// the chest-unlock sparkle (CYANFONT) in the Ahkuilon module — see the
+// FOUNTAIN_TFountainAnimator forensics doc.
+//
+// One bespoke port covers the abstract base + all 4 color leaves
+// (TCyanFountainAnimator / TRedFountainAnimator / TGreenFountainAnimator /
+// TBlueFountainAnimator). The only per-variant code in the snapshot is
+// `SetColorObject() { colorobj = 0|1|2|3; }` (effect.h:949,964,979,994);
+// we expose colorobj_ as a SpawnForTest_BESPOKE parameter and resolve
+// the sub-object 0..3 at spawn.
+//
+// Asset: Misc\Sparkle.I3D (4 sub-objects 'photon'/'photon01'/'02'/'03',
+// selected with its own authored geometry, UVs and material).
+// Class.Def-registered 4 times as CyanFont/RedFont/GreenFont/BlueFont
+// (legacy/Class.Def:2023-2026).
+//
+// Blend: snapshot uses SetBlendState (= Alpha; MODULATE + SRC_ALPHA /
+// INV_SRC_ALPHA). Forensics flags this as SUSPECT (bright-on-dark
+// sprite, the textbook "code says Alpha but reads as glow" case) but
+// the rule is to preserve blend AS WRITTEN — Alpha it is.
+//
+// The snapshot submits the selected authored mesh without adding a light.
+
+inline constexpr int32_t kFountainBespokeNumBubbles  = 10;     // NUM_FOUNTAIN_BUBBLES
+inline constexpr float   kFountainBespokeScaleStep   = 0.15f;  // FOUNTAIN_SCALE_STEP
+inline constexpr int32_t kFountainBespokeRadius      = 20;     // FOUNTAIN_RADIUS
+inline constexpr float   kFountainBespokeInitScale   = 2.0f;   // scale[n] at spawn
+inline constexpr double  kFountainBespokeSimTickMs   = 1000.0 / 24.0;
+inline constexpr int32_t kFountainBespokeNumSubObjs  = 4;      // photon/photon01/02/03
+
+_CLASSDEF(TFountainAnimator_Bespoke)
+
+class TFountainAnimator_Bespoke : public TEffect
+{
+  public:
+    TFountainAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFountainAnimator_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFountainAnimator_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    // colorobj selects the photon sub-object (0=Cyan / 1=Red / 2=Green / 3=Blue)
+    [[nodiscard]] static TFountainAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                         int32_t colorobj,
+                                                                         const char* asset_override = nullptr);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }   // ambient loop — never dies
+
+  private:
+    // Per-bubble state. Mirrors TFountainAnimator's p/scale/rise/framenum
+    // arrays (effect.h:911-914).
+    hmm_vec3 p_[kFountainBespokeNumBubbles] {};
+    float    scale_[kFountainBespokeNumBubbles] {};
+    float    rise_[kFountainBespokeNumBubbles]  {};
+    int32_t  framenum_[kFountainBespokeNumBubbles] {};
+    int32_t  colorobj_ = 0;     // 0..3 -> photon/photon01/photon02/photon03
+
+    // Authored sub-object geometry, UVs and material (resolved at spawn).
+    // We pre-resolve all 4 even though only colorobj_ is drawn — keeps the SpawnForTest
+    // path uniform and lets a future use case re-tint without reload.
+    TTextureHandle textures_[kFountainBespokeNumSubObjs]  = {kInvalidTexture, kInvalidTexture, kInvalidTexture, kInvalidTexture};
+    S3DVertex     vertices_[kFountainBespokeNumSubObjs][4] = {};
+    float         diffuse_[kFountainBespokeNumSubObjs][4] = {{1,1,1,1},{1,1,1,1},{1,1,1,1},{1,1,1,1}};
+    double         sim_accum_ms_ = 0.0;
+};
+
+// =========================================================================
+// W2D batch — Misc A — character/ambient particle emitters (X01, B04)
+// =========================================================================
+// Localized-at-end additions for clean wave-3 merge. Faithful direct ports
+// of the snapshot animator bodies in src/effect_old.cpp.
+
+// ----- X01 TFlyEffect (Bespoke) ------------------------------------------
+// FAITHFUL DIRECT PORT of TFlyAnimator (snapshot src/effect_old.cpp:
+// 6514-6603). Ambient corpse-decay fly swarm. Per-particle random wander
+// inside a fixed cube (FLY_RANGE_X/Y/Z = 30 wu), one fly is "switched on"
+// per tick at random until all 20 are active. Velocity is per-tick
+// random(-2,2) integer steps in each axis; if a fly oversteps the cube
+// edge it's pushed back by 2*vel (a hard reflect-bounce). Render is
+// SetBlendState() (Alpha) with cull=NONE — billboards already no-cull.
+// Asset: Misc\Flies.I3D — small dark-grey/black pixel-sprite quads.
+
+inline constexpr int32_t kFlyBespokeCount        = FLY_COUNT;     // 20
+inline constexpr int32_t kFlyBespokeRangeX       = FLY_RANGE_X;   // 30
+inline constexpr int32_t kFlyBespokeRangeY       = FLY_RANGE_Y;   // 30
+inline constexpr int32_t kFlyBespokeRangeZ       = FLY_RANGE_Z;   // 30
+inline constexpr float   kFlyBespokeScale        = 0.3f;          // Init: scl.xyz = .3
+inline constexpr int32_t kFlyBespokeSimTickMs    = 1000 / 24;
+inline constexpr float   kFlyBespokeBaseSizeWu   = 10.0f;         // size.x = size.y = 10
+
+struct SFlyParticleBespoke
+{
+    hmm_vec3 pos  = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 scl  = {kFlyBespokeScale, kFlyBespokeScale, kFlyBespokeScale};
+    hmm_vec3 rot  = {0.0f, 0.0f, 0.0f};
+    bool     used = false;   // staged activation (1 per tick chance)
+};
+
+_CLASSDEF(TFlyEffect_Bespoke)
+
+class TFlyEffect_Bespoke : public TEffect
+{
+  public:
+    TFlyEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFlyEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFlyEffect_Bespoke() override = default;
+
+    void OffScreen() override { if(runtime_owned_)TObjectInstance::OffScreen();else KillThisEffect(); }
+
+    [[nodiscard]] static TFlyEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    void Initialize(bool attach_runtime_component=true);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode) const;
+    void SetNativeDomainForTest(bool enabled);
+    [[nodiscard]] bool IsAlive() const { return true; }   // ambient swarm — never dies
+
+  private:
+    SFlyParticleBespoke flies_[kFlyBespokeCount] {};
+    TTextureHandle      texture_      = kInvalidTexture;
+    float               uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+    float               size_wu_      = kFlyBespokeBaseSizeWu;
+    double              sim_accum_ms_ = 0.0;
+    S3DVertex           vertices_[4] = {};
+    double              tick_seconds_ = 0.0;
+    int64_t             ticks_ = 0;
+    bool                initialized_=false,runtime_owned_=false,native_domain_=false;
+    hmm_mat4            native_owner_ = {};
+};
+
+// ----- B04 TPulpEffect (Bespoke) — STUBBED -------------------------------
+// FAITHFUL DIRECT PORT BLOCKED. TPulpEffect::Set(vel, ch, ...) requires a
+// live PTCharacter whose TCharAnimator yields per-bone sub-object meshes
+// (head/limb chunks) ejected as falling rigid bodies + blood spray. The
+// harness rig path exists but there is no SubmitFx* API for animated
+// character sub-object meshes (only billboards/particles); a faithful
+// port would need either the IM body-part submission path or coupling
+// against the live rig from inside the bespoke effect — both out of
+// W2D scope. STUB per brief: SpawnForTest returns nullptr + log_warn.
+// Re-enable once either (a) char-mesh submission lands or (b) we accept
+// the blood-only subset and reuse the B01 path (brief notes: "May share
+// particles with B01 — keep B01 path canonical"). Status: BLOCKED.
+
+_CLASSDEF(TPulpEffect_Bespoke)
+
+class TPulpEffect_Bespoke : public TEffect
+{
+  public:
+    TPulpEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TPulpEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TPulpEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TPulpEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+};
+
+// *************************************************************************
+// * Wave 3 batch W2C: Weather C — character-cast storm + wind strip.       *
+// *                                                                       *
+// *   W07 TStormAnimator_Bespoke  — particle storm (rain-of-bolts) driven *
+// *                                 by SStormParams (effectcomp.cpp:38).  *
+// *                                 First-pass mirrors the TStormAnimator *
+// *                                 inner helper as a standalone effect — *
+// *                                 the M09-style "wrapper" (e.g.         *
+// *                                 TMeteorStormAnimator) becomes a fixed *
+// *                                 params struct chosen at spawn time.   *
+// *                                                                       *
+// *   S02 TWindStripAnimator_Bespoke — 3-strip wind-blown ambient streak  *
+// *                                    (stripeffect.cpp:1063-1417). Each  *
+// *                                    strip walks a Lissajous-like curve *
+// *                                    around the caster, spawning drop    *
+// *                                    sparks behind it + a fade-in/out   *
+// *                                    halo. Snapshot SetBlendState =     *
+// *                                    Alpha for strips, AddBlendState    *
+// *                                    for halo.                          *
+// *                                                                       *
+// * Translation rules: identical math, identical per-tick constants,      *
+// * identical render-pass order. Only the render API adapts. Both port    *
+// * reuses the StripFamilyGlowTexture / StripFamilySparkTexture procedural*
+// * stand-ins already proven by S04 TLightningAnimator_Bespoke.           *
+// *************************************************************************
+
+// --- W07 TStormAnimator_Bespoke -------------------------------------------
+// Faithful direct port of the inner TStormAnimator helper (effectcomp.cpp:
+// 38-380). The helper is a particle bucket of falling animated billboards;
+// each instance is born above the caster, falls under gravity, switches to
+// an "impact" animation when it hits the walk-height, then dies after the
+// impact frames play out. Snapshot Render blend = SetAddBlendState ->
+// AdditiveStraight (cf. TMeteorStormAnimator::Render, effect_old.cpp:6485).
+//
+// For the harness we instantiate with ice-bolt-style params (a smaller,
+// blue-tinted storm — the "stormbolt.i3d" intent). The MeteorStormAnimator
+// wrapper in effect_old.cpp:6367-6445 is our reference for how outer
+// animators populate SStormParams.
+//
+// Asset binding is deferred (no stormbolt.i3d loader yet); first-pass uses
+// the StripFamilySparkTexture procedural stand-in tinted blue for the
+// "particle" phase and white for the "impact" phase.
+inline constexpr int32_t kStormBespokeMaxInstance = 20;   // STORM_DEFAULT_MAX_INSTANCE
+inline constexpr int32_t kStormBespokeSimTickMs   = 1000 / 24;
+inline constexpr int32_t kStormBespokeDurationTicks = 24 * 5;  // ~5 s of spawning
+inline constexpr int32_t kStormBespokeRampSize     = 8;   // pulse_count target
+
+// One storm particle (snapshot SStormInstance — effectcomp.h:56).
+struct SStormBespokeInstance
+{
+    bool     used               = false;
+    hmm_vec3 pos                = {0.0f, 0.0f, 0.0f};
+    bool     is_particle        = true;
+    bool     explosion_sounded  = false;
+    hmm_vec3 velocity           = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 part_scl           = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 expl_scl           = {0.0f, 0.0f, 0.0f};
+    float    gravity            = 0.0f;
+    float    frame              = 0.0f;
+    float    impact_frame_inc   = 0.0f;
+    float    particle_frame_inc = 0.0f;
+};
+
+// The bespoke holds its own SStormParams (snapshot effectcomp.h:21). All
+// fields copied verbatim — kept here as a local struct so the bespoke is
+// self-contained without dragging in effectcomp.h.
+struct SStormBespokeParams
+{
+    int32_t  particles          = 0;
+    int32_t  tex_u              = 64;
+    int32_t  tex_v              = 64;
+    int32_t  particle_u         = 8;
+    int32_t  particle_v         = 2;
+    int32_t  particle_begin     = 0;
+    int32_t  particle_end       = 7;
+    int32_t  impact_u           = 4;
+    int32_t  impact_v           = 4;
+    int32_t  impact_begin       = 8;
+    int32_t  impact_end         = 15;
+    float    gravity            = 0.37f;
+    hmm_vec3 velocity           = {-10.0f, 0.0f, -15.0f};
+    hmm_vec3 pos                = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 pos_spread         = {100.0f, 100.0f, 0.0f};
+    float    impact_frame_inc   = 0.7f;
+    float    particle_frame_inc = 0.5f;
+    hmm_vec3 particle_scale     = {0.5f, 1.5f, 1.0f};
+    hmm_vec3 impact_scale       = {1.0f, 1.0f, 1.0f};
+    hmm_vec3 rot                = {0.0f, 0.0f, 0.0f};
+};
+
+_CLASSDEF(TStormAnimator_Bespoke)
+class TStormAnimator_Bespoke : public TEffect
+{
+  public:
+    TStormAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TStormAnimator_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TStormAnimator_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TStormAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot animator helpers (effectcomp.cpp:53/80/116).
+    int32_t GetCount_() const;
+    void    Create_();
+    void    Animate_();
+
+    SStormBespokeParams   params_ {};
+    SStormBespokeInstance storm_instance_[kStormBespokeMaxInstance] {};
+
+    // Outer-animator state (mirrors TMeteorStormAnimator: ticks/tracker
+    // drive the particle-count ramp).
+    int32_t ticks_   = 0;
+    int32_t tracker_ = 0;
+    bool    alive_   = true;
+    double  sim_accum_ms_ = 0.0;
+};
+
+// --- S02 TWindStripAnimator_Bespoke ---------------------------------------
+// Faithful direct port of TWindStripAnimator::Initialize / SetupObjects /
+// Animate / Render (src/stripeffect.cpp:1063-1417). Three parallel strip
+// curves walk Lissajous-like paths around the caster; behind each strip
+// point we spawn a "drop spark" with gravity. A central halo grows during
+// the first half of the fadeout window and shrinks after. Snapshot has the
+// caster following the spell-invoker's facing — for the harness we hold
+// the center at the spawn origin and let centerang wobble.
+//
+// Blend: SetBlendState (Alpha) for strips + drops, SetAddBlendState
+// (AdditiveStraight) for the halo (preserved as written in :1333).
+//
+// Asset: Magic\windstrip.i3d (no loader yet); first-pass uses the
+// StripFamilyGlowTexture for the strips and the StripFamilySparkTexture
+// for drops + halo.
+
+inline constexpr int32_t kWindStripBespokeMaxStrips      = 3;
+inline constexpr int32_t kWindStripBespokePoints         = 20;   // WINDSTRIP_POINTS
+inline constexpr int32_t kWindStripBespokeWidth          = 15;   // WINDSTRIP_WIDTH
+inline constexpr int32_t kWindStripBespokeWidth2         = 15;   // WINDSTRIP_WIDTH2
+inline constexpr int32_t kWindStripBespokeDuration       = 250;  // WINDSTRIP_DURATION
+inline constexpr int32_t kWindStripBespokeFadeout        = 100;  // WINDSTRIP_FADEOUT
+inline constexpr int32_t kWindStripBespokeModifier       = 5;    // WINDSTRIP_MODIFIER
+inline constexpr int32_t kWindStripBespokeModifierV      = 15;   // WINDSTRIP_MODIFIERV
+inline constexpr int32_t kWindStripBespokeRadius         = 2;    // WINDSTRIP_RADIUS
+inline constexpr int32_t kWindStripBespokeNumSparks      = 20 * 20;
+inline constexpr float   kWindStripBespokeSparkScale     = 0.4f;
+inline constexpr float   kWindStripBespokeSparkDScale    = 0.005f;
+inline constexpr float   kWindStripBespokeSparkGrav      = 0.2f;
+inline constexpr float   kWindStripBespokeSparkFall      = 0.5f;
+inline constexpr float   kWindStripBespokeHaloStep       = 0.04f;
+inline constexpr int32_t kWindStripBespokeSimTickMs      = 1000 / 24;
+
+// One Lissajous point along a strip (head-prepended ring buffer).
+struct SWindStripBespokePoint
+{
+    hmm_vec3 pos = {0.0f, 0.0f, 0.0f};
+    bool     used = false;
+};
+
+// One drop spark.
+struct SWindStripBespokeDrop
+{
+    hmm_vec3 pos = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 vel = {0.0f, 0.0f, 0.0f};
+    float    scl = 0.0f;
+    bool     used = false;
+};
+
+_CLASSDEF(TWindStripAnimator_Bespoke)
+class TWindStripAnimator_Bespoke : public TEffect
+{
+  public:
+    TWindStripAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TWindStripAnimator_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TWindStripAnimator_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TWindStripAnimator_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    void InitDrops_();
+    void AddDrop_(const hmm_vec3& pos);
+
+    // Per-strip Lissajous parameters (member arrays in the snapshot —
+    // mystrip[j], r[j], th[j], h[j], dr[j], dth[j], dh[j], ac[j], dac[j]).
+    float r_[kWindStripBespokeMaxStrips]   {};
+    float th_[kWindStripBespokeMaxStrips]  {};
+    float h_[kWindStripBespokeMaxStrips]   {};
+    float dr_[kWindStripBespokeMaxStrips]  {};
+    float dth_[kWindStripBespokeMaxStrips] {};
+    float dh_[kWindStripBespokeMaxStrips]  {};
+    float ac_[kWindStripBespokeMaxStrips]  {};
+    float dac_[kWindStripBespokeMaxStrips] {};
+
+    // Per-strip point ring buffer (head = newest). Snapshot uses
+    // TStripAnimator's AddPoint / DelStartPoint; we replicate the FIFO.
+    SWindStripBespokePoint strip_points_[kWindStripBespokeMaxStrips]
+                                        [kWindStripBespokePoints] {};
+    int32_t strip_count_[kWindStripBespokeMaxStrips] = {0, 0, 0};
+
+    // Center pos + offset accumulators (snapshot center, realpos).
+    hmm_vec3 center_   = {0.0f, 0.0f, 0.0f};
+    hmm_vec3 realpos_  = {0.0f, 0.0f, 0.0f};
+    int32_t  centerang_ = 0;
+    float    haloscale_ = 0.0f;
+    int32_t  frameon_   = 0;
+
+    // Spark bucket — fixed-size heap array in the snapshot.
+    SWindStripBespokeDrop drops_[kWindStripBespokeNumSparks] {};
+
+    bool   alive_        = true;
+    double sim_accum_ms_ = 0.0;
+};
+
+// =========================================================================
+// * Wave-2B Weather B — large composite spawners (W01/W02/W03)             *
+// *                                                                       *
+// * These three effects (Meteor Storm / Tornado / Vortex) are large       *
+// * composite animators that lean on infrastructure not yet available     *
+// * in the bespoke port pipeline:                                         *
+// *                                                                      *
+// *   - W01 TMeteorStormAnimator delegates to TStormAnimator              *
+// *     (effectcomp.{h,cpp}) for spawn/animate/render. The whole          *
+// *     TStormAnimator body in effectcomp.cpp is gated `#if 0` (Phase-3   *
+// *     sokol pipeline TODO). Without that subsystem ported there is     *
+// *     no faithful path here.                                           *
+// *                                                                      *
+// *   - W02 TTornadoAnimator renders three multi-sub-object I3D mesh     *
+// *     families (flames / tornado particles / ice chunks+splashes) via  *
+// *     T3DAnimator::GetObject(N)+RenderObject(), with full per-instance *
+// *     D3DMATRIX matrix stacks. The bespoke pipeline today only         *
+// *     submits billboards/strips/lights — no mesh-RenderObject path.    *
+// *                                                                      *
+// *   - W03 TVortexAnimator does the same multi-sub-object mesh dance    *
+// *     (sub-objects 0/1/2 + 36-vert glow + particle system) plus heavy  *
+// *     per-vertex alpha writeback into LVERTEX.color (D3DRGBA). Same    *
+// *     blocker.                                                         *
+// *                                                                      *
+// * Per batch protocol: stub SpawnForTest to return nullptr + log_warn,  *
+// * mark blocked. The classes exist so the harness has something to      *
+// * register against and a future port can flesh out the bodies         *
+// * without touching the registration side.                              *
+// =========================================================================
+
+// W01 TMeteorStormEffect_Bespoke — faithful direct port of
+// TMeteorStormAnimator (effect_old.cpp:6365-6503) and its inner
+// TStormAnimator helper (effectcomp.cpp:38-380). Uses the real
+// `Magic\comet.I3D` imagery atlas: 8x2 grid for the falling-meteor sprite
+// (frames 0..7) and 4x4 grid for the ground-impact splash (frames 8..15).
+//
+// State + math are shared with W07 TStormAnimator_Bespoke (which is the
+// same animator wrapped with stormbolt placeholder texture). W01 owns its
+// own copies of the per-instance arrays so the two effects can run
+// independently in the harness cycle.
+inline constexpr int32_t kMeteorStormBespokeMaxInstance   = 20;
+inline constexpr int32_t kMeteorStormBespokeSimTickMs     = 1000 / 24;
+inline constexpr int32_t kMeteorStormBespokeDurationTicks = 24 * 5;  // ~5 s of meteor spawning
+inline constexpr int32_t kMeteorStormBespokeRampSize      = 8;       // METEOR_STORM_SIZE
+
+// One pre-registered atlas-tile mesh handle. SHelperMeshSubmit does not
+// expose a UV transform, so we register one MeshHandle per cell with the
+// cell's UV rect baked into the verts. 8 cells in the particle row
+// (cells 0..7 of the 8x2 grid) + 8 cells in the impact 4x4 sub-grid
+// (cells 8..15) = 16 handles total.
+inline constexpr int32_t kMeteorStormBespokeParticleCells = 8;   // params.particle_u
+inline constexpr int32_t kMeteorStormBespokeImpactCells   = 8;   // params.impact_end - impact_begin + 1
+
+_CLASSDEF(TMeteorStormEffect_Bespoke)
+
+class TMeteorStormEffect_Bespoke : public TEffect
+{
+  public:
+    TMeteorStormEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TMeteorStormEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TMeteorStormEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TMeteorStormEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    // Drives the per-tick simulation (Create/Animate ramp + meteor
+    // physics) AND the optional billboard overlays. The real I3D mesh
+    // draws live in SubmitWorldMeshes_BESPOKE which must be called from
+    // the harness's `submit_world` hook (after BeginTilePass, see
+    // vfxtest.cpp:1518-1528).
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    // World-space mesh draws (the comet quad per meteor instance). Routes
+    // through SubmitHelperMesh — must run inside BeginTilePass scope
+    // so the transparent_world_queue isn't cleared before draws land.
+    // Pattern mirrors icebolt's iter4 (effect.cpp:8280+).
+    void SubmitWorldMeshes_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot animator helpers (effectcomp.cpp:53/80/116).
+    int32_t GetCount_() const;
+    void    Create_();
+    void    Animate_();
+
+    SStormBespokeParams   params_ {};
+    SStormBespokeInstance storm_instance_[kMeteorStormBespokeMaxInstance] {};
+
+    // Outer-animator state (mirrors TMeteorStormAnimator: ticks/tracker
+    // drive the particle-count ramp, effect_old.cpp:6376-6377+6452-6463).
+    int32_t ticks_   = 0;
+    int32_t tracker_ = 0;
+    bool    alive_   = true;
+    double  sim_accum_ms_ = 0.0;
+
+    // Real Magic\comet.I3D imagery (held alive for the effect's lifetime
+    // so the texture handle stays valid). Released in the dtor via
+    // TObjectImagery::FreeImagery.
+    TObjectImagery* imagery_ = nullptr;
+
+    // Pre-baked atlas-cell meshes (Comet.I3D GetObject(0) quad with UVs
+    // remapped to each animation cell). cell_meshes_[0..7] = particle
+    // phase cells, [8..15] = impact phase cells. 0 = kInvalidMeshHandle
+    // means extraction failed (used in TickAndSubmit to skip submission).
+    MeshHandle cell_meshes_[16] = {};
+
+    // Static parent transform from BuildStaticObjectMatrix(img, obj=0).
+    // The comet quad's authored anchor in I3D-local space.
+    float parent_matrix_[16] = {};
+
+    // I3D material colours for sub-object 0 (loaded from S3DMat at
+    // SpawnForTest). Routed into SHelperMeshSubmit's diffuse/ambient/
+    // emissive at draw — same pattern as icebolt's iter4 path
+    // (effect.cpp:7830-7852 + 8382-8398).
+    float diffuse_[4]  = {1.0f, 1.0f, 1.0f, 1.0f};
+    float emissive_[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+};
+
+_CLASSDEF(TTornadoEffect_Bespoke)
+
+class TTornadoEffect_Bespoke : public TEffect
+{
+  public:
+    TTornadoEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TTornadoEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TTornadoEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TTornadoEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+};
+
+_CLASSDEF(TVortexEffect_Bespoke)
+
+class TVortexEffect_Bespoke : public TEffect
+{
+  public:
+    TVortexEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TVortexEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TVortexEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TVortexEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+};
+
+// *************************************************************************
+// * wave-bespoke-W2A: weather / ground-scatter family — fog / sandswirl /  *
+// * quicksand. Faithful direct ports of the snapshot animator bodies for   *
+// * the --test=vfx harness, mirroring the TBloodEffect_Bespoke pattern.    *
+// * Each class loads its real .I3D imagery (no procedural stand-in per     *
+// * feedback_no_standins) and runs the snapshot's per-tick state machine   *
+// * LINE BY LINE against an internal state array. Pipeline + blend         *
+// * preserved verbatim — SetBlendState in the snapshot means Alpha here;   *
+// * SetAddBlendState means AdditiveStraight; no constants invented.        *
+// *************************************************************************
+
+_CLASSDEF(TFogEffect_Bespoke)
+
+// Original Fog: 36 authored prelit vertices, 50 triangles, no textures.
+class TFogEffect_Bespoke : public TEffect
+{
+  public:
+    TFogEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFogEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    void OffScreen() override { KillThisEffect(); }
+    static TFogEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void SetNativeDomainForTest(bool enabled);
+    void Advance(double seconds);
+    void Submit(EFxDebugMode debug_mode) const;
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    bool IsAlive() const { return true; }
+  private:
+    retail_fog::State state_;
+    S3DVertex vertices_[retail_fog::Count]{};
+    S3DFace faces_[50]{};
+    bool native_domain_=false;
+};
+
+_CLASSDEF(TSandswirlEffect_Bespoke)
+
+// W04: sandswirl spell-cast burst. Snapshot:
+// src/effect_old.cpp:9476-9683 (TSandswirlAnimator). Spawns a child
+// "sand" particle effect (TParticle3DAnimator) on Initialize with 50-100
+// particles, sets seek-targets to (0,0,100) above the cast point. After
+// SANDSWIRL_DURATION (75) the snapshot scans nearby characters and
+// retargets the particles at them, also spawning child Quicksand effects.
+// At frame SANDSWIRL_DURATION*4 (=300) the effect kills itself. Render()
+// is fully commented-out in the snapshot — no own draws; visuals are
+// entirely the child sand PE.
+//
+// First-pass bespoke: own particle pool (50 sand particles) running the
+// snapshot's seek-target curve (z=100 ascending point), so the effect
+// reads visually as the swirling sand updraft. Blend = AdditiveStraight
+// by sister-family precedent (sand, dust, swirl PEs all SetAddBlendState
+// in the snapshot family). Retarget-to-character logic is stubbed: in
+// the harness there are no nearby characters, so on frame == SANDSWIRL_
+// DURATION we keep the original (0,0,100) target. KillThisEffect at
+// frame SANDSWIRL_DURATION*4 preserved.
+class TSandswirlEffect_Bespoke : public TEffect
+{
+  public:
+    TSandswirlEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TSandswirlEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TSandswirlEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TSandswirlEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot constants.
+    static constexpr float   kSandswirlDuration = 75.0f;   // SANDSWIRL_DURATION
+    static constexpr int32_t kSandMaxParticles  = 100;     // upper bound of random(50,100)
+    static constexpr float   kSandSpawnZ        = 70.0f;   // pr.pos.z
+    static constexpr float   kSandSpreadXY      = 50.0f;   // pr.pspread.x/y
+    static constexpr float   kSandSpreadZ       = 50.0f;   // pr.pspread.z
+    static constexpr float   kSandSeekTargetZ   = 100.0f;  // pr.targetpos[0].z
+    static constexpr float   kSandSeekSpeedBase = 5.0f;    // pr.seekspeed
+    static constexpr float   kSandTurnAng       = 0.5f;    // pr.turnang
+    static constexpr int32_t kSandMinLife       = 100;     // pr.minlife
+    static constexpr int32_t kSandMaxLife       = 150;     // pr.maxlife
+    static constexpr int32_t kSandSimTickMs     = 1000 / 24;
+    static constexpr float   kSandBaseSizeWu    = 32.0f;   // single sand mote
+
+    struct SSandParticle
+    {
+        hmm_vec3 pos    = {0.0f, 0.0f, 0.0f};
+        hmm_vec3 vel    = {0.0f, 0.0f, 0.0f};
+        int32_t  life   = 0;
+        bool     alive  = false;
+        int32_t  start  = 0;     // delay until particle activates
+    };
+
+    SSandParticle  parts_[kSandMaxParticles] {};
+    int32_t        numparticles_  = 0;
+    int32_t        frameon_       = 0;
+    int32_t        angle_         = 0;     // snapshot: inst->GetAngle()
+    hmm_vec3       seektarget_    = {0.0f, 0.0f, kSandSeekTargetZ};
+    bool           alive_         = true;
+    TTextureHandle texture_       = kInvalidTexture;
+    float          uv_rect_[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+    double         sim_accum_ms_  = 0.0;
+};
+
+_CLASSDEF(TQuicksandEffect_Bespoke)
+
+// W05: quicksand ground trap. Snapshot:
+// src/effect_old.cpp:9137-9474 (TQuicksandAnimator at lines 9137-9442 +
+// REGISTER + Pulse at TQuicksandEffect:9004-9122). A duplicate body
+// exists at 12520-12836 inside /***** Old Quicksand: Redone by Pepper *****/
+// comment block — DEAD (commented-out); the canonical body is at line
+// 9194.
+//
+// The snapshot uses three sub-objects on a 3-mesh I3D:
+//   GetObject(0) — spinning sand decal (4-frame UV-flip texture), scaled
+//                  by `scalesize` (animated), rotated by `ang` (+=0.06/tick).
+//   GetObject(1) — twin cylinders, scaled by (cylscale, cylheight), one
+//                  rotated by `cylrot`, the other by M_PI - cylrot.
+//   GetObject(2) — dust mesh (34 verts) U-scrolling at -0.06/tick, rendered
+//                  in 3 concentric scales: (scalesize), (scalesize/1.25),
+//                  (scalesize/1.5), (scalesize/1.75). zscalefactor ramps
+//                  down after QUICKSAND_DURATION*2.
+//
+// SetBlendState -> Alpha (verbatim, preserved AS WRITTEN). Render does
+// SetBlendState a second time mid-body which is a no-op (alpha->alpha).
+//
+// First-pass bespoke: ONE ground-aligned (WorldXY) Alpha billboard whose
+// scale follows the animated `scalesize` curve and orientation follows
+// `ang`. Cylinder mesh + 4-stack dust passes are deferred to a follow-up
+// (engine doesn't have axis-aligned-cylinder rendering today; future
+// upgrade once mesh submission path exposes scale-with-rotation).
+// scalesize / stage / count animation curve preserved verbatim from
+// snapshot Animate (line 9194-9236).
+class TQuicksandEffect_Bespoke : public TEffect
+{
+  public:
+    TQuicksandEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TQuicksandEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TQuicksandEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TQuicksandEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot constants (effect_old.cpp:8993-8997 — canonical body).
+    static constexpr int32_t kQuicksandDuration  = 40;     // QUICKSAND_DURATION
+    static constexpr float   kQuicksandSwitch    = 10.0f;  // QUICKSAND_SWITCH
+    static constexpr float   kQuicksandCylRot    = 0.5f;   // QUICKSAND_CYLROT
+    static constexpr float   kQuicksandSpinStart = 10.0f;  // QUICKSAND_SPIN_START
+    static constexpr int32_t kQuicksandSimTickMs = 1000 / 24;
+    static constexpr float   kQuicksandBaseSizeWu = 128.0f;  // ground decal footprint
+
+    // Internal state — direct mapping of TQuicksandAnimator privates.
+    float    scalesize_    = 0.0f;
+    float    cylscale_     = 0.0f;
+    float    cylheight_    = 1.0f;
+    float    cylrot_       = 0.0f;
+    int32_t  cylcount_     = 0;
+    int32_t  stage_        = 0;
+    int32_t  count_        = 0;
+    float    ang_          = 0.0f;
+    float    zscalefactor_ = 1.0f;
+    int32_t  frameon_      = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// =========================================================================
+// * Wave-3 W3-H — Boss-specific + LabyrinthEffect (deep-recon batch)       *
+// *                                                                       *
+// * Five retail-only effects whose snapshot source body is absent. Each   *
+// * is shipped as a minimal placeholder: SpawnForTest loads the .I3D and *
+// * resolves sub-object 0, TickAndSubmit draws ONE ScreenAligned Alpha    *
+// * billboard at the effect origin with a sensible default lifetime.     *
+// * This gives the harness a row to A/B against game video; concrete    *
+// * animator behaviour (boss tie-ins, spawn waypoints, teleport-pair    *
+// * sequencing, multi-flare layout) is deferred to a follow-up once the  *
+// * caller side (TJhaga / Nakrnoth / Misorial labyrinth) is in scope.    *
+// *                                                                     *
+// * Pattern mirrors TBloodEffect_Bespoke at src/effect.cpp:1690-2065;   *
+// * placeholder kinematics mirror TFlareEffect_Bespoke (single sub-obj  *
+// * Alpha billboard, no spark loop).                                    *
+// =========================================================================
+
+// --- LabyrinthEffect (asset: misc\Starfield.I3D) -------------------------
+// Late-game endgame visual (Misorial labyrinth). Starfield.I3D = animated
+// starfield bg. Spell-handler at 0x5052e0/0x505300 registers it as a
+// dedicated entry in the spell table (s_LabyrinthEffect_005e15c4 has 2
+// XREFs in the same function — dedicated registrar). Feasibility: medium.
+// Owning class body not yet found by direct decomp — XREFs land in
+// dispatcher prologue/epilogue. Placeholder until class is identified.
+_CLASSDEF(TLabyrinthEffect_Bespoke)
+class TLabyrinthEffect_Bespoke : public TEffect
+{
+  public:
+    TLabyrinthEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TLabyrinthEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TLabyrinthEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TLabyrinthEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Placeholder constants — endgame bg starfield: large, persistent.
+    static constexpr float   kLabyrinthBaseSizeWu = 256.0f;
+    static constexpr double  kLabyrinthLifetimeMs = 8000.0;
+
+    bool           alive_       = true;
+    double         elapsed_ms_  = 0.0;
+    TTextureHandle texture_     = kInvalidTexture;
+    float          uv_rect_[4]  = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// --- JhagaAttack (asset: magic\Jattack.i3d) ------------------------------
+// Jhaga (boss) attack effect. Boss-specific. No XREF on s_JhagaAttack_ at
+// 0x505800 lands in a class body — dispatcher entry only. Feasibility: low.
+// Placeholder until Jhaga boss fight is in scope; once behaviour known,
+// likely reuses TFireSwarmEffect / TFireBallEffect variant scaffold.
+_CLASSDEF(TJhagaAttackEffect_Bespoke)
+class TJhagaAttackEffect_Bespoke : public TEffect
+{
+  public:
+    TJhagaAttackEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TJhagaAttackEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TJhagaAttackEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TJhagaAttackEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float  kJhagaAttackBaseSizeWu = 96.0f;
+    static constexpr double kJhagaAttackLifetimeMs = 1500.0;
+
+    bool           alive_      = true;
+    double         elapsed_ms_ = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// --- jtele (asset: magic\jtele.i3d) --------------------------------------
+// Jhaga teleport-source effect. Paired with `jteled` (teleport-dest).
+// XREF lands at TCharacter PostEvent in cls_0x5a7b98_TCharacter_AI_PerMonster
+// (4cce1a) — Jhaga AI spawns a `jtele` map-object at her current position
+// via TMapPane::NewObject(name="jtele"), then 6 ticks later spawns
+// `jteled` at the warp-target waypoint. Feasibility: medium — clear
+// pair semantics, but the actual visual is asset-only (animator class
+// not yet identified). Placeholder: short-lived bright flare-style
+// burst at spawn position.
+_CLASSDEF(TJTeleEffect_Bespoke)
+class TJTeleEffect_Bespoke : public TEffect
+{
+  public:
+    TJTeleEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TJTeleEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TJTeleEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TJTeleEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float  kJTeleBaseSizeWu = 64.0f;
+    static constexpr double kJTeleLifetimeMs = 800.0;
+
+    bool           alive_      = true;
+    double         elapsed_ms_ = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// --- Nakrnoth: class definition supplied by W3-E above ---
+
+// --- ceyes (asset: magic\Ceyes.i3d) --------------------------------------
+// Boss "creature eyes" glowing-eye sprite pair. No XREF — asset-only.
+// Feasibility: low. Likely two-flare setup once mapped. Placeholder
+// renders the first sub-object as a single billboard; the second flare
+// (left/right eye pair) is deferred until we know the offset.
+_CLASSDEF(TCEyesEffect_Bespoke)
+class TCEyesEffect_Bespoke : public TEffect
+{
+  public:
+    TCEyesEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TCEyesEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TCEyesEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TCEyesEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float  kCEyesBaseSizeWu = 32.0f;
+    static constexpr double kCEyesLifetimeMs = 4000.0;
+
+    bool           alive_      = true;
+    double         elapsed_ms_ = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// =========================================================================
+// * Wave-3 batch W3-G — Decorative ambient / late-polish (5 retail-only)   *
+// *                                                                       *
+// * Fairy (misc\Fairy.I3D), Globe (misc\Globe.I3D),                       *
+// * PunchAndJudy (misc\PunchAndJudy.i3d), goldeffect (misc\Goldp.i3d),    *
+// * Dust (misc\Dustcloud.i3d).                                            *
+// *                                                                       *
+// * Ghidra evidence: thin to nonexistent. No s_<Name>_ XREF visible in    *
+// * recon/, asset-only. Per W3-G brief: ship minimal placeholders that    *
+// * load the I3D asset and draw the first sub-object as a ScreenAligned   *
+// * Alpha billboard. Lifetime / motion are sensible defaults. Each effect *
+// * exists as a harness row so the user can A/B against game video and    *
+// * iterate when forensics arrive. Status: stubbed.                      *
+// *                                                                       *
+// * Localized-at-end for clean merge with adjacent wave-3 batches.        *
+// =========================================================================
+
+_CLASSDEF(TFairyEffect_Bespoke)
+
+// Floating fairy sprite ambient. Per brief: likely a TPixieEffect variant
+// (already covered) — both are small flying sprites with trails. A Fairy2
+// variant also exists in inventory. Placeholder: load misc\Fairy.I3D and
+// draw sub-object 0 as a hovering ScreenAligned Alpha billboard with a
+// small vertical bob; 24Hz sim-tick gate for framerate-independent motion.
+class TFairyEffect_Bespoke : public TEffect
+{
+  public:
+    TFairyEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFairyEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFairyEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TFairyEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }   // ambient — never dies
+
+  private:
+    TTextureHandle texture_      = kInvalidTexture;
+    float          uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+    float          size_wu_      = 18.0f;
+    float          phase_        = 0.0f;   // bob phase (radians)
+    double         sim_accum_ms_ = 0.0;
+};
+
+_CLASSDEF(TAuthoredStaticMeshEffect)
+
+// Verified fixed authored models (Globe and twelve town signs). Their
+// diagnostic previews share the normal map mesh extraction/pose path.
+// Callers pass explicit audited assets; there is no guessed motion or tint.
+class TAuthoredStaticMeshEffect : public TEffect
+{
+  public:
+    TAuthoredStaticMeshEffect(TObjectImagery* newim) : TEffect(newim) {}
+    TAuthoredStaticMeshEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TAuthoredStaticMeshEffect() override;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TAuthoredStaticMeshEffect* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                  const char* asset_override = nullptr,
+                                                                  bool animate_textures = false,
+                                                                  bool scroll_textures = false);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    void SubmitWorldMeshForTest_BESPOKE(EFxDebugMode debug_mode);
+    void SubmitNativeWorldMeshForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+
+  private:
+    struct SStaticPart {
+        MeshHandle mesh = 0;
+        int32_t object_index = 0;
+        std::vector<MeshHandle> frame_meshes;
+        int32_t retail_lighting = 0;
+        float local_matrix[16] = {};
+    };
+    std::vector<SStaticPart> parts_;
+    bool animate_textures_ = false;
+    T3DImagery* scroll_imagery_ = nullptr; // borrowed from this owner's imagery
+    double texture_tick_seconds_ = 0.0;
+};
+
+_CLASSDEF(TPunchAndJudyEffect_Bespoke)
+
+// Puppet-show decorative effect (entertainer NPC). Per brief: pure scripted
+// animation — probably no per-tick custom logic, just plays an I3D animation
+// loop. Low priority (one-off scene asset). Placeholder draws sub-object 0
+// as a WorldXY (ground-locked) Alpha billboard so the puppet-show stage
+// reads correctly even before mesh-anim playback lands.
+class TPunchAndJudyEffect_Bespoke : public TEffect
+{
+  public:
+    TPunchAndJudyEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TPunchAndJudyEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TPunchAndJudyEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TPunchAndJudyEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+
+  private:
+    TTextureHandle texture_      = kInvalidTexture;
+    float          uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+    float          size_wu_      = 48.0f;
+    double         sim_accum_ms_ = 0.0;
+};
+
+_CLASSDEF(TGoldEffect_Bespoke)
+
+// Pickup sparkle for gold piles. Per brief: likely a TFlareAnimator variant.
+// High-frequency effect (every gold pickup), so cheap path matters.
+// Placeholder draws sub-object 0 as an additive ScreenAligned billboard
+// with a short ~1.2s pulse-fade lifetime — the burst-pulse semantics of a
+// pickup sparkle. Self-kills when lifetime expires.
+class TGoldEffect_Bespoke : public TEffect
+{
+  public:
+    TGoldEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TGoldEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TGoldEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TGoldEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float kGoldLifetimeMs = 1200.0f;
+    TTextureHandle texture_      = kInvalidTexture;
+    float          uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
+    float          size_wu_      = 22.0f;
+    double         age_ms_       = 0.0;
+    bool           alive_        = true;
+    double         sim_accum_ms_ = 0.0;
+};
+
+_CLASSDEF(TDustEffect_Bespoke)
+
+// Retail Dustcloud uses a partsys tag with ground01..ground04 emitters
+// and #cloud prototype. posjitter/scljitter and exact-type controller binding
+// remain unsupported. The preview factory fails explicitly; it does not
+// substitute an invented 600ms expanding/tinted ground billboard.
+class TDustEffect_Bespoke : public TEffect
+{
+  public:
+    TDustEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TDustEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TDustEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TDustEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    bool alive_ = false;
+};
+
+// =========================================================================
+// Wave-3 W3-F: Buff overlays (character-attached state effects)
+// -------------------------------------------------------------------------
+// Five retail-only effects with NO snapshot source body and effectively no
+// per-effect Ghidra class identification:
+//
+//   - Might         magic\might.i3d        s_Might_*    : 1 ambiguous XREF
+//   - Stoneskin     magic\Stone.i3d        s_Stone_*    : 2 ambiguous XREFs
+//                                                         (could be terrain)
+//   - Invisible     Magic\Invisible.I3D    s_invisible_*: 11 XREFs but
+//                                                         spread across
+//                                                         combat/AI invis
+//                                                         flag plus the
+//                                                         effect
+//   - charm         magic\Charm.i3d        none in _data.txt — asset only
+//   - speed         magic\Speed.i3d        no clear XREF — asset only
+//
+// The original Revenant buff family likely shared ONE TBuffEffect or
+// TAuraEffect animator with color/asset overrides per buff (the asset-only
+// registrations support a data-driven dispatch). The closest base in the
+// snapshot is TAuraAnimator (Magic\aura.i3d, AURA_COUNT=100 particles); see
+// TAuraEffect_Bespoke at src/effect.cpp:8572 for the faithful port.
+//
+// Without per-effect Ghidra evidence and without snapshot bodies, each of
+// the 5 effects below ships as a MINIMAL PLACEHOLDER (status=stubbed):
+//
+//   - SpawnForTest loads the verbatim asset path via TryLoadMagicTexture.
+//   - TickAndSubmit draws ONE ScreenAligned Alpha billboard at the effect
+//     origin with a per-effect color tint sampled from the buff's visual
+//     family (gold for Might, grey for Stoneskin, cyan-shimmer for
+//     Invisible, pink for charm, blue-streak for speed).
+//   - A simple `lifetime_ms_` timer self-terminates after ~6s so the
+//     harness can re-trigger via the SpellGround cadence.
+//
+// Each effect gets a distinct C++ type so the bespoke dispatch / future
+// per-effect tuning has a hook; collapsing them into a single
+// TBuffEffect_Bespoke type would lose the harness A/B identity. When the
+// user has video footage, per-effect tuning can land here without touching
+// the shared infra.
+//
+// Once the shared TBuffEffect / TAuraEffect base is identified in Ghidra
+// (and a real animator is ported), these classes should become thin
+// adapters around it. For now: bespoke placeholders so each row has a
+// boot-able harness entry.
+
+_CLASSDEF(TBuffEffect_Bespoke__Might)
+
+class TBuffEffect_Bespoke__Might : public TEffect
+{
+  public:
+    TBuffEffect_Bespoke__Might(TObjectImagery* newim) : TEffect(newim) {}
+    TBuffEffect_Bespoke__Might(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TBuffEffect_Bespoke__Might() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TBuffEffect_Bespoke__Might* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    bool   alive_         = true;
+    double age_ms_        = 0.0;
+    double sim_accum_ms_  = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TBuffEffect_Bespoke__Stoneskin)
+
+class TBuffEffect_Bespoke__Stoneskin : public TEffect
+{
+  public:
+    TBuffEffect_Bespoke__Stoneskin(TObjectImagery* newim) : TEffect(newim) {}
+    TBuffEffect_Bespoke__Stoneskin(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TBuffEffect_Bespoke__Stoneskin() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TBuffEffect_Bespoke__Stoneskin* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    bool   alive_         = true;
+    double age_ms_        = 0.0;
+    double sim_accum_ms_  = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TInvisibleEffect_Bespoke)
+
+class TInvisibleEffect_Bespoke : public TEffect
+{
+  public:
+    TInvisibleEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TInvisibleEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TInvisibleEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TInvisibleEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    bool   alive_         = true;
+    double age_ms_        = 0.0;
+    double sim_accum_ms_  = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TBuffEffect_Bespoke__charm)
+
+class TBuffEffect_Bespoke__charm : public TEffect
+{
+  public:
+    TBuffEffect_Bespoke__charm(TObjectImagery* newim) : TEffect(newim) {}
+    TBuffEffect_Bespoke__charm(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TBuffEffect_Bespoke__charm() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TBuffEffect_Bespoke__charm* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    bool   alive_         = true;
+    double age_ms_        = 0.0;
+    double sim_accum_ms_  = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TBuffEffect_Bespoke__speed)
+
+class TBuffEffect_Bespoke__speed : public TEffect
+{
+  public:
+    TBuffEffect_Bespoke__speed(TObjectImagery* newim) : TEffect(newim) {}
+    TBuffEffect_Bespoke__speed(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TBuffEffect_Bespoke__speed() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TBuffEffect_Bespoke__speed* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    bool   alive_         = true;
+    double age_ms_        = 0.0;
+    double sim_accum_ms_  = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// =========================================================================
+// * wave-3 W3-E: Spell-only effects (asset-only, no dedicated class).      *
+// *                                                                       *
+// * Five retail-shipped spell visuals (cataclysm, funnel, maelstrom,      *
+// * magicshield, Nakrnoth) whose Class.Def registrations point at named   *
+// * I3D assets in the retail data tree (Magic\Cataclysm.I3D, etc.) but   *
+// * whose game-side classes are SPELL-INIT STUBS — the Ghidra decomp for *
+// * each is a single-statement ctor that flips one default member        *
+// * (cls_0x4fe9e0 / cls_0x4fd890 / cls_0x502420 etc.). All of the actual *
+// * animator logic lives in a shared TStormAnimator / TMeteorStormAnimator *
+// * / TShieldEffect parent, which is either already covered (TShieldEffect, *
+// * X09 + W3-D wave) or BLOCKED on a sokol-pipeline TODO (W01            *
+// * TMeteorStormEffect_Bespoke is `#if 0`'d).                            *
+// *                                                                       *
+// * The I3D assets themselves are not present in the local                *
+// * RevenantRepo/Imagery/Magic tree — they ship only with the retail     *
+// * data drop. The five bespoke classes therefore ship as MINIMAL        *
+// * PLACEHOLDERS per batch protocol: SpawnForTest_BESPOKE attempts to    *
+// * load the named .I3D candidate set, and TickAndSubmit draws a single  *
+// * ScreenAligned Alpha billboard with the asset's first sub-object      *
+// * texture if it resolved (otherwise no submission, log_warn). Status   *
+// * is `stubbed` — the harness has a row to A/B against retail game      *
+// * video; the body can be fleshed out once the user provides reference  *
+// * video + I3D assets show up in the local data tree.                   *
+// *                                                                       *
+// * Per batch brief / feedback_no_standins: we do NOT draw procedural    *
+// * stand-ins for these named real effects. If the asset doesn't         *
+// * resolve, we draw nothing and log_warn.                                *
+// =========================================================================
+
+_CLASSDEF(TCataclysmEffect_Bespoke)
+
+// W3-E #1: "cataclysm" — spell registered via Class.Def to Magic\Cataclysm.I3D.
+// Ghidra evidence: s_Cataclysm_005e13a0 XREFs at 004fe7c0 / 004fe7e0 are
+// inside cls_0x4fe9e0 (spell-init region) whose ctor body just clears a
+// single member (mbr_0x190 = 1) — no animator logic. Parent of W3-D's
+// YCataclysm. Likely a meteor-storm variant whose visual lives in the
+// shared TMeteorStormAnimator (W01, BLOCKED on TStormAnimator #if 0).
+class TCataclysmEffect_Bespoke : public TEffect
+{
+  public:
+    TCataclysmEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TCataclysmEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TCataclysmEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TCataclysmEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kCataclysmBaseSizeWu = 96.0f;   // ground burst footprint
+    static constexpr int32_t kCataclysmLifeMs     = 4000;    // 4s default lifetime
+
+    bool           alive_       = true;
+    double         age_ms_      = 0.0;
+    TTextureHandle texture_     = kInvalidTexture;
+    float          uv_rect_[4]  = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TFunnelEffect_Bespoke)
+
+// W3-E #2: "funnel" — Magic\Funnel.I3D. Ghidra evidence at 004fd3b0 /
+// 004fd3d0 is the spell-init region; no dedicated animator class. Likely
+// a tornado-funnel variant whose visual lives in TTornadoEffect (W02,
+// BLOCKED on multi-sub-object I3D mesh path). Asset-only placeholder.
+class TFunnelEffect_Bespoke : public TEffect
+{
+  public:
+    TFunnelEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFunnelEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFunnelEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TFunnelEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kFunnelBaseSizeWu = 128.0f;   // funnel column footprint
+    static constexpr int32_t kFunnelLifeMs     = 5000;     // 5s default lifetime
+
+    bool           alive_       = true;
+    double         age_ms_      = 0.0;
+    TTextureHandle texture_     = kInvalidTexture;
+    float          uv_rect_[4]  = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TMaelstromEffect_Bespoke)
+
+// W3-E #3: "maelstrom" — magic\maelstrom.i3d. NO XREF found in
+// recon/ghidra/_data.txt — pure Class.Def registration with no game-side
+// class body. Parent of W3-D's ymaelstrom. Likely a swirling water/energy
+// vortex whose visual lives in TVortexEffect (W03, BLOCKED).
+class TMaelstromEffect_Bespoke : public TEffect
+{
+  public:
+    TMaelstromEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TMaelstromEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TMaelstromEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TMaelstromEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kMaelstromBaseSizeWu = 144.0f;   // swirl footprint
+    static constexpr int32_t kMaelstromLifeMs     = 5000;     // 5s default lifetime
+
+    bool           alive_       = true;
+    double         age_ms_      = 0.0;
+    TTextureHandle texture_     = kInvalidTexture;
+    float          uv_rect_[4]  = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TMagicShieldEffect_Bespoke)
+
+// W3-E #4: "magicshield" — Magic\Mshield.I3D. Ghidra has 4 string XREFs
+// from cls_0x502420 (spell-init region) for "MagicShield" / "MagicShield2" /
+// "MagicShield3" — 3-tier variant set, all sharing the same init class. The
+// init ctor (meth_0x502420) sets mbr_0x184 = 0 / mbr_0x188 = 0xf and
+// calls a base init via vtable[0x158] — no animator body. The actual visual
+// is TShieldAnimator (already ported as TShieldEffect_Bespoke, X09) with a
+// different I3D asset. First-pass: try Mshield.I3D, fall through to ALPHA
+// billboard with a pale-blue tint like TShieldEffect, but ScreenAligned.
+class TMagicShieldEffect_Bespoke : public TEffect
+{
+  public:
+    TMagicShieldEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TMagicShieldEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TMagicShieldEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TMagicShieldEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return true; }   // shield = persistent buff
+
+  private:
+    // Mirror TShieldEffect_Bespoke constants/layout — magicshield is the
+    // same animator with a different I3D.
+    static constexpr float   kMagicShieldBaseSizeWu = 64.0f;
+    static constexpr float   kMagicShieldScale      = 2.0f;   // SHIELD_SCALE
+    static constexpr float   kMagicShieldLiftZ      = 40.0f;  // pos.z=40
+
+    int32_t        framenum_   = 0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TNakrnothEffect_Bespoke)
+
+// W3-E #5: "Nakrnoth" — magic\Nakrnoth.I3D. NO XREF in
+// recon/ghidra/_data.txt — boss-specific (Nakrnoth = dragon boss) asset-
+// only registration. Probably a one-off scripted spell visual whose
+// owning class hasn't been found yet. First-pass placeholder: try to
+// load the I3D and draw the first sub-object as an Alpha billboard.
+class TNakrnothEffect_Bespoke : public TEffect
+{
+  public:
+    TNakrnothEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TNakrnothEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TNakrnothEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TNakrnothEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kNakrnothBaseSizeWu = 96.0f;    // boss-spell footprint
+    static constexpr int32_t kNakrnothLifeMs     = 4000;     // 4s default lifetime
+
+    bool           alive_       = true;
+    double         age_ms_      = 0.0;
+    TTextureHandle texture_     = kInvalidTexture;
+    float          uv_rect_[4]  = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// =========================================================================
+// * Wave-3 W3-D Y-prefix boss-variant bespoke stubs                        *
+// *                                                                       *
+// * Five retail-only Y-prefix effects (Yhagoro / boss-variant assets).    *
+// * No snapshot source body. Ghidra evidence is THIN for four of the      *
+// * five — only TYFireBallEffect has a dedicated cls_0x5b4814 candidate   *
+// * (with the same vtable shape as cls_0x5b4290 = base FireBall, i.e.     *
+// * "same code, different asset"). The other four (YFireWind, YCataclysm,*
+// * YManadrain, ymaelstrom) only show string XREFs in spell-handler       *
+// * routines — no dedicated class layout to port.                         *
+// *                                                                       *
+// * Per the batch protocol, each ships as a MINIMAL placeholder: load     *
+// * the I3D asset (path verbatim from /tmp/retail_effect_inventory.tsv),  *
+// * draw the first sub-object as a ScreenAligned Alpha billboard, with a *
+// * default lifetime. Status = stubbed. Bodies are intentionally tiny —   *
+// * forensics-without-decomp is fabrication; the placeholders give the    *
+// * harness a row to A/B against game video once the user captures one.   *
+// *                                                                       *
+// * Each class follows the lightweight stub pattern: nullptr-imagery      *
+// * ctor + TryLoadMagicTexture-style asset load, single-billboard tick.   *
+// *************************************************************************
+
+// W3-D YFireBall — Yhagoro fireball variant.
+// Ghidra: cls_0x5b4814, MEDIUM confidence (recon/mappings/
+// TYFireBallEffect_cls_0x5b4814_candidate.yaml). Same vtable shape and
+// self-allocated size (0x4cc bytes) as cls_0x5b4290 (base FireBall) — Y
+// variant is functionally identical with overridden asset. Asset
+// Magic\YFireBall.I3D (yellow/large fireball).
+//
+// Original Y common prefix/head/glow/trail methods match FireBall's
+// instruction stream; share the verified moving frontend with its green asset.
+// Yhagoro-specific world hit logic and complete burst/ring remain separate gates.
+_CLASSDEF(TFireBallEffect_Bespoke__YFireBall)
+class TFireBallEffect_Bespoke__YFireBall : public TFireBallEffect
+{
+  public:
+    TFireBallEffect_Bespoke__YFireBall(TObjectImagery* newim) : TFireBallEffect(newim)
+        { SetPreviewLightColor(180.0f/255.0f,1.0f,80.0f/255.0f); SetYFireBallRingPalette(); }
+    TFireBallEffect_Bespoke__YFireBall(SObjectState* def,TObjectImagery* newim) : TFireBallEffect(def,newim)
+        { SetPreviewLightColor(180.0f/255.0f,1.0f,80.0f/255.0f); SetYFireBallRingPalette(); }
+    ~TFireBallEffect_Bespoke__YFireBall() override = default;
+    [[nodiscard]] static TFireBallEffect_Bespoke__YFireBall* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+};
+
+// W3-D YCataclysm — boss-variant cataclysm. Ghidra XREF for s_YCataclysm_
+// at 0x005e1520 lives in virt_meth_0x507530 (spell handler), no dedicated
+// class. Base Cataclysm is similarly spell-only (no class). Asset
+// Magic\YCataclysm.I3D. Minimal placeholder.
+_CLASSDEF(TCataclysmEffect_Bespoke__YCataclysm)
+class TCataclysmEffect_Bespoke__YCataclysm : public TEffect
+{
+  public:
+    TCataclysmEffect_Bespoke__YCataclysm(TObjectImagery* newim) : TEffect(newim) {}
+    TCataclysmEffect_Bespoke__YCataclysm(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TCataclysmEffect_Bespoke__YCataclysm() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TCataclysmEffect_Bespoke__YCataclysm* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kStubLifetimeMs   = 4000;
+    static constexpr float   kStubBaseSizeWu   = 64.0f;
+    static constexpr int32_t kStubSimTickMs    = 1000 / 24;
+
+    int32_t  age_ms_       = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// W3-D YManadrain — boss-variant mana-drain tether/beam. Ghidra XREF for
+// s_YManaDrain_005e1550 lives in virt_meth_0x5082c0 (spell handler); base
+// ManaDrain has XREFs in cls handler 0x4fbf50 but no clean class body
+// candidate identified. Asset Magic\YManadrain.I3D. Minimal placeholder.
+_CLASSDEF(TManadrainEffect_Bespoke__YManadrain)
+class TManadrainEffect_Bespoke__YManadrain : public TEffect
+{
+  public:
+    TManadrainEffect_Bespoke__YManadrain(TObjectImagery* newim) : TEffect(newim) {}
+    TManadrainEffect_Bespoke__YManadrain(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TManadrainEffect_Bespoke__YManadrain() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TManadrainEffect_Bespoke__YManadrain* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kStubLifetimeMs   = 3000;
+    static constexpr float   kStubBaseSizeWu   = 20.0f;
+    static constexpr int32_t kStubSimTickMs    = 1000 / 24;
+
+    int32_t  age_ms_       = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// W3-D ymaelstrom — boss-variant maelstrom vortex. Pure asset-only (no
+// s_maelstrom_/s_ymaelstrom_ XREF in _data.txt — registered via class.def).
+// Asset magic\ymaelstrom.i3d (lowercase, preserved verbatim from
+// /tmp/retail_effect_inventory.tsv). Minimal placeholder.
+_CLASSDEF(TMaelstromEffect_Bespoke__ymaelstrom)
+class TMaelstromEffect_Bespoke__ymaelstrom : public TEffect
+{
+  public:
+    TMaelstromEffect_Bespoke__ymaelstrom(TObjectImagery* newim) : TEffect(newim) {}
+    TMaelstromEffect_Bespoke__ymaelstrom(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TMaelstromEffect_Bespoke__ymaelstrom() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TMaelstromEffect_Bespoke__ymaelstrom* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kStubLifetimeMs   = 5000;
+    static constexpr float   kStubBaseSizeWu   = 96.0f;
+    static constexpr int32_t kStubSimTickMs    = 1000 / 24;
+
+    int32_t  age_ms_       = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// *************************************************************************
+// * Wave-3 W3-A Dragon/Fire bespokes (Blast, FireFlash, FireWind,         *
+// * FireCone, Faultfire) — fire-effect candidates.                         *
+// *                                                                       *
+// * Status summary (see effect.cpp bodies for per-class detail):           *
+// *   TBlastEffect_Bespoke      — STUBBED (no animator, no Ghidra body)    *
+// *   TFireFlashEffect_Bespoke  — STUBBED (snapshot animator depends on    *
+// *                                PTSpell/PTCharacter rig not in test     *
+// *                                harness; Ghidra cls_0x5a9194 is a       *
+// *                                merged composite, untrustworthy)        *
+// *   TFireWindEffect_Bespoke   — STUBBED (same dependency profile;        *
+// *                                supports YFireWind variant via asset    *
+// *                                override)                               *
+// *   TFireConeEffect_Bespoke   — STUBBED (TParticleSystem fire+smoke+     *
+// *                                burst tri-system; not yet harness-      *
+// *                                ready; supports dragonfire variant)     *
+// *   TFaultFireEffect_Bespoke  — PORTED (small self-contained UV-scroll   *
+// *                                + scale-cosine pulse animator; faithful *
+// *                                authored two-pass vertical quad)          *
+// *                                                                       *
+// * All five register a SpawnForTest_BESPOKE that loads the cited .I3D     *
+// * asset. Faultfire now uses its authored mesh and a runtime component;   *
+// * the other four candidates still require their actual controllers.      *
+// *************************************************************************
+
+_CLASSDEF(TBlastEffect_Bespoke)
+
+class TBlastEffect_Bespoke : public TEffect
+{
+  public:
+    TBlastEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TBlastEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TBlastEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TBlastEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void                                       TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr float   kBlastBaseSizeWu = 48.0f;
+    static constexpr int32_t kBlastLifetimeMs = 1500;
+
+    TTextureHandle texture_      = kInvalidTexture;
+    float          age_ms_       = 0.0f;
+    bool           alive_        = true;
+};
+
+_CLASSDEF(TFireFlashEffect_Bespoke)
+
+class TFireFlashEffect_Bespoke : public TEffect
+{
+  public:
+    TFireFlashEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFireFlashEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFireFlashEffect_Bespoke() override;
+
+    [[nodiscard]] static TFireFlashEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void Initialize(bool attach_runtime_component = true);
+    void Advance(double elapsed_seconds);
+    void Submit(EFxDebugMode debug_mode);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Literal FFLASH_PARTICLE layout/state; slots 0..74 initially belong
+    // to the sphere. The commented-out source RING spawn stays inactive.
+    struct Particle {
+        hmm_vec3 pos = {}, pivot = {}, vel = {}, angle = {}, angvel = {};
+        int32_t state = 0;
+        float scale = 0.0f, dist = 0.0f;
+        int32_t life = 0, startfade = 0, stopfade = 0, color = 0;
+    };
+    void SimulateTick();
+    Particle particles_[150] = {};
+    bool BindMeshes() const;
+    mutable MeshHandle meshes_[2] = {};
+    std::vector<SMeshVertex> vertices_[2];
+    std::vector<uint16_t> indices_[2];
+    TTextureHandle textures_[2] = {kInvalidTexture, kInvalidTexture};
+    S3DMat materials_[2] = {}; // Immutable authored material metadata.
+    float diffuse_[2][4] = {{1,1,1,1}, {1,1,1,1}};
+    float emissive_[2][4] = {}; // Authored metadata; normal-lighting parity open.
+    TSafeRef<TObjectInstance> target_;
+    hmm_vec3 gsphere_ = {0.0f, 0.0f, 30.0f};
+    float facing_ = 0.0f, mainscale_ = 0.0f, gsize_ = 1.0f, rsize_ = 0.0f;
+    int32_t frameon_ = 0;
+    double sim_accum_ms_ = 0.0;
+    bool initialized_ = false, runtime_owned_ = false, alive_ = false;
+};
+
+_CLASSDEF(TFireWindEffect_Bespoke)
+
+class TFireWindEffect_Bespoke : public TEffect, private firewind_core::State
+{
+  public:
+    TFireWindEffect_Bespoke(TObjectImagery* image):TEffect(image){}
+    TFireWindEffect_Bespoke(SObjectState* def,TObjectImagery* image):TEffect(def,image){}
+    ~TFireWindEffect_Bespoke() override;
+    void OffScreen() override {}
+    void Pulse() override;
+    static TFireWindEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,const char* asset_override=nullptr);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode mode);
+    void SubmitWorldMeshes_BESPOKE(EFxDebugMode mode);
+    void SetNativeDomain(bool enabled){native_domain_=enabled;}
+    bool IsAlive()const{return alive_;}
+  protected:
+    bool InitializeVisual(const S3DPoint& origin);
+  private:
+    bool BindMeshes();void Simulate();
+    struct Part {MeshHandle mesh=0;S3DMat material{};};
+    std::array<Part,2> parts_{};
+    bool alive_=true,native_domain_=false;
+    double sim_accum_=0;
+};
+
+// Own native Y registrations5066a0/5067b0; visual core compatibility is
+// checked against its full original400-slot state and authored draw matrices.
+_CLASSDEF(TFireWindEffect_Bespoke__YFireWind)
+class TFireWindEffect_Bespoke__YFireWind : public TFireWindEffect_Bespoke
+{
+  public:
+    using TFireWindEffect_Bespoke::TFireWindEffect_Bespoke;
+    static TFireWindEffect_Bespoke__YFireWind* SpawnForTest_BESPOKE(const S3DPoint& origin);
+};
+
+_CLASSDEF(TFireConeEffect_Bespoke)
+
+class TFireConeEffect_Bespoke : public TEffect
+{
+  public:
+    TFireConeEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFireConeEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFireConeEffect_Bespoke() override;
+
+    // A shared asset does not establish DragonFire's distinct animator.
+    // Any non-null override is deliberately unsupported here.
+    [[nodiscard]] static TFireConeEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                       const char*     asset_override = nullptr);
+    void Initialize(bool attach_runtime_component = true);
+    void SetNativeDomainForTest(bool enabled);
+    void Pulse() override;
+    void Advance(double elapsed_seconds);
+    void Submit(EFxDebugMode debug_mode) const;
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int FLAME_COUNT = 80, FLAME_BURST = 100;
+    static constexpr int FLAME_MIN_H = 83, FLAME_MAX_H = 87;
+    static constexpr int FLAME_MIN_V = 20, FLAME_MAX_V = 30;
+    static constexpr int FLAME_FRAME_COUNT = 17, FLAME_CREATE = 4;
+    static constexpr int FLAME_MIN_LIFE = 10, FLAME_MAX_LIFE = 45;
+    static constexpr int FLAME_STATE_START = 1, FLAME_STATE_MID = 2, FLAME_STATE_BLAST = 3;
+    static constexpr int FLAME_SPEED = 1800;
+    using Particle = SParticleSystemInfo;
+    struct Pool {
+        explicit Pool(int count) : particles(size_t(count), Particle{}) {}
+        std::vector<Particle> particles;
+        Particle* Get(int i) { return i < 0 || size_t(i) >= particles.size() ? nullptr : &particles[size_t(i)]; }
+        void Add(const Particle* particle);
+        void Animate();
+    };
+    void SimulateTick();
+    void SubmitPool(const Pool& pool, int object, EFxDebugMode debug_mode) const;
+    bool BindMeshes() const;
+    mutable MeshHandle meshes_[2] = {};
+    Pool fire_{FLAME_COUNT}, smoke_{FLAME_COUNT}, burst_{FLAME_BURST};
+    std::vector<SMeshVertex> vertices_[2];
+    std::vector<uint16_t> indices_[2];
+    TTextureHandle textures_[2] = {kInvalidTexture, kInvalidTexture};
+    S3DMat materials_[2] = {};
+    float diffuse_[2][4] = {{1,1,1,1}, {1,1,1,1}};
+    float facing_ = 0.0f;
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
+    int frame_count_ = 0, state_ = FLAME_STATE_START, sim_ticks_ = 0;
+    double sim_accum_ms_ = 0.0;
+    bool done_ = false, firsttime_ = true;
+    bool initialized_ = false, runtime_owned_ = false, alive_ = false;
+};
+
+_CLASSDEF(TFaultFireEffect_Bespoke)
+
+// Source TFaultFireAnimator: authored vertical quad, two UV-scaled passes,
+// persistent24Hz U scroll. Exact runtime initialization follows final map ID.
+class TFaultFireEffect_Bespoke : public TEffect
+{
+  public:
+    TFaultFireEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TFaultFireEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TFaultFireEffect_Bespoke() override = default;
+    void OffScreen() override { KillThisEffect(); }
+    [[nodiscard]] static TFaultFireEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void Initialize(bool attach_runtime_component = true);
+    void Advance(double elapsed_seconds);
+    void SetNativeDomainForTest(bool enabled);
+    void Submit(EFxDebugMode debug_mode) const;
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+  private:
+    bool native_domain_ = false;
+    hmm_mat4 native_owner_ = {};
+    TTextureHandle texture_ = kInvalidTexture;
+    std::vector<SMeshVertex> vertices_;
+    std::vector<uint16_t> indices_;
+    bool initialized_ = false;
+    bool runtime_owned_ = false;
+    float th_ = 0.0f;
+    float u_offset_ = 0.0f;
+    double sim_accum_ms_ = 0.0;
+};
+
+// =========================================================================
+// * Wave-3 W3-B — Arrow/projectile family (5 retail-only effects)        *
+// *   Forensics: thin Ghidra evidence (cls_0x5b0cfc has decompiled       *
+// *   ctor/dtor/vtbl helpers but no Animate/Render body; the other 4    *
+// *   effects have no dedicated class decomp). Each effect ships as a   *
+// *   minimal SpawnForTest + Tick body that loads its named I3D and     *
+// *   draws sub-object 0 as a ScreenAligned Alpha billboard with a      *
+// *   sensible default lifetime. Awaiting user video A/B for kinematic  *
+// *   tuning. Pattern mirrors TBloodEffect_Bespoke template.            *
+// =========================================================================
+
+_CLASSDEF(TArrowEffect_Bespoke)
+// W3-B-1 — arroweffect / queenarrow. Both retail strings resolve to the
+// same Ghidra class cls_0x5b0cfc (288 bytes, 5 vtbl methods, registrar
+// fn 0x503740 attaches to caster's 'rhand' bone). Asset is
+// misc\Arroweffects.I3D — shared between the two variants. The
+// queenarrow variant (TArrowEffect_Bespoke__queenarrow) is the boss-fight
+// (Queen Mahara) arrow, same asset with a red tint. Constructor at
+// 0x503740 sets mbr_0x114 = 100.0f (likely initial speed/range) and zeros
+// mbr_0x118/0x11c.
+class TArrowEffect_Bespoke : public TEffect
+{
+  public:
+    TArrowEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TArrowEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TArrowEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TArrowEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+    // Variant tint (queenarrow override sets this red).
+    float tint_rgba_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+
+  private:
+    // Default 24Hz sim cadence + ~1.0s lifetime placeholder. Real lifetime
+    // (snapshot Pulse-driven) unknown without a richer decomp.
+    static constexpr int32_t kSimTickMs       = 1000 / 24;
+    static constexpr int32_t kLifeTicks       = 24;     // ~1.0s placeholder
+    static constexpr float   kBaseSizeWu      = 48.0f;  // billboard footprint
+
+    int32_t  ticks_        = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TSparksEffect_Bespoke)
+// W3-B-3 — Sparks. Generic impact-spark effect (asset Misc\Sparks.I3D).
+// Compatibility preview name for the generic combat particle burst. The
+// behavior is owned by TSparkEffect, whose caller constants were recovered
+// from retail TCharacter::EffectBurst. No independent invented sprite.
+class TSparksEffect_Bespoke : public TEffect
+{
+  public:
+    TSparksEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TSparksEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TSparksEffect_Bespoke() override;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TSparksEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return burst_ && burst_->IsAlive(); }
+
+  private:
+    TObjectPtr<TSparkEffect> burst_;
+};
+
+_CLASSDEF(TCombatFlashEffect_Bespoke)
+// W3-B-4 — combatflash. Triggered from TCharacter combat code at hit-
+// frame (cls_0x5a7b98 method 0x4c8500 builds a NewObjectByName request
+// with type=0x19 at character pos + (+0x1e, +0x50, +0x1e)). Asset is
+// misc\Impact.i3d — shared hit-flash imagery. Brief bright additive
+// flash; lifetime <0.5s.
+class TCombatFlashEffect_Bespoke : public TEffect
+{
+  public:
+    TCombatFlashEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TCombatFlashEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TCombatFlashEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TCombatFlashEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kSimTickMs  = 1000 / 24;
+    static constexpr int32_t kLifeTicks  = 10;     // ~0.42s flash
+    static constexpr float   kBaseSizeWu = 56.0f;
+
+    int32_t  ticks_        = 0;
+    bool     alive_        = true;
+    double   sim_accum_ms_ = 0.0;
+
+    TTextureHandle texture_    = kInvalidTexture;
+    float          uv_rect_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+_CLASSDEF(TStrikeEffect_Bespoke)
+// W3-B-5 — StrikeEffect. Asset is Misc\Dummy.i3d (placeholder/no-imagery
+// marker). Likely audio-only or script-trigger effect with no visible
+// body. Stubbed: SpawnForTest still allocates the effect (so it shows
+// up in the harness cycle) but Tick draws nothing.
+class TStrikeEffect_Bespoke : public TEffect
+{
+  public:
+    TStrikeEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TStrikeEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TStrikeEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TStrikeEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    static constexpr int32_t kSimTickMs = 1000 / 24;
+    static constexpr int32_t kLifeTicks = 12;     // ~0.5s marker lifetime
+
+    int32_t ticks_        = 0;
+    bool    alive_        = true;
+    double  sim_accum_ms_ = 0.0;
+};
+
+// *************************************************************************
+// * Wave 3 batch W3-C: Cave / environment ambient                         *
+// *                                                                       *
+// *   sgeyser/fgeyser TGeyserEffect_Bespoke — Steam / Fire periodic geyser*
+// *                                           spout. Retail Ghidra evid:  *
+// *                                           cls_0x5b79ac (348-byte      *
+// *                                           class) is a TParticle3D-    *
+// *                                           Animator subclass; the      *
+// *                                           registrar at FUN_00526780   *
+// *                                           differentiates 'CavFGeyser' *
+// *                                           (fire) and 'CavSGeyser'     *
+// *                                           (steam) by name and selects *
+// *                                           'fgeyser'/'sgeyser' sound   *
+// *                                           cue (Sound/effects/         *
+// *                                           {f,s}geyser.wav are on      *
+// *                                           disk). The 100-iter loop on *
+// *                                           meth_0x526040 (a TEffect    *
+// *                                           sub-object spawn) implies   *
+// *                                           ~100 particles per emission *
+// *                                           burst. Snapshot has no body *
+// *                                           — synthesis: periodic       *
+// *                                           upward spurt (gravity-      *
+// *                                           ballistic particles)        *
+// *                                           tinted by variant.          *
+// *                                                                       *
+// *   cfire TFlameAnimator_Bespoke__cfire — campfire ambient flame. No   *
+// *                                          Ghidra match, no asset on    *
+// *                                          disk in legacy/data. Likely  *
+// *                                          a TFlameAnimator variant     *
+// *                                          with a different I3D, but    *
+// *                                          asset absent. STUB: spawn    *
+// *                                          returns nullptr with         *
+// *                                          diagnostic; harness row      *
+// *                                          present for A/B with future  *
+// *                                          captured video.              *
+// *                                                                       *
+// *   MistFog TFogEffect_Bespoke__MistFog — ambient mist (gravity smoke   *
+// *                                         puffs). Faithful direct port  *
+// *                                         of TMistFogAnimator           *
+// *                                         (legacy/effect.cpp:11311-     *
+// *                                         11456): NUMMISTFOG=25 smoke   *
+// *                                         puffs, gravity, lifetime 200, *
+// *                                         scale grows then shrinks,     *
+// *                                         resets when scale dies.       *
+// *                                         SetAddBlendState ->            *
+// *                                         AdditiveStraight (preserved   *
+// *                                         literally). Per task spec we  *
+// *                                         add a dedicated class rather  *
+// *                                         than re-using TFogEffect      *
+// *                                         since the snapshot bodies     *
+// *                                         differ materially.            *
+// *                                                                       *
+// *   RockStorm TRockStormEffect_Bespoke — falling/orbiting rocks spell.  *
+// *                                        Faithful direct port of        *
+// *                                        TRockStormAnimator             *
+// *                                        (legacy/effect3.cpp:96-413).   *
+// *                                        4-7 rocks orbit caster at      *
+// *                                        radius, descending to land     *
+// *                                        height, contract to             *
+// *                                        min_radius, damage stage,      *
+// *                                        then bounce out. Snapshot     *
+// *                                        SetBlendState (rock = Alpha,  *
+// *                                        glow = AdditiveStraight)       *
+// *                                        preserved. First-pass collapses*
+// *                                        per-rock rendering to a single *
+// *                                        composite point: each rock is  *
+// *                                        a screen-aligned billboard at  *
+// *                                        the computed orbital pos with  *
+// *                                        scl_fac scale.                 *
+// * ************************************************************************
+
+_CLASSDEF(TGeyserEffect_Bespoke)
+
+// W03: API retained for existing preview entries, but no invented geyser.
+// Retail CavFGeyser/CavSGeyser traps create generic EFFECT fgeyser/sgeyser;
+// their authored I3D tags drive the retail general `partsys` component.
+// That tag interpreter is not ported yet. The previous ballistic/tinted
+// approximation was based on a merged PoisonCloud/TRAP decompilation.
+// See docs/vfx/forensics/W03_GEYSER_RUNTIME.md for recovered evidence.
+class TGeyserEffect_Bespoke : public TEffect
+{
+  public:
+    enum class EVariant : uint8_t { Steam = 0, Fire = 1 };
+
+    TGeyserEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TGeyserEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    ~TGeyserEffect_Bespoke() override = default;
+
+    [[nodiscard]] static TGeyserEffect_Bespoke* SpawnForTest_BESPOKE(
+        const S3DPoint& origin, EVariant variant);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return false; }
+};
+
+_CLASSDEF(TFlameAnimator_Bespoke__cfire)
+
+// W3-C cfire. STUB. No Ghidra body, no snapshot body, no asset on
+// disk (Class.Def does not register "cfire"; ATTACHEFFECT lines in
+// char.def are commented out). SpawnForTest returns nullptr with a
+// diagnostic; harness row present so the id appears in --vfx-list for
+// future A/B once real video / asset surface.
+class TFlameAnimator_Bespoke__cfire : public TEffect
+{
+  public:
+    TFlameAnimator_Bespoke__cfire(TObjectImagery* newim) : TEffect(newim) {}
+    TFlameAnimator_Bespoke__cfire(SObjectState* def, TObjectImagery* newim)
+        : TEffect(def, newim) {}
+    ~TFlameAnimator_Bespoke__cfire() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TFlameAnimator_Bespoke__cfire* SpawnForTest_BESPOKE(
+        const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return false; }   // stub never alive
+};
+
+_CLASSDEF(TFogEffect_Bespoke__MistFog)
+
+// M06: literal TMistFogAnimator state and authored subobject0 geometry.
+// Retail ID180674ba uses Misc\\Mistfog.i3d (RGB565), not Magic's alpha asset.
+class TFogEffect_Bespoke__MistFog : public TEffect
+{
+  public:
+    TFogEffect_Bespoke__MistFog(TObjectImagery* newim) : TEffect(newim) {}
+    TFogEffect_Bespoke__MistFog(SObjectState* def, TObjectImagery* newim)
+        : TEffect(def, newim) {}
+    ~TFogEffect_Bespoke__MistFog() override;
+
+    void OffScreen() override { /* persistent ambient map effect */ }
+    void Initialize(bool attach_runtime_component = true);
+    void Advance(double elapsed_seconds);
+    void Submit(EFxDebugMode debug_mode) const;
+    [[nodiscard]] static TFogEffect_Bespoke__MistFog* SpawnForTest_BESPOKE(
+        const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] bool IsAlive() const { return true; }
+
+  private:
+    static constexpr int32_t kMistFogNumPuffs = 25;
+    static constexpr double kMistFogSimTickMs = 1000.0 / 24.0;
+    static constexpr float kMistFogSmokeGrav = SMOKE_GRAV; // snapshot -0.01f
+    struct SMistPuff
+    {
+        float x = 0.0f, y = 0.0f, z = 0.0f, rot = 0.0f;
+        float vx = 0.0f, vy = 0.0f, vz = 0.0f;
+        int32_t life = 0;
+        float size = 0.0f;
+    };
+    SMistPuff smoke_[kMistFogNumPuffs] {};
+    float centerx_ = 0.0f, centery_ = 0.0f;
+    int32_t ticks_ = 0;
+    double sim_accum_ms_ = 0.0;
+    bool initialized_ = false;
+    TTextureHandle texture_ = kInvalidTexture;
+    std::vector<S3DVertex> authored_vertices_;
+    float diffuse_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    mutable uint32_t software_mesh_ = 0;
+    bool SubmitSoftware(EFxDebugMode debug_mode) const;
+    void ResetBall_(int32_t b);
+};
+
+_CLASSDEF(TRockStormEffect_Bespoke)
+
+// W3-C RockStorm. Faithful direct port of TRockStormAnimator
+// (legacy/effect3.cpp:96-413). The animator runs a 5-stage state machine:
+//   START   → level-2 only: ramp scl_fac[max] in
+//   STAGE1  → level 1: rocks orbit, descending, then contract radius
+//             level 2: big rock descends
+//   DAMAGE  → flip lin_vel to 4.0 (bounce out)
+//   STAGE2  → rocks rise, expanding radius, fading
+//   DONE    → kill effect
+//
+// First-pass bespoke targets level 1 only (no spell-target lookup
+// available in harness; level 2 needs a real target). Renders each rock
+// as a screen-aligned billboard with scl_fac scale, plus an additive
+// "glow" billboard during STAGE1.
+//
+// Blend per snapshot Render: rock = SetBlendState (Alpha),
+// glow = SetAddBlendState (AdditiveStraight). Preserved literally.
+//
+// Asset Magic\Rocks.I3D is referenced in Class.Def but not present on
+// disk in legacy/Imagery/Magic. Bespoke tries to RegisterImagery/Load
+// and falls back to a procedural untextured render if missing.
+class TRockStormEffect_Bespoke : public TEffect
+{
+  public:
+    TRockStormEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
+    TRockStormEffect_Bespoke(SObjectState* def, TObjectImagery* newim)
+        : TEffect(def, newim) {}
+    ~TRockStormEffect_Bespoke() override = default;
+
+    void OffScreen() override { KillThisEffect(); }
+
+    [[nodiscard]] static TRockStormEffect_Bespoke* SpawnForTest_BESPOKE(
+        const S3DPoint& origin);
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+
+    [[nodiscard]] bool IsAlive() const { return alive_; }
+
+  private:
+    // Snapshot constants (legacy/effect3.cpp:37-45).
+    static constexpr int32_t kRockStormMinRocks   = 4;   // ROCKSTORM_MINROCKS
+    static constexpr int32_t kRockStormVarRocks   = 3;   // ROCKSTORM_VARROCKS
+    static constexpr int32_t kRockStormMaxRocks   = 7;   // ROCKSTORM_MAXROCKS
+    static constexpr int32_t kRockStormSimTickMs  = 1000 / 24;
+    static constexpr float   kRockStormBaseSizeWu = 22.0f;
+    static constexpr float   kRockStormGlowSizeWu = 36.0f;
+
+    enum EStage
+    {
+        kStageStart   = 0,
+        kStageStage1  = 1,
+        kStageDamage  = 2,
+        kStageStage2  = 3,
+        kStageDone    = 4,
+    };
+
+    // Mirror TRockStormAnimator privates (legacy/effect3.cpp:99-112).
+    int32_t  level_       = 1;
+    int32_t  stage_       = kStageStart;
+    int32_t  num_rocks_   = 0;
+    S3DPoint target_pos_  = {0, 0, 0};
+    float    min_radius_  = 8.0f;
+    float    radius_[kRockStormMaxRocks] {};
+    float    ang_vel_[kRockStormMaxRocks] {};
+    float    ang_[kRockStormMaxRocks] {};
+    float    dest_height_[kRockStormMaxRocks + 1] {};
+    float    lin_vel_[kRockStormMaxRocks + 1] {};
+    float    height_[kRockStormMaxRocks + 1] {};
+    float    scl_fac_[kRockStormMaxRocks + 1] {};
+    int32_t  frameon_    = 0;
+    bool     alive_      = true;
+    double   sim_accum_ms_ = 0.0;
+    TTextureHandle rock_tex_  = kInvalidTexture;
+    TTextureHandle glow_tex_  = kInvalidTexture;
+    float          rock_uv_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+    float          glow_uv_[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+// SetVortex caches absolute D3D position once; subsequent owner movement
+// and facing changes do not move its authored object. See SETVORTEX_AUTHORED.md.
+_CLASSDEF(TSetVortexEffect_Bespoke)
+class TSetVortexEffect_Bespoke : public TEffect
+{
+  public:
+    TSetVortexEffect_Bespoke(TObjectImagery* img) : TEffect(img) {}
+    TSetVortexEffect_Bespoke(SObjectState* def, TObjectImagery* img) : TEffect(def, img) {}
+    ~TSetVortexEffect_Bespoke() override = default;
+
+    void OffScreen() override {} // Persistent marker; only explicit deletion kills it.
+    void Initialize(bool attach_runtime_component = true);
+    void Advance(double elapsed_seconds);
+    void Submit(EFxDebugMode debug_mode = EFxDebugMode::Normal) const;
+    void TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode);
+    [[nodiscard]] static TSetVortexEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
+    [[nodiscard]] bool IsAlive() const { return !(GetFlags() & OF_KILL); }
+
+  private:
+    std::vector<SMeshVertex> vertices_;
+    std::vector<uint16_t> indices_;
+    TTextureHandle texture_ = kInvalidTexture;
+    float diffuse_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    hmm_vec3 cached_d3d_position_ = {0.0f, 0.0f, 0.0f};
+    float current_height_ = 30.0f;
+    int32_t direction_ = 1;
+    double sim_accum_ms_ = 0.0;
+    bool initialized_ = false;
+};

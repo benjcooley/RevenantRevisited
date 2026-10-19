@@ -2,8 +2,9 @@
 // the way a prefab component will be declared.
 #pragma once
 
-#include "../src/objectcomponent.h"
-#include "../src/refl.h"
+#include "../src/engine/scene/component.h"
+#include "../src/engine/scene/node.h"
+#include "../src/engine/refl/refl.h"
 
 #include <HandmadeMath.h>
 
@@ -16,7 +17,7 @@ enum class ETestMode : uint8_t
     Steady,
 };
 
-class STestGlow : public TObjectComponent
+class STestGlow : public TComponent
 {
   public:
     DEF_COMPONENT("glow")
@@ -26,6 +27,7 @@ class STestGlow : public TObjectComponent
     PROP(3)                                 ETestMode   mode    = ETestMode::Pulse;
     PROP(4, "Texture asset path")           std::string texture;
     PROP_NOSAVE(5)                          float       phase   = 0.0f;
+    PROP(6, "A node this glow follows")     TNodeRef    target;
 
     // Derived state: what a constructor would have computed from the
     // fields. Set by PostLoad, so it is valid by the time OnAttach runs.

@@ -19,7 +19,7 @@ const auto q=a.jhagaattack_object_zero_origin;printf("%.9g %.9g %.9g\n",q.X,q.Y,
 return f?0:3;}
 '''
 def run(traces,poses,out):
- out.mkdir(parents=True,exist_ok=True);production=(ROOT/'src/3dimage.cpp').read_text();methods=[function(production,s)for s in['void T3DAnimator::SetJhagaAttackObjectZeroOrigin(','void T3DAnimator::NoteJhagaAttackPrototypeSample(']]
+ out.mkdir(parents=True,exist_ok=True);production=(ROOT/'src/game/imagery/3dimage.cpp').read_text();methods=[function(production,s)for s in['void T3DAnimator::SetJhagaAttackObjectZeroOrigin(','void T3DAnimator::NoteJhagaAttackPrototypeSample(']]
  src=out/'cached.cpp';src.write_text(DRIVER.replace('METHODS','\n'.join(methods)));exe=out/'cached';subprocess.run(['clang++','-std=c++17','-O1','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(src),'-o',str(exe)],check=True)
  keys={tuple(map(int,p[:3])):list(map(float,p[3:]))for l in poses.read_text().splitlines()if(p:=l.split())};cases=[]
  for path in traces:

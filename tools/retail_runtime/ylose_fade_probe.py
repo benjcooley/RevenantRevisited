@@ -32,7 +32,7 @@ int main(){for(int i=0;i<17;++i)printf("%d ",retail_ylose::FadedObject(i));puts(
    for stage,color in zip(('before','after'),values):
     assert all(obj['color']==color for obj in row[stage]),(stride,row,values);fields+=len(row[stage])
   cases.append(dict(stride=stride,frames=30,records=records,rng=f.rng_draws))
- report=dict(status='pass',fields=fields,cases=cases,asset_sha256=sha(data),source_sha256=sha((ROOT/'src/ylosefade.h').read_bytes()),driver_sha256=sha(source.read_bytes()),executable_sha256=sha(exe.read_bytes()),scope='Original401d40 registration,4021a0 FVF clone/malformed target parsing,4022b0 Render-time curve/cache, whole default Animate/Render and real owner lifecycle; no replacement vertex colors in original.',limits=['No natural Yhagoro caller or complete scene/device acceptance'])
+ report=dict(status='pass',fields=fields,cases=cases,asset_sha256=sha(data),source_sha256=sha((ROOT/'src/game/effects/ylosefade.h').read_bytes()),driver_sha256=sha(source.read_bytes()),executable_sha256=sha(exe.read_bytes()),scope='Original401d40 registration,4021a0 FVF clone/malformed target parsing,4022b0 Render-time curve/cache, whole default Animate/Render and real owner lifecycle; no replacement vertex colors in original.',limits=['No natural Yhagoro caller or complete scene/device acceptance'])
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print('pass',fields);return report
 if __name__=='__main__':
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.executable,a.output)

@@ -53,7 +53,7 @@ def parse_asset(data):
 
 
 def compile_material(output,m):
-    method=span((ROOT/'src/d3dport.cpp').read_text(),'void LoadMaterial(',
+    method=span((ROOT/'src/game/imagery/d3dport.cpp').read_text(),'void LoadMaterial(',
                 '// --------------------------------------------------------------------------\n// RenderObject')
     prelude=r'''#include <cstdio>
 #include <cstring>
@@ -182,7 +182,7 @@ def main():
         raise AssertionError('Unexpected textured retail raster branch')
     after={k:sha(v.encode()) for k,v in production_spans().items()}
     if after != before: raise AssertionError('Production source changed during comparison')
-    current_material=span((ROOT/'src/d3dport.cpp').read_text(),'void LoadMaterial(',
+    current_material=span((ROOT/'src/game/imagery/d3dport.cpp').read_text(),'void LoadMaterial(',
         '// --------------------------------------------------------------------------\n// RenderObject')
     if sha(current_material.encode()) != material_compiled['source_span_sha256']:
         raise AssertionError('Production material source changed during comparison')

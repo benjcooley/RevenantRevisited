@@ -39,7 +39,7 @@ The system must preserve these invariants:
 
 ```cpp
 TObjectInstance
-  components: TPointerArray<TObjectComponent>
+  components: TPointerArray<TComponent>
 ```
 
 Components are not serialized. They are reconstructed from existing object
@@ -94,15 +94,15 @@ Components are not pulsed by default. A component opts into updates by
 registering a member method:
 
 ```cpp
-RegisterUpdate(&TObjectComponent::Update);
+RegisterUpdate(&TComponent::Update);
 ```
 
 The global update list stores:
 
 ```cpp
 struct SComponentUpdateEntry {
-    TSafeComponentRef<TObjectComponent> component;
-    TObjectComponentUpdateMethod method;
+    TSafeComponentRef<TComponent> component;
+    TComponentUpdateMethod method;
 };
 ```
 

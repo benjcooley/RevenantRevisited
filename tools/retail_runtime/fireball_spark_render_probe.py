@@ -76,7 +76,7 @@ int main(int argc,char**argv){if(argc!=3)return 2;S3DVertex vertices[8];FILE*v=s
  }std::fclose(f);std::puts("]");}
 ''')
     binary=output/'port-native-spark'
-    command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/fireballquad.cpp'),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/game/effects/fireballquad.cpp'),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     result=subprocess.run(command,text=True,capture_output=True);(output/'raw-compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Raw native geometry compilation failed')
     return binary,dict(command=command,source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest())
@@ -99,7 +99,7 @@ def main():
     vertices.write_bytes(asset[0x270:0x370])
     prefix,core_compiled=compile_prefix(args.output)
     raw_binary,raw_compiled=compile_raw(args.output)
-    sourcefiles=['src/effect.cpp','src/effect.h','src/fireballquad.h','src/fireballquad.cpp','src/fireballspark.h']
+    sourcefiles=['src/game/effects/effect.cpp','src/game/effects/effect.h','src/game/effects/fireballquad.h','src/game/effects/fireballquad.cpp','src/game/effects/fireballspark.h']
     hashes={f:hashlib.sha256((ROOT/f).read_bytes()).hexdigest()for f in sourcefiles}
     fixture=SparkRenderFixture(args.executable,asset);fixture.missile.configure([0,0,128],[1000,0,128],target_hp=0,animator_present=True)
     states=[];motion=[]
@@ -161,7 +161,7 @@ def main():
         authored_offsets=dict(vertices=hex(SPARK_VERTICES),indices=hex(SPARK_INDICES),texture=hex(SPARK_TEXTURE)),texture=dict(width=64,height=64,format='ARGB4444',diffuse=[1,1,1,1],emissive=[0,0,0,1]),
         original_functions=['0x50b2b0','0x4de1f0','0x4de210','0x4de200','0x43ad80','0x56d960'],viewport=[960,540],camera=[240,0,128],
         float_position_bound='max(3e-5 absolute,8binary32ULPs), established authored-transform bound; raw D3D stage checked independently before bridge',
-        bridge_sources=['src/3dimage.cpp:RenderObject OBJ3D_ABSPOS bypasses owner matrix','src/object.h:REV_FIX_Z_VALUE maps D3D Z back to map coordinates (x1.46)','src/3dimage.cpp:GetObjectMapPos applies REV_FIX_Z_VALUE to complete transformed D3D point','src/renderer.cpp:SubmitFxQuad forwards each world_pos corner to common-world FX projection','src/shaders/fx.glsl.h:world-space isometric/perspective projection'],
+        bridge_sources=['src/game/imagery/3dimage.cpp:RenderObject OBJ3D_ABSPOS bypasses owner matrix','src/game/object/object.h:REV_FIX_Z_VALUE maps D3D Z back to map coordinates (x1.46)','src/game/imagery/3dimage.cpp:GetObjectMapPos applies REV_FIX_Z_VALUE to complete transformed D3D point','src/engine/render/renderer.cpp:SubmitFxQuad forwards each world_pos corner to common-world FX projection','src/engine/render/shaders/fx.glsl.h:world-space isometric/perspective projection'],
         coordinate_bridge='Original MATRIX|ABSPOS bypasses owner. Retained raw native D3D points convert to common-world Z via existing object.h REV_FIX_Z_VALUE (x1.46), matching existing absolute effect adapters and common-world quad renderer. Bridge-relative software images are not an independent original device parity proof.',
         scope='Actual original shared spark render transforms and shipped box02 topology/UV/64x64ARGB texture against compiled production Submit. Candidate state comes from compiled verified prefix, original owner motion through impact and pool drain. Explicit unlit/white material environment and common-world bridge; no growth/burst/ring/damage/complete FireBall/Metal acceptance.')
     (args.output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({k:v for k,v in report.items()if k!='cases'},indent=2))

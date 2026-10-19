@@ -12,7 +12,7 @@
 // full suite passes. A failing assert exits non-zero with a diagnostic.
 // *************************************************************************
 
-#include "../src/transform.h"
+#include "../src/engine/scene/transform.h"
 
 #include <cassert>
 #include <cmath>

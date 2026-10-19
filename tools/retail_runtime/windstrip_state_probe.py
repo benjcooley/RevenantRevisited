@@ -28,7 +28,7 @@ def run(exe,archive,out):
    rows.append(n)
    if tick%25==0:print(stride,tick,maximum,errors[:2],flush=True)
   results.append(dict(stride=stride,fields=fields,max_float_error=maximum,errors=errors,native=rows))
- report=dict(status='fail'if any(r['errors']for r in results)else'pass',cases=results,source_sha256=sha((ROOT/'src/windstripcore.h').read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),controls='Actual owner Pulse then NextFrame then custom Animate; original full Render each stride1/3.20 independent strip histories and400 drop slots, live-only payload, exact RNG; natural null spell. ASan/UBSan compiled source.')
+ report=dict(status='fail'if any(r['errors']for r in results)else'pass',cases=results,source_sha256=sha((ROOT/'src/game/effects/windstripcore.h').read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),controls='Actual owner Pulse then NextFrame then custom Animate; original full Render each stride1/3.20 independent strip histories and400 drop slots, live-only payload, exact RNG; natural null spell. ASan/UBSan compiled source.')
  (out/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');return report
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('executable',type=Path);p.add_argument('--archive',type=Path,default=ROOT/'data/imagery.rvi');p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.executable,a.archive,a.output)

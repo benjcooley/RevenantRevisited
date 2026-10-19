@@ -4,7 +4,7 @@
 TRules::Initialize (Load over rules.def, stats.def, char.def, weapon.def,
 armor.def) and BindTypes in the emulator (slots/combat/data_parse.py); the
 port runs TRules::Initialize (`Revenant --retail-ab=combat-data`,
-src/retailab_data.cpp). Both dump every record by field name; the compare
+src/game/ab/retailab_data.cpp). Both dump every record by field name; the compare
 walks them record by record, so a difference reads as
 `char Araknid attack 3 hitmaxrange`.
 
@@ -37,7 +37,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 IGNORED = {'schema', 'side', 'elapsed_ms', 'seams'}
 
-# class.def's CLASS names -> class ids (src/object.h OBJCLASS_*, retail's
+# class.def's CLASS names -> class ids (src/game/object/object.h OBJCLASS_*, retail's
 # class registry index).
 CLASS_IDS = dict(ITEM=0, WEAPON=1, ARMOR=2, TALISMAN=3, FOOD=4, CONTAINER=5, LIGHTSOURCE=6, TOOL=7,
                  MONEY=8, TILE=9, EXIT=10, PLAYER=11, CHARACTER=12, TRAP=13, SHADOW=14, HELPER=15,

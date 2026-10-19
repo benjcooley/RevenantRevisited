@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class WatcherClockTests(unittest.TestCase):
     def test_review_rate_and_reference_clock(self):
-        source = (ROOT / 'src/effect.cpp').read_text()
+        source = (ROOT / 'src/game/effects/effect.cpp').read_text()
         start = source.index('void TAuthoredStaticMeshEffect::TickAndSubmitForTest_BESPOKE')
         end = source.index('// Explicit watcher comparison route', start)
         actual = source[start:end]

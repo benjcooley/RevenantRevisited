@@ -25,7 +25,7 @@ int main(){ytelekinesis_core::State s;s.Initialize(random_range);dump(-1,s);for(
    for k,(a,b)in enumerate(zip(s,expected)):
     d=abs(a-b);maximum=max(maximum,d);fields+=1
     if d>max(5e-5,abs(b)*1e-7):errors.append(dict(tick=tick,rock=i,field=k,source=a,native=b,error=d))
- report=dict(status='pass'if not errors else'fail',fields=fields,max_error=maximum,errors=errors[:20],trace_sha256=sha(trace.read_bytes()),source_sha256=sha((ROOT/'src/ytelekinesiscore.h').read_bytes()))
+ report=dict(status='pass'if not errors else'fail',fields=fields,max_error=maximum,errors=errors[:20],trace_sha256=sha(trace.read_bytes()),source_sha256=sha((ROOT/'src/game/effects/ytelekinesiscore.h').read_bytes()))
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report);assert not errors
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('trace',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.trace,a.output)

@@ -51,11 +51,11 @@ int main(){
 '''
 class WaterQuadPolicy(unittest.TestCase):
  def test_actual_format_and_default_opt_in(self):
-  source=(ROOT/'src/effect.cpp').read_text()
+  source=(ROOT/'src/game/effects/effect.cpp').read_text()
   body=function(source,'bool LoadWaterQuad(')+'\n'+function(source,'void SubmitWaterQuad(')
   with tempfile.TemporaryDirectory()as temp:
    p=Path(temp);(p/'test.cpp').write_text(PRELUDE+body+MAIN)
-   command=['clang++','-std=c++17','-O1','-fsanitize=address,undefined','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(p/'test.cpp'),str(ROOT/'src/math3d.cpp'),'-o',str(p/'test')]
+   command=['clang++','-std=c++17','-O1','-fsanitize=address,undefined','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(p/'test.cpp'),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(p/'test')]
    r=subprocess.run(command,capture_output=True,text=True);self.assertEqual(r.returncode,0,r.stdout+r.stderr)
    r=subprocess.run([str(p/'test')],capture_output=True,text=True);self.assertEqual(r.returncode,0,r.stdout+r.stderr)
 if __name__=='__main__':unittest.main()

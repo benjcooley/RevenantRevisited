@@ -1,0 +1,27 @@
+// *************************************************************************
+// *                         Cinematix Revenant                            *
+// *                    Copyright (C) 1998 Cinematix                       *
+// *                        tool.h - TTool module                          *
+// *************************************************************************
+
+#pragma once
+
+#include "game/app/revenant.h"
+#include "game/object/object.h"
+
+_CLASSDEF(TTool)
+class TTool : public TObjectInstance
+{
+  public:
+    TTool(TObjectImagery* newim) : TObjectInstance(newim) {}
+    TTool(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
+
+    virtual bool Use(TObjectInstance* user, int32_t with = -1);
+    int32_t CursorType(TObjectInstance* with = nullptr) override;
+
+    // Tool stats
+    STATFUNC(Value)
+    STATFUNC(Pick)
+};
+
+DEFINE_OBJECT_DEF("TOOL", TTool)

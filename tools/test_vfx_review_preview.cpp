@@ -1,8 +1,8 @@
 // Compile with src/vfxreviewpreview.cpp and src/time.cpp. The tiny catalogue
 // provider makes any accidental browser initialization an unresolved symbol.
-#include "../src/vfxreviewpreview.h"
-#include "../src/time.h"
-#include "../src/effects/paralizepreview.h"
+#include "../src/game/ab/vfxreviewpreview.h"
+#include "../src/engine/core/revtime.h"
+#include "../src/game/effects/legacy/paralizepreview.h"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif

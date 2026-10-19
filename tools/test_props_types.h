@@ -2,7 +2,9 @@
 // struct in the exact shape a prefab component will use.
 #pragma once
 
-#include "../src/refl.h"
+#include "../src/engine/refl/refl.h"
+#include "../src/engine/scene/node.h"
+#include "../src/engine/assets/assetcache.h"
 
 #include <HandmadeMath.h>
 
@@ -17,6 +19,7 @@ enum class ETestBlend : uint8_t
 
 struct STestMesh
 {
+    REFL_IDS(1, 19)
     PROP(1)                  bool        visible   = true;
     PROP(2)                  SRgba       diffuse   = {1, 1, 1, 1};
     PROP_NOSAVE(3, "UV scroll rate") float   uv_scroll = 0.0f;
@@ -31,6 +34,15 @@ struct STestMesh
     void PropChanged(uint16_t id) { ++changed_count; last_changed = id; }
 };
 
+// Identity and links: a uid of its own, a node ref and an asset ref.
+struct STestLinks
+{
+    PROP(1) TUid                 uid;
+    PROP(2, "What it points at") TNodeRef          target;
+    PROP(3)                      TAssetRef<TAsset> image;
+    PROP(4)                      int32_t           after = 5;
+};
+
 // A class with no annotations is simply not in the registry.
 struct STestEmpty
 {
@@ -40,6 +52,7 @@ struct STestEmpty
 // Inheritance: a derived annotated class sees its base's properties.
 struct STestDerived : public STestMesh
 {
+    REFL_IDS(20, 29)
     PROP(20) float extra = 2.5f;
 };
 
@@ -54,7 +67,7 @@ class STestPrivate
     PROP(2)                     int32_t count_ = 2;
 };
 
-// Accessor-backed properties (the TNodeInst shape: state lives behind
+// Accessor-backed properties (the TNode shape: state lives behind
 // setters, e.g. in a TTransform).
 struct STestAccessor
 {

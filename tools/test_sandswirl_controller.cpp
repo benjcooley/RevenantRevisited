@@ -1,4 +1,4 @@
-#include "effects/sandswirlcontroller.h"
+#include "game/effects/legacy/sandswirlcontroller.h"
 #include <cassert>
 #include <iostream>
 using namespace retail_sandswirl;

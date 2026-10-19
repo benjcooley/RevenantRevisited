@@ -46,7 +46,7 @@ def run(executable, asset_file, output):
     binary = output/'parser_driver'
     command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined',
         '-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),str(source),
-        str(ROOT/'src/partsysdefinition.cpp'),'-o',str(binary)]
+        str(ROOT/'src/engine/fx/partsysdefinition.cpp'),'-o',str(binary)]
     p=subprocess.run(command,capture_output=True,text=True)
     (output/'compile.log').write_text(p.stdout+p.stderr)
     if p.returncode:raise RuntimeError('Actual production parser compile failed')
@@ -68,7 +68,7 @@ def run(executable, asset_file, output):
         evidence='Original4010f3 MOV [EBX],0 before literal/curve selection4010fc; '
             'curve branch never writes the additional caller destinations. '
             'Whole literal40d750/4042e0/4010d0/403320 run in every diagnostic.',
-        source_sha256=sha(ROOT/'src/partsysdefinition.cpp'),probe_sha256=sha(__file__),
+        source_sha256=sha(ROOT/'src/engine/fx/partsysdefinition.cpp'),probe_sha256=sha(__file__),
         generated_source_sha256=sha(source),binary_sha256=sha(binary),
         original_executable_sha256=sha(executable),sanitizers='ASan/UBSan',
         accepted=False,new_rendered_ab_cases=0,

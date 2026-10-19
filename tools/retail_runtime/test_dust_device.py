@@ -26,7 +26,7 @@ class DustDeviceTests(unittest.TestCase):
    doubled=raster([p,p],mode,8,8);self.assertEqual(tuple(doubled[:3]),(14,12,10))
    old=raster([p],mode,8,8,legacy_color=True);self.assertEqual(tuple(old[:3]),(6,4,4));self.assertNotEqual(raw,old)
  def test_compiled_production_policy(self):
-  source=(ROOT/'src/3dimage.cpp').read_text();start=source.index('            const bool retail_rgb5_color =');end=source.index('            // Actual SW LV',start);body=source[start:end]
+  source=(ROOT/'src/game/imagery/3dimage.cpp').read_text();start=source.index('            const bool retail_rgb5_color =');end=source.index('            // Actual SW LV',start);body=source[start:end]
   names='combat_native might immortalmight fmastery speed static_particles head jhaga lightstrip funnel comet fgeyser dust poison'.split()
   code='#include <cmath>\n#include <cstdio>\nint main(){ int checks=0; for(int profile=-1;profile<14;++profile)for(int sw=0;sw<2;++sw)for(int value=0;value<256;++value){\n'
   code+='struct {bool sw;bool UsesRetailSoftwareMeshLighting()const{return sw;}} renderer{bool(sw)};\n'

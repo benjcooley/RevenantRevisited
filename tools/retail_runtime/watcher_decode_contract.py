@@ -9,7 +9,7 @@ from character_native_preflight import ROOT
 
 def run(output):
     output.mkdir(parents=True, exist_ok=False)
-    text = (ROOT / 'src/3dimage.cpp').read_text()
+    text = (ROOT / 'src/game/imagery/3dimage.cpp').read_text()
     source = text[text.index('static inline uint8_t ExpandBitsTo8('):text.index('static uint64_t I3DTextureAssetKey(')]
     harness = r'''
 #include <cstdint>
@@ -43,7 +43,7 @@ int main() {
     cpp=output/'decode.cpp';cpp.write_text(harness);binary=output/'decode'
     command=['clang++','-std=c++17','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),str(cpp),'-o',str(binary)]
     subprocess.run(command,check=True);subprocess.run([str(binary)],check=True)
-    report=dict(status='pass',words_per_format=65536,formats=['ARGB1555','ARGB4444','RGB565'],channel_assertions=786432,source_span_sha256=hashlib.sha256(source.encode()).hexdigest(),lighting_header_sha256=hashlib.sha256((ROOT/'src/retailmeshlighting.h').read_bytes()).hexdigest(),compile_command=command,scope='Actual extracted production decoder and actual policy selector only; no GPU/render/device equivalence claim.')
+    report=dict(status='pass',words_per_format=65536,formats=['ARGB1555','ARGB4444','RGB565'],channel_assertions=786432,source_span_sha256=hashlib.sha256(source.encode()).hexdigest(),lighting_header_sha256=hashlib.sha256((ROOT/'src/engine/render/retailmeshlighting.h').read_bytes()).hexdigest(),compile_command=command,scope='Actual extracted production decoder and actual policy selector only; no GPU/render/device equivalence claim.')
     (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report))
 
 if __name__=='__main__':

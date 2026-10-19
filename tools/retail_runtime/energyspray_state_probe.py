@@ -28,7 +28,7 @@ def run(exe,archive,out):
     if delta>2e-5:errors.append(dict(tick=tick,field=k,native=expected,port=actual))
    rows.append(n)
   results.append(dict(stride=stride,fields=fields,max_float_error=maximum,errors=errors,native=rows));print(stride,fields,maximum,errors[:3],flush=True)
- report=dict(status='fail'if any(r['errors']for r in results)else'pass',cases=results,source_sha256=sha((ROOT/'src/energyspraycore.h').read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),controls='Complete original owner/leaf calls; exact RNG everytick and one extra per actual Render; stride1/3 changes source stream together; post-kill no-op; ASan/UBSan compiled core.')
+ report=dict(status='fail'if any(r['errors']for r in results)else'pass',cases=results,source_sha256=sha((ROOT/'src/game/effects/energyspraycore.h').read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),controls='Complete original owner/leaf calls; exact RNG everytick and one extra per actual Render; stride1/3 changes source stream together; post-kill no-op; ASan/UBSan compiled core.')
  (out/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');return report
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('executable',type=Path);p.add_argument('--archive',type=Path,default=ROOT/'data/imagery.rvi');p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.executable,a.archive,a.output)

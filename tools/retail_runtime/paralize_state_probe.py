@@ -26,9 +26,9 @@ def run(trace,output):
    if not okay:errors.append(dict(tick=i+1,field=hex(address),native=a,source=b,error=error))
  controls=[]
  for label,old,new in [('snapshot_duration','count=240','count=200'),('snapshot_knot_step','knot-=.6f','knot-=.5f')]:
-  header=(ROOT/'src/paralizecore.h').read_text();assert old in header;bad=output/(label+'.h');bad.write_text(header.replace(old,new));driver=output/(label+'.cpp');driver.write_text(DRIVER.replace('"paralizecore.h"','"'+bad.name+'"'));binary=output/label
+  header=(ROOT/'src/game/effects/paralizecore.h').read_text();assert old in header;bad=output/(label+'.h');bad.write_text(header.replace(old,new));driver=output/(label+'.cpp');driver.write_text(DRIVER.replace('"paralizecore.h"','"'+bad.name+'"'));binary=output/label
   qbad=subprocess.run(['clang++','-std=c++17','-O1','-ffp-contract=off','-fsanitize=address,undefined',str(driver),'-o',str(binary)],capture_output=True,text=True);assert qbad.returncode==0,qbad.stderr
   qbad=subprocess.run([str(binary)],capture_output=True);assert qbad.returncode==0;differences=sum(a!=b for a,b in zip(q.stdout,qbad.stdout));assert differences>0;controls.append(dict(name=label,different_bytes=differences))
- report=dict(status='fail'if errors else'pass',fields=checks,maximum_float_error=maximum,error_count=len(errors),errors=errors[:100],source_sha256=sha((ROOT/'src/paralizecore.h').read_bytes()),native_trace_sha256=sha(trace.read_bytes()),sanitizers='ASan/UBSan',negative_controls=controls,accepted=False);(output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],len(errors),maximum);return report
+ report=dict(status='fail'if errors else'pass',fields=checks,maximum_float_error=maximum,error_count=len(errors),errors=errors[:100],source_sha256=sha((ROOT/'src/game/effects/paralizecore.h').read_bytes()),native_trace_sha256=sha(trace.read_bytes()),sanitizers='ASan/UBSan',negative_controls=controls,accepted=False);(output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],len(errors),maximum);return report
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('trace',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.trace,a.output)

@@ -25,7 +25,7 @@ The map pane's own level (`+0x98`, `0x666970`) is the case's
 `globals.maplevel` (0).
 
 Schema `combat.map.v1`, shared with the port's `Revenant
---retail-ab=map-los` / `map-find-objects` (src/retailab_map.cpp).
+--retail-ab=map-los` / `map-find-objects` (src/game/ab/retailab_map.cpp).
 
 Usage:
     map_query.py EXE --serve             # {"id":..,"case":{...}} per line

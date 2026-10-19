@@ -10,7 +10,7 @@ import unittest
 import blood_spray_probe as probe
 
 EXE = probe.ROOT / 'recon/retail_asm/baseline/Revenant.rebuilt.exe'
-SOURCE = probe.ROOT / 'src/effects/bloodspray.cpp'
+SOURCE = probe.ROOT / 'src/game/effects/legacy/bloodspray.cpp'
 
 
 def mutated(directory: Path, old: str, new: str) -> Path:

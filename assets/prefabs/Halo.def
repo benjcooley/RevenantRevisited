@@ -1,0 +1,86 @@
+// Halo -- the pulsing spell halo (retail THaloEffect / THaloAnimator,
+// effect_old.cpp 10557-10680; forensics docs/vfx/forensics/
+// HALO_PUBLIC_PARAMETERS_RENDER_20261011.md; INVENTORY row L02; the
+// retail-exact mesh reference is the harness entry Halo_AUTHORED_PUBLIC60,
+// src/effects/halopreview.cpp + src/halocore.h).
+//
+// Retail parameters, all per tick at 24 Hz:
+//   asset       Magic\Halo.I3D: one quad 10.23 x 9.78 wu (bbox +-5.115 x
+//               +-4.892, z = 0), one 128x128 texture: pure blue with a
+//               radial alpha falloff.
+//   InitParams  (totframes = 60, halostep = 0.04): the lab's public case
+//               (the natural caller is still unidentified; the other
+//               declared case is (20, 0.08)).
+//   envelope    haloscale += halostep while frameon < 30, -= after;
+//               frameon++ per tick; killed when frameon > 60. After tick
+//               n the uniform scale is 0.04 * min(n, 60 - n): a triangle
+//               wave peaking at 1.2 on tick 30, back to 0 on tick 60,
+//               killed on tick 61. Drawn only while scale > 0.
+//   matrix      scale, RotateX(-pi/2), RotateZ(-pi/4) ("rotate to face
+//               screen": the flat authored quad is stood upright and yawed
+//               to face the iso camera -- contrast the bubble glow at
+//               effect_old.cpp 775-790, which keeps RotateX(0) to lie on
+//               the ground), then translate (-5, -5, +5) in the owner's
+//               frame. So: an upright camera-facing quad, 5 wu above and
+//               (-5, -5) beside the owner -> screen_aligned here.
+//   blend       SetAddBlendState is requested, but the shipped software
+//               path draws it source-alpha (lab: retail_source_alpha,
+//               additive_blend = false; the blue replaces the floor
+//               colour at the centre) -> alpha.
+//
+// Not carried: retail lights the mesh (material diffuse white, emissive
+// (0.4, 0.7, 0.4)); the bucket draws it unlit, texture colour only, like
+// the other prefabs. The retail quad is upright in the world, so its
+// height is foreshortened by cos(30 deg) under the iso view; a
+// screen_aligned billboard is not. The row's LS half (a point light) has
+// no prefab component yet.
+particles
+{
+    effect Halo
+    {
+        inactive_ttl_pulses = 12
+
+        bucket halo
+        {
+            imagery_path = "Magic\\Halo.I3D"
+            texture_slot = 0
+            atlas_cols = 1
+            atlas_rows = 1
+            atlas_frames = 1
+            width = 10.23
+            height = 9.78
+            blend_mode = "alpha"
+            light_mode = "unlit"
+            depth_mode = "test_no_write"
+            orientation = "screen_aligned"
+
+            spawn_burst = 1
+            tick_hz = 24
+            // Backstop only; kill_expr ends the halo on tick 61.
+            default_life = 3.0
+
+            // haloscale starts at 0 (THaloAnimator::Initialize), so
+            // nothing is drawn until the first tick. Retail's RotateZ(-pi/4)
+            // is the yaw that faces the camera, not an in-plane spin, so
+            // rot stays 0.
+            spawn_expr = "
+                pos = emit_pos + vec3(-5, -5, 5);
+                scale = vec3(0, 0, 1);
+                rot.x = 0;
+                frame = 0;
+                color = vec4(1, 1, 1, 1);
+            "
+
+            // Tick n = round(age * 24) (age is advanced before tick_expr).
+            // Closed form of the retail accumulator: scale = quad size *
+            // 0.04 * min(n, 60 - n), clamped at 0 past the end.
+            tick_expr = "
+                scale.x = 10.23 * 0.04 * max(0, min(floor(age * 24 + 0.5), 60 - floor(age * 24 + 0.5)));
+                scale.y = 9.78 * 0.04 * max(0, min(floor(age * 24 + 0.5), 60 - floor(age * 24 + 0.5)));
+            "
+
+            // frameon > totframes: dead on tick 61.
+            kill_expr = "step(61, floor(age * 24 + 0.5))"
+        }
+    }
+}

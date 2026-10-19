@@ -10,10 +10,10 @@
 // Run via build/test_classiclighting after build.
 // *************************************************************************
 
-#include "../src/classiclighting.h"
-#include "../src/gameoptions.h"
-#include "../src/graphics.h"
-#include "../src/renderer.h"
+#include "../src/game/world/classiclighting.h"
+#include "../src/game/app/gameoptions.h"
+#include "../src/engine/render/graphics.h"
+#include "../src/engine/render/renderer.h"
 
 #include <gtest/gtest.h>
 

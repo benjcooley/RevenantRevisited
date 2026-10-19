@@ -35,7 +35,7 @@ def run(trace, output):
     assert native == port
     report = dict(status='pass', rows=len(rows), integer_fields=sum(map(len, native)),
                   kill_record=next(r['tick'] for r in rows if r['flags'] & 4096),
-                  trace_sha256=sha(trace), source_sha256=sha(ROOT/'src/dragonattackcore.h'),
+                  trace_sha256=sha(trace), source_sha256=sha(ROOT/'src/game/effects/dragonattackcore.h'),
                   scope='Declared actual Acolyte Fighting/Sid Dragon Attack caller, '
                         'face96 and original Angle20 muzzle(14,14), empty-map ground0. '
                         'Actual owner initialization, velocity, truncated movement, '

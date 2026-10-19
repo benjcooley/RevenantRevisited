@@ -5,7 +5,7 @@ from pathlib import Path
 from fizzle_probe import ROOT,span,sha,f32
 
 def run(reference,output):
- output.mkdir(parents=True,exist_ok=False);n=json.loads((reference/'manifest.json').read_text());s=(ROOT/'src/effect.cpp').read_text();h=(ROOT/'src/effect.h').read_text()
+ output.mkdir(parents=True,exist_ok=False);n=json.loads((reference/'manifest.json').read_text());s=(ROOT/'src/game/effects/effect.cpp').read_text();h=(ROOT/'src/game/effects/effect.h').read_text()
  types=span(h,'class THealEffect_Bespoke :','_CLASSDEF(TMistEffect_Bespoke)').replace('  private:','  public:')
  spawn=span(s,'THealEffect_Bespoke* THealEffect_Bespoke::SpawnForTest_BESPOKE','void THealEffect_Bespoke::Advance')
  init=span(spawn,'    heal->heal_num_','    log_info(')
@@ -21,8 +21,8 @@ def run(reference,output):
 #undef min
 #undef max
 using MeshHandle=uint32_t;struct SMeshVertex{float p[8];};struct S3DMat{};
-struct TObjectImagery{};struct SObjectDef{};enum class EFxDebugMode{Normal};
-struct TEffect{TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual ~TEffect()=default;virtual void OffScreen(){};void KillThisEffect(){}};
+struct TObjectImagery{};struct SObjectState{};enum class EFxDebugMode{Normal};
+struct TEffect{TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};virtual ~TEffect()=default;virtual void OffScreen(){};void KillThisEffect(){}};
 std::ifstream input;int draws=0;
 int random(int a,int b){int x,y,v;if(!(input>>x>>y>>v)||a!=x||b!=y)throw std::runtime_error("Heal RNG range/order differs");++draws;return v;}
 '''

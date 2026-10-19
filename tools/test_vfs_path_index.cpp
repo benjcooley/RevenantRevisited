@@ -1,7 +1,7 @@
 #ifdef NDEBUG
 #undef NDEBUG // Keep regression checks active in Release builds too.
 #endif
-#include "../src/vfspathindex.h"
+#include "../src/engine/core/vfspathindex.h"
 #include <cassert>
 #include <iostream>
 

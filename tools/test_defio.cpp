@@ -3,11 +3,11 @@
 // *************************************************************************
 
 #include "test_defio_types.h"
-#include "../src/defio.h"
-#include "../src/nodeinst.h"
-#include "../src/nodepack.h"
-#include "../src/packed.h"
-#include "../src/particledef.h"
+#include "../src/engine/refl/defio.h"
+#include "../src/engine/scene/node.h"
+#include "../src/engine/refl/nodepack.h"
+#include "../src/engine/refl/packed.h"
+#include "../src/engine/fx/particledef.h"
 
 #include <gtest/gtest.h>
 
@@ -46,11 +46,11 @@ const char* kDoc = R"(
     }
 )";
 
-void CheckTree(const TNodeInst& root)
+void CheckTree(const TNode& root)
 {
     EXPECT_FLOAT_EQ(root.LocalPos().Y, 2.0f);
     ASSERT_EQ(root.GetChildCount(), 2);
-    const TNodeInst* core = root.FindPath("core");
+    const TNode* core = root.FindPath("core");
     ASSERT_NE(core, nullptr);
     EXPECT_FLOAT_EQ(core->LocalPos().Z, 10.0f);
     ASSERT_EQ(core->NumComponents(), 1);
@@ -65,7 +65,7 @@ void CheckTree(const TNodeInst& root)
     EXPECT_FLOAT_EQ(g->radius_sq, 625.0f);
     EXPECT_FLOAT_EQ(g->radius_at_attach, 25.0f);       // attached after loading
 
-    const TNodeInst* tip = root.FindPath("core/tip");
+    const TNode* tip = root.FindPath("core/tip");
     ASSERT_NE(tip, nullptr);
     EXPECT_FLOAT_EQ(tip->LocalPos().Z, 20.0f);
     const STestGlow* inner = tip->GetComponent<STestGlow>();
@@ -74,7 +74,7 @@ void CheckTree(const TNodeInst& root)
     EXPECT_EQ(inner->Label(), "inner");
     EXPECT_EQ(inner->mode, ETestMode::Pulse);          // default kept
 
-    const TNodeInst* ring = root.FindPath("ring");
+    const TNode* ring = root.FindPath("ring");
     ASSERT_NE(ring, nullptr);
     EXPECT_NEAR(ring->LocalRotDeg().X, 90.0f, 1e-3f);
     // World position composes through the tree.
@@ -85,8 +85,8 @@ void CheckTree(const TNodeInst& root)
 
 TEST(DefIo, ReadsIntoClasses)
 {
-    TNodeInst root("root");
-    std::vector<std::unique_ptr<TNodeInst>> owned;
+    TNode root("root");
+    std::vector<std::unique_ptr<TNode>> owned;
     std::string err;
     ASSERT_TRUE(defio::Read(kDoc, root, owned, &err)) << err;
     EXPECT_EQ(owned.size(), 3u);
@@ -95,16 +95,16 @@ TEST(DefIo, ReadsIntoClasses)
 
 TEST(DefIo, PackedRoundTrip)
 {
-    TNodeInst root("root");
-    std::vector<std::unique_ptr<TNodeInst>> owned;
+    TNode root("root");
+    std::vector<std::unique_ptr<TNode>> owned;
     ASSERT_TRUE(defio::Read(kDoc, root, owned));
 
     TPackedWriter w;
     nodepack::Pack(root, w);
     EXPECT_GT(w.Buffer().size(), 40u);
 
-    TNodeInst root2("root");
-    std::vector<std::unique_ptr<TNodeInst>> owned2;
+    TNode root2("root");
+    std::vector<std::unique_ptr<TNode>> owned2;
     TPackedReader r(w.Buffer());
     std::string err;
     ASSERT_TRUE(nodepack::Unpack(r, root2, owned2, &err)) << err;
@@ -118,8 +118,8 @@ TEST(DefIo, PackedRoundTrip)
 
 TEST(DefIo, WriteThenReadAgain)
 {
-    TNodeInst root("root");
-    std::vector<std::unique_ptr<TNodeInst>> owned;
+    TNode root("root");
+    std::vector<std::unique_ptr<TNode>> owned;
     ASSERT_TRUE(defio::Read(kDoc, root, owned));
 
     const std::string text = defio::Write(root);
@@ -131,8 +131,8 @@ TEST(DefIo, WriteThenReadAgain)
     EXPECT_EQ(text.find("phase"), std::string::npos);            // PROP_NOSAVE
     EXPECT_EQ(text.find("active"), std::string::npos);           // equals default
 
-    TNodeInst root3("root");
-    std::vector<std::unique_ptr<TNodeInst>> owned3;
+    TNode root3("root");
+    std::vector<std::unique_ptr<TNode>> owned3;
     std::string err;
     ASSERT_TRUE(defio::Read(text, root3, owned3, &err)) << err << "\n" << text;
     CheckTree(root3);
@@ -148,8 +148,8 @@ TEST(DefIo, ReadWithoutPostLoadThenBake)
     // Baking a prefab: deserialize as data only (no PostLoad), serialize
     // to one buffer. The bytes equal those of a fully loaded tree, and the
     // derived state only appears when the buffer is stamped.
-    TNodeInst data("root");
-    std::vector<std::unique_ptr<TNodeInst>> owned;
+    TNode data("root");
+    std::vector<std::unique_ptr<TNode>> owned;
     std::string err;
     ASSERT_TRUE(defio::Read(kDoc, data, owned, &err, /*post_load=*/false)) << err;
     const STestGlow* g = data.FindPath("core")->GetComponent<STestGlow>();
@@ -159,15 +159,16 @@ TEST(DefIo, ReadWithoutPostLoadThenBake)
     TPackedWriter baked;
     nodepack::Pack(data, baked);
 
-    TNodeInst full("root");
-    std::vector<std::unique_ptr<TNodeInst>> owned_full;
+    TNode full("root");
+    full.SetUid(data.Uid());         // same root identity: the children derive theirs from it
+    std::vector<std::unique_ptr<TNode>> owned_full;
     ASSERT_TRUE(defio::Read(kDoc, full, owned_full));
     TPackedWriter packed;
     nodepack::Pack(full, packed);
     EXPECT_EQ(baked.Buffer(), packed.Buffer());
 
-    TNodeInst stamped("root");
-    std::vector<std::unique_ptr<TNodeInst>> owned_stamped;
+    TNode stamped("root");
+    std::vector<std::unique_ptr<TNode>> owned_stamped;
     TPackedReader r(baked.Buffer());
     ASSERT_TRUE(nodepack::Unpack(r, stamped, owned_stamped, &err)) << err;
     CheckTree(stamped);                                  // PostLoad ran on stamp
@@ -175,8 +176,8 @@ TEST(DefIo, ReadWithoutPostLoadThenBake)
 
 TEST(DefIo, StrictErrorsWithLines)
 {
-    TNodeInst root("root");
-    std::vector<std::unique_ptr<TNodeInst>> owned;
+    TNode root("root");
+    std::vector<std::unique_ptr<TNode>> owned;
     std::string err;
 
     EXPECT_FALSE(defio::Read("pos = [1, 2, 3]\nnode a\n{\n    glow { radiius = 1 }\n}\n", root, owned, &err));
@@ -302,4 +303,63 @@ TEST(DefIo, RealEffectsDef)
     refl::Pack(*refl::Of(g), &g, b);
     EXPECT_EQ(a.Buffer(), b.Buffer());
     EXPECT_GT(a.Buffer().size(), 1000u);
+}
+
+// A document with authored uids and a link between two of its nodes: the
+// link reads back, and a stamp's copies get identities of their own with
+// the link following them.
+TEST(DefIo, UidsAndLinksFollowAStamp)
+{
+    const char* doc = R"(
+        node anchor
+        {
+            uid = "0x0000000000000a01"
+        }
+        node core
+        {
+            uid = "0x0000000000000a02"
+            glow
+            {
+                radius = 5
+                target = "0x0000000000000a01"
+            }
+        }
+    )";
+    TNode root("root");
+    std::vector<std::unique_ptr<TNode>> owned;
+    std::string err;
+    ASSERT_TRUE(defio::Read(doc, root, owned, &err)) << err;
+    TNode* anchor = root.FindPath("anchor");
+    TNode* core = root.FindPath("core");
+    ASSERT_NE(anchor, nullptr);
+    ASSERT_NE(core, nullptr);
+    EXPECT_EQ(anchor->Uid(), TUid(0xa01));
+    const STestGlow* glow = core->GetComponent<STestGlow>();
+    ASSERT_NE(glow, nullptr);
+    EXPECT_EQ(glow->target.Get(), anchor);
+
+    // The text form writes the uids back as hex strings.
+    const std::string text = defio::Write(root);
+    EXPECT_NE(text.find("uid = \"0x0000000000000a01\""), std::string::npos) << text;
+    EXPECT_NE(text.find("target = \"0x0000000000000a01\""), std::string::npos) << text;
+
+    // Stamp: the bake, unpacked under a new root, then reidentified.
+    TPackedWriter baked;
+    nodepack::Pack(root, baked);
+    TNode owner("owner");
+    std::vector<std::unique_ptr<TNode>> stamped;
+    TPackedReader r(baked.Buffer());
+    ASSERT_TRUE(nodepack::Unpack(r, owner, stamped, &err, /*apply_root_props=*/false)) << err;
+    nodepack::Reidentify(owner, stamped);
+    TNode* anchor2 = owner.FindPath("anchor");
+    TNode* core2 = owner.FindPath("core");
+    ASSERT_NE(anchor2, nullptr);
+    ASSERT_NE(core2, nullptr);
+    EXPECT_NE(anchor2->Uid(), TUid(0xa01));                      // its own identity
+    EXPECT_EQ(anchor->Uid(), TUid(0xa01));                       // the original keeps its
+    const STestGlow* glow2 = core2->GetComponent<STestGlow>();
+    ASSERT_NE(glow2, nullptr);
+    EXPECT_EQ(glow2->target.Uid(), anchor2->Uid());              // the link followed the copy
+    EXPECT_EQ(glow2->target.Get(), anchor2);
+    EXPECT_EQ(glow->target.Get(), anchor);                       // and the original's didn't move
 }

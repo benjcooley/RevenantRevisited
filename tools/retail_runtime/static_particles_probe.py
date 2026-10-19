@@ -146,7 +146,7 @@ def punctuation(f):
 
 def run(executable,archive,output,profile,independent_poses=None):
     output.mkdir(parents=True,exist_ok=True)
-    source_paths=('src/3dimage.cpp','src/3dimage.h','src/staticpartsysprofiles.h','src/authoredpartsys.cpp','src/authoredpartsys.h','src/partsysdefinition.cpp','src/partsysdefinition.h','src/speedauthoredmatrix.h','src/goldauthoredmatrix.h','src/math3d.cpp','src/math3d.h')
+    source_paths=('src/game/imagery/3dimage.cpp','src/game/imagery/3dimage.h','src/game/effects/staticpartsysprofiles.h','src/engine/fx/authoredpartsys.cpp','src/engine/fx/authoredpartsys.h','src/engine/fx/partsysdefinition.cpp','src/engine/fx/partsysdefinition.h','src/game/effects/speedauthoredmatrix.h','src/game/effects/goldauthoredmatrix.h','src/engine/core/math3d.cpp','src/engine/core/math3d.h')
     pinned={p:sha((ROOT/p).read_bytes())for p in source_paths}
     with zipfile.ZipFile(archive)as z:
         member=next(n for n in z.namelist()if n.lower()==('imagery/'+profile['asset']).lower());data=z.read(member)
@@ -166,14 +166,14 @@ def run(executable,archive,output,profile,independent_poses=None):
     (output/'retail-state-trace.json').write_text(json.dumps(native,indent=2)+'\n')
     state_compare=compare_state(output,output/'state-comparison')
     if state_compare['status']!='pass':raise AssertionError('Full independent production state/RNG differs')
-    production=(ROOT/'src/3dimage.cpp').read_text();body=fn(production,'int32_t T3DAnimator::SubmitPartSys(')
-    family=fn((ROOT/'src/3dimage.h').read_text(),'bool HasRetailSpeedFamilyPartSysProfile(')
-    static_profile=fn((ROOT/'src/3dimage.h').read_text(),'bool HasRetailStaticParticleProfile(')
+    production=(ROOT/'src/game/imagery/3dimage.cpp').read_text();body=fn(production,'int32_t T3DAnimator::SubmitPartSys(')
+    family=fn((ROOT/'src/game/imagery/3dimage.h').read_text(),'bool HasRetailSpeedFamilyPartSysProfile(')
+    static_profile=fn((ROOT/'src/game/imagery/3dimage.h').read_text(),'bool HasRetailStaticParticleProfile(')
     cpp=PRELUDE.replace('SPEED_FAMILY_METHOD',family).replace('STATIC_PROFILE_METHOD',static_profile)+'\n'+body+'\n'+MAIN
     source=output/'packet_driver.cpp';source.write_text(cpp);binary=output/'packet_driver'
     command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer',
         '-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(source),
-        str(ROOT/'src/authoredpartsys.cpp'),str(ROOT/'src/partsysdefinition.cpp'),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+        str(ROOT/'src/engine/fx/authoredpartsys.cpp'),str(ROOT/'src/engine/fx/partsysdefinition.cpp'),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     q=subprocess.run(command,capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr)
     if q.returncode:raise RuntimeError('Actual SubmitPartSys compile failed; see compile.log')
     pose_fixture_sha=None;source_poses=None

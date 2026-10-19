@@ -5,7 +5,7 @@ from dust_device_reference import raster
 ROOT=Path(__file__).resolve().parents[2]
 class FsprayDeviceTests(unittest.TestCase):
  def test_actual_exact_profile_policy_full_byte_domain(self):
-  source=(ROOT/'src/3dimage.cpp').read_text();start=source.index('            const uint32_t color_type =');end=source.index('            // Actual SW LV',start);body=source[start:end]
+  source=(ROOT/'src/game/imagery/3dimage.cpp').read_text();start=source.index('            const uint32_t color_type =');end=source.index('            // Actual SW LV',start);body=source[start:end]
   names='combat_native might immortalmight fmastery speed static_particles head jhaga lightstrip funnel comet fgeyser dust poison'.split()
   code='#include <cmath>\n#include <cstdint>\n#include <cstdio>\nint main(){int checks=0;for(int profile=-1;profile<19;++profile)for(int sw=0;sw<2;++sw)for(int value=0;value<256;++value){\n'
   code+='struct{bool sw;bool UsesRetailSoftwareMeshLighting()const{return sw;}}renderer{bool(sw)};struct Owner{uint32_t id;uint32_t ObjId()const{return id;}}owner{profile==14||profile==18?0x0c052638u:profile==15?0x10ac03deu:profile==16?0xe0a3bc43u:profile==17?0xad92bd38u:0xdeadu};auto*inst=&owner;\n'

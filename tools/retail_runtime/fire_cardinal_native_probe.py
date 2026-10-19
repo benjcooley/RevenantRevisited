@@ -1,7 +1,7 @@
 """Original Fire default renderer at four declared cardinal construction facings.
 
 This is a public object-definition control, not a natural caller or animation
-claim. Only SObjectDef.rotatez changes; the original factory, loaded asset,
+claim. Only SObjectState.rotatez changes; the original factory, loaded asset,
 owner, animator, frame selection, lighting and software raster remain intact.
 """
 import argparse
@@ -21,7 +21,7 @@ class CardinalFire(FireScene):
         super().__init__(executable, boot_image)
 
     def new_object(self, *args, **kwargs):
-        # AuthenticCharacters constructs a real SObjectDef and calls the actual
+        # AuthenticCharacters constructs a real SObjectState and calls the actual
         # loaded class factory. Supply its declared rotatez before that call
         # consumes the definition; do not mutate an initialized animator.
         def configure(uc, address, size, user):

@@ -68,10 +68,10 @@ endif()
 
 # Windows: keep <windows.h> from defining min/max macros over revtypes.h's
 # functions, accept the C runtime's classic string functions, and supply
-# the POSIX headers the port uses (src/platform/windows/include).
+# the POSIX headers the port uses (src/engine/platform/windows/include).
 if(WIN32)
-  add_compile_definitions(NOMINMAX _CRT_SECURE_NO_WARNINGS)
-  include_directories(BEFORE "${CMAKE_SOURCE_DIR}/src/platform/windows/include")
+  add_compile_definitions(NOMINMAX _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
+  include_directories(BEFORE "${CMAKE_SOURCE_DIR}/src/engine/platform/windows/include")
 endif()
 
 # ----------------------------------------------------------------------------
@@ -191,44 +191,47 @@ target_compile_definitions(imgui PRIVATE USE_STD_FILESYSTEM)
 
 # Gather C++ sources. Sokol TU is added explicitly per-backend below so
 # the GLOB doesn't pick up the wrong one on a given platform.
+# Includes are spelled from src/: "engine/scene/node.h", "game/object/object.h".
+include_directories("${CMAKE_SOURCE_DIR}/src")
+
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
   "${CMAKE_SOURCE_DIR}/src/*.cpp"
   "${CMAKE_SOURCE_DIR}/src/*.h")
-list(REMOVE_ITEM SOURCES "${CMAKE_SOURCE_DIR}/src/countlines.cpp")
 
 # PNG encoding, resizing and captured-byte cleanup dominate long A/B films
 # in otherwise unoptimized builds. Keep game/renderer compilation unchanged.
 option(REVENANT_OPTIMIZE_CAPTURE "Optimize screenshot export in non-Debug builds" ON)
 if(REVENANT_OPTIMIZE_CAPTURE AND CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-  set_property(SOURCE "${CMAKE_SOURCE_DIR}/src/framesnap.cpp" APPEND PROPERTY
+  set_property(SOURCE "${CMAKE_SOURCE_DIR}/src/engine/render/framesnap.cpp" APPEND PROPERTY
     COMPILE_OPTIONS "$<$<NOT:$<CONFIG:Debug>>:-O2>")
 endif()
 
 if(SOKOL_BACKEND STREQUAL "METAL")
-  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/sokol_impl.m")
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/engine/platform/sokol_impl.m")
 else()
-  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/sokol_impl.c")
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/engine/platform/sokol_impl.c")
 endif()
 
 # Pick up the editor's macOS Obj-C++ shim. .mm files aren't part of the
 # default *.cpp glob so add it explicitly. Skipped on non-Apple builds
 # where there's no Cocoa to call into.
 if(APPLE)
-  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/editorplatform.mm")
-  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/renderer_readback.mm")
-  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/cursor.mm")
-  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/platform/macosx/headless_window.mm")
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/engine/platform/macosx/editorplatform.mm")
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/engine/platform/macosx/renderer_readback.mm")
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/engine/platform/macosx/cursor.mm")
+  list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/engine/platform/macosx/headless_window.mm")
 endif()
 
 add_executable(Revenant ${SOURCES} ${MINIZ_DIR}/miniz.c ${LOG_DIR}/log.c)
 target_link_libraries(Revenant PRIVATE imgui revsmk)
 # Annotated classes (PROP / PROP_FN). One line per header; see rev_reflect.
 rev_reflect(Revenant
-  src/nodeinst.h
-  src/object.h
-  src/sector.h
-  src/particledef.h
-  src/particlecomponent.h)
+  src/engine/scene/node.h
+  src/game/object/object.h
+  src/game/world/sector.h
+  src/engine/fx/particledef.h
+  src/engine/fx/particlecomponent.h
+  src/game/world/lightcomponent.h)
 
 # buildinfo.h: the commit the binary is built from (the playtest recordings
 # name it) and its version (the main menu shows it). Regenerated every
@@ -268,34 +271,34 @@ target_include_directories(Revenant PRIVATE
 add_executable(test_defdoc tools/test_defdoc.cpp)
 add_executable(test_vfx_review_schedule tools/test_vfx_review_schedule.cpp)
 add_executable(test_vfx_review_layout tools/test_vfx_review_layout.cpp)
-add_executable(test_vfx_review_preview tools/test_vfx_review_preview.cpp src/vfxreviewpreview.cpp src/time.cpp)
+add_executable(test_vfx_review_preview tools/test_vfx_review_preview.cpp src/game/ab/vfxreviewpreview.cpp src/engine/core/revtime.cpp)
 target_include_directories(test_vfx_review_preview PRIVATE ${HANDMADE_MATH_DIR} ${SOKOL_DIR})
 
 add_executable(test_render_metadata
   tools/test_render_metadata.cpp
-  src/render_metadata.cpp)
+  src/engine/render/render_metadata.cpp)
 # The test reads the source tree's engine asset, whatever the cwd.
 target_compile_definitions(test_render_metadata PRIVATE REV_ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")
 
 add_executable(test_anim_system
   tools/test_anim_system.cpp
-  src/animsystem.cpp)
+  src/engine/scene/animsystem.cpp)
 
 add_executable(test_asset_cache
   tools/test_asset_cache.cpp
-  src/assetcache.cpp)
+  src/engine/assets/assetcache.cpp)
 
 add_executable(test_transform
   tools/test_transform.cpp
-  src/transform.cpp
-  src/animsystem.cpp
-  src/math3d.cpp)
+  src/engine/scene/transform.cpp
+  src/engine/scene/animsystem.cpp
+  src/engine/core/math3d.cpp)
 target_include_directories(test_transform PRIVATE
   ${HANDMADE_MATH_DIR})
 
 add_executable(test_particlefx
   tools/test_particlefx.cpp
-  src/particlefx.cpp)
+  src/engine/fx/particlefx.cpp)
 target_include_directories(test_particlefx PRIVATE
   ${SOKOL_DIR}
   ${HANDMADE_MATH_DIR})
@@ -303,43 +306,47 @@ target_compile_definitions(test_particlefx PRIVATE REV_ASSETS_DIR="${CMAKE_SOURC
 
 add_executable(test_props
   tools/test_props.cpp
-  src/refl.cpp
-  src/packed.cpp)
+  src/engine/core/uid.cpp
+  src/engine/refl/refl.cpp
+  src/engine/refl/packed.cpp)
 target_include_directories(test_props PRIVATE ${HANDMADE_MATH_DIR})
 target_link_libraries(test_props PRIVATE GTest::gtest_main)
 rev_reflect(test_props tools/test_props_types.h)
 
 add_executable(test_defio
   tools/test_defio.cpp
-  src/defio.cpp
-  src/nodepack.cpp
-  src/nodeinst.cpp
-  src/transform.cpp
-  src/animsystem.cpp
-  src/math3d.cpp
-  src/refl.cpp
-  src/packed.cpp
-  src/particledef.cpp)
+  src/engine/refl/defio.cpp
+  src/engine/refl/nodepack.cpp
+  src/engine/core/uid.cpp
+  src/engine/scene/node.cpp
+  src/engine/scene/transform.cpp
+  src/engine/scene/animsystem.cpp
+  src/engine/core/math3d.cpp
+  src/engine/refl/refl.cpp
+  src/engine/refl/packed.cpp
+  src/engine/fx/particledef.cpp)
 target_include_directories(test_defio PRIVATE ${HANDMADE_MATH_DIR})
 target_compile_definitions(test_defio PRIVATE REV_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(test_defio PRIVATE GTest::gtest_main)
-rev_reflect(test_defio tools/test_defio_types.h src/nodeinst.h src/particledef.h)
+rev_reflect(test_defio tools/test_defio_types.h src/engine/scene/node.h src/engine/fx/particledef.h)
 
-add_executable(test_nodeinst
-  tools/test_nodeinst.cpp
-  src/nodeinst.cpp
-  src/transform.cpp
-  src/animsystem.cpp
-  src/math3d.cpp
-  src/refl.cpp
-  src/packed.cpp)
-target_include_directories(test_nodeinst PRIVATE ${HANDMADE_MATH_DIR})
-target_link_libraries(test_nodeinst PRIVATE GTest::gtest_main)
-rev_reflect(test_nodeinst src/nodeinst.h)
+add_executable(test_node
+  tools/test_node.cpp
+  src/engine/core/uid.cpp
+  src/engine/refl/nodepack.cpp
+  src/engine/scene/node.cpp
+  src/engine/scene/transform.cpp
+  src/engine/scene/animsystem.cpp
+  src/engine/core/math3d.cpp
+  src/engine/refl/refl.cpp
+  src/engine/refl/packed.cpp)
+target_include_directories(test_node PRIVATE ${HANDMADE_MATH_DIR})
+target_link_libraries(test_node PRIVATE GTest::gtest_main)
+rev_reflect(test_node src/engine/scene/node.h)
 
 add_executable(test_savefile
   tools/test_savefile.cpp
-  src/savefile.cpp)
+  src/game/save/savefile.cpp)
 target_include_directories(test_savefile PRIVATE ${XXHASH_DIR})
 
 add_executable(test_defwidget tools/test_defwidget.cpp)
@@ -347,10 +354,10 @@ target_include_directories(test_defwidget PRIVATE ${HANDMADE_MATH_DIR} ${LOG_DIR
 
 add_executable(test_sectorstore
   tools/test_sectorstore.cpp
-  src/sectorstore.cpp
-  src/savefile.cpp
+  src/game/world/sectorstore.cpp
+  src/game/save/savefile.cpp
   ${LOG_DIR}/log.c)
-target_include_directories(test_sectorstore PRIVATE ${XXHASH_DIR} ${HANDMADE_MATH_DIR} ${LOG_DIR})
+target_include_directories(test_sectorstore PRIVATE ${XXHASH_DIR} ${HANDMADE_MATH_DIR} ${LOG_DIR} ${SOKOL_DIR})
 
 FetchContent_Declare(
   googletest
@@ -376,7 +383,7 @@ add_executable(cpu_tile_perspective_test
 # the same include dirs and SOKOL_<backend> define as the main target.
 add_executable(test_parse
   tools/test_parse.cpp
-  src/parse.cpp)
+  src/engine/core/parse.cpp)
 target_include_directories(test_parse PRIVATE
   ${SOKOL_DIR}
   ${HANDMADE_MATH_DIR}
@@ -393,7 +400,7 @@ target_compile_definitions(test_parse PRIVATE SOKOL_${SOKOL_BACKEND})
 # engine headers it includes need the same include dirs as test_parse.
 add_executable(test_classiclighting
   tools/test_classiclighting.cpp
-  src/classiclighting.cpp)
+  src/game/world/classiclighting.cpp)
 target_include_directories(test_classiclighting PRIVATE
   ${SOKOL_DIR}
   ${HANDMADE_MATH_DIR}
@@ -412,8 +419,8 @@ target_link_libraries(test_classiclighting PRIVATE GTest::gtest_main)
 # engine hooks like test_parse does.
 add_executable(test_playerstats
   tools/test_playerstats.cpp
-  src/playerstats.cpp
-  src/parse.cpp)
+  src/game/object/playerstats.cpp
+  src/engine/core/parse.cpp)
 target_include_directories(test_playerstats PRIVATE
   ${SOKOL_DIR}
   ${HANDMADE_MATH_DIR}
@@ -430,14 +437,14 @@ target_link_libraries(test_playerstats PRIVATE GTest::gtest_main)
 # Shadow Smoke's plan format (docs/shadow/ARCHITECTURE.md §9.1).
 add_executable(test_shadowplan
   tools/test_shadowplan.cpp
-  src/shadow/shadowplan.cpp)
+  src/game/shadow/shadowplan.cpp)
 target_link_libraries(test_shadowplan PRIVATE GTest::gtest_main)
 
 # Sound file decoding and lengths (audio_backend's decoders; no playback
 # device). miniz reads the shipped voices when REVENANT_DATA_PATH is set.
 add_executable(test_audio_decode
   tools/test_audio_decode.cpp
-  src/audio_backend.cpp
+  src/engine/audio/audio_backend.cpp
   ${MINIZ_DIR}/miniz.c
   ${LOG_DIR}/log.c)
 target_include_directories(test_audio_decode PRIVATE
@@ -531,7 +538,7 @@ foreach(test IN ITEMS
     test_defio
     test_defwidget
     test_particlefx
-    test_nodeinst
+    test_node
     test_playerstats
     test_props
     test_savefile
@@ -545,6 +552,7 @@ endforeach()
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND AND NOT WIN32)
   foreach(script IN ITEMS
+      test_layering
       test_fx_capacity
       test_fx_source_alpha
       test_helper_source_alpha

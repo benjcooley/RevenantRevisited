@@ -95,7 +95,7 @@ def compile_warp(output,metadata,ticks=40):
     code=r"""
 #include <cstdio>
 #include <fstream>
-#include "effects/warp_atlas.h"
+#include "game/effects/legacy/warp_atlas.h"
 enum class Shade{Material=0,Texture=1,TextureLit=2};
 struct Draw {float uv_offset[2]{};bool additive_blend=true,premultiply_alpha=true;Shade shade=Shade::Material;
  int retail_lighting=0;float diffuse[4]{},ambient[4]{},specular[4]{},emissive[4]{};float power=9;};
@@ -128,7 +128,7 @@ int main(int argc,char**argv){float original[8];std::ifstream f(argv[1],std::ios
         if any(row['flags']!=[0,0,1,3]or row['material']!=[1.]*8+[0.]*9 for row in rows):raise AssertionError('Actual ConfigureDraw contract changed')
         traces[p['name']]=rows
     return traces,dict(command=command,driver_sha256=sha(source.read_bytes()),binary_sha256=sha(binary.read_bytes()),
-        header_sha256=sha((ROOT/'src/effects/warp_atlas.h').read_bytes()),bodies=['retail_warp::State::Step','Advance','Reset','ConfigureDraw','AssetPath'],
+        header_sha256=sha((ROOT/'src/game/effects/legacy/warp_atlas.h').read_bytes()),bodies=['retail_warp::State::Step','Advance','Reset','ConfigureDraw','AssetPath'],
         timing_control='Step equals Advance(1/24) and two Advance(1/48) calls for every tick; reset clears state')
 
 

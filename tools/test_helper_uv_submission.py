@@ -14,8 +14,8 @@ def function(source,signature):
     return source[start:end]
 
 
-source=(ROOT/'src/renderer.cpp').read_text()
-header=(ROOT/'src/renderer.h').read_text()
+source=(ROOT/'src/engine/render/renderer.cpp').read_text()
+header=(ROOT/'src/engine/render/renderer.h').read_text()
 record=header[header.index('struct SHelperMeshSubmit\n'):]
 record=record[:record.index('\n};')+3]
 emit=function(source,'void TRenderer::EmitTransparentHelper(')
@@ -26,7 +26,7 @@ prelude=r'''
 #include <cmath>
 #include <vector>
 #include <cstdio>
-#include "effects/warp_atlas.h"
+#include "game/effects/legacy/warp_atlas.h"
 using MeshHandle=uint32_t;using TTextureHandle=uint32_t;
 constexpr uint32_t kInvalidTexture=0;
 enum class EHelperMeshShade:uint8_t{Material=0,Texture=1,TextureLit=2};

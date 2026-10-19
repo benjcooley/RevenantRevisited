@@ -13,12 +13,12 @@ WIDTH=192;HEIGHT=192;INDICES=(0,1,3,3,2,0)
 
 
 def production_spans():
-    source=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     init=span(source,'    // Snapshot effect_old.cpp:11383-11392','    if (!attach_runtime_component) return;')
     return dict(types=span(header,'class TMistEffect_Bespoke :','_CLASSDEF(TShieldEffect_Bespoke)'),initialize=init,
         advance_submit=span(source,'void TMistEffect_Bespoke::Advance(','// =========================================================================\n// X09'),
         map_dispatch=span(source,'class TMistReferenceComponent final','void TMistEffect_Bespoke::Initialize('),
-        math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
+        math=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text())
 
 
 def build_port(output,asset,inputs,ticks):
@@ -38,8 +38,8 @@ def build_port(output,asset,inputs,ticks):
 enum class EFxBlend:uint8_t{Alpha,AdditiveStraight};enum class EFxDepthMode:uint8_t{TestNoWrite};enum class EFxDebugMode:uint8_t{Normal};enum class EFxLightMode:uint8_t{Unlit};
 struct SQuadDrawItem{bool retail_argb4444=false;float world_pos[4][3]{},uv[4][2]{};struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};TRenderer renderer;TRenderer*Renderer=&renderer;
-struct TObjectImagery{};struct SObjectDef{};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
-struct TEffect{World world;TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual~TEffect()=default;int GetFace()const{return 0;}const World&Transform()const{return world;}};
+struct TObjectImagery{};struct SObjectState{};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
+struct TEffect{World world;TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};virtual~TEffect()=default;int GetFace()const{return 0;}const World&Transform()const{return world;}};
 std::ifstream rng;int rng_count=0;int random(int low,int high){int a,b,v;if(!(rng>>a>>b>>v)||a!=low||b!=high)throw std::runtime_error("Mist native/port RNG order mismatch");++rng_count;return v;}
 '''
     records=struct.unpack_from('<32f',asset,0xfc)
@@ -57,7 +57,7 @@ int main(int argc,char**argv){rng.open(argv[1]);if(!rng)return 2;TMistEffect_Bes
  int a,b,c;if(rng>>a>>b>>c)throw std::runtime_error("Unused original RNG inputs");}
 '''.replace('VERTICES',vertices).replace('TICKS',str(ticks))
     source=output/'mist-port-component.cpp';source.write_text(prelude+'\n'+types+'\n'+initializer+'\n'+pieces['advance_submit']+'\n'+trailer)
-    binary=output/'mist-port-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'mist-port-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     result=subprocess.run(command,capture_output=True,text=True);(output/'port-compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Mist production compile failed')
     result=subprocess.run([str(binary),str(inputs)],capture_output=True,text=True);(output/'port-trace.txt').write_text(result.stdout);(output/'port-run.log').write_text(result.stderr)
@@ -69,7 +69,7 @@ int main(int argc,char**argv){rng.open(argv[1]);if(!rng)return 2;TMistEffect_Bes
         elif p[0]=='P':frames[tick]['particles'].append(dict(index=int(p[2]),dead=bool(int(p[3])),values=[float(x)for x in p[4:]]))
         else:frames[tick]['draws'].append(dict(positions=[[float(x)for x in p[2+i*5:5+i*5]]for i in range(4)],uvs=[[float(x)for x in p[5+i*5:7+i*5]]for i in range(4)]))
     return frames,dict(command=command,generated_source_sha256=sha(source.read_bytes()),binary_sha256=sha(binary.read_bytes()),
-        bodies=['Initialize actual state loop','Advance','Submit','src/math3d.cpp'],boundaries=['exact authored geometry/texture','identity owner, face zero','unchanged original range-RNG result replay','asset/component binding separate'])
+        bodies=['Initialize actual state loop','Advance','Submit','src/engine/core/math3d.cpp'],boundaries=['exact authored geometry/texture','identity owner, face zero','unchanged original range-RNG result replay','asset/component binding separate'])
 
 
 class MistFixture:

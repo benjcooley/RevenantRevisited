@@ -17,7 +17,7 @@
 // pass; a failing assert exits non-zero with a diagnostic.
 // *************************************************************************
 
-#include "../src/parse.h"
+#include "../src/engine/core/parse.h"
 
 #include <cassert>
 #include <cstdio>

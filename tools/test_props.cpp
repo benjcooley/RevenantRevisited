@@ -3,7 +3,7 @@
 // *************************************************************************
 
 #include "test_props_types.h"
-#include "../src/packed.h"
+#include "../src/engine/refl/packed.h"
 
 #include <gtest/gtest.h>
 
@@ -265,4 +265,45 @@ TEST(Props, AccessorBacked)
     EXPECT_FLOAT_EQ(b.LocalPos().Y, 9.0f);
     EXPECT_FLOAT_EQ(b.Scale(), 2.0f);
     EXPECT_EQ(b.Blend(), ETestBlend::Additive);
+}
+
+TEST(Props, UidsAndRefsRoundTrip)
+{
+    const refl::SType* tp = refl::Of<STestLinks>();
+    ASSERT_NE(tp, nullptr);
+    EXPECT_EQ(tp->props[0].type, EPropType::Uid);
+    EXPECT_EQ(tp->props[1].type, EPropType::Ref);
+    EXPECT_EQ(tp->props[1].ref_kind, ERefKind::Node);
+    EXPECT_EQ(tp->props[2].ref_kind, ERefKind::Asset);
+    EXPECT_EQ(tp->props[3].ref_kind, ERefKind::None);
+
+    STestLinks a;
+    a.uid    = TUid(0x0123456789abcdefull);
+    a.target = TNodeRef(TUid(0xfedcba9876543210ull));   // ten varint bytes
+    a.image  = TAssetRef<TAsset>(TUid(7));
+    a.after  = 9;
+
+    SPropValue v;
+    ASSERT_TRUE(refl::Get(*tp, &a, 2, v));
+    EXPECT_EQ(v.type, EPropType::Ref);
+    EXPECT_EQ(v.u, 0xfedcba9876543210ull);
+
+    TPackedWriter w;
+    refl::Pack(*tp, &a, w);
+    STestLinks b;
+    TPackedReader r(w.Buffer());
+    refl::Unpack(*tp, &b, r);
+    EXPECT_EQ(b.uid.value, a.uid.value);
+    EXPECT_EQ(b.target.Uid().value, a.target.Uid().value);
+    EXPECT_EQ(b.image.Uid().value, 7u);
+    EXPECT_EQ(b.after, 9);
+
+    // A reader without the uid fields skips their ten-byte varints and
+    // still reads what follows.
+    TPackedReader r2(w.Buffer());
+    SPackedField f;
+    int32_t seen = 0;
+    while (r2.Next(f)) ++seen;
+    EXPECT_EQ(seen, 4);
+    EXPECT_TRUE(r2.AtEnd());
 }

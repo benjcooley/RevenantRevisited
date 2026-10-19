@@ -128,7 +128,7 @@ tables behind `+0x58`. Globals: guest.py's, `nahkranoth` (`0x668108`),
 `alreadydead` (`0x668104`), `nocombatresults` (`0x668194`).
 
 Schema `combat.melee.v1`, shared with the port's `Revenant
---retail-ab=melee-*` (src/retailab_melee.cpp).
+--retail-ab=melee-*` (src/game/ab/retailab_melee.cpp).
 """
 from __future__ import annotations
 

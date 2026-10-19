@@ -8,8 +8,8 @@
 
 #include "test_sectorimages.h"
 
-#include "../src/revenant.h"
-#include "../src/sectorstore.h"
+#include "../src/game/app/revenant.h"
+#include "../src/game/world/sectorstore.h"
 
 #include <gtest/gtest.h>
 

@@ -10,12 +10,12 @@ def run(draws_file,output):
   names={n.lower():n for n in z.namelist()}
   for p in profiles:metadata[p['name']]=parse_frames(z.read(names['imagery/'+p['asset'].replace('\\','/').lower()]),p)
  common,compiled=build_port(output,metadata,frames=(0,1,2,3),texture_frames=True)
- generated=(output/'static-port-components.cpp').read_text();effects=(ROOT/'src/effect.cpp').read_text();method=effects[effects.index('void TAuthoredStaticMeshEffect::SubmitNativeWorldMeshForTest_BESPOKE('):effects.index('void TAuthoredStaticMeshEffect::SubmitWorldMeshForTest_BESPOKE(')]
+ generated=(output/'static-port-components.cpp').read_text();effects=(ROOT/'src/game/effects/effect.cpp').read_text();method=effects[effects.index('void TAuthoredStaticMeshEffect::SubmitNativeWorldMeshForTest_BESPOKE('):effects.index('void TAuthoredStaticMeshEffect::SubmitWorldMeshForTest_BESPOKE(')]
  generated=generated.replace('#include "math3d.h"','#include "math3d.h"\n#include "retailsoftwaretransform.h"\n#include <cassert>')
  generated=generated.replace('struct TRenderer {SMeshSubmit last;', 'struct SHelperMeshSubmit:SMeshSubmit {bool retail_software_projection=false,retail_source_alpha=false;};\nstruct TRenderer {SMeshSubmit last;void SubmitHelperMesh(const SHelperMeshSubmit& s){assert(s.retail_software_projection&&s.retail_source_alpha&&s.retail_lighting==2);last=s;}')
  generated=generated.replace('void SubmitWorldMeshForTest_BESPOKE(EFxDebugMode);', 'void SubmitWorldMeshForTest_BESPOKE(EFxDebugMode);void SubmitNativeWorldMeshForTest_BESPOKE(EFxDebugMode);S3DPoint Pos()const{return {int(root.m.Elements[3][0]),int(root.m.Elements[3][1]),int(root.m.Elements[3][2])};}int GetFace()const{return 0;}')
  generated=generated.replace('int main(int argc,char**argv){',method+'\nint main(int argc,char**argv){').replace('effect.SubmitWorldMeshForTest_BESPOKE(EFxDebugMode::Normal);','effect.parts_[0].retail_lighting=2;effect.SubmitNativeWorldMeshForTest_BESPOKE(EFxDebugMode::Normal);')
- cpp=output/'native-port.cpp';cpp.write_text(generated);binary=output/'native-port';command=['clang++','-std=c++17','-fsanitize=address,undefined','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(cpp),str(ROOT/'src/math3d.cpp'),'-o',str(binary)];subprocess.run(command,check=True)
+ cpp=output/'native-port.cpp';cpp.write_text(generated);binary=output/'native-port';command=['clang++','-std=c++17','-fsanitize=address,undefined','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(cpp),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)];subprocess.run(command,check=True)
  packets={}
  for p in profiles:
   name=p['name'];trace=subprocess.check_output([str(binary),str(output/(name+'.mesh-input'))],text=True);(output/(name+'-native-port.txt')).write_text(trace);cases={}

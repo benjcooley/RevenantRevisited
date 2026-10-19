@@ -34,7 +34,7 @@ The result is tweakable from data files, A/B-able in `--test=vfx`, and
 stamped in-game through the retail `EffectBurst` / `EFFECT` object-type
 path without touching callers.
 
-## 1. Base split: `TNodeInst`
+## 1. Base split: `TNode`
 
 Prefab nodes must not be map objects: nothing in a prefab should be sector
 resident, saved, pulsed by MapPane, picked, or listed by the editor. The
@@ -42,17 +42,17 @@ fix is a base class that holds exactly what a node needs, with
 `TObjectInstance` as the map-shaped specialization.
 
 ```
-TNodeInst  : TSafeObjectBase<TNodeInst>
+TNode  : TSafeObjectBase<TNode>
     name            std::string
     transform_      TTransform                 (parent / children / local pos, rot, scl / world matrix)
-    components      std::vector<std::unique_ptr<TObjectComponent>>
-    Parent(), GetChildCount(), GetChildAt(i)   -> TNodeInst*   (via TTransform owner back-pointer)
+    components      std::vector<std::unique_ptr<TComponent>>
+    Parent(), GetChildCount(), GetChildAt(i)   -> TNode*   (via TTransform owner back-pointer)
     FindChild(name), FindPath("a/b/c")
     AddComponent / RemoveComponent / ActivateComponents / GetComponent<T>()
     virtual TObjectInstance* AsObjectInstance()   { return nullptr; }
     property channels (see §2): LocalPosX..Z, LocalRotX..Z, LocalSclX..Z, Active
 
-TObjectInstance : TNodeInst
+TObjectInstance : TNode
     everything else: mapindex, sector, class/type info, imagery + frame state,
     inventory, script, lightdef, stats, movement, oldpos / screen cache
     AsObjectInstance() override { return this; }
@@ -63,28 +63,28 @@ Measured sizes (2026-10-16, arm64): `TObjectInstance` 560 B of which
 
 Rules of the split:
 
-- **Component owner is the node.** `TObjectComponent::Owner()` returns
-  `TNodeInst*`. Components that need the map object (today: `TObjectAnimator`,
+- **Component owner is the node.** `TComponent::Owner()` returns
+  `TNode*`. Components that need the map object (today: `TObjectAnimator`,
   `TFlipbookBillboardComponent`, `TParticleEffectComponent`) call
   `Owner()->AsObjectInstance()` and handle null. Three subclasses exist, about
   eight `Owner()` call sites.
-- **Soft refs.** `TNodeInst` inherits `TSafeObjectBase<TNodeInst>` (own
+- **Soft refs.** `TNode` inherits `TSafeObjectBase<TNode>` (own
   registry, own id). `TObjectInstance` keeps **mapindex** as its
   `TSafeRef<TObjectInstance>` id, hiding the base contract, because existing
   code compares `TSafeRef::MapIndex()` against map indices (particle runtime
   lookup, editor selection set). Two id spaces, 12 extra bytes per object,
   zero churn on existing refs. Unifying them later is registry-internal.
-- **`TSafeComponentRef<T>`** holds `TSafeRef<TNodeInst>` + slot + generation
-  and moves from object.h to nodeinst.h next to the node definition. The
+- **`TSafeComponentRef<T>`** holds `TSafeRef<TNode>` + slot + generation
+  and moves from object.h to node.h next to the node definition. The
   component update list (`g_component_updates`, object.cpp:86-420) moves with
   it.
-- **`TTransform` gets an owner back-pointer** (`TNodeInst*`, set by the node
+- **`TTransform` gets an owner back-pointer** (`TNode*`, set by the node
   constructor) so child traversal by name and path resolution work from the
   transform hierarchy. Hierarchy links stay non-owning, as they are today.
 - **Ownership of nodes** stays with the creator. A stamped prefab owns its
   child node instances and destroys them with the root effect.
 
-Files: `src/nodeinst.{h,cpp}` (new), `src/objectcomponent.{h,cpp}`,
+Files: `src/node.{h,cpp}` (new), `src/component.h`,
 `src/object.{h,cpp}`, `src/transform.{h,cpp}`, `src/saferef.h` comment.
 `tools/test_transform.cpp` gains node-tree + path-resolution tests.
 
@@ -98,7 +98,7 @@ or animatable state annotates members and nothing else: no base class,
 no declared overrides, no enum, no switch.
 
 ```cpp
-class TMeshComponent : public TObjectComponent
+class TMeshComponent : public TComponent
 {
     DEF_COMPONENT("mesh")                             // block keyword + factory
     PROP(1, "Draw this mesh")       bool        visible   = true;
@@ -155,10 +155,10 @@ Rules that keep it honest:
   `"core.mesh.diffuse.a"`, `"ring.scl.z"`. The component segment is
   omitted for node properties; two components of one type on a node are
   told apart by their DEF label (`mesh outer { }`). Resolved at stamp time
-  to `SPropertyBinding { TSafeRef<TNodeInst> node; int16_t slot; uint32_t gen; uint16_t id; uint8_t lane; }`;
+  to `SPropertyBinding { TSafeRef<TNode> node; int16_t slot; uint32_t gen; uint16_t id; uint8_t lane; }`;
   a dead node makes the binding a no-op, unknown names are a load-time
   error.
-- `TNodeInst` annotates `pos`, `rot` (euler degrees), `scl`, `active`
+- `TNode` annotates `pos`, `rot` (euler degrees), `scl`, `active`
   (bool; inactive = subtree neither ticked nor drawn) and `name`
   (read-only), and is `DEF_BLOCK("node")`.
 - A class may declare `void PostLoad()`: the post-deserialize
@@ -191,11 +191,11 @@ The DEF reader/writer is a separate module that *uses* reflection.
 ```
    DEF text  (data/Resources/prefabs/*.def; embedded in the shipped binary)
       │  defio::Read — the defdoc lexer/parser streams statements (Sink) straight
-      │  into live classes: key = value → setter; `node x { }` → child TNodeInst;
+      │  into live classes: key = value → setter; `node x { }` → child TNode;
       │  `<component> [label] { }` → DEF_COMPONENT factory + AddComponent.
       │  No document tree exists on this path. Unknown key / block = error with line.
       ▼
-   live TNodeInst tree + components
+   live TNode tree + components
       │  nodepack::Pack — the baked form (one per prefab, held by TPrefabLibrary)
       ▼
    packed bytes          ── nodepack::Unpack on every stamp (cursor + factories)
@@ -343,7 +343,7 @@ flipbook steps. Static: `entry`, `state` blocks. Properties: `Speed`;
 read-only `Time`, `StateIndex`. C++ API: `SetState(name)`, `State()`.
 
 ### 4.8 `effect` — hand-written behaviour
-A C++ class derived from `TObjectComponent`, registered by name
+A C++ class derived from `TComponent`, registered by name
 (`REGISTER_EFFECT_COMPONENT("IceBolt", TIceBoltEffect)`). Hooks: `OnAttach`
 (resolve siblings by node path once, hold `TSafeComponentRef`s),
 `OnUpdate` (24 Hz accumulator per WAVE_1_LESSONS §1.4 when transcribing
@@ -403,7 +403,7 @@ the `SubmitFx` / `SubmitWorld` component virtuals.
   `OnAttach` it stamps the node tree (root node = the owner instance, so
   root transform = effect pos + facing), binds clips, builds the controller
   and script. `OnDetach` tears everything down. It owns the child
-  `TNodeInst`s.
+  `TNode`s.
 - **In game**: `T3DImagery::AttachAnimatorComponents` (3dimage.cpp:2046)
   already resolves by `oi->GetTypeName()` with class-name fallback. The
   prefab lookup goes first with the same name; on a hit it attaches
@@ -415,7 +415,7 @@ the `SubmitFx` / `SubmitWorld` component virtuals.
   `--test=vfx` entry (`Prefab:<Name>`), sharing the existing preview styles
   and rig anchors. During migration the shim keeps its entry so
   `tools/vfx/snap_ab.py` pairs them.
-- **Rendering hooks**: `TObjectComponent` gains two optional virtuals,
+- **Rendering hooks**: `TComponent` gains two optional virtuals,
   `SubmitFx(TRenderer&)` (fx queue: billboards, buckets, strips, lights)
   and `SubmitWorld(TRenderer&)` (inside the tile pass: helper meshes).
   maprenderer calls them for every component of every visible instance at
@@ -458,7 +458,7 @@ file exists, the A/B passes, and the shim is gone.
 1. **PR: reflection + DEF reader/writer + node split** (landed
    2026-10-16, feature/vfx). `tools/reflect/gen.py` + CMake hook, `refl`,
    `packed`, `defio`, `nodepack`, defdoc parser turned into a Sink stream,
-   `TNodeInst` split with annotated node properties; gtests for each.
+   `TNode` split with annotated node properties; gtests for each.
    Follow-up in the same PR: annotate `TObjectInstance` / `TSector`,
    move the editor inspector, undo and clipboard onto `refl`, delete
    `iobject.h` and the adapters.
@@ -479,7 +479,7 @@ file exists, the A/B passes, and the shim is gone.
 
 ## 9. Decision log
 
-- 2026-10-16 Nodes are not `TObjectInstance`s; base split to `TNodeInst`
+- 2026-10-16 Nodes are not `TObjectInstance`s; base split to `TNode`
   (name, soft-ref id, transform + children, components). Components are
   behaviours on a node, never nodes.
 - 2026-10-16 `TObjectInstance` keeps mapindex as its soft-ref id; node

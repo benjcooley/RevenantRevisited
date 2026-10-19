@@ -1,0 +1,18466 @@
+// *************************************************************************
+// *                         Cinematix Revenant                            *
+// *                     effect.cpp - TEffect module                       *
+// *************************************************************************
+//
+// Active effect code only. The D3D-era implementations are preserved in
+// effect_old.cpp, which is entirely remarked out for reference.
+//
+// Legacy animator migration map (old registrations, intentionally commented):
+//   REGISTER_3DANIMATOR("Flare", TFlareAnimator)
+//   REGISTER_3DANIMATOR("Heal", THealAnimator)
+//   REGISTER_3DANIMATOR("CreateFood", TCreateFoodAnimator)
+//   REGISTER_3DANIMATOR("Cure", TCureAnimator)
+//   REGISTER_3DANIMATOR("FireFlash", TFireFlashAnimator)
+//   REGISTER_3DANIMATOR("FireWind", TFireWindAnimator)
+//   REGISTER_3DANIMATOR("Burn", TBurnAnimator)
+//   REGISTER_3DANIMATOR("Aura", TAuraAnimator)
+//   REGISTER_3DANIMATOR("CYANFONT", TCyanFountainAnimator)
+//   REGISTER_3DANIMATOR("REDFONT", TRedFountainAnimator)
+//   REGISTER_3DANIMATOR("GREENFONT", TGreenFountainAnimator)
+//   REGISTER_3DANIMATOR("BLUEFONT", TBlueFountainAnimator)
+//   REGISTER_3DANIMATOR("RIBBON", TRibbonAnimator)
+//   REGISTER_3DANIMATOR("SHIELD", TShieldAnimator)
+//   REGISTER_3DANIMATOR("FLAME", TFlameAnimator) -> TFlipbookBillboardComponent
+//   REGISTER_3DANIMATOR("SymGlow", TSymGlowAnimator)
+//   REGISTER_MULTI_3DANIMATOR_("sparks", TSparkAnimator, TParticle3DAnimator)
+//   REGISTER_3DANIMATOR("IrisFlare", TIrisFlareAnimator)
+//   REGISTER_3DANIMATOR("SetVortex", TSetVortexAnimator)
+//   REGISTER_3DANIMATOR("Teleporter", TTeleporterAnimator)
+//   REGISTER_3DANIMATOR("Smoke", TSmokeEffectAnimator)
+//   REGISTER_3DANIMATOR("MeteorStorm", TMeteorStormAnimator)
+//   REGISTER_3DANIMATOR("Flies", TFlyAnimator)
+//   REGISTER_3DANIMATOR("Fog", TFogAnimator)
+//   REGISTER_3DANIMATOR("PULP", TPulpAnimator)
+//   REGISTER_3DANIMATOR("FIRECONE", TFireConeAnimator)
+//   REGISTER_3DANIMATOR("DragonFire", TDragonFireAnimator)
+//   REGISTER_3DANIMATOR("IceBolt", TIceBoltAnimator)
+//   REGISTER_3DANIMATOR("Iced", TIcedAnimator)
+//   REGISTER_3DANIMATOR("Quicksand", TQuicksandAnimator)
+//   REGISTER_3DANIMATOR("Sandswirl", TSandswirlAnimator)
+//   REGISTER_3DANIMATOR("Tornado", TTornadoAnimator)
+//   REGISTER_3DANIMATOR("Streamer", TStreamerAnimator)
+//   REGISTER_3DANIMATOR("FireSwarm", TFireSwarmAnimator)
+//   REGISTER_3DANIMATOR("Halo", THaloAnimator)
+//   REGISTER_3DANIMATOR("Ripple", TRippleAnimator)
+//   REGISTER_3DANIMATOR("Drip", TDripAnimator)
+//   REGISTER_3DANIMATOR("FaultFire", TFaultFireAnimator)
+//   REGISTER_3DANIMATOR("Blood", TBloodAnimator)
+//   REGISTER_3DANIMATOR("Mist", TMistAnimator)
+//   REGISTER_3DANIMATOR("MistFog", TMistFogAnimator)
+//   REGISTER_3DANIMATOR("WaterFall", TWaterFallAnimator)
+//   REGISTER_3DANIMATOR("Water", TWaterAnimator)
+//   REGISTER_3DANIMATOR("Pixie", TPixieAnimator)
+//   REGISTER_3DANIMATOR("Fizzle", TFizzleAnimator)
+//   REGISTER_3DANIMATOR("Vortex", TVortexAnimator)
+//   REGISTER_3DANIMATOR("Speaker", TAmbSoundAnimator)
+
+#include "engine/render/retailmeshlighting.h"
+#include "game/effects/literalwatermesh.h"
+#include "game/effects/fliesprofile.h"
+#include "game/app/revenant.h"
+#include "game/effects/effect.h"
+#include "game/world/lightcomponent.h"
+#include "game/app/gameoptions.h"
+#include "game/effects/fireballquad.h"
+#include "game/effects/fireballring.h"
+#include "game/effects/fireballcore.h"
+#include "game/effects/fireballspark.h"
+
+#include "game/imagery/3dimage.h"
+#include "game/object/character.h"
+#include "engine/refl/defdoc.h"
+#include "engine/refl/defio.h"
+#include "game/world/mappane.h"
+#include "engine/core/math3d.h"
+#include "engine/render/retailsoftwaretransform.h"
+#include "game/effects/cometsoftwarebounds.h"
+#include "game/app/testconfig.h"
+#include "game/effects/legacy/flamevariantspreview.h"
+#include "game/imagery/meshextract.h"   // M09b: ExtractSubMesh for I3D cylinder mesh
+#include "game/app/revutils.h"
+#include "engine/core/logging.h"
+#include "game/effects/stripeffect.h"   // S04: STRIP_* constants for TLightningAnimator_Bespoke
+#include "engine/core/revtime.h"
+
+#include <algorithm>
+#include <cstring>
+#include <cmath>
+#include <cstdlib>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+namespace {
+
+void ParticleFatal(const std::string& msg)
+{
+    FatalError(msg.c_str());
+}
+
+std::string ReadParticleEffectsFile()
+{
+    const std::string fname = rev_engine_asset("effects.def");
+    FILE* fp = fname.empty() ? nullptr : std::fopen(fname.c_str(), "rb");
+    if (!fp)
+        ParticleFatal(std::string("[particle] unable to open engine asset effects.def ('") +
+                      fname + "')");
+
+    std::string text;
+    char buf[4096];
+    for (;;)
+    {
+        const size_t n = std::fread(buf, 1, sizeof(buf), fp);
+        if (n > 0)
+            text.append(buf, n);
+        if (n < sizeof(buf))
+            break;
+    }
+    std::fclose(fp);
+    return text;
+}
+
+// The whole effects.def, read once through the DEF reader (defio) into
+// the annotated records in particledef.h, then validated.
+const SParticleEffectsFile& ParticleEffectsFile()
+{
+    static const SParticleEffectsFile file = [] {
+        SParticleEffectsFile f;
+        std::string err;
+        if (!defio::ReadObject(ReadParticleEffectsFile(), f, &err))
+            ParticleFatal("[particle] effects.def: " + err);
+        for (const SParticleEffectDef& e : f.effect)
+            if (!e.Validate(&err))
+                ParticleFatal("[particle] effects.def: " + err);
+        return f;
+    }();
+    return file;
+}
+
+SParticleEffectDef ParseParticleEffectDef(const char* wanted)
+{
+    if (const SParticleEffectDef* e = ParticleEffectsFile().Find(wanted))
+        return *e;
+    ParticleFatal(std::string("[particle] missing effect definition ") + wanted);
+    return {};
+}
+
+const SParticleEffectDef& TorchFlameDef()
+{
+    static const SParticleEffectDef def = ParseParticleEffectDef("TorchFlame");
+    return def;
+}
+
+} // namespace
+
+static TParticleEffectManager g_particle_effect_manager;
+TParticleEffectManager* ParticleEffectManager = &g_particle_effect_manager;
+
+namespace {
+
+SParticleBufferLayout ParticleEffectBucketLayout()
+{
+    SParticleBufferLayout layout = {};
+    ParticleLayoutAddVar(layout, EParticleVar::OwnerId);
+    ParticleLayoutAddVar(layout, EParticleVar::Life);
+    ParticleLayoutAddVar(layout, EParticleVar::Age);
+    ParticleLayoutAddVar(layout, EParticleVar::Age01);
+    ParticleLayoutAddVar(layout, EParticleVar::Seed);
+    ParticleLayoutAddVar(layout, EParticleVar::EmitPos);
+    ParticleLayoutAddVar(layout, EParticleVar::EmitVel);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawPos);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawScl);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawRot);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawColor);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawFrame);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawUvRect);
+    ParticleLayoutAddVar(layout, EParticleVar::Delay);
+    return layout;
+}
+
+const SParticleBucketEffectDef* FindEffectBucketDef(const SParticleEffectDef& effect_def,
+                                                    const std::string& name)
+{
+    for (const SParticleBucketEffectDef& bucket : effect_def.bucket)
+        if (bucket.name == name)
+            return &bucket;
+    return nullptr;
+}
+
+EParticleBlendMode ResolveBlendMode(const std::string& s, bool legacy_additive)
+{
+    if (s == "alpha")              return EParticleBlendMode::Alpha;
+    if (s == "additive")           return EParticleBlendMode::Additive;
+    if (s == "additive_straight")  return EParticleBlendMode::AdditiveStraight;
+    if (s == "premul_alpha")       return EParticleBlendMode::PremulAlpha;
+    // Empty => fall back to legacy `additive` bool.
+    return legacy_additive ? EParticleBlendMode::Additive : EParticleBlendMode::Alpha;
+}
+
+EParticleLightMode ResolveLightMode(const std::string& s)
+{
+    if (s == "lit_flat") return EParticleLightMode::LitFlat;
+    return EParticleLightMode::Unlit;   // default for back-compat
+}
+
+EParticleDepthMode ResolveDepthMode(const std::string& s)
+{
+    if (s == "test_write") return EParticleDepthMode::TestWrite;
+    if (s == "none")       return EParticleDepthMode::None;
+    return EParticleDepthMode::TestNoWrite;
+}
+
+EParticleOrientation ResolveOrientation(const std::string& s)
+{
+    if (s == "world_xy") return EParticleOrientation::WorldXY;
+    return EParticleOrientation::ScreenAligned;
+}
+
+// Resolve the bucket's texture handle. Honours bucket_def.imagery_path if
+// set (B01/M05 patterns that load a non-owner imagery via TObjectImagery::
+// LoadImagery), otherwise falls back to the owner imagery's texture_slot.
+struct SBucketTextureBinding
+{
+    TTextureHandle handle = kInvalidTexture;
+    int32_t width = 0;
+    int32_t height = 0;
+};
+
+SBucketTextureBinding ResolveBucketTexture(const SParticleBucketEffectDef& bucket_def,
+                                           TNode* owner)
+{
+    SBucketTextureBinding binding = {};
+    if (!bucket_def.imagery_path.empty())
+    {
+        const int32_t img_id = TObjectImagery::FindImagery(bucket_def.imagery_path.c_str());
+        if (img_id < 0)
+        {
+            char err[256];
+            snprintf(err, sizeof(err),
+                     "[particle] bucket %s: imagery_path='%s' FindImagery failed",
+                     bucket_def.name.c_str(), bucket_def.imagery_path.c_str());
+            FatalError(err);
+        }
+        TObjectImagery* imagery = TObjectImagery::LoadImagery(img_id);
+        T3DImagery* img3d = dynamic_cast<T3DImagery*>(imagery);
+        if (!img3d)
+        {
+            char err[256];
+            snprintf(err, sizeof(err),
+                     "[particle] bucket %s: imagery_path='%s' is not a T3DImagery",
+                     bucket_def.name.c_str(), bucket_def.imagery_path.c_str());
+            FatalError(err);
+        }
+        (void)img3d->NumObjects();  // force lazy mesh init so texture slots populate
+        S3DTex tex = {};
+        img3d->GetTexture(bucket_def.texture_slot, &tex);
+        binding.handle = tex.htexture;
+        binding.width  = int32_t(tex.desc.width);
+        binding.height = int32_t(tex.desc.height);
+        return binding;
+    }
+
+    // Owner-imagery path (TorchFlame): use the owner's imagery, demand it
+    // exists and has the requested slot populated.
+    TObjectInstance* owner_inst = owner ? owner->Object() : nullptr;
+    T3DImagery* img3d = owner_inst ? dynamic_cast<T3DImagery*>(owner_inst->GetImagery()) : nullptr;
+    if (!img3d || img3d->NumTextures() <= 0)
+        FatalError("[particle] effect requires 3D imagery with at least one texture (set imagery_path= for buckets on nodes without imagery)");
+    S3DTex tex = {};
+    img3d->GetTexture(bucket_def.texture_slot, &tex);
+    binding.handle = tex.htexture;
+    binding.width  = int32_t(tex.desc.width);
+    binding.height = int32_t(tex.desc.height);
+    return binding;
+}
+
+SParticleBucketDesc BuildRuntimeBucketDesc(const SParticleEffectDef& effect_def,
+                                           const SParticleBucketEffectDef& bucket_def,
+                                           TNode* owner)
+{
+    const SBucketTextureBinding tex = ResolveBucketTexture(bucket_def, owner);
+    if (tex.handle == kInvalidTexture)
+        FatalError("[particle] effect bucket texture handle is invalid");
+    if (tex.width <= 0 || tex.height <= 0)
+    {
+        char err[256];
+        snprintf(err, sizeof(err),
+                 "[particle] effect bucket texture dimensions invalid (%dx%d)",
+                 tex.width, tex.height);
+        FatalError(err);
+    }
+
+    SParticleBucketDesc desc = {};
+    desc.name = bucket_def.name;
+    desc.blend = ResolveBlendMode(bucket_def.blend_mode, bucket_def.additive);
+    desc.light_mode = ResolveLightMode(bucket_def.light_mode);
+    desc.depth_mode = ResolveDepthMode(bucket_def.depth_mode);
+    desc.orientation = ResolveOrientation(bucket_def.orientation);
+    desc.sort = EParticleSortMode::None;
+    desc.texture = tex.handle;
+    desc.texture_width = tex.width;
+    desc.texture_height = tex.height;
+    desc.frame_cols = bucket_def.atlas_cols;
+    desc.frame_rows = bucket_def.atlas_rows;
+    desc.default_width = bucket_def.width;
+    desc.default_height = bucket_def.height;
+    desc.trail_count = bucket_def.trail_count;
+    desc.trail_gravity = bucket_def.trail_gravity;
+    desc.debug_solid = effect_def.debug_solid;
+    desc.flip_v = bucket_def.flip_v;
+    desc.chroma_key = bucket_def.chroma_key_enabled;
+    desc.chroma_key_rgb[0] = bucket_def.chroma_key_rgb[0];
+    desc.chroma_key_rgb[1] = bucket_def.chroma_key_rgb[1];
+    desc.chroma_key_rgb[2] = bucket_def.chroma_key_rgb[2];
+    return desc;
+}
+
+void InitializeRuntimeParticle(TParticleBucket& bucket, int32_t particle_index,
+                               const SParticleBucketEffectDef& bucket_def,
+                               const SParticleEmitterEffectDef& emitter,
+                               TNode* owner)
+{
+    if (float* draw_pos = bucket.VarPtr(particle_index, EParticleVar::DrawPos))
+    {
+        const hmm_vec3 p = owner->Transform().Pos();
+        draw_pos[0] = p.X + emitter.local_pos.X;
+        draw_pos[1] = p.Y + emitter.local_pos.Y;
+        draw_pos[2] = p.Z + emitter.local_pos.Z;
+    }
+    if (float* emit_pos = bucket.VarPtr(particle_index, EParticleVar::EmitPos))
+    {
+        emit_pos[0] = emitter.local_pos.X;
+        emit_pos[1] = emitter.local_pos.Y;
+        emit_pos[2] = emitter.local_pos.Z;
+    }
+    if (float* draw_scl = bucket.VarPtr(particle_index, EParticleVar::DrawScl))
+    {
+        draw_scl[0] = bucket_def.width * bucket_def.scale;
+        draw_scl[1] = bucket_def.height * bucket_def.scale;
+        draw_scl[2] = 1.0f;
+    }
+    if (float* uv_rect = bucket.VarPtr(particle_index, EParticleVar::DrawUvRect))
+    {
+        if (!bucket_def.uv_rect_expr.empty())
+        {
+            TParticleExpression expr;
+            std::string error;
+            if (!expr.Compile(bucket_def.uv_rect_expr.c_str(), &error))
+                ParticleFatal("[particle] bucket " + bucket_def.name + " uv_rect expression compile failed: " + error);
+            SParticleEvalContext ctx = {};
+            ctx.time_frame = float(TTime::Time());
+            expr.Eval(ctx, uv_rect, 4);
+        }
+        else
+        {
+            // Default: full quad (single-frame sprite, no atlas).
+            uv_rect[0] = 0.0f;
+            uv_rect[1] = 0.0f;
+            uv_rect[2] = 1.0f;
+            uv_rect[3] = 1.0f;
+        }
+    }
+    // Default DrawColor = opaque white (lets spawn_expr override per particle).
+    if (float* color = bucket.VarPtr(particle_index, EParticleVar::DrawColor))
+    {
+        color[0] = 1.0f; color[1] = 1.0f; color[2] = 1.0f; color[3] = 1.0f;
+    }
+}
+
+// Default-init the per-particle slots a self-spawning bucket needs, then
+// run the bucket's compiled spawn_expr to override. Used by EmitSpawnTopup.
+void InitializeSelfSpawnParticle(TParticleBucket& bucket, int32_t particle_index,
+                                 const SParticleBucketEffectDef& bucket_def,
+                                 const TParticleExpression& spawn_expr,
+                                 bool has_spawn_expr,
+                                 TNode* owner,
+                                 int32_t forced_frame = -1)
+{
+    const hmm_vec3 p = owner ? owner->Transform().Pos() : hmm_vec3{{0, 0, 0}};
+    const float emit_pos[3] = { p.X, p.Y, p.Z };
+    const float emit_vel[3] = { 0.0f, 0.0f, 0.0f };
+
+    // Pre-spawn defaults: pos at owner, white opaque, unit scale, frame 0.
+    if (float* dp = bucket.VarPtr(particle_index, EParticleVar::DrawPos))
+    { dp[0] = emit_pos[0]; dp[1] = emit_pos[1]; dp[2] = emit_pos[2]; }
+    if (float* ep = bucket.VarPtr(particle_index, EParticleVar::EmitPos))
+    { ep[0] = emit_pos[0]; ep[1] = emit_pos[1]; ep[2] = emit_pos[2]; }
+    if (float* ev = bucket.VarPtr(particle_index, EParticleVar::EmitVel))
+    { ev[0] = 0.0f; ev[1] = 0.0f; ev[2] = 0.0f; }
+    if (float* ds = bucket.VarPtr(particle_index, EParticleVar::DrawScl))
+    { ds[0] = bucket_def.width * bucket_def.scale;
+      ds[1] = bucket_def.height * bucket_def.scale;
+      ds[2] = 1.0f; }
+    if (float* dr = bucket.VarPtr(particle_index, EParticleVar::DrawRot))
+        *dr = 0.0f;
+    if (float* dc = bucket.VarPtr(particle_index, EParticleVar::DrawColor))
+    { dc[0] = 1.0f; dc[1] = 1.0f; dc[2] = 1.0f; dc[3] = 1.0f; }
+    if (float* age = bucket.VarPtr(particle_index, EParticleVar::Age))
+        *age = 0.0f;
+    if (float* age01 = bucket.VarPtr(particle_index, EParticleVar::Age01))
+        *age01 = 0.0f;
+    // Seed: deterministic-per-slot mix of particle_index + bucket_def address.
+    // Computed BEFORE DrawFrame so random_start_frame can use it.
+    float seed_val = 0.0f;
+    if (float* seed = bucket.VarPtr(particle_index, EParticleVar::Seed))
+    {
+        uint32_t s = uint32_t(particle_index) * 2654435761u
+                   + uint32_t(uintptr_t(&bucket_def) & 0xffffffffu) * 16807u;
+        if (s == 0) s = 1;
+        *seed = float(s & 0x7fffffu) / float(0x7fffffu);
+        seed_val = *seed;
+    }
+    // DrawFrame + DrawUvRect: pick atlas cell now and write the explicit
+    // UV rect (the renderer's UV priority is DrawUvRect > atlas-from-frame,
+    // so we must materialize the cell UV here — leaving DrawUvRect at the
+    // default (0,0,1,1) would override the atlas pick and render the whole
+    // sheet). When the bucket has no atlas grid (cells == 1), DrawUvRect
+    // stays at full-quad.
+    const int32_t atlas_cells = bucket_def.atlas_cols * bucket_def.atlas_rows;
+    int32_t spawn_frame = 0;
+    if (forced_frame >= 0)
+        spawn_frame = forced_frame;                     // one cell per burst
+    else if (bucket_def.random_start_frame && bucket_def.atlas_frames > 1)
+        spawn_frame = int32_t(std::floor(seed_val * float(bucket_def.atlas_frames)));
+    // Start delay in sim ticks: held (not ticked, not drawn) until it runs out.
+    if (float* delay = bucket.VarPtr(particle_index, EParticleVar::Delay))
+        *delay = bucket_def.spawn_delay_max > 0
+                     ? float(random(bucket_def.spawn_delay_min, bucket_def.spawn_delay_max))
+                     : 0.0f;
+    if (float* df = bucket.VarPtr(particle_index, EParticleVar::DrawFrame))
+        *df = float(spawn_frame);
+    if (float* uv = bucket.VarPtr(particle_index, EParticleVar::DrawUvRect))
+    {
+        // Atlas buckets leave the rect unset (zero size): the renderer then
+        // derives the cell from DrawFrame on every draw, so a tick_expr can
+        // animate `frame`. Single-sprite buckets use the whole texture.
+        if (atlas_cells > 1)
+        {
+            uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 0.0f; uv[3] = 0.0f;
+        }
+        else
+        {
+            uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 1.0f; uv[3] = 1.0f;
+        }
+    }
+
+    // Now run the user spawn expression (statement-form). Identifier
+    // aliases pos/vel/color/scale etc. resolve against the bucket slots
+    // we just pre-initialised — spawn_expr can override random_start_frame
+    // by writing to `frame` explicitly.
+    if (has_spawn_expr)
+    {
+        SParticleEvalContext ctx = {};
+        ctx.time_frame = float(TTime::Time());
+        spawn_expr.EvalParticle(ctx, bucket, particle_index, emit_pos, emit_vel);
+    }
+}
+
+void UpdateRuntimeParticles(const SParticleEffectDef& effect_def, float owner_particle_id,
+                            TNode* owner)
+{
+    if (!owner)
+        return;
+
+    for (const SParticleEmitterEffectDef& emitter : effect_def.emitter)
+    {
+        for (const SParticleEmitterOutputDef& output : emitter.output)
+        {
+            const SParticleBucketEffectDef* bucket_def = FindEffectBucketDef(effect_def, output.name);
+            TParticleBucket* bucket = ParticleManager().FindGlobalBucket(output.name.c_str());
+            if (!bucket_def || !bucket)
+                continue;
+
+            for (int32_t particle_index = 0; particle_index < bucket->Count(); ++particle_index)
+            {
+                const float* owner_id = bucket->VarPtr(particle_index, EParticleVar::OwnerId);
+                if (!owner_id || *owner_id != owner_particle_id)
+                    continue;
+                InitializeRuntimeParticle(*bucket, particle_index, *bucket_def, emitter, owner);
+            }
+        }
+    }
+}
+
+} // namespace
+
+TParticleEffectManager::SRuntime* TParticleEffectManager::FindRuntime(
+    const SParticleEffectDef* effect_def, int32_t owner_node_id)
+{
+    if (!effect_def || owner_node_id < 0)
+        return nullptr;
+    for (SRuntime& runtime : runtimes)
+        if (runtime.effect_def == effect_def && runtime.owner.Id() == owner_node_id)
+            return &runtime;
+    return nullptr;
+}
+
+void TParticleEffectManager::PulseEffect(const SParticleEffectDef* effect_def, TNode* owner)
+{
+    if (!effect_def || !owner)
+        return;
+
+    const int32_t owner_node_id = owner->NodeId();
+    SRuntime* runtime = FindRuntime(effect_def, owner_node_id);
+    if (!runtime)
+    {
+        SRuntime new_runtime = {};
+        new_runtime.effect_def = effect_def;
+        new_runtime.owner = owner;
+        new_runtime.owner_particle_id = float(owner_node_id);
+        runtimes.push_back(std::move(new_runtime));
+        runtime = &runtimes.back();
+        StartRuntime(*runtime, owner);
+    }
+    runtime->last_draw_pulse_pass = ParticleManager().DrawPulsePass();
+    UpdateRuntimeParticles(*effect_def, runtime->owner_particle_id, owner);
+}
+
+void TParticleEffectManager::StopEffect(const SParticleEffectDef* effect_def, TNode* owner)
+{
+    const int32_t owner_node_id = owner ? owner->NodeId() : -1;
+    for (size_t i = 0; i < runtimes.size(); ++i)
+    {
+        if (runtimes[i].effect_def == effect_def && runtimes[i].owner.Id() == owner_node_id)
+        {
+            StopRuntime(i);
+            return;
+        }
+    }
+}
+
+void TParticleEffectManager::ExpireInactiveEffects()
+{
+    const uint32_t current_pass = ParticleManager().DrawPulsePass();
+    if (last_expire_pass == current_pass)
+        return;
+    last_expire_pass = current_pass;
+
+    for (size_t i = 0; i < runtimes.size(); )
+    {
+        SRuntime& runtime = runtimes[i];
+        const bool owner_dead = !runtime.owner.Get();
+        const uint32_t ttl = runtime.effect_def ? runtime.effect_def->inactive_ttl_pulses : 1;
+        const bool expired = current_pass != runtime.last_draw_pulse_pass &&
+            uint32_t(current_pass - runtime.last_draw_pulse_pass) > ttl;
+        if (owner_dead || expired)
+            StopRuntime(i);
+        else
+            ++i;
+    }
+}
+
+void TParticleEffectManager::Clear()
+{
+    runtimes.clear();
+    last_expire_pass = 0;
+}
+
+// Top up a bucket's particle population. For spawn_burst, called once at
+// StartRuntime; for spawn_count, called each frame from IntegrateEffect
+// to restock after kill_expr fires. The number to emit is the difference
+// between the target count and how many live particles this runtime owns.
+void TParticleEffectManager::EmitSpawnTopup(SBucketRuntime& brt, TNode* owner, float owner_particle_id)
+{
+    if (!brt.bucket || !brt.bucket_def) return;
+
+    int32_t target = 0;
+    if (brt.bucket_def->spawn_burst > 0 && brt.spawned_burst == 0)
+        target = brt.bucket_def->spawn_burst;
+    else if (brt.bucket_def->spawn_count > 0)
+    {
+        // Count live particles owned by this runtime.
+        int32_t live = 0;
+        for (int32_t i = 0; i < brt.bucket->Count(); ++i)
+        {
+            const float* o = brt.bucket->VarPtr(i, EParticleVar::OwnerId);
+            if (o && *o == owner_particle_id) ++live;
+        }
+        target = brt.bucket_def->spawn_count - live;
+    }
+
+    for (int32_t k = 0; k < target; ++k)
+    {
+        const SParticleBucketEffectDef& bd = *brt.bucket_def;
+        float life = bd.default_life > 0.0f ? bd.default_life : -1.0f;
+        if (life > 0.0f && bd.life_max > bd.default_life)
+            life = bd.default_life + (bd.life_max - bd.default_life) * (float(std::rand()) / float(RAND_MAX));
+        const int32_t pi = brt.bucket->AddParticle(owner_particle_id, life);
+        if (pi < 0) break;
+        InitializeSelfSpawnParticle(*brt.bucket, pi, *brt.bucket_def,
+                                    brt.spawn_expr, brt.spawn_compiled, owner, brt.burst_frame);
+    }
+}
+
+TParticleEffectManager::SBucketRuntime* TParticleEffectManager::FindBucketRuntime(
+    SRuntime& runtime, const std::string& bucket_name)
+{
+    for (SBucketRuntime& brt : runtime.bucket_runtimes)
+        if (brt.bucket_def && brt.bucket_def->name == bucket_name)
+            return &brt;
+    return nullptr;
+}
+
+// Spawn one particle in the chain bucket using the dying particle's pos /
+// vel as the chain spawn's emit_pos / emit_vel. The chain bucket's
+// spawn_expr runs against the chain particle's own slots, with the
+// supplied dying-pos/vel exposed as the read-only emit_pos / emit_vel
+// identifiers (this is exactly how the legacy emitter/output path
+// supplies emit_pos / emit_vel to spawn_expr).
+//
+// Reflection-plane / chain-bucket mechanism: blood's FLY droplet hits
+// ground (kill_expr fires on pos.z <= emit_pos.z), the engine reaps the
+// flier AND spawns one SPLAT into the chain bucket at the impact site.
+// Generic — any "die into X" effect uses the same wire.
+int32_t TParticleEffectManager::EmitChainParticle(SBucketRuntime& chain_brt,
+                                                  TNode* owner,
+                                                  float owner_particle_id,
+                                                  const float dying_pos[3],
+                                                  const float dying_vel[3])
+{
+    if (!chain_brt.bucket || !chain_brt.bucket_def)
+        return -1;
+
+    const float life = chain_brt.bucket_def->default_life > 0.0f
+                           ? chain_brt.bucket_def->default_life : -1.0f;
+    const int32_t pi = chain_brt.bucket->AddParticle(owner_particle_id, life);
+    if (pi < 0)
+        return -1;
+
+    // Pre-init the chain particle's slots to sensible defaults (matches
+    // InitializeSelfSpawnParticle's defaults). Then run the chain
+    // bucket's spawn_expr — but with the dying particle's pos / vel
+    // shadowed into emit_pos / emit_vel so the chain spawn can place
+    // itself at the impact site naturally.
+    TParticleBucket& bucket = *chain_brt.bucket;
+    const SParticleBucketEffectDef& bd = *chain_brt.bucket_def;
+
+    if (float* dp = bucket.VarPtr(pi, EParticleVar::DrawPos))
+    { dp[0] = dying_pos[0]; dp[1] = dying_pos[1]; dp[2] = dying_pos[2]; }
+    if (float* ep = bucket.VarPtr(pi, EParticleVar::EmitPos))
+    { ep[0] = dying_pos[0]; ep[1] = dying_pos[1]; ep[2] = dying_pos[2]; }
+    if (float* ev = bucket.VarPtr(pi, EParticleVar::EmitVel))
+    { ev[0] = dying_vel[0]; ev[1] = dying_vel[1]; ev[2] = dying_vel[2]; }
+    if (float* ds = bucket.VarPtr(pi, EParticleVar::DrawScl))
+    { ds[0] = bd.width * bd.scale; ds[1] = bd.height * bd.scale; ds[2] = 1.0f; }
+    if (float* dr = bucket.VarPtr(pi, EParticleVar::DrawRot))
+        *dr = 0.0f;
+    if (float* dc = bucket.VarPtr(pi, EParticleVar::DrawColor))
+    { dc[0] = 1.0f; dc[1] = 1.0f; dc[2] = 1.0f; dc[3] = 1.0f; }
+    if (float* age = bucket.VarPtr(pi, EParticleVar::Age))
+        *age = 0.0f;
+    if (float* age01 = bucket.VarPtr(pi, EParticleVar::Age01))
+        *age01 = 0.0f;
+    float chain_seed_val = 0.0f;
+    if (float* seed = bucket.VarPtr(pi, EParticleVar::Seed))
+    {
+        // Seed off the chain particle's index + the dying particle's
+        // pos.x so successive chain spawns don't collide.
+        uint32_t s = uint32_t(pi) * 2654435761u
+                   + uint32_t(int32_t(dying_pos[0])) * 16807u;
+        if (s == 0) s = 1;
+        *seed = float(s & 0x7fffffu) / float(0x7fffffu);
+        chain_seed_val = *seed;
+    }
+    // DrawFrame + DrawUvRect: same atlas-cell materialization as self-spawn
+    // (the renderer's UV priority is DrawUvRect > atlas-from-frame, so we
+    // must write the cell UV explicitly here).
+    const int32_t chain_atlas_cells = bd.atlas_cols * bd.atlas_rows;
+    int32_t chain_spawn_frame = 0;
+    if (bd.random_start_frame && bd.atlas_frames > 1)
+        chain_spawn_frame = int32_t(std::floor(chain_seed_val * float(bd.atlas_frames)));
+    if (float* df = bucket.VarPtr(pi, EParticleVar::DrawFrame))
+        *df = float(chain_spawn_frame);
+    if (float* uv = bucket.VarPtr(pi, EParticleVar::DrawUvRect))
+    {
+        // As in InitializeSelfSpawnParticle: atlas cell comes from DrawFrame.
+        if (chain_atlas_cells > 1)
+        {
+            uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 0.0f; uv[3] = 0.0f;
+        }
+        else
+        {
+            uv[0] = 0.0f; uv[1] = 0.0f; uv[2] = 1.0f; uv[3] = 1.0f;
+        }
+    }
+
+    if (chain_brt.spawn_compiled)
+    {
+        SParticleEvalContext ctx = {};
+        ctx.time_frame = float(TTime::Time());
+        // dying_pos / dying_vel become the emit_pos / emit_vel identifiers
+        // for this chain spawn — the chain bucket's spawn_expr can read
+        // emit_pos / emit_vel to inherit the impact site.
+        chain_brt.spawn_expr.EvalParticle(ctx, bucket, pi, dying_pos, dying_vel);
+    }
+
+    (void)owner;
+    return pi;
+}
+
+// Per-bucket integration. dt_seconds is wall-clock for this render frame.
+//
+// UNIT MODEL: explicit-tick-multiplier.
+//
+//   The engine's contract with bucket authors is:
+//
+//   * tick_hz > 0 (the normal case): tick_expr is invoked exactly tick_hz
+//     times per simulated second, regardless of render FPS. Leftover ms
+//     accumulate in sim_accum_ms across render frames and produce additional
+//     integer ticks on subsequent frames. tick_expr is NOT given dt and is
+//     NOT scaled per call -- authors write velocity / acceleration literals
+//     in PER-TICK units (wu/tick, wu/tick^2). One tick_expr call == one
+//     tick's worth of motion.
+//
+//   * tick_hz == 0: tick_expr runs once per render frame. Motion authored
+//     under tick_hz==0 is frame-rate-dependent; prefer tick_hz>0 for any
+//     bucket whose dynamics need to be wall-clock-consistent.
+//
+//   * Age / Life / Age01 are always in SECONDS. Age is advanced by
+//     per_tick_seconds (= 1/tick_hz when tick_hz>0) per tick, and Life is
+//     stored as the bucket's default_life value in seconds. Age01 = Age/Life.
+//     The auto-kill at the bottom of this loop fires when Age >= Life in
+//     seconds.
+//
+//   In short: tick_expr literals are PER-TICK; default_life / Age / Age01
+//   are SECONDS. Authors converting between the two convert by hand using
+//   tick_hz (e.g. blood_splat's SHRINK comment shows 0.4*1.6s*24Hz = 15.4
+//   ticks).
+void TParticleEffectManager::IntegrateBucket(SRuntime& runtime, SBucketRuntime& brt,
+                                             TNode* owner, float dt_seconds,
+                                             float owner_particle_id)
+{
+    if (!brt.bucket || !brt.bucket_def) return;
+    if (!brt.tick_compiled && !brt.kill_compiled && brt.bucket_def->default_life <= 0.0f
+        && brt.bucket_def->spawn_count == 0
+        && brt.bucket_def->chain_bucket.empty())
+    {
+        // Nothing to do -- no per-tick dynamics, no life-based kill,
+        // no spawn-topup restock target, no chain emission. The legacy
+        // emitter/output path (TorchFlame) hits this branch.
+        return;
+    }
+
+    // Compute number of integration ticks this frame.
+    int32_t ticks = 1;
+    float per_tick_seconds = dt_seconds;
+    if (brt.bucket_def->tick_hz > 0)
+    {
+        const double tick_ms = 1000.0 / double(brt.bucket_def->tick_hz);
+        brt.sim_accum_ms += double(dt_seconds) * 1000.0;
+        ticks = 0;
+        while (brt.sim_accum_ms >= tick_ms)
+        {
+            brt.sim_accum_ms -= tick_ms;
+            ++ticks;
+        }
+        per_tick_seconds = float(tick_ms / 1000.0);
+    }
+
+    if (ticks == 0)
+        return;
+
+    const hmm_vec3 p = owner ? owner->Transform().Pos() : hmm_vec3{{0, 0, 0}};
+    const float emit_pos[3] = { p.X, p.Y, p.Z };
+    const float emit_vel[3] = { 0.0f, 0.0f, 0.0f };
+
+    SParticleEvalContext base_ctx = {};
+    base_ctx.time_frame = float(TTime::Time());
+
+    // Per-tick: walk the bucket, integrate live particles owned by this
+    // runtime, run kill_expr, respawn or reap as appropriate.
+    for (int32_t t = 0; t < ticks; ++t)
+    {
+        for (int32_t i = brt.bucket->Count() - 1; i >= 0; --i)
+        {
+            const float* owner_slot = brt.bucket->VarPtr(i, EParticleVar::OwnerId);
+            if (!owner_slot || *owner_slot != owner_particle_id)
+                continue;
+
+            // Start delay: hold the particle (no tick, not drawn) until it runs out.
+            if (float* delay = brt.bucket->VarPtr(i, EParticleVar::Delay))
+                if (*delay > 0.0f)
+                {
+                    *delay -= 1.0f;
+                    continue;
+                }
+
+            // Advance age.
+            float* age = brt.bucket->VarPtr(i, EParticleVar::Age);
+            float* age01 = brt.bucket->VarPtr(i, EParticleVar::Age01);
+            float* life = brt.bucket->VarPtr(i, EParticleVar::Life);
+            if (age) *age += per_tick_seconds;
+            if (age && life && *life > 0.0f && age01)
+            {
+                const float t = *age / *life;
+                *age01 = t < 1.0f ? t : 1.0f;
+            }
+            else if (age01) *age01 = 0.0f;
+
+            SParticleEvalContext ctx = base_ctx;
+            if (age)   ctx.age   = *age;
+            if (age01) ctx.age01 = *age01;
+            // Pull the current seed into ctx so EvalParticle's rng_state
+            // initialisation reads it.
+            if (const float* seed = brt.bucket->VarPtr(i, EParticleVar::Seed))
+                ctx.seed = *seed;
+
+            // Run the tick body.
+            if (brt.tick_compiled)
+                brt.tick_expr.EvalParticle(ctx, *brt.bucket, i, emit_pos, emit_vel);
+
+            // kill_expr -> respawn (re-run spawn_expr, zero age).
+            bool kill = false;
+            if (brt.kill_compiled)
+                kill = brt.kill_expr.EvalParticlePredicate(ctx, *brt.bucket, i, emit_pos, emit_vel);
+            if (!kill && life && *life > 0.0f && age && *age >= *life)
+                kill = true;
+
+            if (kill)
+            {
+                // Chain emission: if the bucket defines a chain_bucket,
+                // spawn one particle in the target bucket using this
+                // particle's pos / vel as the chain spawn's emit_pos /
+                // emit_vel. This is the reflection-plane / state-
+                // transition mechanism — blood uses it for FLY droplet
+                // -> SPLAT decal. Generic.
+                if (!brt.bucket_def->chain_bucket.empty())
+                {
+                    SBucketRuntime* chain_brt =
+                        FindBucketRuntime(runtime, brt.bucket_def->chain_bucket);
+                    if (chain_brt)
+                    {
+                        float dying_pos[3] = {0, 0, 0};
+                        float dying_vel[3] = {0, 0, 0};
+                        if (const float* dp = brt.bucket->VarPtr(i, EParticleVar::DrawPos))
+                        { dying_pos[0] = dp[0]; dying_pos[1] = dp[1]; dying_pos[2] = dp[2]; }
+                        if (const float* dv = brt.bucket->VarPtr(i, EParticleVar::EmitVel))
+                        { dying_vel[0] = dv[0]; dying_vel[1] = dv[1]; dying_vel[2] = dv[2]; }
+                        EmitChainParticle(*chain_brt, owner, owner_particle_id,
+                                          dying_pos, dying_vel);
+                    }
+                }
+
+                if (brt.bucket_def->spawn_count > 0)
+                {
+                    // Steady-state: respawn in place by re-running spawn_expr
+                    // and resetting age. The particle stays in the bucket.
+                    if (age)   *age = 0.0f;
+                    if (age01) *age01 = 0.0f;
+                    InitializeSelfSpawnParticle(*brt.bucket, i, *brt.bucket_def,
+                                                brt.spawn_expr, brt.spawn_compiled, owner, brt.burst_frame);
+                }
+                else
+                {
+                    // One-shot burst (or chain-source bucket): tag the
+                    // particle dead via owner_id mutation, then reap below.
+                    if (float* mut_o = brt.bucket->VarPtr(i, EParticleVar::OwnerId))
+                        *mut_o = -7777.0f;
+                }
+            }
+        }
+        brt.bucket->KillParticlesByOwner(-7777.0f);
+    }
+
+    // Steady-state restock (covers the case where a particle was reaped
+    // mid-tick by something other than the respawn path, or the bucket
+    // started under-populated).
+    if (brt.bucket_def->spawn_count > 0)
+        EmitSpawnTopup(brt, owner, owner_particle_id);
+}
+
+void TParticleEffectManager::IntegrateEffect(const SParticleEffectDef* effect_def, TNode* owner, float dt_seconds)
+{
+    if (!effect_def || !owner) return;
+    SRuntime* runtime = FindRuntime(effect_def, owner->NodeId());
+    if (!runtime) return;
+    for (SBucketRuntime& brt : runtime->bucket_runtimes)
+        IntegrateBucket(*runtime, brt, owner, dt_seconds, runtime->owner_particle_id);
+}
+
+void TParticleEffectManager::SubmitEffect(const SParticleEffectDef* effect_def, TNode* owner,
+                                          EFxDebugMode debug_mode)
+{
+    if (!effect_def || !owner || !Renderer) return;
+    SRuntime* runtime = FindRuntime(effect_def, owner->NodeId());
+    if (!runtime) return;
+    for (TParticleBucket* bucket : runtime->buckets)
+        if (bucket && bucket->Active())
+            Renderer->SubmitFxParticleBucket(*bucket, debug_mode);
+}
+
+bool TParticleEffectManager::EffectHasParticles(const SParticleEffectDef* effect_def, TNode* owner)
+{
+    if (!effect_def || !owner) return false;
+    SRuntime* runtime = FindRuntime(effect_def, owner->NodeId());
+    if (!runtime) return false;
+    for (TParticleBucket* bucket : runtime->buckets)
+    {
+        if (!bucket) continue;
+        for (int32_t i = 0; i < bucket->Count(); ++i)
+            if (const float* o = bucket->VarPtr(i, EParticleVar::OwnerId); o && *o == runtime->owner_particle_id)
+                return true;
+    }
+    return false;
+}
+
+void TParticleEffectManager::StartRuntime(SRuntime& runtime, TNode* owner)
+{
+    if (!runtime.effect_def || !owner)
+        return;
+
+    runtime.buckets.clear();
+    runtime.bucket_runtimes.clear();
+    const SParticleBufferLayout layout = ParticleEffectBucketLayout();
+    for (const SParticleBucketEffectDef& bucket_def : runtime.effect_def->bucket)
+    {
+        SParticleBucketDesc desc = BuildRuntimeBucketDesc(*runtime.effect_def, bucket_def, owner);
+        TParticleBucket* bucket = ParticleManager().GetOrCreateGlobalBucket(desc, layout);
+        runtime.buckets.push_back(bucket);
+
+        // Build per-bucket compiled-expression cache. Buckets without
+        // spawn/tick/kill expressions stay all-default (only owns the
+        // bucket ptr for the integration loop's spawn-topup path).
+        SBucketRuntime brt = {};
+        brt.bucket = bucket;
+        brt.bucket_def = &bucket_def;
+        if (bucket_def.burst_frame && bucket_def.atlas_frames > 1)
+            brt.burst_frame = random(0, bucket_def.atlas_frames - 1);
+        std::string err;
+        if (!bucket_def.spawn_expr.empty())
+        {
+            brt.spawn_compiled = brt.spawn_expr.Compile(
+                bucket_def.spawn_expr.c_str(), &err, EParticleExprMode::Statements);
+            if (!brt.spawn_compiled)
+                ParticleFatal("[particle] bucket " + bucket_def.name + " spawn_expr compile failed: " + err);
+        }
+        if (!bucket_def.tick_expr.empty())
+        {
+            brt.tick_compiled = brt.tick_expr.Compile(
+                bucket_def.tick_expr.c_str(), &err, EParticleExprMode::Statements);
+            if (!brt.tick_compiled)
+                ParticleFatal("[particle] bucket " + bucket_def.name + " tick_expr compile failed: " + err);
+        }
+        if (!bucket_def.kill_expr.empty())
+        {
+            brt.kill_compiled = brt.kill_expr.Compile(
+                bucket_def.kill_expr.c_str(), &err, EParticleExprMode::Expression);
+            if (!brt.kill_compiled)
+                ParticleFatal("[particle] bucket " + bucket_def.name + " kill_expr compile failed: " + err);
+        }
+        runtime.bucket_runtimes.push_back(std::move(brt));
+    }
+
+    // Legacy emitter/output path -- still drives TorchFlame. New
+    // self-spawning buckets (spawn_burst / spawn_count) are handled by
+    // IntegrateEffect's spawn-topup.
+    for (const SParticleEmitterEffectDef& emitter : runtime.effect_def->emitter)
+    {
+        for (const SParticleEmitterOutputDef& output : emitter.output)
+        {
+            const SParticleBucketEffectDef* bucket_def = FindEffectBucketDef(*runtime.effect_def, output.name);
+            if (!bucket_def)
+                continue;
+
+            TParticleBucket* bucket = ParticleManager().FindGlobalBucket(output.name.c_str());
+            if (!bucket)
+                continue;
+
+            const int32_t particle_index = bucket->AddParticle(runtime.owner_particle_id, output.life);
+            if (particle_index >= 0)
+                InitializeRuntimeParticle(*bucket, particle_index, *bucket_def, emitter, owner);
+        }
+    }
+
+    // One-shot burst AND steady-state population: emit at attach time so
+    // the bucket is visible immediately (the integration loop's per-frame
+    // top-up handles restocks after kill_expr fires).
+    for (SBucketRuntime& brt : runtime.bucket_runtimes)
+    {
+        if (brt.bucket_def && brt.bucket_def->spawn_burst > 0 && brt.spawned_burst == 0)
+        {
+            EmitSpawnTopup(brt, owner, runtime.owner_particle_id);
+            brt.spawned_burst = brt.bucket_def->spawn_burst;
+        }
+        else if (brt.bucket_def && brt.bucket_def->spawn_count > 0)
+        {
+            EmitSpawnTopup(brt, owner, runtime.owner_particle_id);
+        }
+    }
+}
+
+void TParticleEffectManager::StopRuntime(size_t runtime_index)
+{
+    if (runtime_index >= runtimes.size())
+        return;
+
+    SRuntime& runtime = runtimes[runtime_index];
+    // Runtime removal stops the effect system. Buckets themselves are retained;
+    // they are storage/render batches and may still contain particles from
+    // other systems, or future timed particles that outlive their emitter.
+    for (TParticleBucket* bucket : runtime.buckets)
+        if (bucket)
+            bucket->KillParticlesByOwner(runtime.owner_particle_id);
+
+    runtimes[runtime_index] = std::move(runtimes.back());
+    runtimes.pop_back();
+}
+
+void TParticleEffectComponent::OnAttach()
+{
+    RegisterUpdate(&TComponent::Update);
+}
+
+void TParticleEffectComponent::OnDetach()
+{
+    if (ParticleEffectManager)
+        ParticleEffectManager->StopEffect(Def(), Owner());
+    UnregisterUpdate(&TComponent::Update);
+}
+
+void TParticleEffectComponent::OnUpdate()
+{
+    if (ParticleEffectManager)
+        ParticleEffectManager->ExpireInactiveEffects();
+}
+
+void TParticleEffectComponent::PostLoad()
+{
+    // Inline definition from a prefab: validate it where it was written.
+    std::string err;
+    if (!effect_.Validate(&err))
+        log_error("[particle] inline %s", err.c_str());
+}
+
+void TParticleEffectComponent::DrawPulse()
+{
+    const SParticleEffectDef* effect_def = Def();
+    if (!ParticleEffectManager || !effect_def || effect_def->bucket.empty() || !Owner())
+        return;
+    ParticleEffectManager->PulseEffect(effect_def, Owner());
+    // Per-frame integration: tick the runtime's bucket expressions
+    // (spawn_expr / tick_expr / kill_expr) against the live owner. dt is
+    // the shared render-frame delta -- buckets with tick_hz > 0 accumulate
+    // and integrate at their fixed cadence; others integrate once per
+    // render frame.
+    const float dt = float(TTime::DeltaTime());
+    ParticleEffectManager->IntegrateEffect(effect_def, Owner(), dt);
+}
+
+void TParticleEffectComponent::Submit(EFxDebugMode debug_mode)
+{
+    if (ParticleEffectManager && Owner())
+        ParticleEffectManager->SubmitEffect(Def(), Owner(), debug_mode);
+}
+
+bool TParticleEffectComponent::HasParticles() const
+{
+    return ParticleEffectManager && Owner()
+        && ParticleEffectManager->EffectHasParticles(Def(), Owner());
+}
+
+TObjectClass EffectClass("EFFECT", OBJCLASS_EFFECT, 0);
+
+class TGenericEffectDef final : public TStateObjectDef<SObjectState>
+{
+  public:
+    TObjectInstance* Create(SObjectState& state, TObjectImagery* img) const override { return new TEffect(&state, img); }
+    TObjectInstance* Create(TObjectImagery* img) const override { return new TEffect(img); }
+};
+
+static std::unique_ptr<TObjectDef> MakeGenericEffectDef() { return std::make_unique<TGenericEffectDef>(); }
+
+static TObjectDef::SRegistrar g_effect_builder("EFFECT", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_builder_lower("effect", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_stillwater_builder("StillWater", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_flowwater_builder("FlowWater", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_bendwater1_builder("BendWater1", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_bendwater2_builder("BendWater2", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_sewerwater_builder("SewerWater", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_wave_builder("Wave", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_waves_builder("WaveS", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_wavem_builder("WaveM", MakeGenericEffectDef);
+// Pixie uses the authored exact-type builder below; a generic registration
+// here would win the first-match lookup and suppress its owner component.
+static TObjectDef::SRegistrar g_effect_speaker_builder("speaker", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_speaker_caps_builder("Speaker", MakeGenericEffectDef);
+
+// REVSYNC-DIVERGENCE: retail turns the point with the object's facing in its
+// own float math (TEffect::Pulse 0x004dea44..0x004deb92; the Strike def's
+// 0x0040edc0 / 0x0040ef80 matrix); the port takes the 3D animator's
+// object-map position, which carries the same placement.
+bool ObjectMapOffset(TObjectInstance* target, const char* name, S3DPoint& offset)
+{
+    auto* animator = dynamic_cast<T3DAnimator*>(target->GetAnimator());
+    return animator && animator->GetObjectMapPos(name, offset);
+}
+
+// REVSYNC: TEffect::Pulse @ 0x004de800 (vtable 0x005a85ac slot 0x110), the
+// part every effect runs (SPELLS_MISSILES.md 2.19):
+//  1. a staggered start: hidden until its start wait runs out, nothing else;
+//  2. the object pulse (the animator: tag sounds; the script);
+//  3. following: at the followed object (orbiting, or on its attach point),
+//     plus the CONTROLDATA POS, on its level; the follow time runs out to
+//     its end; a "visible while" name shows it only while the followed
+//     character's root matches;
+//  4. a poison spell keeps its first target poisoned;
+//  5. a timed life counts down, blinking out over its last ticks, and ends
+//     curing that poison;
+//  6. RANGEDAMAGE: at its frame, the blast around the effect;
+//  7. without a spell, a state that doesn't loop removes it once played out;
+//  8. SetCommandDone(false).
+// Between 2 and 3, the spell's LIGHT (0x004de860..0x004de9c4): lit and
+// ramped in, faded out from the kill (SetEffectFlags, SEffectLightRamp).
+void TEffect::Pulse()
+{
+    if (startwait > 0)
+    {
+        if (startwait > 1)
+            ResetFlags(flags & ~OF_ANIMATE);
+        else
+            ResetFlags(flags | OF_ANIMATE);
+        startwait--;
+        return;
+    }
+
+    TObjectInstance::Pulse();
+
+  // REVSYNC: 0x004de860..0x004de9c4 -- the spell's LIGHT. With real-time
+  // lights on, the first tick it has one it is lit at the LIGHT's colour,
+  // multiplier and offset (the setters before OF_LIGHT, as retail calls
+  // them); with them off it goes out. Then the ramp's intensity, each tick.
+    const SSpellData* spelldata = spell ? spell->SpellData() : nullptr;
+    const bool lit = spelldata && spelldata->light.intensity > 0;
+    if (RealTimeLight && !IsLight() && lit)
+    {
+        SColor color{};
+        color.red = spelldata->light.color[0];
+        color.green = spelldata->light.color[1];
+        color.blue = spelldata->light.color[2];
+        TLightComponent& light = EnsureLight();
+        light.SetColor(color);
+        light.SetIntensity(uint8_t(lightramp.value));
+        light.SetMultiplier(uint8_t(spelldata->light.mult));
+        light.SetOffset(S3DPoint{spelldata->light.pos[0], spelldata->light.pos[1], spelldata->light.pos[2]});
+        SetEffectFlags(flags | OF_LIGHT);
+    }
+    else if (!RealTimeLight && IsLight())
+        SetEffectFlags(flags & ~OF_LIGHT);
+    if (lit)
+        if (TLightComponent* light = Light())
+            light->SetIntensity(uint8_t(lightramp.Step(spelldata->light.intensity, spelldata->light.fadein,
+                                                        spelldata->light.fadeout)));
+
+    SSpellVariant* variant = spell ? spell->VariantData() : nullptr;
+    SSpellControlData* control = variant ? variant->controldata : nullptr;
+
+    if (TObjectInstance* target = follow.Get())
+    {
+        S3DPoint at = IntPos(target);
+        if (orbit)
+        {
+            S3DPoint around;
+            ConvertToVector(orbitangle, orbitdist, around);
+            at.x += around.x;
+            at.y += around.y;
+            at.z += around.z;
+        }
+        else if (S3DPoint offset; attachname[0] && ObjectMapOffset(target, attachname, offset))
+        {
+            at.x += offset.x;
+            at.y += offset.y;
+            at.z += offset.z;
+        }
+        if (control)
+        {
+            at.x += control->pos[0];
+            at.y += control->pos[1];
+            at.z += control->pos[2];
+        }
+        SetPos(at, target->GetLevel(), false);
+
+        if (followtime > 0)
+            followtime--;
+        if (followtime == 0)
+            SetEffectFlags(flags | OF_KILL | OF_PULSE);
+
+        if (visiblewhen[0] && (target->ObjClass() == OBJCLASS_CHARACTER || target->ObjClass() == OBJCLASS_PLAYER))
+        {
+            const TActionBlock* root = static_cast<TCharacter*>(target)->RootBlock();
+            if (root && root->Is(visiblewhen))
+                ResetFlags(flags & ~OF_INVISIBLE);
+            else
+                ResetFlags(flags | OF_INVISIBLE);
+        }
+    }
+
+    if (TObjectInstance* poisoned = (spell ? spell->PoisonTarget() : nullptr))
+        poisoned->SetPoisoned(1);
+
+    if (timed)
+    {
+        if (duration > 0)
+            duration--;
+        if (duration == 0)
+        {
+            if (TObjectInstance* poisoned = (spell ? spell->PoisonTarget() : nullptr))
+                poisoned->SetPoisoned(0);
+            SetEffectFlags(flags | OF_KILL | OF_PULSE);
+        }
+        else if (blinktime > 0 && duration < blinktime)
+        {
+            // The last stretch blinks: a phase 0..3 from how much is left.
+            // Without a blink time retail's phase is the x87's integer
+            // indefinite (a division by zero, Strike's default DURATION2 of
+            // 0 against a DURATION of -1): no blink, as here.
+            const int32_t phase =
+                int32_t((1.0 - double(blinktime - duration) / double(blinktime)) * 4.0);
+            bool hidden = false;
+            bool blinks = true;
+            switch (phase)
+            {
+                case 0: hidden = duration % 4 == 0; break;
+                case 1: hidden = duration % 3 == 0; break;
+                case 2: hidden = duration % 2 == 0; break;
+                case 3: hidden = duration % 3 != 0; break;
+                default: blinks = false; break;
+            }
+            if (blinks)
+                ResetFlags(hidden ? (flags | OF_INVISIBLE) : (flags & ~OF_INVISIBLE));
+        }
+    }
+
+    // REVSYNC-DIVERGENCE: retail hands AreaDamage the invoker pointer the
+    // spell keeps (it dangles once the caster is gone); the port's safe
+    // reference gives none then, and nobody is hurt.
+    if (control && control->rangedamage[0] && control->rangedamage[1] == GetFrame())
+        AreaDamage(spell->GetInvokerRef().Get(), IntPos(*this), control->rangedamage[0], variant->mindamage,
+                   variant->maxdamage, spell->SpellData()->damagetype, 0);
+
+    // Retail preserves the owner's normal animation frames for all effects;
+    // the old per-type whitelist kept the snapshot reset for other types.
+    // A replacing runtime visual has its own verified lifetime (for
+    // example Cure, Mist and Drip). Its companion generic animator's
+    // header can finish earlier; the visual simulator requests its own kill.
+    const auto* visual = GetComponent<TFlipbookBillboardComponent>();
+    const bool visual_owns_lifetime = visual && visual->ReplacesDefaultVisual();
+    if (!visual_owns_lifetime && !spell && HasAnimator() && imagery &&
+        !(imagery->GetAniFlags(GetState()) & AF_LOOPING) && CommandDone())
+    {
+        log_debug("[effect] %s: state %d played out, removed", GetName(), GetState());
+        SetFlags(GetFlags() | OF_KILL);
+    }
+    SetCommandDone(false);
+}
+
+void TEffect::KillThisEffect()
+{
+    if (TObjectInstance* poisoned = (spell ? spell->PoisonTarget() : nullptr))
+        poisoned->SetPoisoned(0);
+    SetEffectFlags(flags | OF_KILL);
+    ResetFlags(flags | OF_PULSE);
+    // Retail ends the spell once the effect is ready to go (slot 0x3c,
+    // 0x004def00: removed, and no light still fading out -- the port's
+    // effect lights don't fade, so at once).
+    if (spell)
+        spell->Kill();
+}
+
+void TEffect::SetEffectFlags(uint32_t value)
+{
+    if (!(flags & OF_KILL) && (value & OF_KILL) && spell && spell->SpellData())
+    {
+        const auto& light = spell->SpellData()->light;
+        if (light.intensity > 0 && light.fadeout > 0)
+            lightramp.StartFadeOut(light.fadeout);
+    }
+    const bool waslight = IsLight();
+    ResetFlags(value);
+    if (!waslight && IsLight())
+        OnScreen();
+    else if (waslight && !IsLight())
+        OffScreen();
+}
+
+void TEffect::Notify(int32_t notify, void* ptr)
+{
+    TObjectInstance::Notify(notify, ptr);
+    TObjectInstance* followed = follow.Get();
+    if (followed && NOTIFY_DELETED(ptr, followed))
+    {
+        follow.Clear();
+        SetEffectFlags(flags | OF_KILL | OF_PULSE);
+    }
+}
+
+void TEffect::Follow(TObjectInstance* target, int32_t a, int32_t dist, bool around)
+{
+    follow = target;
+    if (target)
+        SetNotify(N_DELETINGOBJECT | N_DELETINGSECTOR);
+    orbit = around;
+    orbitangle = a;
+    orbitdist = dist;
+    memset(attachname, 0, sizeof(attachname));
+}
+
+void TEffect::SetAttachName(const char* name)
+{
+    strncpy(attachname, name ? name : "", sizeof(attachname) - 1);
+    attachname[sizeof(attachname) - 1] = 0;
+}
+
+void TEffect::SetVisibleWhen(const char* name)
+{
+    strncpy(visiblewhen, name ? name : "", sizeof(visiblewhen) - 1);
+    visiblewhen[sizeof(visiblewhen) - 1] = 0;
+}
+
+// ***************
+// * TIcedEffect *
+// ***************
+
+// REVSYNC: the "Iced" builder @ 0x004ec860 (Build 0x004f7dc0: 0x18c bytes,
+// vtable 0x005ab25c, no target and no ticks; its Init 0x004ec880, slot
+// 0x1fc, clears both again).
+DEFINE_OBJECT_DEF("Iced", TIcedEffect)
+REGISTER_OBJECT_DEF(TIcedEffect)
+
+void TIcedEffect::Set(TObjectInstance* victim)
+{
+    if (!victim)
+        return;
+    target = victim;
+    victim->SetFlags(OF_PARALIZE);
+    victim->SetFlags(OF_ICED);
+    PlayAt("FREEZECUBE", IntPos(victim));
+}
+
+void TIcedEffect::Pulse()
+{
+    TEffect::Pulse();
+    ++ticks;
+    if (TObjectInstance* victim = target.Get())
+    {
+        if (auto* chr = dynamic_cast<TCharacter*>(victim))
+            chr->Stop();
+        if (ticks < kThawTicks && (!(victim->GetFlags() & OF_ICED) || victim->Health() <= 0))
+            ticks = kThawTicks;
+        if (ticks == kThawTicks)
+        {
+            victim->ResetFlags(victim->GetFlags() & ~OF_PARALIZE);
+            victim->ResetFlags(victim->GetFlags() & ~OF_ICED);
+        }
+    }
+}
+
+// Retail's Iced animator (0x004eca40; its Animate 0x004ecaa0) holds the
+// effect: each frame it clears the effect's command-done flag, so a
+// played-out state never ends it (TEffect::Pulse), and once its shatter
+// (from tick 240) has bounced out it removes it (KillThisEffect); the target
+// is stopped every pulse until then.
+// REVSYNC-DIVERGENCE: that animator is the VFX track's and isn't ported (its
+// shatter draws on the game's RNG in the draw pass); the port's Animate
+// keeps the hold and removes the effect at the shatter.
+void TIcedEffect::Animate(bool draw)
+{
+    TEffect::Animate(draw);
+    SetCommandDone(false);
+    if (ticks >= kThawTicks && !(GetFlags() & OF_KILL))
+        KillThisEffect();
+}
+
+int32_t TEffect::GetAngle()
+{
+    return angle;
+}
+
+void TBurnEffect::Set(PTCharacter ch)
+{
+    character = ch;
+    if (character)
+    {
+        S3DPoint pos;
+        pos = IntPos(character);
+        SetPos(pos);
+    }
+}
+
+void TBurnEffect::ResetFrameCount()
+{
+    // Phase 3: delegate to TBurnAnimator once the burn animator is ported.
+}
+
+void TPulpEffect::Set(S3DPoint /*vel*/, PTCharacter ch,
+                      int32_t /*num_body_part*/, int32_t /*num_blood*/,
+                      int32_t /*num_splat*/)
+{
+    character = ch;
+}
+
+bool SaveBlendState()    { return true; }
+bool SetBlendState()     { return true; }
+bool RestoreBlendState() { return true; }
+
+void TFlipbookBillboardComponent::Submit(TRenderer& renderer) const
+{
+    if (const TObjectInstance* owner = OwnerInstance())
+        Submit(renderer, *owner);
+}
+
+void TFlipbookBillboardComponent::Submit(TRenderer& renderer, const TObjectInstance& inst) const
+{
+    if (texture_handle == kInvalidTexture)
+        return;
+
+    SBillboardDrawItem item = {};
+    const S3DPoint& p = IntPos(inst);
+    item.world_pos[0] = float(p.x);
+    item.world_pos[1] = float(p.y);
+    item.world_pos[2] = float(p.z);
+    item.size_wu[0]   = size_w;
+    item.size_wu[1]   = size_h;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    UvRect(item.uv_rect);
+    item.key.texture     = texture_handle;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(additive_blend ? EFxBlend::Additive : EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+    renderer.SubmitFxBillboard(item);
+}
+
+// Keep the shared flipbook clock, but draw the asset's authored quad instead
+// of deriving its geometry from RefreshZBuffer's damage rectangle.
+class TFlameQuadComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    void ConfigureRetailTexture(bool argb4444) { retail_argb4444_ = argb4444; }
+
+    void ConfigureAuthoredQuad(T3DImagery& imagery, float scale)
+    {
+        if (imagery.NumObjVerts(0) != 4)
+            ParticleFatal("[flame] expected four authored box01 vertices");
+        S3DVertex vertices[4] = {};
+        imagery.GetObjVerts(0, vertices, 0, 0, ERender3DVertex::Vertex);
+
+        // effect_old.cpp:4529-4541: row vectors multiply Rx * Ry * Rz * S.
+        // The object's world transform (including the legacy 1.5 Z stretch)
+        // is concatenated at submission, exactly as for other I3D meshes.
+        hmm_mat4 local = {};
+        MtxClear(&local);
+        constexpr float radians = float(M_PI / 180.0);
+        MtxRotateX(&local, 45.0f * radians);
+        MtxRotateY(&local, 30.0f * radians);
+        MtxRotateZ(&local, 160.0f * radians);
+        const hmm_vec3 uniform_scale = {scale, scale, scale};
+        MtxScale(&local, &uniform_scale);
+        for (int32_t i = 0; i < 4; ++i)
+            MtxTransform(&local, &vertices[i].pos, &local_corners_[i]);
+    }
+
+    void Submit(TRenderer& renderer, const TObjectInstance& inst) const override
+    {
+        if (Texture() == kInvalidTexture)
+            return;
+        SQuadDrawItem item = {};
+        // Base Flame uses the same authored ARGB4444 atlas as its colored
+        // variants. Select the source-format kernel from the loaded texture,
+        // including sector-less previews that have no retail type record.
+        const bool native = StartupVfxNativeDomain;
+        item.retail_texture = retail_argb4444_ ? 1 : 0;
+        item.retail_argb4444 = retail_argb4444_;
+        hmm_mat4 native_owner;
+        if(native){const auto& p=IntPos(inst);BuildRetailSoftwareOwner(native_owner,p.x,p.y,p.z,uint8_t(IntFacing(inst)));}
+        const hmm_mat4& world = native?native_owner:inst.Transform().Matrix();
+        item.retail_software_projection=native;
+        float rect[4] = {};
+        UvRect(rect);
+        if(native && TTime::FrameCount()<=40)log_info("[flame-phase] tick=%lld uv=%.9g,%.9g,%.9g,%.9g",(long long)TTime::FrameCount(),rect[0],rect[1],rect[2],rect[3]);
+        if (DebugMode() == EFxDebugMode::FullTexture)
+        {
+            rect[0] = rect[1] = 0.0f;
+            rect[2] = rect[3] = 1.0f;
+        }
+        for (int32_t i = 0; i < 4; ++i)
+        {
+            hmm_vec3 corner = {};
+            MtxTransform(&world, &local_corners_[i], &corner);
+            item.world_pos[i][0] = corner.X;
+            item.world_pos[i][1] = corner.Y;
+            item.world_pos[i][2] = corner.Z;
+            // Original Render rewrites UVs by vertex index; preserve this
+            // mapping, independent of the quad's rotated screen orientation.
+            item.uv[i][0] = rect[0] + float(i & 1) * rect[2];
+            item.uv[i][1] = rect[1] + float(i >> 1) * rect[3];
+        }
+        item.key.texture = Texture();
+        item.key.blend = uint8_t(AdditiveBlend() ? EFxBlend::Additive : EFxBlend::Alpha);
+        item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
+        item.debug_mode = DebugMode();
+        renderer.SubmitFxQuad(item);
+    }
+
+  private:
+    hmm_vec3 local_corners_[4] = {};
+    bool retail_argb4444_ = false;
+};
+
+DEFINE_OBJECT_DEF("FLAME", TFlameEffect)
+REGISTER_OBJECT_DEF(TFlameEffect)
+
+void TFlameEffect::InitializeVisualComponent(TObjectImagery* imagery)
+{
+    AttachVisualComponent(this, imagery);
+}
+
+void TFlameEffect::AttachVisualComponent(TObjectInstance* inst, TObjectImagery* imagery)
+{
+    if (!inst)
+        return;
+
+    const SParticleEffectDef& def = TorchFlameDef();
+    const SParticleBucketEffectDef& primary_bucket = def.bucket.front();
+    const bool needs_flipbook = !inst->GetComponent<TFlipbookBillboardComponent>();
+    if (!needs_flipbook)
+        return;
+
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(imagery);
+    if (!img3d)
+        return;
+    // Force lazy mesh init. NumTextures() itself is not init-triggering
+    // (texture slots are only populated by InitializeMesh / OldInitializeMesh),
+    // but NumObjects() is — so a quick poke through that path materializes
+    // the texture slots before we read them. Otherwise spawning a flame
+    // via SpawnForTest immediately after LoadImagery sees NumTextures==0
+    // and silently bails.
+    (void)img3d->NumObjects();
+    if (img3d->NumTextures() <= 0)
+    {
+        // Constructors can run before T3DImagery has initialized texture
+        // slots. The animator-builder hook calls us again after mesh init.
+        return;
+    }
+
+    // Imagery-only preview constructors do not have a CLASS type record.
+    const uint32_t flame_id = inst->ObjClass() == OBJCLASS_EFFECT ? inst->ObjId() : 0;
+    if ((flame_id==0x50ba373cu || flame_id==0x50ba373du) &&
+        !flame_variants_preview::Matches(inst,img3d)) {
+        log_warn("[flame] rejected exact colored variant resource id=%08x",flame_id);
+        return;
+    }
+
+    S3DTex primary_tex = {};
+    img3d->GetTexture(primary_bucket.texture_slot, &primary_tex);
+    if (primary_tex.htexture == kInvalidTexture)
+        FatalError("[particle] FLAME effect texture handle is invalid");
+
+    const int32_t primary_texture_width = int32_t(primary_tex.desc.width);
+    const int32_t primary_texture_height = int32_t(primary_tex.desc.height);
+    if (primary_texture_width <= 0 || primary_texture_height <= 0)
+    {
+        char err[256];
+        snprintf(err, sizeof(err),
+                 "[particle] FLAME effect texture dimensions invalid desc=%ux%u",
+                 primary_tex.desc.width, primary_tex.desc.height);
+        FatalError(err);
+    }
+
+    if (needs_flipbook)
+    {
+        auto flipbook = std::make_unique<TFlameQuadComponent>();
+        flipbook->Configure(primary_tex.htexture,
+                            primary_texture_width, primary_texture_height,
+                            primary_bucket.atlas_cols,
+                            primary_bucket.atlas_rows,
+                            primary_bucket.atlas_frames,
+                            primary_bucket.width * primary_bucket.scale,
+                            primary_bucket.height * primary_bucket.scale,
+                            primary_bucket.additive, true);
+        flipbook->ConfigureAuthoredQuad(*img3d, primary_bucket.scale);
+        flipbook->ConfigureRetailTexture(RetailMeshTextureLighting(primary_tex.desc.pixelFormat) == 3);
+        std::string expr_error;
+        if (!flipbook->SetFrameExpression(primary_bucket.frame_expr.c_str(), &expr_error))
+            ParticleFatal("[particle] FLAME frame expression compile failed: " + expr_error);
+        if (!flipbook->SetUvRectExpression(primary_bucket.uv_rect_expr.c_str(), &expr_error))
+            ParticleFatal("[particle] FLAME uv rect expression compile failed: " + expr_error);
+        flipbook->SetDebugMode(def.debug_solid ? EFxDebugMode::SolidColor
+                                               : EFxDebugMode::Normal);
+        inst->AddComponent(std::move(flipbook));
+        log_info("[flame-component] attached flipbook component tex=%dx%d handle=%u",
+                 primary_texture_width, primary_texture_height, primary_tex.htexture);
+    }
+
+}
+
+class TFlameAnimatorComponentBuilder : public T3DAnimatorBuilder
+{
+  public:
+    TFlameAnimatorComponentBuilder() : T3DAnimatorBuilder("FLAME") {}
+    T3DAnimator* Build(TObjectInstance* oi) override { return new T3DAnimator(oi); }
+    void AttachComponents(TObjectInstance* oi) override
+    {
+        TFlameEffect::AttachVisualComponent(oi, oi ? oi->GetImagery() : nullptr);
+    }
+};
+
+static TFlameAnimatorComponentBuilder g_flame_animator_component_builder;
+
+// Standalone spawn path used by the --test=vfx harness. The in-game spawn
+// route is `MapPane::NewObject(SObjectState*)`, which threads the instance
+// into a loaded sector via the object-class registry; that's overkill (and
+// requires a live area / sector) for previewing a single effect. Here we
+// take the imagery-only ctor, attach the visual components by hand, and
+// give the instance a fresh map index so its components Activate (their
+// RegisterUpdate hooks need to be in the global update list for the
+// flipbook frame counter to tick). The caller `delete`s the returned
+// pointer when done; the destructor releases the imagery refcount and
+// detaches the components.
+TFlameEffect* TFlameEffect::SpawnForTest(const S3DPoint& origin)
+{
+    constexpr const char* kImageryPath = "Magic\\flame.i3d";
+
+    const int32_t img_id = TObjectImagery::FindImagery(kImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[flame] SpawnForTest: FindImagery('%s') failed", kImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[flame] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[flame] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Use the imagery-only ctor; we don't have (or want) an SObjectState /
+    // OBJCLASS_EFFECT registry entry for a preview-only instance. Note
+    // that this leaves `objclass == -1`; the destructor's component +
+    // imagery cleanup runs regardless (see TObjectInstance::~TObjectInstance).
+    auto* flame = new TFlameEffect(base);
+    SetIntPos(flame, origin);
+
+    // OnAttach (which RegisterUpdates the flipbook ticker) only fires once
+    // the instance has a map index, since AddComponent gates Activate() on
+    // GetMapIndex() >= 0. Stamp one in now so subsequent AddComponent calls
+    // (and any future ones from the harness) activate immediately. The
+    // visual component on the existing instance was added inside the ctor
+    // before the map index existed — re-Activate it explicitly so its
+    // OnAttach RegisterUpdate fires too.
+    flame->SetMapIndex(MapPane.MakeIndex());
+
+    // Activate every owned component now that the instance has a map
+    // index. The ctor's AddComponent calls ran *before* SetMapIndex, so
+    // the auto-Activate path in AddComponent (gated on GetMapIndex() >= 0)
+    // was skipped — re-fire OnAttach (and any RegisterUpdate inside) here.
+    flame->ActivateComponents();
+
+    if (!flame->GetComponent<TFlipbookBillboardComponent>())
+    {
+        log_error("[flame] SpawnForTest: flipbook component missing after ctor "
+                  "(T3DImagery has %d textures, %d objects) — asset may be "
+                  "missing texture slot 0",
+                  img3d->NumTextures(), img3d->NumObjects());
+        delete flame;
+        return nullptr;
+    }
+
+    log_info("[flame] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "textures=%d",
+             kImageryPath, flame->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             img3d->NumTextures());
+    return flame;
+}
+
+// *************************************************************************
+// * (B01) TBloodEffect — engine-particle rework                            *
+// *************************************************************************
+//
+// See docs/vfx/forensics/B01_TBloodEffect_RENDER_RESETTLED.md for the
+// authoritative spec, docs/vfx/PLAN_B01_engine_rework.md for the rework
+// plan. Blood is rebuilt as two engine particle buckets declared in
+// assets/effects.def:
+//
+//   blood_fly    — one-shot 10-droplet burst (spawn_burst=10), 24 Hz
+//                  integration, gravity+drag tick_expr, reflection-plane
+//                  kill_expr on pos.z <= emit_pos.z. chain_bucket=
+//                  "blood_splat" spawns one SPLAT decal at the impact
+//                  site when a droplet kills.
+//   blood_splat  — chain-driven, ground-flat decal (orientation=world_xy),
+//                  holds peak scale for ~60% of life then shrinks to zero.
+//
+// Render-state per the resettled doc §6:
+//   - blend = Alpha (with the texture loader's 1-bit chroma-key alpha
+//     baked in by 3dimage.cpp ~line 1690, the result is chroma-keyed
+//     opaque -- not semi-transparent, not additive).
+//   - light_mode = LitFlat (scene-lit grayscale modulation, retail
+//     DoLighting analog).
+//   - depth_mode = TestNoWrite.
+//   - orientation = ScreenAligned (FLY) / WorldXY (SPLAT).
+//
+// The bespoke C++ port (1998 TBloodSystem-style per-particle state
+// machine on the effect class, two-pass alpha+additive billboard draws)
+// is preserved under `#if 0` below for reference, per project
+// preserve-old-code rule.
+namespace {
+
+constexpr const char* kBloodImageryPath = "Misc\\Blood.I3D";
+
+// Cached parsed effects.def "Blood" block. Lazy on first use; same
+// pattern as TorchFlameDef / MistEffectDef above.
+const SParticleEffectDef& BloodEffectDef()
+{
+    static const SParticleEffectDef def = ParseParticleEffectDef("Blood");
+    return def;
+}
+
+// 24 Hz cadence gate (family-consistent with F03/H03/M05/X22). The original
+// per-tick rates (gravity 0.37 wu/tick^2, drag 0.95/tick, scale step 0.01/tick,
+// SPLAT duration 25 ticks, SHRINK step 0.1/tick) are integrated once per
+// sim-tick of accumulated wall-clock time. See forensics §3 + §6.2.
+constexpr int32_t kBloodSimTickMs = 1000 / 24;
+
+// Constants — straight from src/effectcomp.cpp:1164-1180 (forensics §3).
+// Names mirror the BLOOD_* defines so the port reads side-by-side with
+// the original (the doc cites these by their BLOOD_* spelling).
+constexpr float   kBloodAirresist     = 0.95f;
+constexpr float   kBloodGravity       = 0.37f;
+constexpr int32_t kBloodStageFly      = 0;
+constexpr int32_t kBloodStageSplat    = 1;
+constexpr int32_t kBloodStageShrink   = 2;
+constexpr float   kBloodSplatSize     = 1.8f;
+constexpr int32_t kBloodSplatDuration = 25;
+constexpr float   kBloodSplatScale    = 0.1f;
+constexpr int32_t kBloodZOffset       = 20;
+constexpr float   kBloodVel           = 2.0f;
+constexpr int32_t kBloodSquirtDelay   = 3;
+constexpr float   kBloodFlyScaleStep  = 0.01f;
+constexpr float   kBloodFlyScale      = 1.0f;
+constexpr int32_t kBloodBloodsPerSquirt = 4;
+constexpr int32_t kBloodMostBloods    = 10;
+
+// Retail spray params (TCharacter::ResolveAttack impale immediates per
+// recon/discovered/cls_0x5a7b98_..._4c1bb0.cpp:190 — forensics §2.1 / §3).
+// These are the live-ship values for the attack-hit path. The snapshot's
+// commented `SetParams(40, (face+128)&255, 0, 80, 20, random(1,5))` at
+// character.cpp:2260 differs only in spread tuning (snapshot 80/20 vs
+// retail 32/5; flagged §13.2) — retail wins for the impale path.
+constexpr int32_t kBloodHeightAttack = 40;
+constexpr int32_t kBloodVangleAttack = 32;     // retail 0x20 (vangle, not vspread)
+constexpr int32_t kBloodHspreadAttack = 32;    // RETAIL 0x20 (snapshot 80)
+constexpr int32_t kBloodVspreadAttack = 5;     // RETAIL 5     (snapshot 20)
+constexpr int32_t kBloodNumMin = 1;            // random(1,5) count
+constexpr int32_t kBloodNumMax = 5;
+constexpr int32_t kBloodSizeIdxMax = 2;        // size = random(0, min(maxsize, 2))
+
+// Quad world-unit size when the I3D sub-object has no resolvable size hint.
+// The Blood.I3D box billboards are authored at sprite-cell pixel sizes; the
+// FB pipeline draws size_wu world-units, so we pick a small base that
+// reads as a droplet at typical camera distances. The per-droplet scl
+// curve multiplies this (FLY ~1.0 → SPLAT 1.8 → SHRINK → 0).
+constexpr float kBloodBaseSizeWu = 16.0f;
+
+// Resolve which texture slot a sub-object draws from by walking its
+// texfaces[] table. Each S3DObj records one nonzero entry in
+// numtexfaces[1..MAXTEXTURES] for the single texture that actually
+// renders its quad (index 0 is no-texture). Returns -1 if none found.
+int32_t SubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
+{
+    if (!img3d || objnum < 0 || objnum >= img3d->NumObjects())
+        return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0)
+        return -1;
+    // GetObjFaces fills numtexfaces[0..MAXTEXTURES]. Index 0 is the
+    // "no texture" bin; the active texture slot is the first nonzero
+    // index in [1..MAXTEXTURES]. Return slot-1 (zero-based texture index
+    // for GetTexture).
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
+}
+
+// Read a sub-object's authored UV sub-rect from its vertex list. Matches
+// the spark UV-cell extraction (see TSparkEffect::SpawnForTest).
+void ResolveSubObjUv(T3DImagery* img3d, int32_t objnum, float out[4])
+{
+    out[0] = 0.0f; out[1] = 0.0f; out[2] = 1.0f; out[3] = 1.0f;
+    if (!img3d) return;
+    const int32_t nverts = img3d->NumObjVerts(objnum);
+    if (nverts <= 0) return;
+    std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
+    img3d->GetObjVerts(objnum, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+    float minu = vbuf[0].tu, maxu = vbuf[0].tu;
+    float minv = vbuf[0].tv, maxv = vbuf[0].tv;
+    for (int32_t i = 1; i < nverts; ++i)
+    {
+        if (vbuf[i].tu < minu) minu = vbuf[i].tu;
+        if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
+        if (vbuf[i].tv < minv) minv = vbuf[i].tv;
+        if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
+    }
+    out[0] = minu;
+    out[1] = minv;
+    out[2] = maxu - minu;
+    out[3] = maxv - minv;
+}
+
+// Byte-angle → world XY components (matches the original
+// `((angle & 255) * 360 / 256) * TORADIAN` math at effectcomp.cpp:1222-1223).
+float ByteAngleToRad(int32_t byteangle)
+{
+    return float((byteangle & 255)) * (float(M_PI) * 2.0f / 256.0f);
+}
+
+}   // namespace
+
+// --- Engine-driven implementation (resettled-forensics rework) -----------
+//
+// Retail TBloodEffect::Initialize / Pulse are the in-game spawn-path hooks
+// (decompiled body lives in recon/classes/cls_0x5acaa8.cpp, merged with
+// Mist + WaterFall — see forensics §2). The `--test=vfx` path drives
+// spawn + tick via SpawnForTest + TickAndSubmitForTest, which wire a
+// TParticleEffectComponent configured with the "Blood" effects.def block
+// (FLY + SPLAT buckets + chain). The in-game path will be wired in B01a.
+
+TBloodEffect::~TBloodEffect()
+{
+    // Drop any live particles owned by this effect. Both buckets are
+    // engine-owned globals; reaping by owner_id only kills this effect's
+    // contribution, leaving other in-flight bursts (if any) intact.
+    if (owner_particle_id_ >= 0.0f)
+    {
+        if (fly_bucket_)   fly_bucket_->KillParticlesByOwner(owner_particle_id_);
+        if (splat_bucket_) splat_bucket_->KillParticlesByOwner(owner_particle_id_);
+    }
+}
+
+void TBloodEffect::Initialize()
+{
+    // Empty (intentional). The pre-release TBloodEffect::Initialize body
+    // is empty (effect_old.cpp:11246-11253); per-burst state now lives
+    // in the engine particle buckets keyed by owner_particle_id_.
+}
+
+void TBloodEffect::Pulse()
+{
+    TEffect::Pulse();
+    // No per-pulse work — the engine ticks particles via the attached
+    // TParticleEffectComponent's DrawPulse path each render frame.
+}
+
+bool TBloodEffect::IsAlive() const
+{
+    // Alive while either bucket still holds particles owned by us. The
+    // harness uses this to gate the re-trigger gap (see vfxtest.cpp
+    // BloodSubmit). Walking the bucket per-frame is fine — both buckets
+    // hold at most a few dozen particles total at the SPLAT/FLY peaks.
+    auto any_owned = [this](const TParticleBucket* b) {
+        if (!b) return false;
+        for (int32_t i = 0; i < b->Count(); ++i)
+        {
+            const float* o = b->VarPtr(i, EParticleVar::OwnerId);
+            if (o && *o == owner_particle_id_)
+                return true;
+        }
+        return false;
+    };
+    return any_owned(fly_bucket_) || any_owned(splat_bucket_);
+}
+
+TBloodEffect* TBloodEffect::SpawnForTest(const S3DPoint& origin)
+{
+    // Load Misc\Blood.I3D so its textures get registered with the renderer
+    // (the bucket descs reference these via `imagery_path` and the engine
+    // resolves the htexture handle at StartRuntime; the texture loader's
+    // 1-bit chroma-key alpha conversion happens during this load, per
+    // 3dimage.cpp ~line 1690). No procedural stand-in -- the dark-red box
+    // sprites ARE the visual identity per forensics §10.
+    const int32_t img_id = TObjectImagery::FindImagery(kBloodImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[blood] SpawnForTest: FindImagery('%s') failed", kBloodImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[blood] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kBloodImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[blood] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kBloodImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+    // Force lazy mesh init so the bucket-desc resolver finds populated
+    // texture slots (NumTextures alone doesn't trigger init).
+    (void)img3d->NumObjects();
+    if (img3d->NumTextures() <= 0)
+    {
+        log_error("[blood] SpawnForTest: imagery has no textures after init");
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* blood = new TBloodEffect(base);
+    SetIntPos(blood, origin);
+    blood->SetMapIndex(MapPane.MakeIndex());
+    blood->ActivateComponents();
+
+    // Attach the engine-driven particle component. The "Blood" effects.def
+    // entry declares two buckets (blood_fly + blood_splat) wired by
+    // chain_bucket="blood_splat" on FLY's kill_expr.
+    auto particle_effect = std::make_unique<TParticleEffectComponent>();
+    particle_effect->Configure(&BloodEffectDef());
+    blood->AddComponent(std::move(particle_effect));
+
+    // Drive one DrawPulse so StartRuntime fires NOW and the FLY bucket's
+    // spawn_burst=10 emits immediately (visible from frame 1, matching
+    // the harness Static preview style).
+    if (auto* pe = blood->GetComponent<TParticleEffectComponent>())
+        pe->DrawPulse();
+
+    blood->fly_bucket_       = ParticleManager().FindGlobalBucket("blood_fly");
+    blood->splat_bucket_     = ParticleManager().FindGlobalBucket("blood_splat");
+    blood->owner_particle_id_ = float(blood->NodeId());
+
+    log_info("[blood] SpawnForTest (engine-driven): '%s' map_index=%d "
+             "origin=(%d,%d,%d) fly_bucket=%p splat_bucket=%p def=Blood",
+             kBloodImageryPath, blood->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             (void*)blood->fly_bucket_, (void*)blood->splat_bucket_);
+    return blood;
+}
+
+void TBloodEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!Renderer) return;
+
+    // Drive the engine's per-frame integration. Pulse first so the
+    // FLY tick_expr advances + kill_expr/chain fire before submit.
+    if (auto* pe = GetComponent<TParticleEffectComponent>())
+        pe->DrawPulse();
+
+    if (fly_bucket_)
+        Renderer->SubmitFxParticleBucket(*fly_bucket_, debug_mode);
+    if (splat_bucket_)
+        Renderer->SubmitFxParticleBucket(*splat_bucket_, debug_mode);
+}
+
+// --- Bespoke faithful port (A/B reference, lives alongside engine port).
+//
+// The 1998 TBloodSystem-style implementation: 30-particle array on the
+// effect class, 3-stage FLY → SPLAT → SHRINK state machine integrated at
+// 24 Hz via a sim-tick accumulator, two-pass billboard draw per droplet
+// (Alpha base + AdditiveStraight overlay) using 8 box sub-objects of
+// Misc\Blood.I3D. Lives alongside the engine-particle rework above as
+// the A/B baseline for snap_ab.py side-by-side filmstrip verification
+// (see TBloodEffect_Bespoke in effect.h + tools/vfx/snap_ab.py).
+//
+// The math/constants/sub-object resolution are the snapshot port,
+// preserved per project preserve-old-code rule.
+
+TBloodEffect_Bespoke* TBloodEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // --- Load the REAL Misc\Blood.I3D imagery (no procedural stand-in).
+    // The dark-red box sprites ARE the visual identity (forensics §10).
+    const int32_t img_id = TObjectImagery::FindImagery(kBloodImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[blood] SpawnForTest: FindImagery('%s') failed", kBloodImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[blood] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kBloodImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[blood] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kBloodImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* blood = new TBloodEffect_Bespoke(base);
+    SetIntPos(blood, origin);
+    blood->SetMapIndex(MapPane.MakeIndex());
+    blood->ActivateComponents();
+
+    // Lazy-mesh-init poke (mirror F01 / H04 / X22). NumObjects triggers
+    // the actual mesh load; NumTextures alone doesn't.
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj < 8 || num_tex <= 0)
+    {
+        log_error("[blood] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d) — expected 8 box sub-objects",
+                  num_obj, num_tex);
+        delete blood;
+        return nullptr;
+    }
+
+    // Resolve each of the 8 box sub-objects to (texture, UV sub-rect).
+    // Forensics §4 maps:
+    //   index 0..3 = box01..box04 = pass 1 (AdditiveStraight overlay)
+    //   index 4..7 = box05..box08 = pass 0 (Alpha base)
+    // Within each set: [0]=small, [1]=med, [2]=big, [3]=splat.
+    // GetObject(0..7) maps directly to T3DImagery sub-object indices 0..7;
+    // box01 is sub-object 0, box02 is 1, ..., box08 is 7.
+    int32_t resolved_textures[8] = {0,0,0,0,0,0,0,0};
+    for (int32_t i = 0; i < 8; ++i)
+    {
+        if (i >= num_obj)
+            break;
+        const int32_t tex_slot = SubObjTextureSlot(img3d, i);
+        const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+        resolved_textures[i] = slot;
+        S3DTex tex = {};
+        img3d->GetTexture(slot, &tex);
+        blood->subobjs_[i].texture = tex.htexture;
+        ResolveSubObjUv(img3d, i, blood->subobjs_[i].uv_rect);
+        blood->subobjs_[i].size_wu = kBloodBaseSizeWu;
+    }
+    if (blood->subobjs_[0].texture == kInvalidTexture
+        || blood->subobjs_[4].texture == kInvalidTexture)
+    {
+        log_error("[blood] SpawnForTest: sub-object textures unresolved "
+                  "(pass1[0]=%u, pass0[4]=%u)",
+                  blood->subobjs_[0].texture, blood->subobjs_[4].texture);
+        delete blood;
+        return nullptr;
+    }
+
+    // --- Port of TBloodSystem::Init (effectcomp.cpp:1182-1307).
+    // Retail spray params (forensics §2.1 / §3): impale-path immediates.
+    // hangle randomized for the harness (no attacker→victim vector); in-game
+    // it's `(victim_face + 128) & 255` (180° from victim front).
+    int32_t height_param  = kBloodHeightAttack;            // 40 wu above object pos
+    int32_t hangle_param  = random(0, 255);                // harness: random horizontal mean
+    int32_t vangle_param  = kBloodVangleAttack;            // retail 32
+    int32_t hspread_param = kBloodHspreadAttack;           // RETAIL 32 (not snapshot 80)
+    int32_t vspread_param = kBloodVspreadAttack;           // RETAIL 5  (not snapshot 20)
+    int32_t num_param     = random(kBloodNumMin, kBloodNumMax);  // random(1,5)
+    // maxsize from TBloodAnimator::Initialize (effect_old.cpp:11292).
+    int32_t maxsize_param = 2;
+
+    // ViolenceLevel clamps (effectcomp.cpp:1214-1217).
+    int32_t num     = num_param;
+    int32_t maxsize = maxsize_param;
+    if (num > ViolenceLevel * 2)
+        num = ViolenceLevel * 2;
+    if (maxsize > ViolenceLevel)
+        maxsize = ViolenceLevel;
+
+    // Trail-fill budget (effectcomp.cpp:1211).
+    const int32_t init_left_base =
+        kBloodMaxParticles - ((kBloodMostBloods - num) * kBloodBloodsPerSquirt);
+    int32_t left = init_left_base > kBloodBloodsPerSquirt
+                       ? init_left_base
+                       : kBloodBloodsPerSquirt;
+
+    blood->height_local_ = float(height_param);
+
+    // Main droplets (effectcomp.cpp:1220-1236).
+    int32_t cur_num = 0;
+    const int32_t main_count = num < kBloodMaxParticles ? num : kBloodMaxParticles;
+    for (int32_t i = 0; i < main_count; ++i)
+    {
+        // Byte-angle ± spread → radians, faithful to original
+        // `(((mean + random(-spread, spread)) & 255) * 360 / 256) * TORADIAN`.
+        const float ha = ByteAngleToRad(
+            hangle_param + random(-hspread_param, hspread_param));
+        const float va = ByteAngleToRad(
+            vangle_param + random(-vspread_param, vspread_param));
+        SBloodParticleEx& p = blood->particles_[i];
+        p.used = true;
+        const int32_t sz_cap = maxsize < kBloodSizeIdxMax ? maxsize : kBloodSizeIdxMax;
+        p.size = random(0, sz_cap);
+        p.pos.X = 0.0f;
+        p.pos.Y = 0.0f;
+        p.pos.Z = float(height_param);
+        const float vs_x = float(random(100, 300)) / 100.0f;   // 1.0 .. 3.0
+        const float vs_y = float(random(100, 300)) / 100.0f;
+        const float vs_z = float(random(100, 300)) / 100.0f;
+        p.vel.X = kBloodVel * std::cos(ha) * vs_x;
+        p.vel.Y = kBloodVel * std::sin(ha) * vs_y;
+        p.vel.Z = kBloodVel * std::sin(va) * vs_z;
+        p.scl   = kBloodFlyScale;
+        p.stage = kBloodStageFly;
+        p.delay = 0;
+        p.count = 0;
+        --left;
+        ++cur_num;
+    }
+
+    // Trail-fill gate (effectcomp.cpp:1238-1239).
+    if (ViolenceLevel < 4)
+        left = 0;
+
+    // Smalls-trail-smalls loop (effectcomp.cpp:1285-1306).
+    // Only the live loop — the big/med trail loops above (:1242-1283) are
+    // dead per forensics §13.5. Walk i forward through the source droplets,
+    // adding small droplets riding each one at vel * random(60,75)/80.
+    for (int32_t i = 0; left > 0 && cur_num < kBloodMaxParticles; ++i)
+    {
+        // Original loop has no upper bound on i — it walks until either
+        // `left` runs out or `me.num >= MAX_BLOODS` (cur_num == cap), with
+        // the source droplet index wrapping by always pulling from the
+        // most recent slot (i increments while cur_num grows). Cap i to
+        // the live count to avoid an unbounded walk if the seeded droplets
+        // ran out (an edge case the original tolerated implicitly via the
+        // MAX_BLOODS ceiling).
+        if (i >= cur_num)
+            break;
+        if (!blood->particles_[i].used)
+            continue;
+        SBloodParticleEx& parent = blood->particles_[i];
+        SBloodParticleEx& q = blood->particles_[cur_num];
+        q.used = true;
+        q.size = random(0, 1);
+        q.pos.X = 0.0f;
+        q.pos.Y = 0.0f;
+        q.pos.Z = float(height_param);
+        const float scale_x = float(random(60, 75)) / 80.0f;   // 0.75..0.9375
+        const float scale_y = float(random(60, 75)) / 80.0f;
+        const float scale_z = float(random(60, 75)) / 80.0f;
+        q.vel.X = parent.vel.X * scale_x;
+        q.vel.Y = parent.vel.Y * scale_y;
+        q.vel.Z = parent.vel.Z * scale_z;
+        q.delay = parent.delay + kBloodSquirtDelay + random(-1, 1);
+        if (q.delay < 0) q.delay = 0;
+        q.stage = kBloodStageFly;
+        q.scl   = kBloodFlyScale;
+        q.count = 0;
+        ++cur_num;
+        --left;
+    }
+
+    blood->alive_ = (cur_num > 0);
+    log_info("[blood] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "particles=%d (main=%d trail=%d) height=%d hangle=%d "
+             "hspread=%d vspread=%d ViolenceLevel=%d "
+             "subobj_tex={pass1=%u/%u/%u/%u, pass0=%u/%u/%u/%u} "
+             "tex_slots={%d,%d,%d,%d,%d,%d,%d,%d}",
+             kBloodImageryPath, blood->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             cur_num, main_count, cur_num - main_count,
+             height_param, hangle_param, hspread_param, vspread_param,
+             ViolenceLevel,
+             blood->subobjs_[0].texture, blood->subobjs_[1].texture,
+             blood->subobjs_[2].texture, blood->subobjs_[3].texture,
+             blood->subobjs_[4].texture, blood->subobjs_[5].texture,
+             blood->subobjs_[6].texture, blood->subobjs_[7].texture,
+             resolved_textures[0], resolved_textures[1],
+             resolved_textures[2], resolved_textures[3],
+             resolved_textures[4], resolved_textures[5],
+             resolved_textures[6], resolved_textures[7]);
+    return blood;
+}
+
+void TBloodEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Update: port of TBloodSystem::Animate (effectcomp.cpp:1309-1370),
+    // framerate-independent via the 24 Hz sim-tick accumulator. Each tick
+    // runs the original per-tick integration exactly once.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kBloodSimTickMs))
+        {
+            sim_accum_ms_ -= double(kBloodSimTickMs);
+
+            bool done = true;
+            for (int32_t i = 0; i < kBloodMaxParticles; ++i)
+            {
+                SBloodParticleEx& p = particles_[i];
+                if (!p.used)
+                    continue;
+                if (p.delay > 0)
+                {
+                    p.delay--;
+                    continue;
+                }
+                done = false;
+
+                if (p.stage == kBloodStageFly)
+                {
+                    // effectcomp.cpp:1326-1334: pos += vel; vel.xy *= 0.95;
+                    // vel.z -= 0.37; scl += 0.01.
+                    p.pos.X += p.vel.X;
+                    p.pos.Y += p.vel.Y;
+                    p.pos.Z += p.vel.Z;
+                    p.vel.X *= kBloodAirresist;
+                    p.vel.Y *= kBloodAirresist;
+                    p.vel.Z -= kBloodGravity;
+                    p.scl   += kBloodFlyScaleStep;
+
+                    // effectcomp.cpp:1336-1345: ground hit → SPLAT, with
+                    // early-kills at ViolenceLevel<3 OR size==0.
+                    if (p.pos.Z <= float(kBloodZOffset))
+                    {
+                        p.pos.Z = float(kBloodZOffset);
+                        p.stage = kBloodStageSplat;
+                        p.count = 0;
+                        if (ViolenceLevel < 3)
+                            p.used = false;
+                        if (p.size == 0)
+                            p.used = false;
+                    }
+                }
+                else if (p.stage == kBloodStageSplat)
+                {
+                    // effectcomp.cpp:1347-1355.
+                    p.scl = kBloodSplatSize;
+                    p.count++;
+                    if (p.count > kBloodSplatDuration)
+                    {
+                        p.stage = kBloodStageShrink;
+                        p.count = 0;
+                    }
+                }
+                else if (p.stage == kBloodStageShrink)
+                {
+                    // effectcomp.cpp:1357-1365.
+                    p.scl -= kBloodSplatScale;
+                    if (p.scl <= 0.0f)
+                    {
+                        p.scl = 0.0f;
+                        p.used = false;
+                    }
+                }
+            }
+            // TBloodAnimator self-destruct: OF_KILL when GetDone() goes
+            // true (effect_old.cpp:11313-11316). Harness reads alive_ to
+            // know when to re-trigger.
+            if (done)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    // Snapshot TBloodSystem::Render draws two passes per particle:
+    // box05/06 are an ARGB4444 black opacity mask; box01/02 contain
+    // the RGB565 red color. Neither pass is a substitute for the other.
+    // Preserve their source order through the billboard batching queue.
+    const S3DPoint& base = IntPos(*this);
+    for (int32_t i = 0; i < kBloodMaxParticles; ++i)
+    {
+        const SBloodParticleEx& p = particles_[i];
+        if (!p.used || p.delay > 0)
+            continue;
+        // Per-droplet world position. The render places each box at
+        // (pos.x, pos.y, pos.z - height) so the world z is
+        // (object_origin.z + pos.z - height) — forensics §7 "the −height
+        // cancels the local start height". For the harness, base is the
+        // object origin in world coords.
+        const float wx = float(base.x) + p.pos.X;
+        const float wy = float(base.y) + p.pos.Y;
+        const float wz = float(base.z) + (p.pos.Z - height_local_);
+
+        // Size index → sub-object within each pass-set: [0]=small, [1]=med,
+        // [2]=big (DEAD, falls through to small per §13.3), [3]=splat
+        // (DEAD, only used by the bif splash per §13.4). Render small + med
+        // only. Big size collapses to small.
+        const int32_t cell = p.size == 1 ? 1 : 0;
+
+        // Common item template (per-pass blend + sub-object override below).
+        SBillboardDrawItem item = {};
+        item.size_wu[0] = item.size_wu[1] =
+            subobjs_[4 + cell].size_wu * p.scl;
+        item.color_rgba[0] = 1.0f;
+        item.color_rgba[1] = 1.0f;
+        item.color_rgba[2] = 1.0f;
+        item.color_rgba[3] = 1.0f;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        // Light mode: matches the engine-driven blood_fly bucket
+        // (assets/effects.def `light_mode = "unlit"`) which is
+        // currently set Unlit as a harness diagnostic until the test scene
+        // lights TBloodEffect properly (resettled doc §6.6). Keeping the
+        // bespoke aligned with the engine path means the A/B capture
+        // isolates BLEND differences only, not lighting.
+        item.light_mode = EFxLightMode::Unlit;
+        // FLY droplets are tipped ground-flat (RotateX(-90°)+RotateZ(-45°),
+        // i.e. WorldXY ground-oriented with a 45° in-plane spin per §7);
+        // SPLAT/SHRINK keep authored facing. WorldXY is the engine analog
+        // for the canonical ground-flat tip.
+        item.orientation = p.stage == kBloodStageFly
+                               ? EFxBillboardOrientation::WorldXY
+                               : EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode  = debug_mode;
+        item.world_pos[0] = wx;
+        item.world_pos[1] = wy;
+        item.world_pos[2] = wz;
+
+        item.preserve_submission_order = true;
+        for (int32_t pass = 0; pass < 2; ++pass)
+        {
+            const SBloodSubObject& so = subobjs_[(pass == 0 ? 4 : 0) + cell];
+            if (so.texture == kInvalidTexture) continue;
+            item.key.texture = so.texture;
+            item.key.blend = uint8_t(pass == 0 ? EFxBlend::Alpha : EFxBlend::AdditiveStraight);
+            std::copy_n(so.uv_rect, 4, item.uv_rect);
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+}
+// --- end bespoke faithful port (A/B reference)
+
+// *************************************************************************
+// * TFlameEffect_Bespoke — legacy preview IDs for authored Flame          *
+// *************************************************************************
+// Base, blue and green previews use the same authored quad, literal retail
+// Euler transform, 18-tick clock and 4x2 atlas UV mapping as TFlameEffect.
+// Keeping a second guessed billboard/clock here caused variant-only drift.
+
+namespace {
+
+constexpr const char* kFlameBespokeImageryPath = "Magic\\flame.i3d";
+
+}  // namespace
+
+TFlameEffect_Bespoke* TFlameEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                 const char* asset_override)
+{
+    // --- Load Magic\flame.i3d (asset path from snapshot Class.Def:2030)
+    // Variant entries (FlameB/FlameG) pass an override path; same animator.
+    const char* asset_path = asset_override ? asset_override : kFlameBespokeImageryPath;
+    int32_t img_id = TObjectImagery::FindImagery(asset_path);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(asset_path));
+    if (img_id < 0)
+    {
+        log_error("[flame-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed"
+                  " — asset missing",
+                  asset_path);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[flame-bespoke] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, asset_path);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[flame-bespoke] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  asset_path);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+    (void)img3d->NumObjects();   // lazy-mesh-init poke (sister idiom F01/B01/M05/H04)
+    if (img3d->NumTextures() <= 0)
+    {
+        log_error("[flame-bespoke] SpawnForTest: imagery '%s' has 0 textures after lazy-init",
+                  asset_path);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Resolve texture slot 0 (single material slot per F01 forensics §4).
+    S3DTex tex0 = {};
+    img3d->GetTexture(0, &tex0);
+    if (tex0.htexture == kInvalidTexture)
+    {
+        log_error("[flame-bespoke] SpawnForTest: texture slot 0 handle invalid");
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* flame = new TFlameEffect_Bespoke(base);
+    SetIntPos(flame, origin);
+    flame->SetMapIndex(MapPane.MakeIndex());
+    TFlameEffect::AttachVisualComponent(flame, base);
+    flame->ActivateComponents();
+    if (!flame->GetComponent<TFlipbookBillboardComponent>())
+    {
+        log_error("[flame-bespoke] authored Flame component was not attached");
+        delete flame;
+        return nullptr;
+    }
+
+    log_info("[flame-bespoke] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "tex0=%u w=%u h=%u",
+             asset_path, flame->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             tex0.htexture, tex0.desc.width, tex0.desc.height);
+    return flame;
+}
+
+void TFlameEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+    if (auto* component = GetComponent<TFlipbookBillboardComponent>())
+    {
+        component->SetDebugMode(debug_mode);
+        component->Submit(*Renderer, *this);
+    }
+}
+// --- end TFlameEffect_Bespoke faithful port
+
+// (TFireEffect_Bespoke impl deferred to after the F03 engine port; see
+//  the matching block after TFireEffect::TickAndSubmitForTest — that's
+//  where the `kFirePatchHalfWu` / `RerollFireQuad` anon-namespace helpers
+//  live and are reused verbatim.)
+
+// *************************************************************************
+// * TFireSwarmEffect_Bespoke — authored source implementation               *
+// *************************************************************************
+//
+// Original effect.cpp:10276-10345 drives object1/tube01 with an XY-growth,
+// Z-collapse and Z-rotation matrix over75ticks. The shipped object has174
+// vertices/192 triangles and uses its own texture1. The old billboard/texture0
+// substitution is removed. Implementation follows the shared typed-owner
+// helpers below; actual software retail trails remain a visual blocker.
+
+namespace {
+
+constexpr const char* kFireSwarmBespokeImageryPath = "Magic\\FireSwarm.i3d";
+constexpr int32_t     kFireSwarmBespokeDuration    = 75;        // FIRESWARM_DURATION
+constexpr float       kFireSwarmBespokeHsclStep    = 0.4f;      // FIRESWARM_CYLHSCLSTEP
+constexpr float       kFireSwarmBespokeThStep      = 0.5f;      // FIRESWARM_CYLTHSTEP
+constexpr float       kFireSwarmBespokeVsclInit    = 30.0f;     // FIRESWARM_CYLVSCLINIT
+constexpr float       kFireSwarmBespokeVsclStep    = 0.4f;      // FIRESWARM_CYLVSCLSTEP
+constexpr float       kFireSwarmBespoke2Pi         = 6.2831853071795864f;
+constexpr double      kFireSwarmBespokeSimTickMs   = 1000.0 / 24.0;
+}  // namespace
+
+// Authored FireSwarm implementation follows the shared typed-owner helpers.
+// --- end TFireSwarmEffect_Bespoke faithful port
+
+// *************************************************************************
+// * TBurnEffect_Bespoke — M04 A/B reference (faithful direct port)         *
+// *************************************************************************
+//
+// Line-by-line port of the snapshot TBurnAnimator::Initialize / Animate /
+// Render (src/effect_old.cpp:3292-3460). Forensics doc:
+// docs/vfx/forensics/M04_TBurnEffect.md. Two TParticleSystem instances
+// (fire + smoke) with BURN_COUNT=70 capacity each, fire→smoke promotion
+// on life==life_span (×1.25 scl, ×2/3 life_span). Blend =
+// AdditiveStraight (snapshot SetAddBlendState — fire-family consistent
+// per forensics §7).
+//
+// First-pass drift: the harness has no live TCharacter rig, so the
+// per-particle "spawn at a random bone's world position" path is
+// simplified to spawn at the effect's own world position + ±BURN_SPREAD
+// jitter on each axis (size_ defaults to 1 — "one virtual bone" = the
+// effect origin). Particle physics (velocity, life, decay, fire→smoke
+// promotion, ramp envelope, kill condition) are preserved verbatim.
+// Full character-rig attachment is a follow-up.
+
+namespace {
+
+constexpr const char* kBurnBespokeImageryPath = "Magic\\burnbabyburn.I3D";
+constexpr int32_t     kBurnBespokeSimTickMs   = 1000 / 24;
+constexpr int32_t     kBurnBespokePartMin     = 50;   // BURN_PART_MIN (DEAD per forensics §13.1 — preserve)
+constexpr int32_t     kBurnBespokePartMax     = 50;   // BURN_PART_MAX (DEAD)
+constexpr int32_t     kBurnBespokeAdd         = 8;    // BURN_ADD
+constexpr int32_t     kBurnBespokeSpread      = 2;    // BURN_SPREAD (wu, ± per axis)
+constexpr int32_t     kBurnBespokeMinScl      = 15;   // BURN_MIN_SCL (×0.01)
+constexpr int32_t     kBurnBespokeMaxScl      = 40;   // BURN_MAX_SCL (×0.01)
+constexpr int32_t     kBurnBespokeMinZ        = 30;   // BURN_MIN_Z (×0.1)
+constexpr int32_t     kBurnBespokeMaxZ        = 75;   // BURN_MAX_Z (×0.1)
+constexpr int32_t     kBurnBespokeMinLife     = 5;    // BURN_MIN_LIFE
+constexpr int32_t     kBurnBespokeMaxLife     = 15;   // BURN_MAX_LIFE
+constexpr float       kBurnBespokeDec         = 0.97f;// BURN_DEC
+constexpr int32_t     kBurnBespokeFrame       = 50;   // BURN_FRAME
+
+// Sub-object enumeration (forensics §4):
+//   GetObject(0) = "smoke"    -> smoke system  -> tex slot for smoke
+//   GetObject(1) = "smoke01"  -> fire  system  -> tex slot for fire
+// Following the SubObjTextureSlot helper above (TBloodEffect_Bespoke).
+int32_t BurnSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
+{
+    if (!img3d || objnum < 0 || objnum >= img3d->NumObjects())
+        return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0)
+        return -1;
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
+}
+
+}  // namespace
+
+TBurnEffect_Bespoke* TBurnEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    int32_t img_id = TObjectImagery::FindImagery(kBurnBespokeImageryPath);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kBurnBespokeImageryPath));
+    if (img_id < 0)
+    {
+        log_error("[burn-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
+                  kBurnBespokeImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[burn-bespoke] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kBurnBespokeImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[burn-bespoke] SpawnForTest: imagery '%s' is not a T3DImagery",
+                  kBurnBespokeImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj < 2 || num_tex <= 0)
+    {
+        log_error("[burn-bespoke] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d) — expected 2 sub-objects",
+                  num_obj, num_tex);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Resolve fire / smoke textures per forensics §4.
+    auto resolve_subobj_tex = [&](int32_t objnum) -> TTextureHandle {
+        const int32_t slot = BurnSubObjTextureSlot(img3d, objnum);
+        const int32_t safe_slot = (slot >= 0 && slot < num_tex) ? slot : 0;
+        S3DTex tex = {};
+        img3d->GetTexture(safe_slot, &tex);
+        return tex.htexture;
+    };
+    const TTextureHandle tex_smoke = resolve_subobj_tex(0);  // smoke sub-object
+    const TTextureHandle tex_fire  = resolve_subobj_tex(1);  // smoke01 sub-object (fire)
+    if (tex_fire == kInvalidTexture && tex_smoke == kInvalidTexture)
+    {
+        log_error("[burn-bespoke] SpawnForTest: both sub-object textures invalid");
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* burn = new TBurnEffect_Bespoke(base);
+    SetIntPos(burn, origin);
+    burn->SetMapIndex(MapPane.MakeIndex());
+    burn->ActivateComponents();
+    burn->tex_fire_  = tex_fire;
+    burn->tex_smoke_ = tex_smoke;
+
+    // Snapshot TBurnAnimator::Initialize (effect_old.cpp:3292-3313):
+    //   T3DAnimator::Initialize()
+    //   size = ca->NumObjects()          <-- harness drift: no rig, simulate
+    //                                       a humanoid mesh (~12 sub-objects)
+    //   fire.Init(...) / smoke.Init(...) <-- our particle arena is pre-zeroed
+    //   frame = 0; to_add = 0;
+    burn->frame_         = 0;
+    burn->to_add_        = 0;
+    burn->size_          = kBurnBespokeSyntheticBones;
+    burn->alive_         = true;
+    burn->sim_accum_ms_  = 0.0;
+    for (auto& part : burn->particles_)
+        part.used = false;
+
+    // Iter1 fix #2 — synthesise a vertical "bone" column standing in for
+    // the snapshot's `ca->GetObjectMatrix(j) * MakeMatrix(&mtx)` chain.
+    // A humanoid mesh has ~12 sub-objects (head/torso/upper-arms/lower-
+    // arms/hands/upper-legs/lower-legs/feet) — distribute the synthetic
+    // anchors evenly along Z=[0..96], with a small (±6) lateral spread
+    // around the body centre line. The snapshot then transforms (0,0,0)
+    // through the bone matrix (effect_old.cpp:3375-3381) — i.e. the
+    // origin in bone-local frame ends up at the bone's world position.
+    // With these bones in place the per-spawn picks any humanoid limb
+    // uniformly, exactly like the snapshot's `random(0, size-1)`.
+    {
+        const float zmin = 0.0f;
+        const float zmax = 96.0f;   // ~character height in wu
+        for (int32_t i = 0; i < kBurnBespokeSyntheticBones; ++i)
+        {
+            const float t = float(i) / float(kBurnBespokeSyntheticBones - 1);
+            // Light XY zig-zag so adjacent bones don't perfectly stack
+            // (mirrors the typical humanoid layout where limbs aren't on
+            // the central spine line). Magnitudes are << bone Z spacing
+            // so the column reads as one connected emitter.
+            const float xoff = ((i & 1) ? 1.0f : -1.0f) * 4.0f;
+            const float yoff = ((i & 2) ? 1.0f : -1.0f) * 3.0f;
+            burn->bones_[i].X = xoff;
+            burn->bones_[i].Y = yoff;
+            burn->bones_[i].Z = zmin + t * (zmax - zmin);
+        }
+    }
+
+    log_info("[burn-bespoke] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "tex_fire=%u tex_smoke=%u numobj=%d numtex=%d",
+             kBurnBespokeImageryPath, burn->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             tex_fire, tex_smoke, num_obj, num_tex);
+    return burn;
+}
+
+void TBurnEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Animate: port of TBurnAnimator::Animate
+    // (src/effect_old.cpp:3315-3447). Snapshot ungated; drift to 24 Hz
+    // sim-tick gate per feedback-framerate-independent-anim.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kBurnBespokeSimTickMs))
+        {
+            sim_accum_ms_ -= double(kBurnBespokeSimTickMs);
+
+            ++frame_;                                                // :3328
+            if (frame_ < kBurnBespokeFrame && to_add_ < kBurnBespokeAdd)
+                ++to_add_;                                           // :3329-3330 ramp up
+            else if (frame_ >= kBurnBespokeFrame && to_add_ > 0)
+                --to_add_;                                           // :3331-3332 ramp down
+
+            // 1. fire→smoke promotion (:3339-3357).
+            //    Iterate fire half [0..kBurnBespokeCount); on life ==
+            //    life_span, copy into smoke half [count..count*2) with
+            //    ×1.25 scl and ×2/3 life_span.
+            for (int32_t i = 0; i < kBurnBespokeCount; ++i)
+            {
+                SBurnBespokeParticle& particle = particles_[i];
+                if (!particle.used || particle.system != 0)
+                    continue;
+
+                if (particle.life == particle.life_span)
+                {
+                    particle.used = false;                           // :3347 free fire slot
+
+                    // Compute promoted values from the dying particle.
+                    SBurnBespokeParticle promoted = particle;
+                    promoted.life_span = (particle.life_span * 2) / 3;   // :3349
+                    promoted.scl.X *= 1.25f;                          // :3351
+                    promoted.scl.Y *= 1.25f;                          // :3352
+                    promoted.scl.Z *= 1.25f;                          // :3353
+                    promoted.life   = 0;
+                    promoted.system = 1;                              // smoke
+                    promoted.used   = true;
+
+                    // smoke.Add(particle) — find first unused slot in
+                    // the smoke half [kBurnBespokeCount, 2*kBurnBespokeCount).
+                    for (int32_t k = kBurnBespokeCount; k < kBurnBespokeCount * 2; ++k)
+                    {
+                        if (!particles_[k].used)
+                        {
+                            particles_[k] = promoted;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 2. fire.Animate() + smoke.Animate()  (:3359-3360)
+            //    TParticleSystem::Animate (effectcomp.cpp:1041-1068):
+            //      if (life >= life_span) used = false; continue;
+            //      ++life; pos += vel; vel *= acc;
+            for (auto& particle : particles_)
+            {
+                if (!particle.used)
+                    continue;
+                if (particle.life >= particle.life_span)
+                {
+                    particle.used = false;
+                    continue;
+                }
+                ++particle.life;
+                particle.pos.X += particle.vel.X;
+                particle.pos.Y += particle.vel.Y;
+                particle.pos.Z += particle.vel.Z;
+                particle.vel.X *= particle.acc.X;
+                particle.vel.Y *= particle.acc.Y;
+                particle.vel.Z *= particle.acc.Z;
+            }
+
+            // 3. Spawn `to_add_` new fire particles at random bones.
+            //    Snapshot path (effect_old.cpp:3365-3413):
+            //      int j = random(0, size - 1);
+            //      obj = ca->GetObject(j); ca->GetObjectMatrix(j, &obj->matrix);
+            //      vp = (0,0,0); dest = obj->matrix * MakeMatrix();
+            //      D3DMATRIXTransform(&dest, &vp, &p.pos);
+            //      p.pos += random(-SPREAD, SPREAD) per axis;
+            //      // … scale / rotation / vel / life …
+            //    Iter1 fix #2: with no CharAnimator we approximate
+            //    `obj->matrix * MakeMatrix()` by treating bones_[j] as the
+            //    transformed origin (the bone's world position relative
+            //    to the effect's own world position). Per-particle physics
+            //    is preserved verbatim per :3387-3413.
+            const S3DPoint& origin = IntPos(*this);
+            for (int32_t i = 0; i < to_add_; ++i)
+            {
+                // Find a free fire slot.
+                int32_t free_idx = -1;
+                for (int32_t k = 0; k < kBurnBespokeCount; ++k)
+                {
+                    if (!particles_[k].used)
+                    {
+                        free_idx = k;
+                        break;
+                    }
+                }
+                if (free_idx < 0)
+                    break;       // fire arena full
+
+                SBurnBespokeParticle& p = particles_[free_idx];
+
+                const int32_t j = (size_ > 1) ? random(0, size_ - 1) : 0;     // :3367
+                const hmm_vec3 bone = bones_[j];                              // :3371-3381 collapsed
+                p.pos.X = float(origin.x) + bone.X;
+                p.pos.Y = float(origin.y) + bone.Y;
+                p.pos.Z = float(origin.z) + bone.Z;
+
+                p.pos.X += float(random(-kBurnBespokeSpread, kBurnBespokeSpread));   // :3387
+                p.pos.Y += float(random(-kBurnBespokeSpread, kBurnBespokeSpread));   // :3388
+                p.pos.Z += float(random(-kBurnBespokeSpread, kBurnBespokeSpread));   // :3389
+
+                const float scale = float(random(kBurnBespokeMinScl, kBurnBespokeMaxScl)) * 0.01f;
+                p.scl.X = scale;                                                     // :3393
+                p.scl.Y = scale;                                                     // :3394
+                p.scl.Z = scale;                                                     // :3395
+
+                // p.rot.x = -90; p.rot.z = -45; p.rot.y = 0  (:3398-3400)
+                // No rotation lane on SBillboardDrawItem — preserved as
+                // dead semantic state (the snapshot bakes these into the
+                // matrix at Render in TParticleSystem::Render
+                // effectcomp.cpp:1086-1090).
+
+                p.acc.X = 1.0f;                                                      // :3403
+                p.acc.Y = 1.0f;
+                p.acc.Z = 1.0f;
+
+                p.vel.X = 0.0f;                                                      // :3406
+                p.vel.Y = 0.0f;                                                      // :3407
+                p.vel.Z = float(random(kBurnBespokeMinZ, kBurnBespokeMaxZ)) * 0.1f;  // :3408
+
+                p.life_span = random(kBurnBespokeMinLife, kBurnBespokeMaxLife);      // :3410
+                p.life      = 0;
+                p.system    = 0;        // fire system
+                p.used      = true;                                                  // fire.Add :3412
+            }
+
+            // 4. Per-tick scl decay (:3415-3440) and `done` check.
+            bool done = true;
+            for (auto& particle : particles_)
+            {
+                if (!particle.used)
+                    continue;
+                done = false;
+                particle.scl.X *= kBurnBespokeDec;
+                particle.scl.Y *= kBurnBespokeDec;
+                particle.scl.Z *= kBurnBespokeDec;
+            }
+
+            if (frame_ >= kBurnBespokeFrame && to_add_ == 0 && done)
+            {
+                alive_ = false;                                       // KillThisEffect :3444
+                break;
+            }
+        }
+    }
+
+    // --- Render: port of TBurnAnimator::Render
+    // (src/effect_old.cpp:3449-3460). SetAddBlendState() = AdditiveStraight
+    // (DECALALPHA + ONE/ONE). One particle = one billboard with the
+    // particle's per-axis scale applied uniformly (snapshot
+    // TParticleSystem::Render bakes Scale·Rot·Translate into the I3D
+    // sub-object's per-instance matrix; in the FB pipeline we use the
+    // billboard's size_wu lane for the scale and let the particle's
+    // world pos drive translate. Per-quad rot.x=-π/2 + rot.z=-π/4 from
+    // effectcomp.cpp:1086-1090 is preserved as dead semantic state per
+    // the drift note above — billboards have no rotation lane in
+    // SBillboardDrawItem; if visual reads wrong, switch to
+    // SParticleDrawItem and route rotation_rad).
+    SBillboardDrawItem item = {};
+    item.color_rgba[0]   = 1.0f;
+    item.color_rgba[1]   = 1.0f;
+    item.color_rgba[2]   = 1.0f;
+    item.color_rgba[3]   = 1.0f;
+    item.uv_rect[0]      = 0.0f;
+    item.uv_rect[1]      = 0.0f;
+    item.uv_rect[2]      = 1.0f;
+    item.uv_rect[3]      = 1.0f;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);   // SetAddBlendState :3452
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+    item.light_mode      = EFxLightMode::Unlit;                   // fire-family unlit (§7)
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+
+    for (const auto& particle : particles_)
+    {
+        if (!particle.used)
+            continue;
+
+        const TTextureHandle tex = (particle.system == 0) ? tex_fire_ : tex_smoke_;
+        if (tex == kInvalidTexture)
+            continue;
+
+        item.key.texture  = tex;
+        item.world_pos[0] = particle.pos.X;
+        item.world_pos[1] = particle.pos.Y;
+        item.world_pos[2] = particle.pos.Z;
+        // Particle scale is uniform per axis at spawn; pick X as the
+        // scalar (Y/Z identical). Multiply by base_size_wu_ to convert
+        // the [0.15, 0.40]-ish range into a readable on-screen quad.
+        const float quad = particle.scl.X * base_size_wu_;
+        item.size_wu[0]   = quad;
+        item.size_wu[1]   = quad;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+
+// --- end TBurnEffect_Bespoke faithful port
+
+// *************************************************************************
+// * TMissileEffect_Bespoke — S08 base infrastructure (faithful direct port)
+// *************************************************************************
+//
+// Faithful translation of TMissileEffect::Initialize / SetSpeed / Pulse /
+// OffScreen from src/missileeffect.cpp:31-141 (whole file under #if 0).
+// Line-by-line port — same variable names, same constants, same per-tick
+// math. The only adaptations are:
+//   1. `Move()` collapses to an inline `pos += vel` per tick (the engine's
+//      collision-integrating mover is not wired for the --test=vfx path).
+//   2. The MOVE_BLOCKED / TMapIterator(character)-hit branches in FLY are
+//      no-ops here (no map collision, no live characters in the harness);
+//      the range countdown still drives the EXPLODE transition.
+//   3. The harness draws a single state-colored marker billboard at the
+//      missile world-pos using the renderer's white texture — TMissileEffect
+//      has no visual of its own in retail (each leaf supplies its own
+//      animator), so the marker exists only to prove state transitions.
+
+void TMissileEffect_Bespoke::Initialize()
+{
+    // Port of TMissileEffect::Initialize (missileeffect.cpp:31-40).
+    state_ = kMissileLaunch;
+    angle  = 0;            // TEffect::angle (snapshot `angle = 0;`)
+    range_ = 32768;
+
+    SetSpeed(kMissileSpeedDefault);   // SetSpeed(16) -> speed = 16 * ROLLOVER
+
+    status_ = false;
+
+    // Harness-only members (not in snapshot Initialize).
+    aim_angle_ = 0;
+    vel_ = {0.0f, 0.0f, 0.0f};
+    launch_hold_ticks_remaining_ = kMissileHarnessLaunchHoldTicks;
+    explode_ticks_remaining_ = 24;
+    alive_ = true;
+    sim_accum_ms_ = 0.0;
+}
+
+void TMissileEffect_Bespoke::Pulse()
+{
+    // Port of TMissileEffect::Pulse (missileeffect.cpp:52-135), translated
+    // line-by-line. The snapshot's `Move()` becomes an inline `pos += vel`
+    // here so the marker moves without engine collision involvement.
+
+    // Snapshot: `uint32_t bits = Move();` — Move() integrates vel and
+    // returns flags. We integrate inline in FLY state.
+    uint32_t bits = 0;   // MOVE_BLOCKED never set in harness (no collision)
+    if (state_ == kMissileFly)
+    {
+        S3DPoint p = IntPos(*this);
+        p.x += int32_t(vel_.X);
+        p.y += int32_t(vel_.Y);
+        p.z += int32_t(vel_.Z);
+        SetIntPos(*this, p);
+    }
+
+    switch (state_)
+    {
+        case kMissileLaunch:
+        {
+            // missileeffect.cpp:58-72.
+            if (status_)
+            {
+                // Harness-only: hold LAUNCH for ~12 ticks so the
+                // LAUNCH -> FLY edge is observable in --test=vfx. The
+                // in-game caller leaves launch_hold_=0 so this collapses
+                // to the original 1-tick transition.
+                if (launch_hold_ticks_remaining_ > 0)
+                {
+                    --launch_hold_ticks_remaining_;
+                    break;
+                }
+
+                if (speed_)
+                {
+                    // ConvertToVector(GetAngle(), speed, vel) — emits an
+                    // integer S3DPoint scaled by speed. Use aim_angle_
+                    // (the byte-angle stored at spawn) since the harness
+                    // overrides TEffect::angle.
+                    const int32_t harness_speed =
+                        int32_t(float(speed_) * kMissileHarnessSpeedScale);
+                    S3DPoint v_int = {0, 0, 0};
+                    ConvertToVector(aim_angle_, harness_speed, v_int);
+                    vel_.X = float(v_int.x) / float(ROLLOVER);
+                    vel_.Y = float(v_int.y) / float(ROLLOVER);
+
+                    // snapshot sets flags = (flags & ~OF_IMMOBILE)
+                    //                       | OF_MOVING | OF_WEIGHTLESS
+                    // — replicated for any engine-side code path that
+                    // reads them. In-harness collision is bypassed.
+                    flags = (flags & ~OF_IMMOBILE) | OF_MOVING | OF_WEIGHTLESS;
+
+                    // missileeffect.cpp:66 — vel.z = (speed / -16)
+                    // (slight downward arc). `speed / -16` here uses the
+                    // SCALED harness speed so the arc matches the
+                    // harness flight envelope.
+                    vel_.Z = float(harness_speed) / -16.0f / float(ROLLOVER);
+
+                    // missileeffect.cpp:68 — range = (240*MISSILE_RANGE) /
+                    //                                (speed/ROLLOVER)
+                    // = (240*2)/(16) = 30 ticks of flight at default speed.
+                    const int32_t speed_per_tick = speed_ / ROLLOVER;
+                    if (speed_per_tick > 0)
+                        range_ = (240 * kMissileRangeDefault) / speed_per_tick;
+                }
+                state_ = kMissileFly;
+            }
+            break;
+        }
+
+        case kMissileFly:
+        {
+            // missileeffect.cpp:75-124.
+            bool explode = false;
+
+            range_--;
+            if (range_ <= 0)
+                explode = true;
+
+            // missileeffect.cpp:83-84 — MOVE_BLOCKED branch. bits is 0 in
+            // the harness so this never fires; preserved for the eventual
+            // in-game wiring.
+            if (bits & MOVE_BLOCKED)
+                explode = true;
+            else
+            {
+                // missileeffect.cpp:87-113 — character-hit branch
+                // (TMapIterator over OBJSET_CHARACTER). Skipped in the
+                // harness (no live characters); preserved verbatim under
+                // `#if 0` below in this same file as the in-game port
+                // reference. For the bespoke base path we trust the
+                // range countdown to drive EXPLODE.
+            }
+
+            if (explode)
+            {
+                // missileeffect.cpp:119-120 — stop the missile dead.
+                flags = (flags & ~OF_MOVING & ~OF_WEIGHTLESS) | OF_IMMOBILE;
+                state_ = kMissileExplode;
+            }
+            break;
+        }
+
+        case kMissileExplode:
+        {
+            // missileeffect.cpp:127-130 — `if (!HasAnimator()) KillThisEffect();`
+            // The bespoke base has no animator, so we use an explicit
+            // post-explode tick counter to keep the marker visible long
+            // enough that the EXPLODE state is observable in --test=vfx.
+            if (explode_ticks_remaining_ > 0)
+            {
+                --explode_ticks_remaining_;
+            }
+            else
+            {
+                alive_ = false;
+            }
+            break;
+        }
+    }
+
+    // missileeffect.cpp:134 — TEffect::Pulse() chain.
+    TEffect::Pulse();
+}
+
+TMissileEffect_Bespoke* TMissileEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    if (!Renderer)
+    {
+        log_error("[missile] SpawnForTest: renderer not initialized");
+        return nullptr;
+    }
+
+    // Pure infra base — no I3D imagery required. Construct with null
+    // imagery (same pattern as TStripEffect::SpawnForTest at
+    // src/stripeffect.cpp:150). The marker billboard uses the renderer's
+    // white texture.
+    auto* m = new TMissileEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(m, origin);
+    m->SetMapIndex(MapPane.MakeIndex());
+    m->ActivateComponents();
+
+    // Harness aim: random horizontal byte-angle (in-game caller would
+    // supply this via SetAngle()).
+    m->aim_angle_ = random(0, 255);
+    // missileeffect.cpp:39 — status starts false; the animator drives it
+    // true on its first tick. In the harness we set it true immediately
+    // so the state machine proceeds (no animator to wait on).
+    m->status_ = true;
+
+    log_info("[missile] SpawnForTest: map_index=%d origin=(%d,%d,%d) aim=%d "
+             "speed=%d (per-tick=%d) range=%d",
+             m->GetMapIndex(), origin.x, origin.y, origin.z,
+             m->aim_angle_, m->speed_, m->GetSpeed(), m->range_);
+    return m;
+}
+
+void TMissileEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Update: drive Pulse() via the 24 Hz sim-tick accumulator (same
+    // gate B01/F07/B-family use) so motion is framerate-independent.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kMissileSimTickMs))
+        {
+            sim_accum_ms_ -= double(kMissileSimTickMs);
+            Pulse();
+            if (!alive_)
+                break;
+        }
+    }
+
+    // --- Render: ONE marker billboard at the missile world-pos, colored
+    // by state. TMissileEffect has no visual in retail (each leaf supplies
+    // its own animator); the marker exists only to prove the state-machine
+    // ticks LAUNCH -> FLY -> EXPLODE in --test=vfx.
+    const S3DPoint& p = IntPos(*this);
+
+    float r = 1.0f, g = 1.0f, b = 1.0f;
+    switch (state_)
+    {
+        case kMissileLaunch:  r = 1.0f; g = 1.0f; b = 0.2f; break;   // yellow
+        case kMissileFly:     r = 1.0f; g = 0.55f; b = 0.0f; break;  // orange
+        case kMissileExplode: r = 1.0f; g = 0.15f; b = 0.10f; break; // red
+        default: break;
+    }
+
+    SBillboardDrawItem item = {};
+    item.world_pos[0]  = float(p.x);
+    item.world_pos[1]  = float(p.y);
+    item.world_pos[2]  = float(p.z);
+    item.size_wu[0]    = kMissileMarkerSizeWu;
+    item.size_wu[1]    = kMissileMarkerSizeWu;
+    item.color_rgba[0] = r;
+    item.color_rgba[1] = g;
+    item.color_rgba[2] = b;
+    item.color_rgba[3] = 1.0f;
+    item.key.texture     = Renderer->WhiteTextureHandle();
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    Renderer->SubmitFxBillboard(item);
+}
+// --- end S08 TMissileEffect_Bespoke port
+
+#if 0
+// REVISITED (earlier WIP): pre-faithful-port body, re-derived blood
+// through a TParticleBucket directly (no effects.def, no chain). Kept
+// here as historical context only; the resettled engine-driven rework
+// at the top of this section is the live path. Renamed to
+// SpawnForTest_BESPOKE_WIP to disambiguate from the live bespoke
+// faithful-port class above.
+TBloodEffect* TBloodEffect::SpawnForTest_BESPOKE_WIP(const S3DPoint& origin)
+{
+    const int32_t img_id = TObjectImagery::FindImagery(kBloodImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[blood] SpawnForTest: FindImagery('%s') failed", kBloodImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[blood] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kBloodImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[blood] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kBloodImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* blood = new TBloodEffect(base);
+    SetIntPos(blood, origin);
+    blood->SetMapIndex(MapPane.MakeIndex());
+    blood->ActivateComponents();
+
+    blood->bucket_ = AcquireBloodBucket(img3d);
+    if (!blood->bucket_)
+    {
+        // Imagery loaded but bucket couldn't be built (texture not ready
+        // / asset structurally unexpected). The TBloodEffect itself is
+        // still valid — TickAndSubmitForTest is a no-op without a bucket
+        // so the harness still navigates past B01 cleanly.
+        log_warn("[blood] SpawnForTest: bucket unavailable — B01 will draw nothing");
+        return blood;
+    }
+    blood->owner_particle_id_ = NextBloodOwnerId();
+
+    // Spawn the entire burst right at construction. Blood is a discrete
+    // impact: a single splat at one wound point. The harness drives
+    // re-trigger by destroying and respawning this effect at varying
+    // positions per its EVfxPreviewStyle::Combat setting.
+    constexpr int32_t kBurstCount = 10;
+    constexpr float   kLife       = 1.4f;
+    TParticleBucket& bucket = *blood->bucket_;
+    const S3DPoint& p = IntPos(blood);
+    for (int32_t k = 0; k < kBurstCount; ++k)
+    {
+        const int32_t pi = bucket.AddParticle(blood->owner_particle_id_, kLife);
+        if (pi < 0) break;
+        const float u1 = float(std::rand()) / float(RAND_MAX);
+        const float u2 = float(std::rand()) / float(RAND_MAX);
+        const float angle  = u1 * 6.28318530718f;
+        const float radial = 60.0f + 80.0f * u2;     // wu/s
+        const float upward = 140.0f + 80.0f * u2;    // wu/s (initial upward burst)
+        if (float* dp = bucket.VarPtr(pi, EParticleVar::DrawPos))
+        {
+            dp[0] = float(p.x);
+            dp[1] = float(p.y);
+            dp[2] = float(p.z) + 30.0f;
+        }
+        if (float* vel = bucket.VarPtr(pi, EParticleVar::EmitVel))
+        {
+            vel[0] = std::cos(angle) * radial;
+            vel[1] = std::sin(angle) * radial;
+            vel[2] = upward;
+        }
+        if (float* ds = bucket.VarPtr(pi, EParticleVar::DrawScl))
+        {
+            const float s = 24.0f + 16.0f * u1;
+            ds[0] = s; ds[1] = s; ds[2] = 1.0f;
+        }
+        if (float* df = bucket.VarPtr(pi, EParticleVar::DrawFrame))
+            *df = float(std::rand() % 4);                 // pick 1 of 4 splat variants
+        if (float* dr = bucket.VarPtr(pi, EParticleVar::DrawRot))
+            *dr = float(std::rand()) / float(RAND_MAX) * 6.28318530718f;
+        if (float* col = bucket.VarPtr(pi, EParticleVar::DrawColor))
+        {
+            col[0] = 1.00f - 0.20f * u2;
+            col[1] = 0.10f + 0.10f * u1;
+            col[2] = 0.10f + 0.05f * u2;
+            col[3] = 1.0f;
+        }
+    }
+
+    log_info("[blood] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "owner_id=%.0f textures=%d burst=%d",
+             kBloodImageryPath, blood->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             blood->owner_particle_id_, img3d->NumTextures(), kBurstCount);
+    return blood;
+}
+
+void TBloodEffect::TickAndSubmitForTest_BESPOKE_WIP(EFxDebugMode debug_mode)
+{
+    if (!bucket_ || !Renderer)
+        return;
+
+    const float dt = float(TTime::DeltaTime());
+    age_ += dt;
+
+    // 1. Integrate existing particles owned by this instance.
+    //    Simple Euler with constant downward acceleration ("gravity").
+    //    Faithful retail kinematics + splat-stick deferred to 2.2.1.
+    //    All burst particles were spawned in SpawnForTest -- we never
+    //    spawn more here. The harness re-triggers by destroying this
+    //    effect and spawning a fresh one (EVfxPreviewStyle::Combat).
+    constexpr float kGravity = -480.0f;   // wu / s^2 (rough; looks right at default scale)
+    for (int32_t i = 0; i < bucket_->Count(); ++i)
+    {
+        const float* owner = bucket_->VarPtr(i, EParticleVar::OwnerId);
+        if (!owner || *owner != owner_particle_id_)
+            continue;
+        float* vel = bucket_->VarPtr(i, EParticleVar::EmitVel);
+        float* pos = bucket_->VarPtr(i, EParticleVar::DrawPos);
+        float* age = bucket_->VarPtr(i, EParticleVar::Age);
+        float* life_p = bucket_->VarPtr(i, EParticleVar::Life);
+        float* col = bucket_->VarPtr(i, EParticleVar::DrawColor);
+        if (vel)
+            vel[2] += kGravity * dt;
+        if (pos && vel)
+        {
+            pos[0] += vel[0] * dt;
+            pos[1] += vel[1] * dt;
+            pos[2] += vel[2] * dt;
+        }
+        if (age)
+            *age += dt;
+        // Alpha curve: hold at full opacity for the first half of
+        // life, then linearly fade to 0 over the second half. The
+        // shader pairs (sampled premul) * (tint.a) so the fade is
+        // proportional in both rgb and alpha -- no pink shift.
+        if (col && age && life_p && *life_p > 0.0f)
+        {
+            const float t = *age / *life_p;
+            const float fade = (t < 0.5f) ? 1.0f
+                             : (t >= 1.0f) ? 0.0f
+                             : (1.0f - 2.0f * (t - 0.5f));
+            col[3] = fade;
+        }
+    }
+
+    // 2. Reap expired particles (age > life) for this owner. The bucket's
+    //    AddParticle / KillParticlesByOwner are the only mutators; we
+    //    swap-and-pop by owner-stamping dead particles back to a sentinel
+    //    then killing that sentinel in one pass.
+    constexpr float kDeadSentinel = -7777.0f;
+    bool any_dead = false;
+    for (int32_t i = 0; i < bucket_->Count(); ++i)
+    {
+        const float* o = bucket_->VarPtr(i, EParticleVar::OwnerId);
+        const float* a = bucket_->VarPtr(i, EParticleVar::Age);
+        const float* l = bucket_->VarPtr(i, EParticleVar::Life);
+        if (!o || *o != owner_particle_id_) continue;
+        if (a && l && *l > 0.0f && *a >= *l)
+        {
+            if (float* mut_o = bucket_->VarPtr(i, EParticleVar::OwnerId))
+            {
+                *mut_o = kDeadSentinel;
+                any_dead = true;
+            }
+        }
+    }
+    if (any_dead)
+        bucket_->KillParticlesByOwner(kDeadSentinel);
+
+    // 4. Hand the bucket to the FX queue. The renderer drains it inside
+    //    RunLightingPass.
+    Renderer->SubmitFxParticleBucket(*bucket_, debug_mode);
+}
+#endif // bespoke TBloodEffect spawn/tick preserved-old-code
+
+// *************************************************************************
+// * TFizzleEffect - FAITHFUL DIRECT PORT for --test=vfx (X21)             *
+// *************************************************************************
+//
+// Reconstruction of TFizzleAnimator (effect_old.cpp:12347-12516) +
+// TParticleSystem::Animate/Render (effectcomp.cpp:1041-1109). Same model
+// as TSparkEffect / TBloodEffect: collapse the per-system particle arrays
+// onto the effect class, integrate at the original 24 Hz cadence via a
+// real-time accumulator (RECONSTRUCTION_PROTOCOL framerate-independence
+// rule), drive everything off the snapshot constants in forensics §3.
+//
+// The original organizes particles into 3 TParticleSystem instances
+// (blue/red/purple), each bound to one sub-object of Magic\Fizzle.I3D.
+// Render walks each system in turn; the matrix it builds per particle is:
+//
+//    M = RotateX(rot.x) * RotateY(rot.y) * RotateZ(rot.z)        // (rot.x/y=0)
+//      * RotateX(-pi/2)                                          // tip authored XY mesh upright
+//      * RotateZ(-pi/4)                                          // static spin
+//      * RotateZ(facing)                                         // facing=0
+//      * Scale(scl * [1.5 if flicker])
+//      * Translate(pos)
+//
+// Apply this full matrix to each authored corner. The live Z spin precedes
+// the X tip, so folding it into the final Z spin changes the geometry.
+
+namespace {
+
+constexpr const char* kFizzleImageryPath = "Magic\\Fizzle.I3D";
+
+// 24Hz cadence gate (family-consistent with F03/H03/M05/X22/B01). The
+// original per-tick rates (DUST_SCL_INC=0.05/tick grow, DUST_SCL_DEC=0.02/
+// tick shrink, DUST_ADD=1.5/tick emission, DUST_ROT=15deg/tick max spin,
+// DUST_FRAME=15 tick emission window) integrate once per sim-tick of
+// accumulated wall-clock time. See forensics §3 + §6.2.
+constexpr double kFizzleSimTickMs = 1000.0 / 24.0;
+
+// Constants — straight from effect_old.cpp:12293-12303 (forensics §3).
+// Snapshot-only (the retail animator body is not extracted); rate of
+// these is "best-evidence, visually match in-game" per §2.1(1) / §13.0.
+constexpr int32_t kFizzleDustCount     = kFizzleParticlesPerSystem; // 30
+constexpr int32_t kFizzleDustFrame     = 15;       // emission window (ticks)
+constexpr int32_t kFizzleDustSpread    = 15;       // ± xy jitter at spawn (wu)
+constexpr int32_t kFizzleDustMinZ      = 5;        // ×0.1 -> 0.5 wu/tick min fall
+constexpr int32_t kFizzleDustMaxZ      = 45;       // ×0.1 -> 4.5 wu/tick max fall
+constexpr int32_t kFizzleDustRot       = 15;       // ± deg/tick spin rate
+constexpr int32_t kFizzleDustMinScl    = 5;        // ×0.01 -> 0.05 min max-scale
+constexpr int32_t kFizzleDustMaxScl    = 25;       // ×0.01 -> 0.25 max max-scale
+constexpr float   kFizzleDustSclInc    = 0.05f;    // scale/tick GROW
+constexpr float   kFizzleDustSclDec    = 0.02f;    // scale/tick SHRINK
+constexpr float   kFizzleDustAdd       = 1.5f;     // emission acc /tick
+constexpr int32_t kFizzleSpawnZMin     = 70;       // wu above origin
+constexpr int32_t kFizzleSpawnZMax     = 130;      // wu above origin
+
+// Phase tags (forensics §6.2 / §13.3 — life_span is OVERLOADED as a phase
+// tag, not a tick countdown).
+constexpr int32_t kFizzlePhaseGrow     = 100;
+constexpr int32_t kFizzlePhaseShrink   = 200;
+constexpr int32_t kFizzlePhaseDead     = 0;
+
+// Static in-plane Z-axis rotation from TParticleSystem::Render
+// (effectcomp.cpp:1089) — folded into rotation_rad alongside the live
+// per-particle rot.z so we don't have to chain transforms per draw.
+constexpr float   kFizzleStaticRotRad  = -float(M_PI) / 4.0f;
+
+// Flicker scale boost (effectcomp.cpp:1095-1097).
+constexpr float   kFizzleFlickerScale  = 1.5f;
+
+// Resolve which texture slot a sub-object draws from by walking its
+// texfaces[] table. Each S3DObj records one nonzero entry in
+// numtexfaces[1..MAXTEXTURES] for the single texture that actually
+// renders its quad (index 0 is no-texture). Returns -1 if none found.
+// Duplicated locally rather than #include'd because the helper in the
+// blood section above is `static` to that anonymous namespace; keep this
+// file's structure preserve-and-add (no cross-section coupling).
+int32_t FizzleSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
+{
+    if (!img3d || objnum < 0 || objnum >= img3d->NumObjects())
+        return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0)
+        return -1;
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
+}
+
+// Read a sub-object's authored UV sub-rect from its vertex list (same
+// shape as ResolveSubObjUv above for blood / the spark UV-cell extraction).
+void FizzleResolveSubObjUv(T3DImagery* img3d, int32_t objnum, float out[4])
+{
+    out[0] = 0.0f; out[1] = 0.0f; out[2] = 1.0f; out[3] = 1.0f;
+    if (!img3d) return;
+    const int32_t nverts = img3d->NumObjVerts(objnum);
+    if (nverts <= 0) return;
+    std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
+    img3d->GetObjVerts(objnum, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+    float minu = vbuf[0].tu, maxu = vbuf[0].tu;
+    float minv = vbuf[0].tv, maxv = vbuf[0].tv;
+    for (int32_t i = 1; i < nverts; ++i)
+    {
+        if (vbuf[i].tu < minu) minu = vbuf[i].tu;
+        if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
+        if (vbuf[i].tv < minv) minv = vbuf[i].tv;
+        if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
+    }
+    out[0] = minu;
+    out[1] = minv;
+    out[2] = maxu - minu;
+    out[3] = maxv - minv;
+}
+
+// Find an unused slot for spawn. Mirrors TParticleSystem::Add's free-slot
+// search (effectcomp.cpp:1133-1158). Returns -1 if the cap is hit.
+// Collapsed-array variant: only consider slots tagged with the requested
+// system (the original kept 3 separate arrays, so a slot was implicitly
+// system-typed — here we search by system field).
+int32_t FizzleFindFreeSlot(SFizzleParticle particles[], int32_t system_idx)
+{
+    // Each system gets its own contiguous range of slots so we preserve
+    // the original's per-system DUST_COUNT cap (effect_old.cpp:12316,
+    // ::Add at effectcomp.cpp:1133-1158 walks the system's own array
+    // until it finds `!used`). System 0 owns slots [0..30), system 1
+    // owns [30..60), system 2 owns [60..90).
+    const int32_t base = system_idx * kFizzleParticlesPerSystem;
+    const int32_t end  = base + kFizzleParticlesPerSystem;
+    for (int32_t i = base; i < end; ++i)
+        if (!particles[i].used)
+            return i;
+    return -1;
+}
+
+}   // namespace
+
+TFizzleEffect* TFizzleEffect::SpawnForTest(const S3DPoint& origin)
+{
+    // --- Load the REAL Magic\Fizzle.I3D imagery (no procedural stand-in).
+    // The 3 dust-puff sprites (blue/purple/magenta) ARE the visual
+    // identity per forensics §10 — substituting procedural dust is
+    // explicitly called out as a bug in §10 / no-standins feedback.
+    const int32_t img_id = TObjectImagery::FindImagery(kFizzleImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[fizzle] SpawnForTest: FindImagery('%s') failed", kFizzleImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[fizzle] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kFizzleImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[fizzle] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kFizzleImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* fizzle = new TFizzleEffect(base);
+    SetIntPos(fizzle, origin);
+    fizzle->SetMapIndex(MapPane.MakeIndex());
+    fizzle->ActivateComponents();
+
+    // Lazy-mesh-init poke (mirror F01 / H04 / X22 / B01). NumObjects
+    // triggers the actual mesh load; NumTextures alone doesn't.
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj < kFizzleNumSystems || num_tex <= 0)
+    {
+        log_error("[fizzle] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d) — expected 3 box sub-objects",
+                  num_obj, num_tex);
+        delete fizzle;
+        return nullptr;
+    }
+
+    // --- Sub-object resolution. The original (effect_old.cpp:12354-12356)
+    // binds:
+    //     blue.Init(this, GetObject(0), ...);
+    //     red.Init(this, GetObject(2), ...);          // NOTE: index 2!
+    //     purple.Init(this, GetObject(1), ...);       // NOTE: index 1!
+    // So system 0 (blue)  -> sub-object 0 (box01, blue sprite)
+    //    system 1 (red)   -> sub-object 2 (box03, magenta sprite)
+    //    system 2 (purple)-> sub-object 1 (box02, violet/purple sprite)
+    // This is the documented index↔label crossing from forensics §4. We
+    // preserve it so the per-system random(1,3) distribution lines up
+    // with what the original drew.
+    const int32_t kSubObjForSystem[kFizzleNumSystems] = { 0, 2, 1 };
+    const char*   kSystemLabel[kFizzleNumSystems]    = { "blue", "red", "purple" };
+    for (int32_t s = 0; s < kFizzleNumSystems; ++s)
+    {
+        const int32_t obj = kSubObjForSystem[s];
+        const int32_t tex_slot = FizzleSubObjTextureSlot(img3d, obj);
+        const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : obj;
+        S3DTex tex = {};
+        img3d->GetTexture(slot, &tex);
+        fizzle->subobjs_[s].texture = tex.htexture;
+        FizzleResolveSubObjUv(img3d, obj, fizzle->subobjs_[s].uv_rect);
+        if (img3d->NumObjVerts(obj) != 4)
+        {
+            log_error("[fizzle] sub-object %d must contain four authored corners", obj);
+            delete fizzle;
+            return nullptr;
+        }
+        img3d->GetObjVerts(obj, fizzle->subobjs_[s].vertices);
+        S3DObj object = {};
+        img3d->GetObject(obj, &object);
+        if (object.material >= 0 && object.material < img3d->NumMaterials())
+        {
+            S3DMat material = {};
+            img3d->GetMaterial(object.material, &material);
+            const auto& color = material.matdesc.diffuse;
+            fizzle->subobjs_[s].diffuse[0] = color.r;
+            fizzle->subobjs_[s].diffuse[1] = color.g;
+            fizzle->subobjs_[s].diffuse[2] = color.b;
+            fizzle->subobjs_[s].diffuse[3] = color.a;
+        }
+        if (fizzle->subobjs_[s].texture == kInvalidTexture)
+        {
+            log_error("[fizzle] SpawnForTest: '%s' sub-object %d texture unresolved",
+                      kSystemLabel[s], obj);
+            delete fizzle;
+            return nullptr;
+        }
+    }
+
+    // Particles are seeded by the per-tick emission loop in
+    // TickAndSubmitForTest (the original spawns over the first DUST_FRAME=15
+    // ticks, NOT all at once at Initialize). Just zero the cadence state.
+    fizzle->emit_add_    = 0.0f;
+    fizzle->frame_count_ = 0;
+    fizzle->sim_accum_ms_ = 0.0;
+    fizzle->alive_       = true;
+
+    log_info("[fizzle] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "subobjs={blue=box%d(tex=%u), red=box%d(tex=%u), purple=box%d(tex=%u)} "
+             "uvs={blue=[%.3f,%.3f %.3fx%.3f], red=[%.3f,%.3f %.3fx%.3f], "
+             "purple=[%.3f,%.3f %.3fx%.3f]}",
+             kFizzleImageryPath, fizzle->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             kSubObjForSystem[0] + 1, fizzle->subobjs_[0].texture,
+             kSubObjForSystem[1] + 1, fizzle->subobjs_[1].texture,
+             kSubObjForSystem[2] + 1, fizzle->subobjs_[2].texture,
+             fizzle->subobjs_[0].uv_rect[0], fizzle->subobjs_[0].uv_rect[1],
+             fizzle->subobjs_[0].uv_rect[2], fizzle->subobjs_[0].uv_rect[3],
+             fizzle->subobjs_[1].uv_rect[0], fizzle->subobjs_[1].uv_rect[1],
+             fizzle->subobjs_[1].uv_rect[2], fizzle->subobjs_[1].uv_rect[3],
+             fizzle->subobjs_[2].uv_rect[0], fizzle->subobjs_[2].uv_rect[1],
+             fizzle->subobjs_[2].uv_rect[2], fizzle->subobjs_[2].uv_rect[3]);
+    return fizzle;
+}
+
+void TFizzleEffect::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled;
+    if (native_domain_) {
+        const auto position = IntPos(*this);
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z,
+                                 uint8_t(IntFacing(*this)));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT particle=relative Fizzle",
+             int(native_domain_));
+}
+
+void TFizzleEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Update: port of TFizzleAnimator::Animate (effect_old.cpp:12361-12487)
+    // + TParticleSystem::Animate (effectcomp.cpp:1041-1068). Framerate-
+    // independent via the 24Hz sim-tick accumulator (same shape as
+    // sparks/blood). Each accumulated tick runs the original per-tick
+    // integration exactly once.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ + 1e-9 >= kFizzleSimTickMs)
+        {
+            sim_accum_ms_ -= kFizzleSimTickMs;
+
+            // Emission cadence: add += DUST_ADD; ++frame_count
+            // (effect_old.cpp:12367, :12371).
+            emit_add_ += kFizzleDustAdd;
+            ++frame_count_;
+
+            // TParticleSystem::Animate (effectcomp.cpp:1045-1067) — per
+            // used particle: integrate pos += vel, multiply vel *= acc
+            // (acc=1.0 -> constant velocity, no gravity/drag for Fizzle).
+            // The scale cycle finishes before the generic 100/200-tick
+            // lifespan limit. Reap its phase=0 particles here, one tick
+            // after shrinking to zero, as TParticleSystem::Animate does.
+            for (int32_t i = 0; i < kFizzleMaxParticles; ++i)
+            {
+                SFizzleParticle& p = particles_[i];
+                if (!p.used)
+                    continue;
+                if (p.phase == kFizzlePhaseDead)
+                {
+                    p.used = false;
+                    continue;
+                }
+                // pos += vel (acc=1.0, so vel never changes)
+                p.pos.X += p.vel.X;
+                p.pos.Y += p.vel.Y;
+                p.pos.Z += p.vel.Z;
+            }
+
+            // --- Emission loop (effect_old.cpp:12378-12423).
+            // Spawn 20 particles over ticks 1–14, distributed
+            // randomly across the 3 systems. Each new particle has
+            // scl=(0,0,0) (will GROW), random max-scale temp.z, random
+            // spin rate temp.y, and phase=100 (GROW).
+            while (emit_add_ > 1.0f && frame_count_ < kFizzleDustFrame)
+            {
+                emit_add_ -= 1.0f;
+
+                SFizzleParticle p = {};
+                p.used = true;
+                // pos: (±DUST_SPREAD, ±DUST_SPREAD, random(70,130)) wu
+                p.pos.X = float(random(-kFizzleDustSpread, kFizzleDustSpread));
+                p.pos.Y = float(random(-kFizzleDustSpread, kFizzleDustSpread));
+                p.pos.Z = float(random(kFizzleSpawnZMin, kFizzleSpawnZMax));
+                // vel: (0, 0, -random(5,45)*0.1) — straight down only
+                p.vel.X = 0.0f;
+                p.vel.Y = 0.0f;
+                p.vel.Z = -float(random(kFizzleDustMinZ, kFizzleDustMaxZ)) * 0.1f;
+                // scl starts at 0 (invisible); will grow via the
+                // state machine.
+                p.scl.X = p.scl.Y = p.scl.Z = 0.0f;
+                // The random rotation is overwritten, but still advances
+                // the original RNG before flicker/spin/max-scale draws.
+                (void)random(0, 359);
+                p.rot_z_deg = 0.0f;
+                // phase tag (life_span in the original; 100 = GROW)
+                p.phase = kFizzlePhaseGrow;
+                // flicker re-rolled each tick during the per-particle
+                // pass; seed it now too (mirrors the spawn assignment).
+                p.flicker = (random(0, 1) != 0);
+                // spin rate temp.y = ±DUST_ROT deg/tick
+                p.spin_rate = float(random(-kFizzleDustRot, kFizzleDustRot));
+                // max-scale temp.z = random(DUST_MIN_SCL, DUST_MAX_SCL) * 0.01
+                p.max_scl = float(random(kFizzleDustMinScl, kFizzleDustMaxScl)) * 0.01f;
+                // Original chooses blue/red/purple after constructing p.
+                p.system = random(1, 3) - 1;
+                const int32_t slot = FizzleFindFreeSlot(particles_, p.system);
+                if (slot >= 0)
+                    particles_[slot] = p;
+            }
+
+            // --- Per-particle scale state machine + spin + flicker
+            // (effect_old.cpp:12426-12478). `done` tracks whether any
+            // particle is still alive — if not (and emission is over),
+            // the effect self-destructs.
+            bool done = true;
+            for (int32_t i = 0; i < kFizzleMaxParticles; ++i)
+            {
+                SFizzleParticle& p = particles_[i];
+                if (!p.used)
+                    continue;
+
+                if (p.phase == kFizzlePhaseGrow)
+                {
+                    // Retail 0x4f42a3..0x4f42c7 retains the x87 sum
+                    // through its comparison, even after storing float X.
+                    // Double holds this sum of two nearby floats exactly.
+                    const double grown_scale = double(p.scl.X) + double(kFizzleDustSclInc);
+                    p.scl.X = float(grown_scale);
+                    p.scl.Y += kFizzleDustSclInc;
+                    p.scl.Z += kFizzleDustSclInc;
+                    if (grown_scale > double(p.max_scl))
+                        p.phase = kFizzlePhaseShrink;
+                }
+                else if (p.phase == kFizzlePhaseShrink)
+                {
+                    // scl -= DUST_SCL_DEC (per axis) — uniform shrink
+                    p.scl.X -= kFizzleDustSclDec;
+                    p.scl.Y -= kFizzleDustSclDec;
+                    p.scl.Z -= kFizzleDustSclDec;
+                    if (p.scl.X <= 0.0f)
+                    {
+                        p.scl.X = p.scl.Y = p.scl.Z = 0.0f;
+                        p.phase = kFizzlePhaseDead;
+                        // Source still spins/re-rolls flicker this tick;
+                        // generic Animate reaps the slot on the next tick.
+                    }
+                }
+
+                // Spin: rot.z += temp.y (deg), wrap [0,360).
+                // (effect_old.cpp:12467-12472).
+                p.rot_z_deg += p.spin_rate;
+                while (p.rot_z_deg <    0.0f) p.rot_z_deg += 360.0f;
+                while (p.rot_z_deg >= 360.0f) p.rot_z_deg -= 360.0f;
+
+                // Re-roll flicker (effect_old.cpp:12475).
+                p.flicker = (random(0, 1) != 0);
+
+                done = false;
+            }
+
+            // --- Self-destruct (effect_old.cpp:12482-12485).
+            if (frame_count_ >= kFizzleDustFrame && done)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    // Source TParticleSystem::Render: spin, tip, static rotation, scale,
+    // then particle translation. Preserve the asset's four raw corners/UVs.
+    const auto& owner_world = native_domain_ ? native_owner_ : Transform().Matrix();
+    SQuadDrawItem item = {};
+    item.key.blend = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode = EFxLightMode::Unlit;
+    item.retail_argb4444 = true; // Shipped Fizzle texture format; original ignores vertex color.
+    item.retail_software_projection = native_domain_;
+    item.retail_camera_z = 0.0f;
+    item.debug_mode = debug_mode;
+
+    for (int32_t i = 0; i < kFizzleMaxParticles; ++i)
+    {
+        const SFizzleParticle& p = particles_[i];
+        if (!p.used || p.scl.X <= 0.0f)
+            continue;
+        const SFizzleSubObject& so = subobjs_[p.system];
+        if (so.texture == kInvalidTexture)
+            continue;
+
+        hmm_mat4 local = {};
+        MtxClear(&local);
+        MtxRotateZ(&local, p.rot_z_deg * float(M_PI) / 180.0f);
+        MtxRotateX(&local, -float(M_PI) / 2.0f);
+        MtxRotateZ(&local, kFizzleStaticRotRad);
+        const float boost = p.flicker ? kFizzleFlickerScale : 1.0f;
+        const hmm_vec3 scale = p.scl * boost;
+        MtxScale(&local, &scale);
+        // Original particle Render(flicker=1, abs_pos=0) keeps raw local Z,
+        // then RenderObject composes the owner matrix. Only the owner owns
+        // the coordinate-domain bridge; never FIX_Z the particle translation.
+        MtxTranslate(&local, &p.pos);
+        for (int32_t corner = 0; corner < 4; ++corner)
+        {
+            hmm_vec3 point = {};
+            MtxTransform(&local, &so.vertices[corner].pos, &point);
+            hmm_vec3 world = {};
+            MtxTransform(&owner_world, &point, &world);
+            item.world_pos[corner][0] = world.X;
+            item.world_pos[corner][1] = world.Y;
+            item.world_pos[corner][2] = world.Z;
+            item.uv[corner][0] = so.vertices[corner].tu;
+            item.uv[corner][1] = so.vertices[corner].tv;
+        }
+        for (int32_t channel = 0; channel < 4; ++channel)
+            item.color_rgba[channel] = so.diffuse[channel];
+        item.key.texture = so.texture;
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
+// *************************************************************************
+// * TRippleEffect / shared water helpers — snapshot and I3D faithful       *
+// *************************************************************************
+// Evidence and remaining retail gaps: forensics/H03_H04_WATER_AUDIT.md.
+namespace {
+constexpr double kWaterTicksPerSecond = 24.0;
+constexpr float kWaterGravity = 0.37f; // wu/authored tick squared
+constexpr int8_t kRippleFrameOf[16] = {3,2,1,0,7,6,5,4,11,10,9,8,15,14,13,12};
+
+int32_t WaterRandom(int32_t lo, int32_t hi)
+{
+    // Retail 0x48330a..0x483312 returns an equal endpoint without advancing
+    // the CRT RNG. Period-one Drip invokes this zero-width range every cycle.
+    if (lo == hi) return lo;
+    return lo + std::rand() % (hi - lo + 1);
+}
+
+// Split time at authored event boundaries. Children receive only the time
+// after their creation, including when a slow render spans several events.
+template <typename AdvanceChildren, typename Tick>
+void AdvanceWaterTime(double& fraction, double seconds,
+                      AdvanceChildren advance_children, Tick tick)
+{
+    if (!std::isfinite(seconds) || seconds <= 0.0)
+        return;
+    double remaining = seconds * kWaterTicksPerSecond;
+    while (remaining > 1e-9)
+    {
+        const double step = (std::min)(remaining, 1.0 - fraction);
+        advance_children(step / kWaterTicksPerSecond);
+        fraction += step;
+        remaining -= step;
+        if (fraction >= 1.0 - 1e-9)
+        {
+            fraction = 0.0;
+            tick();
+        }
+    }
+}
+
+hmm_vec3 WaterDropPosition(const hmm_vec3& pos, const hmm_vec3& vel, double fraction)
+{
+    const float f = float(fraction);
+    hmm_vec3 result = pos + vel * f;
+    // Smooth the source's explicit-Euler parabola; at f=0 and f=1 this
+    // exactly agrees with its authored boundary positions.
+    result.Z -= 0.5f * kWaterGravity * f * (f - 1.0f);
+    return result;
+}
+
+T3DImagery* LoadWaterImagery(const char* path, const char* tag)
+{
+    int32_t id = TObjectImagery::FindImagery(path);
+    if (id < 0)
+    {
+        char mutable_path[MAXPATHLEN];
+        strncpyz(mutable_path, path, sizeof(mutable_path));
+        id = TObjectImagery::RegisterImagery(mutable_path);
+    }
+    TObjectImagery* base = id < 0 ? nullptr : TObjectImagery::LoadImagery(id);
+    auto* img = dynamic_cast<T3DImagery*>(base);
+    if (!img)
+    {
+        log_error("[%s] cannot load required I3D '%s'", tag, path);
+        if (base) TObjectImagery::FreeImagery(base);
+    }
+    return img;
+}
+
+bool LoadWaterQuad(T3DImagery* img, int32_t object,
+                   std::vector<S3DVertex>& vertices, TTextureHandle& texture, bool* argb4444=nullptr)
+{
+    if (!img || object >= img->NumObjects() || img->NumObjVerts(object) != 4)
+        return false;
+    vertices.resize(4);
+    img->GetObjVerts(object, vertices.data());
+    std::vector<SMeshVertex> extracted;
+    std::vector<uint16_t> indices;
+    for (int32_t slot = 1; slot <= img->NumTextures(); ++slot)
+    {
+        if (!ExtractSubMeshTextureSlot(img, object, slot, extracted, indices) || indices.empty())
+            continue;
+        S3DTex tex = {};
+        img->GetTexture(slot - 1, &tex);
+        texture = tex.htexture;
+        if(argb4444) {
+            const auto& f=tex.desc.pixelFormat;
+            *argb4444=f.dwRGBBitCount==16 && f.dwRBitMask==0x0f00 &&
+                f.dwGBitMask==0x00f0 && f.dwBBitMask==0x000f && f.dwRGBAlphaBitMask==0xf000;
+        }
+        return texture != kInvalidTexture;
+    }
+    return false;
+}
+
+void SubmitWaterQuad(TObjectInstance& owner, const std::vector<S3DVertex>& vertices,
+                     TTextureHandle texture, const hmm_vec3& local_pos,
+                     const hmm_vec3& scale, EFxDebugMode debug_mode, int32_t atlas_cell = -1,
+                     bool native_domain=false, bool argb4444=false)
+{
+    if (!Renderer || texture == kInvalidTexture || vertices.size() != 4)
+        return;
+    SQuadDrawItem item = {};
+    hmm_mat4 native_owner;
+    if(native_domain) {
+        const auto& p=IntPos(owner);
+        BuildRetailSoftwareOwner(native_owner,p.x,p.y,p.z,uint8_t(IntFacing(owner)));
+    }
+    const hmm_mat4& world = native_domain?native_owner:owner.Transform().Matrix();
+    item.retail_software_projection=native_domain;
+    item.retail_argb4444=native_domain && argb4444;
+    for (int32_t i = 0; i < 4; ++i)
+    {
+        const hmm_vec3& v = vertices[size_t(i)].pos;
+        const hmm_vec3 point = hmm_vec3{v.X * scale.X, v.Y * scale.Y, v.Z * scale.Z} + local_pos;
+        hmm_vec3 transformed = {};
+        MtxTransform(&world, &point, &transformed);
+        item.world_pos[i][0] = transformed.X;
+        item.world_pos[i][1] = transformed.Y;
+        item.world_pos[i][2] = transformed.Z;
+        if (atlas_cell >= 0 && debug_mode != EFxDebugMode::FullTexture)
+        {
+            // TRippleAnimator::SetAnimFrame overwrites vertex-indexed UVs.
+            item.uv[i][0] = float(atlas_cell % 4) * .25f + (i >= 2 ? .25f : 0.0f);
+            item.uv[i][1] = float(atlas_cell / 4) * .25f + (i % 2 ? .25f : 0.0f);
+        }
+        else
+        {
+            item.uv[i][0] = vertices[size_t(i)].tu;
+            item.uv[i][1] = vertices[size_t(i)].tv;
+        }
+    }
+    item.key.texture = texture;
+    item.key.blend = uint8_t(EFxBlend::Alpha); // source SetBlendState
+    item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode = debug_mode;
+    item.light_mode = EFxLightMode::Unlit;
+    Renderer->SubmitFxQuad(item);
+}
+template <typename Effect>
+class TWaterReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    [[nodiscard]] const char* ComponentName() const override { return "water_reference"; }
+    void Submit(TRenderer&, const TObjectInstance&) const override
+    {
+        if (auto* effect = dynamic_cast<Effect*>(OwnerInstance())) effect->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* effect = dynamic_cast<Effect*>(OwnerInstance())) effect->Advance(TTime::DeltaTime());
+    }
+};
+
+template <typename Effect>
+class TWaterReferenceDef final : public TStateObjectDef<SObjectState>
+{
+  public:
+    TObjectInstance* Create(TObjectImagery* img) const override
+    {
+        return new Effect(img);
+    }
+    TObjectInstance* Create(SObjectState& state, TObjectImagery* img) const override
+    {
+        // NewObject assigns a temporary map index before Load replaces it
+        // with the serialized index. Registering component updates here
+        // would capture that temporary identity and silently go stale.
+        // AttachAnimatorComponents initializes after the complete load.
+        return new Effect(&state, img);
+    }
+};
+
+template <typename Effect>
+static std::unique_ptr<TObjectDef> MakeWaterReferenceDef() { return std::make_unique<TWaterReferenceDef<Effect>>(); }
+static TObjectDef::SRegistrar g_ripple_reference_builder("Ripple", MakeWaterReferenceDef<TRippleEffect>);
+static TObjectDef::SRegistrar g_drip_reference_builder("Drip", MakeWaterReferenceDef<TDripEffect>);
+
+// Map render resolves imagery lazily. Revisit attachment there if a builder
+// ran before its texture assets were ready; Initialize is idempotent.
+template <typename Effect>
+class TWaterReferenceAnimatorBuilder final : public T3DAnimatorBuilder
+{
+  public:
+    explicit TWaterReferenceAnimatorBuilder(const char* name) : T3DAnimatorBuilder(name) {}
+    T3DAnimator* Build(TObjectInstance* owner) override { return new T3DAnimator(owner); }
+    void AttachComponents(TObjectInstance* owner) override
+    {
+        if (auto* effect = dynamic_cast<Effect*>(owner)) effect->Initialize();
+    }
+};
+static TWaterReferenceAnimatorBuilder<TRippleEffect> g_ripple_reference_animator_builder("Ripple");
+static TWaterReferenceAnimatorBuilder<TDripEffect> g_drip_reference_animator_builder("Drip");
+} // namespace
+
+void TRippleEffect::Initialize()
+{
+    if (GetComponent<TFlipbookBillboardComponent>()) return;
+    auto* img = dynamic_cast<T3DImagery*>(GetImagery());
+    if (!LoadWaterQuad(img, 0, ring_vertices_, ring_texture_, &ring_argb4444_) ||
+        !LoadWaterQuad(img, 1, splash_vertices_, splash_texture_, &splash_argb4444_))
+    {
+        log_error("[ripple] map instance lacks required authored ring/splash asset");
+        return;
+    }
+    auto component = std::make_unique<TWaterReferenceComponent<TRippleEffect>>();
+    component->Configure(ring_texture_, 256, 256, 4, 4, 16, 1.0f, 1.0f, false, true);
+    AddComponent(std::move(component));
+}
+void TRippleEffect::Pulse()
+{
+    TEffect::Pulse();
+    if (!IsAlive()) SetFlags(OF_KILL);
+}
+
+TRippleEffect* TRippleEffect::SpawnForTest(const S3DPoint& origin)
+{
+    if (!Renderer) return nullptr;
+    T3DImagery* img = LoadWaterImagery("Magic\\ripples.I3D", "ripple");
+    if (!img) return nullptr;
+    auto* ripple = new TRippleEffect(img);
+    SetIntPos(ripple, origin);
+    ripple->SetMapIndex(MapPane.MakeIndex());
+    ripple->SetLength(96);
+    ripple->ActivateComponents();
+    if (!LoadWaterQuad(img, 0, ripple->ring_vertices_, ripple->ring_texture_, &ripple->ring_argb4444_) ||
+        !LoadWaterQuad(img, 1, ripple->splash_vertices_, ripple->splash_texture_, &ripple->splash_argb4444_))
+    {
+        log_error("[ripple] required ring/splash quad or texture unavailable");
+        delete ripple;
+        return nullptr;
+    }
+    log_info("[ripple] loaded authored ring+splash geometry at (%d,%d,%d), length=%d",
+             origin.x, origin.y, origin.z, ripple->GetLength());
+    return ripple;
+}
+
+void TRippleEffect::Advance(double seconds)
+{
+    AdvanceWaterTime(tick_fraction_, seconds,
+        [&](double step) {
+            for (auto& child : spawned_ripples_) child->Advance(step);
+        },
+        [&] {
+            if (!alive_) return;
+            ++frameon_;
+            if (frameon_ % 2 == 0)
+            {
+                if (frameon_ <= len - 24) ripframe_ = (ripframe_ + 1) & 3;
+                else if (ripframe_ < 4) ripframe_ = len > 24 ? 4 : 4 + (24 - len) / 2;
+                else ripframe_ = (std::min)(ripframe_ + 1, 15);
+            }
+            if (frameon_ > len && ripframe_ == 15) alive_ = false;
+            if (!has_splashed_ && len > 24)
+            {
+                has_splashed_ = true;
+                const int32_t count = WaterRandom(2, 3);
+                for (int32_t i = 0; i < count; ++i)
+                {
+                    SWaterDrop drop = {};
+                    drop.pos = hmm_vec3{0.0f, 0.0f, 5.0f};
+                    drop.vel = hmm_vec3{float(WaterRandom(-len, len)) / 32.0f,
+                                       float(WaterRandom(-len, len)) / 32.0f,
+                                       float(WaterRandom(len / 2, len)) / 20.0f};
+                    splash_drops_.push_back(drop);
+                }
+            }
+            for (auto& drop : splash_drops_)
+            {
+                if (drop.dead) continue;
+                drop.pos += drop.vel;
+                drop.vel.Z -= kWaterGravity;
+                if (drop.pos.Z <= 0.0f)
+                {
+                    const S3DPoint& base = IntPos(*this);
+                    const S3DPoint landing = {int32_t(drop.pos.X + base.x),
+                                             int32_t(drop.pos.Y + base.y), base.z};
+                    if (auto* child = SpawnForTest(landing))
+                    {
+                        child->SetLength(len / 2);
+                        child->SetNativeDomain(native_domain_);
+                        spawned_ripples_.emplace_back(child);
+                    }
+                    drop.dead = true;
+                }
+            }
+        });
+    spawned_ripples_.erase(std::remove_if(spawned_ripples_.begin(), spawned_ripples_.end(),
+        [](const auto& child) { return !child->IsAlive(); }), spawned_ripples_.end());
+}
+
+void TRippleEffect::Submit(EFxDebugMode debug_mode)
+{
+    if (alive_)
+    {
+        const float scale = .5f + float(double(frameon_) + tick_fraction_) / 16.0f;
+        const int32_t cell = kRippleFrameOf[std::clamp(15 - ripframe_, 0, 15)];
+        SubmitWaterQuad(*this, ring_vertices_, ring_texture_, hmm_vec3{},
+                        hmm_vec3{scale, scale, 1.0f}, debug_mode, cell, native_domain_, ring_argb4444_);
+        for (const auto& drop : splash_drops_)
+            if (!drop.dead)
+                SubmitWaterQuad(*this, splash_vertices_, splash_texture_,
+                                WaterDropPosition(drop.pos, drop.vel, tick_fraction_),
+                                hmm_vec3{.25f,.25f,.25f}, debug_mode, -1, native_domain_, splash_argb4444_);
+    }
+    for (auto& child : spawned_ripples_) child->Submit(debug_mode);
+}
+
+void TRippleEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime());
+    Submit(debug_mode);
+}
+
+// *************************************************************************
+// * TMistEffect - PE-pipeline continuous-emitter spawn for --test=vfx (M05) *
+// *************************************************************************
+//
+// Scope: Phase 2 M05 row. Ports the ambient ascending-wisp emitter from
+// `TMistAnimator` (src/effect_old.cpp:11342-11515) to the PE pipeline,
+// reusing the B01 TBloodEffect global-bucket pattern with a continuous
+// (non-burst) seeding model.
+//
+// What this *does* deliver:
+//   1. A real `TMistEffect` instance that owns its lifecycle.
+//   2. A `TParticleBucket` allocated from `ParticleManager()` and
+//      submitted every frame via `Renderer->SubmitFxParticleBucket()` —
+//      exercising the PE pipeline end-to-end through the real effect
+//      class.
+//   3. Real `Magic\mist.i3d` imagery (the canonical wisp sprite,
+//      8916 bytes at legacy/Imagery/Magic/mist.i3d). Texture sourced
+//      via the F01/B01 lazy-mesh-init poke pattern.
+//   4. 50 long-lived drops with retail-faithful pos/vel envelope
+//      (MIST_LENGTH=64, MIST_WIDTH=20, MIST_HEIGHT=4 — see effect_old
+//      and INVENTORY M05 forensics §1). Drops integrate Euler with
+//      RIPPLE_GRAVITY=0.37 wu/tick² and respawn-in-place on landing
+//      (pos.z <= 0). Per-particle integration gated to retail's 24 Hz
+//      sim tick (pre-release was ungated; without the gate drops would
+//      fly 2.5× too fast at 60 fps).
+//
+// What this does *not* deliver:
+//   - The `AddNewRipple` on landing (was commented-out in pre-release —
+//     see forensics §7.6).
+//   - The per-drop 45°+facing rotation (camera-aligned billboard
+//     supersedes — forensics §7.5).
+//   - In-game spawn through area-effect-registry dispatch (no live
+//     registry caller in the port today; harness-only).
+//
+namespace {
+
+constexpr const char* kMistImageryPath = "Magic\\mist.i3d";
+constexpr const char* kMistBucketName  = "vfx.mist.drops";
+
+// Pre-release constants (effect_old.cpp:11370-11374), preserved for
+// reviewability. All values authored at retail's 24 Hz sim tick.
+constexpr int32_t kMistMaxDrops = 50;
+constexpr float   kMistLength   = 64.0f;     // X envelope half-extent (×2 for vel range)
+constexpr float   kMistWidth    = 20.0f;     // Y envelope half-extent
+constexpr float   kMistHeight   = 4.0f;      // Z initial-velocity max (vz = random(H/2..H))
+constexpr float   kMistScale    = 0.7f;      // pre-release sprite scale
+constexpr float   kMistGravity  = 0.37f;     // RIPPLE_GRAVITY shared constant, wu/tick²
+// Pre-release spawned drops at z=5 (close to ground) and they ballisticed
+// to a peak around vz²/(2g) ≈ 4²/(2·0.37) ≈ 21 wu before falling back.
+// At retail's 24 Hz the visible cluster lived in the ~5..25 wu band. At
+// the harness's iso camera (origin-centred, looking down) drops in that
+// band cluster near the centre and read as a low ground-wisp; the
+// camera doesn't show much below z=0. The +20 wu lift offsets the
+// spawn floor to land in the visible window; the arc still respects
+// the retail vz / gravity envelope.
+constexpr float   kMistSpawnZ        = 20.0f;     // wu above origin (was 5 in pre-release)
+constexpr float   kMistLandFloor     = 0.0f;      // drop respawn threshold (relative to origin.z)
+constexpr int32_t kMistSimTickMs = 1000 / 24;  // 24 Hz integration gate
+
+// Owner-id allocator mirrors B01's pattern (per-instance unique id so
+// concurrent emitters don't share particles in the global bucket; the
+// usual GetMapIndex stamp isn't unique across the test harness's
+// detached instances).
+float NextMistOwnerId()
+{
+    static float next = 5000.0f;
+    const float v = next;
+    next += 1.0f;
+    return v;
+}
+
+// Lazily allocate the shared mist bucket against the mist imagery's
+// texture slot 0. Returns nullptr if the texture handle isn't ready.
+TParticleBucket* AcquireMistBucket(T3DImagery* img3d)
+{
+    if (TParticleBucket* existing = ParticleManager().FindGlobalBucket(kMistBucketName))
+        return existing;
+
+    // Same lazy-mesh-init poke as F01/B01: NumTextures() is a passive
+    // read; NumObjects() triggers slot population.
+    (void)img3d->NumObjects();
+    if (img3d->NumTextures() <= 0)
+    {
+        log_error("[mist] AcquireMistBucket: imagery has 0 textures after "
+                  "lazy-init poke (objects=%d)", img3d->NumObjects());
+        return nullptr;
+    }
+
+    S3DTex tex = {};
+    img3d->GetTexture(0, &tex);
+    if (tex.htexture == kInvalidTexture)
+    {
+        log_error("[mist] AcquireMistBucket: texture slot 0 handle invalid");
+        return nullptr;
+    }
+
+    SParticleBucketDesc desc = {};
+    desc.name           = kMistBucketName;
+    desc.scope          = EParticleBucketScope::Global;
+    // Mist is unlit (additive bypasses LitFlat per pre-release
+    // SetAddBlendState — see forensics §4). PremulAlpha pairs with
+    // chroma-key-converted texture for clean edges (3dimage.cpp's
+    // >20%-black-pixel rule auto-fires on the mist sprite, same as
+    // Blood.I3D).
+    desc.light_mode     = EParticleLightMode::Unlit;
+    desc.depth_mode     = EParticleDepthMode::TestNoWrite;
+    // Pre-release uses `SetAddBlendState` = D3DBLEND_ONE/ONE additive.
+    // The match in our enum is AdditiveStraight (forensics §4 + the
+    // particlefx.h note: "ONE/ONE = retail-style self-lit additive").
+    desc.blend          = EParticleBlendMode::AdditiveStraight;
+    desc.sort           = EParticleSortMode::None;
+    desc.texture        = tex.htexture;
+    desc.texture_width  = int32_t(tex.desc.width  > 0 ? tex.desc.width  : 1);
+    desc.texture_height = int32_t(tex.desc.height > 0 ? tex.desc.height : 1);
+    // mist.i3d is a single-frame sprite (no atlas — pre-release renders
+    // GetObject(0) which is a single billboard per drop).
+    desc.frame_cols     = 1;
+    desc.frame_rows     = 1;
+    // Default-size in world units. Pre-release scaled the texture by
+    // 0.7 against the I3D's mesh-space quad (the quad itself was sized
+    // implicitly by the model). For modern billboards we choose a fixed
+    // wu size that reads at the harness camera distance. The 50-drop
+    // cluster wants to read as a "ground-hugging wisp" — sized similar
+    // to the blood splats (~48 wu) so the cluster has visible mass.
+    desc.default_width  = 96.0f;
+    desc.default_height = 96.0f;
+
+    SParticleBufferLayout layout = {};
+    ParticleLayoutAddVar(layout, EParticleVar::OwnerId);
+    ParticleLayoutAddVar(layout, EParticleVar::Life);
+    ParticleLayoutAddVar(layout, EParticleVar::Age);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawPos);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawScl);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawColor);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawFrame);
+    ParticleLayoutAddVar(layout, EParticleVar::DrawRot);
+    // EmitVel stores per-particle velocity (world-units / sim-tick to
+    // keep the math in retail units, then scaled by tick-count per
+    // frame in TickAndSubmitForTest).
+    ParticleLayoutAddVar(layout, EParticleVar::EmitVel);
+
+    TParticleBucket* bucket = ParticleManager().GetOrCreateGlobalBucket(desc, layout);
+    log_info("[mist] AcquireMistBucket: bucket='%s' tex=%dx%d handle=%u",
+             kMistBucketName, desc.texture_width, desc.texture_height,
+             tex.htexture);
+    return bucket;
+}
+
+// Re-seed one drop's pos+vel from the retail envelope. Used both at
+// initial spawn and on landing-respawn. Origin is the emitter centre
+// in world units; offsets are pre-release-local-space and added on.
+void SeedMistDrop(TParticleBucket& bucket, int32_t pi, const S3DPoint& origin)
+{
+    auto frand = []() { return float(std::rand()) / float(RAND_MAX); };
+
+    if (float* pos = bucket.VarPtr(pi, EParticleVar::DrawPos))
+    {
+        // Pre-release spawn envelope was ±32 wu × ±10 wu at the harness
+        // camera distance; that's a tight ground patch under one tile.
+        // Spread the spawn area 3× horizontally so the 50 drops read as
+        // a wisp-blanket area rather than a single tight blob — keeps
+        // retail's per-drop kinematics intact, just samples a wider
+        // ground patch.
+        pos[0] = float(origin.x) + (frand() - 0.5f) * kMistLength * 3.0f;   // ±96 wu
+        pos[1] = float(origin.y) + (frand() - 0.5f) * kMistWidth  * 3.0f;   // ±30 wu
+        pos[2] = float(origin.z) + kMistSpawnZ;                              // +20 wu (forensics §7.5)
+    }
+    if (float* vel = bucket.VarPtr(pi, EParticleVar::EmitVel))
+    {
+        // Pre-release: vx = random(-L,L)/32, vy = random(-W,W)/32,
+        // vz = random(H/2, H). All wu/tick at 24 Hz. Retail-faithful;
+        // the visible "rise" comes from gravity bringing them back
+        // down after ~5 ticks of upward arc.
+        vel[0] = (frand() * 2.0f - 1.0f) * (kMistLength / 32.0f);    // ±2.0 wu/tick
+        vel[1] = (frand() * 2.0f - 1.0f) * (kMistWidth  / 32.0f);    // ±0.625 wu/tick
+        vel[2] = (kMistHeight * 0.5f) + frand() * (kMistHeight * 0.5f);  // +2..+4 wu/tick
+    }
+    if (float* age = bucket.VarPtr(pi, EParticleVar::Age))
+        *age = 0.0f;
+    // Drops live until pos.z <= 0; the `life` field is a soft upper
+    // bound just so the bucket's reaper doesn't tag them as zombies if
+    // gravity somehow doesn't bring them back (e.g. negative gravity
+    // in a future variant). 5 seconds at 24 Hz = 120 ticks, well
+    // beyond any realistic ballistic arc with our vz=2..4 + g=0.37.
+    if (float* life = bucket.VarPtr(pi, EParticleVar::Life))
+        *life = 5.0f;
+}
+
+}   // namespace
+
+TMistEffect::~TMistEffect()
+{
+    if (bucket_ && owner_particle_id_ >= 0.0f)
+        bucket_->KillParticlesByOwner(owner_particle_id_);
+}
+
+// Retail TMistEffect::Initialize / Pulse are empty stubs in pre-release
+// (effect_old.cpp:11349-11356) — all the work lives in the animator.
+// Phase 2 collapses both into TMistEffect; in-game spawn path is
+// deferred (no live caller — INVENTORY M05 forensics §5).
+void TMistEffect::Initialize() {}
+void TMistEffect::Pulse()      { TEffect::Pulse(); }
+
+// Cached parsed effect def. Lazy on first use.
+const SParticleEffectDef& MistEffectDef()
+{
+    static const SParticleEffectDef def = ParseParticleEffectDef("Mist");
+    return def;
+}
+
+// Engine-driven SpawnForTest. Loads Magic\mist.i3d (still needed for the
+// instance refcount / component lifecycle), attaches a TParticleEffectComponent
+// configured with the Mist def, and pulses it once so the engine fills the
+// 50-drop steady-state population via spawn_count.
+//
+// Per-particle dynamics (spawn envelope, gravity, respawn-on-landing) live in
+// the effects.def `Mist` block; this method is now ~25 lines of component
+// wiring instead of ~85 lines of bespoke spawn-loop + 24 Hz integration.
+TMistEffect* TMistEffect::SpawnForTest(const S3DPoint& origin)
+{
+    const int32_t img_id = TObjectImagery::FindImagery(kMistImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[mist] SpawnForTest: FindImagery('%s') failed", kMistImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[mist] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kMistImageryPath);
+        return nullptr;
+    }
+
+    auto* mist = new TMistEffect(base);
+    SetIntPos(mist, origin);
+    mist->SetMapIndex(MapPane.MakeIndex());
+    mist->ActivateComponents();
+
+    // Engine-driven particle component. spawn_count = 50 + tick_hz = 24 +
+    // kill_expr "pos.z <= emit_pos.z" gives the continuous respawn-in-place
+    // wisp pattern from retail TMistAnimator.
+    auto particle_effect = std::make_unique<TParticleEffectComponent>();
+    particle_effect->Configure(&MistEffectDef());
+    mist->AddComponent(std::move(particle_effect));
+
+    // Drive one DrawPulse so StartRuntime fires and EmitSpawnTopup fills
+    // the 50-drop population NOW (visible from frame 1, matching Static
+    // preview style expectations).
+    if (auto* pe = mist->GetComponent<TParticleEffectComponent>())
+        pe->DrawPulse();
+
+    mist->bucket_ = ParticleManager().FindGlobalBucket("mist_drops");
+    mist->owner_particle_id_ = float(mist->NodeId());
+
+    log_info("[mist] SpawnForTest (engine-driven): map_index=%d origin=(%d,%d,%d) "
+             "bucket=%p def=Mist",
+             mist->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             (void*)mist->bucket_);
+    return mist;
+}
+
+void TMistEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!Renderer) return;
+
+    // Drive the engine's per-frame integration.
+    if (auto* pe = GetComponent<TParticleEffectComponent>())
+        pe->DrawPulse();
+
+    if (bucket_)
+        Renderer->SubmitFxParticleBucket(*bucket_, debug_mode);
+}
+
+#if 0
+// REVISITED: replaced by effects.def Mist declaration, kept for reference
+// until migration of all 5 bespoke effects (B01/M05/F03/H03/H04) lands.
+// The original bespoke spawn/tick body seeded 50 long-lived drops with
+// retail-faithful pos/vel envelope, gated integration to 24 Hz sim ticks,
+// applied RIPPLE_GRAVITY=0.37 per-tick, and respawned drops in-place on
+// landing. All of that is now expressed in the effects.def Mist block's
+// spawn_expr / tick_expr / kill_expr with tick_hz=24.
+TMistEffect* TMistEffect::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    const int32_t img_id = TObjectImagery::FindImagery(kMistImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[mist] SpawnForTest: FindImagery('%s') failed", kMistImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[mist] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kMistImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[mist] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kMistImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* mist = new TMistEffect(base);
+    SetIntPos(mist, origin);
+    mist->SetMapIndex(MapPane.MakeIndex());
+    mist->ActivateComponents();
+
+    mist->bucket_ = AcquireMistBucket(img3d);
+    if (!mist->bucket_)
+    {
+        log_warn("[mist] SpawnForTest: bucket unavailable — M05 will draw nothing");
+        return mist;
+    }
+    mist->owner_particle_id_ = NextMistOwnerId();
+
+    // Seed all 50 drops up-front. Unlike B01's one-shot burst, these
+    // live forever — they recycle in-place on landing (TickAndSubmitForTest).
+    TParticleBucket& bucket = *mist->bucket_;
+    const S3DPoint& p = IntPos(mist);
+    for (int32_t k = 0; k < kMistMaxDrops; ++k)
+    {
+        const int32_t pi = bucket.AddParticle(mist->owner_particle_id_, /*life*/5.0f);
+        if (pi < 0) break;
+        SeedMistDrop(bucket, pi, p);
+
+        // DrawScl in this engine is the *absolute* per-particle size
+        // in world units (not a multiplier on default_width/height —
+        // see renderer.cpp::SubmitFxParticleBucket which overwrites
+        // size_wu from ds[]). Per-drop random jitter (±25%) breaks
+        // up the otherwise too-uniform 50-drop cluster. Smaller than
+        // 96 wu so individual wisps read instead of merging into a
+        // single bright blob.
+        if (float* ds = bucket.VarPtr(pi, EParticleVar::DrawScl))
+        {
+            const float frand_u = float(std::rand()) / float(RAND_MAX);
+            const float sz = 56.0f * (0.75f + 0.5f * frand_u);
+            ds[0] = sz;
+            ds[1] = sz;
+            ds[2] = 1.0f;
+        }
+        if (float* df = bucket.VarPtr(pi, EParticleVar::DrawFrame))
+            *df = 0.0f;
+        if (float* dr = bucket.VarPtr(pi, EParticleVar::DrawRot))
+            *dr = 0.0f;
+        // Soft cool-white wisp tint. With AdditiveStraight blend and 50
+        // drops overlapping near the centre, full white (1,1,1,1) is way
+        // too bright — sums saturate to solid white blob. Per-particle
+        // intensity ~0.18 means the densest centre (a few drops on top
+        // of each other) reads as bright but never clips, while the
+        // sparser edges fade naturally to translucent. Slight cyan
+        // tilt (b > r) reads as "mist" not "smoke".
+        if (float* col = bucket.VarPtr(pi, EParticleVar::DrawColor))
+        {
+            col[0] = 0.16f;
+            col[1] = 0.18f;
+            col[2] = 0.22f;
+            col[3] = 1.0f;
+        }
+    }
+
+    log_info("[mist] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "owner_id=%.0f textures=%d drops=%d",
+             kMistImageryPath, mist->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             mist->owner_particle_id_, img3d->NumTextures(), kMistMaxDrops);
+    return mist;
+}
+
+void TMistEffect::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!bucket_ || !Renderer)
+        return;
+
+    // 24 Hz sim-tick gate (forensics §7.4). Without this the upward
+    // velocity (max +4 wu/tick) runs at render rate → 240 wu/s at 60 fps
+    // vs. retail's intended 96 wu/s.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    int32_t ticks = 0;
+    while (sim_accum_ms_ >= double(kMistSimTickMs))
+    {
+        sim_accum_ms_ -= double(kMistSimTickMs);
+        ++ticks;
+    }
+
+    if (ticks > 0)
+    {
+        const S3DPoint& p = IntPos(*this);
+        for (int32_t i = 0; i < bucket_->Count(); ++i)
+        {
+            const float* owner = bucket_->VarPtr(i, EParticleVar::OwnerId);
+            if (!owner || *owner != owner_particle_id_)
+                continue;
+
+            float* pos = bucket_->VarPtr(i, EParticleVar::DrawPos);
+            float* vel = bucket_->VarPtr(i, EParticleVar::EmitVel);
+            if (!pos || !vel)
+                continue;
+
+            for (int32_t t = 0; t < ticks; ++t)
+            {
+                pos[0] += vel[0];
+                pos[1] += vel[1];
+                pos[2] += vel[2];
+                vel[2] -= kMistGravity;
+                // Retail respawn-in-place on landing (effect_old.cpp:11448).
+                // Drops never die — they immediately re-seed at random
+                // pos/vel and keep the emitter in steady-state flux.
+                if (pos[2] <= float(p.z))
+                {
+                    SeedMistDrop(*bucket_, i, p);
+                    // Re-read pos/vel after SeedMistDrop (they pointed
+                    // into the same slot; values changed, pointers
+                    // unchanged in this bucket impl, but stop the
+                    // inner-tick-loop to avoid double-integrating a
+                    // fresh drop in this same frame).
+                    break;
+                }
+            }
+        }
+    }
+
+    Renderer->SubmitFxParticleBucket(*bucket_, debug_mode);
+}
+#endif // bespoke TMistEffect spawn/tick preserved-old-code
+
+// *************************************************************************
+// * TDripEffect — authored single-drop emitter and ripple chain           *
+// *************************************************************************
+// The old manually-managed particle bucket imposed a guessed 48wu square
+// and tint. Preserve the original one-pos/vel state and render its actual
+// I3D quad through the common FX submission API instead.
+TDripEffect::~TDripEffect() = default;
+void TDripEffect::Initialize()
+{
+    if (GetComponent<TFlipbookBillboardComponent>()) return;
+    if (!LoadWaterQuad(dynamic_cast<T3DImagery*>(GetImagery()), 0, drop_vertices_, drop_texture_, &drop_argb4444_))
+    {
+        log_error("[drip] map instance lacks required authored droplet asset");
+        return;
+    }
+    auto component = std::make_unique<TWaterReferenceComponent<TDripEffect>>();
+    component->Configure(drop_texture_, 64, 64, 1, 1, 1, 1.0f, 1.0f, false, true);
+    AddComponent(std::move(component));
+    log_info("[drip] map component ready origin=(%d,%d,%d) height=%d period=%d ripple=%d",
+             IntPos(*this).x, IntPos(*this).y, IntPos(*this).z, height, period, ripplesize);
+}
+void TDripEffect::Pulse() { TEffect::Pulse(); }
+TDripEffect* TDripEffect::SpawnForTest(const S3DPoint& origin)
+{
+    if (!Renderer) return nullptr;
+    T3DImagery* img = LoadWaterImagery("Magic\\drip.i3d", "drip");
+    if (!img) return nullptr;
+    auto* drip = new TDripEffect(img);
+    SetIntPos(drip, origin);
+    drip->SetMapIndex(MapPane.MakeIndex());
+    drip->ActivateComponents();
+    if (!LoadWaterQuad(img, 0, drip->drop_vertices_, drip->drop_texture_, &drip->drop_argb4444_))
+    {
+        log_error("[drip] required authored droplet quad or texture unavailable");
+        delete drip;
+        return nullptr;
+    }
+    log_info("[drip] loaded authored quad, origin=(%d,%d,%d) height=%d period=%d ripple=%d",
+             origin.x, origin.y, origin.z, drip->height, drip->period, drip->ripplesize);
+    return drip;
+}
+
+void TDripEffect::Advance(double seconds)
+{
+    AdvanceWaterTime(tick_fraction_, seconds,
+        [&](double seconds) {
+            for (auto& ripple : spawned_ripples_) ripple->Advance(seconds);
+        },
+        [&] {
+            if (dead_)
+            {
+                ++time_;
+                if (time_ > period && WaterRandom(0, (std::max)(period / 2, 0)) == 0)
+                {
+                    time_ = 0;
+                    drop_pos_ = hmm_vec3{0.0f, 0.0f, float(height)};
+                    drop_vel_ = hmm_vec3{0.0f, 0.0f, -kWaterGravity * 5.0f};
+                    dead_ = false;
+                }
+            }
+            // Separate if is intentional: the source integrates on the
+            // very same tick as respawn. All remaining elapsed ticks are
+            // consumed after landing, too.
+            if (!dead_)
+            {
+                drop_pos_ += drop_vel_;
+                drop_vel_.Z -= kWaterGravity;
+                if (drop_pos_.Z <= 0.0f)
+                {
+                    const S3DPoint& origin = IntPos(*this);
+                    const S3DPoint landing = {int32_t(drop_pos_.X + origin.x),
+                                             int32_t(drop_pos_.Y + origin.y), origin.z};
+                    if (auto* ripple = TRippleEffect::SpawnForTest(landing))
+                    {
+                        ripple->SetLength(ripplesize);
+                        ripple->SetNativeDomain(native_domain_);
+                        spawned_ripples_.emplace_back(ripple);
+                    }
+                    dead_ = true;
+                    time_ = 0;
+                    log_info("[drip] landing (%d,%d,%d), ripple length=%d, children=%zu",
+                             landing.x, landing.y, landing.z, ripplesize, spawned_ripples_.size());
+                }
+            }
+        });
+    spawned_ripples_.erase(std::remove_if(spawned_ripples_.begin(), spawned_ripples_.end(),
+        [](const auto& ripple) { return !ripple->IsAlive(); }), spawned_ripples_.end());
+}
+
+void TDripEffect::Submit(EFxDebugMode debug_mode)
+{
+    if (!dead_)
+        SubmitWaterQuad(*this, drop_vertices_, drop_texture_,
+                        WaterDropPosition(drop_pos_, drop_vel_, tick_fraction_),
+                        hmm_vec3{.3f,.3f,.3f}, debug_mode, -1, native_domain_, drop_argb4444_);
+    for (auto& ripple : spawned_ripples_) ripple->Submit(debug_mode);
+}
+
+void TDripEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime());
+    Submit(debug_mode);
+}
+
+// *************************************************************************
+// * THaloEffect - FB+LS standalone-spawn for --test=vfx (L02)             *
+// *************************************************************************
+//
+// Scope: Phase 2 L02 row. Ports the triangle-wave radial-glow effect from
+// `THaloAnimator` (src/effect_old.cpp:10564-10680) to the FB pipeline +
+// re-adds a per-frame dynamic point light (LS pipeline coupling — the row
+// tag is "FB+LS"; pre-release source never explicitly adds the light, but
+// the LS coupling falls out of the "halo emits light" semantic — see
+// INVENTORY L02 §4 + gap 7.4). Reuses the H03 / F01 standalone-spawn
+// pattern.
+//
+// What this *does* deliver:
+//   1. A real `THaloEffect` instance that owns its lifecycle.
+//   2. A procedural radial-gradient texture built via
+//      `Renderer->RegisterTextureAsset` (no I3D asset on disk — see
+//      INVENTORY L02 gap 7.2). Texture is a single 128x128 RGBA8 with a
+//      bright ring at outer radius, transparent inner + outer falloff,
+//      matching the H03 ripple atlas pattern but as a single non-atlas
+//      frame (the halo's per-frame variation is scale, not flipbook
+//      cycling).
+//   3. Triangle-wave scale envelope (haloscale +=/-=halostep, peak at
+//      totframes/2, zero at totframes) sim-tick-gated to retail's 24 Hz
+//      cadence (pre-release was ungated; without the gate the pulse runs
+//      ~2.5x too fast at 60 fps).
+//   4. One screen-aligned additive SBillboardDrawItem each frame via
+//      SubmitFxBillboard (FB pipeline) + one per-frame Renderer->
+//      AddPointLight at the halo's world position (LS pipeline).
+//   5. Self-killed when `frameon > totframes`; harness retrigger respawns
+//      at the SpellGround 3.0 sec cadence with small XY jitter.
+//
+// What this does *not* deliver:
+//   - Real `Magic\halo.i3d` mesh (L02b if/when asset is identified).
+//   - Flat-on-ground orientation (pre-release rotates the I3D mesh onto
+//     the ground plane; the harness camera looks straight-on so a
+//     ground-flat ring would project edge-on. Screen-aligned billboard
+//     reads as a glowing disc and works for the harness camera).
+//   - In-game spawn through the OBJCLASS_EFFECT registry ("Halo" builder
+//     dispatch from .rvm-archived scripts isn't wired in the port yet —
+//     same blocker as H03 / M05).
+//
+namespace {
+
+// Per-INVENTORY L02 §1: pre-release `totframes` and `halostep` are
+// controller-supplied (no retail defaults visible). Common-sense range:
+// totframes ~24 ticks (1 sec at 24 Hz) gives a ~0.5 sec grow + 0.5 sec
+// shrink pulse; halostep 0.08 yields peak haloscale ≈ 0.96 (close to
+// 1.0 = mesh-natural-size — see §1's "haloscale=1.0 is mesh's authored
+// size" note).
+constexpr int32_t kHaloDefaultTotFrames = 36;            // ~1.5 sec at 24 Hz
+constexpr float   kHaloDefaultHaloStep  = 0.10f;         // peak haloscale ≈ 1.8
+constexpr int32_t kHaloSimTickMs        = 1000 / 24;     // 24 Hz cadence gate
+
+// Visible diameter at haloscale = 1.0, in world units. Pre-release's
+// `RefreshZBuffer` rect of `haloscale * 20` pixels implies a small
+// accent; that screen-pixel measure doesn't carry over to the harness's
+// iso world-space camera. The harness camera frames roughly ±500 wu
+// across the screen width, so a 300 wu base × peak haloscale 1.8 =
+// 540 wu peak diameter -- about a quarter of the visible scene width,
+// reading cleanly as a spell-cast halo without dominating the frame.
+constexpr float   kHaloBaseDiameterWu   = 300.0f;
+
+// LS coupling: dynamic point light radius scales with haloscale. Peak
+// radius covers ~3-4x the visible glow, so the light spills onto
+// surrounding geometry instead of being clipped to the billboard
+// silhouette. The harness has no ground geometry to illuminate so the
+// light is mostly visible by the scene's ambient-vs-sun differential;
+// in the in-game path (post L02b/L02c wiring) the light would light
+// nearby walls + sectors.
+constexpr float   kHaloLightRadiusWu    = 600.0f;
+
+// Procedural radial-gradient texture. Single 128x128 RGBA8 frame
+// (no atlas) — a bright ring at radius ~0.36, soft falloff inside +
+// outside, fully transparent at the edges. Premultiplied alpha so the
+// AdditiveStraight blend reads cleanly (rgb = alpha = ring intensity).
+// Matches H03 RippleAtlasTexture's premultiplied pattern; one cell
+// instead of 16.
+constexpr int32_t kHaloTexPx = 128;
+
+TTextureHandle HaloRingTexture()
+{
+    if (!Renderer) return kInvalidTexture;
+    constexpr uint64_t kKey = 0x4658484C4F000000ull;   // "FXHLO\0\0\0"
+
+    static uint8_t pixels[kHaloTexPx * kHaloTexPx * 4];
+
+    constexpr float kRingR     = 0.36f;   // ring radius in tex-uv space (0..0.5 max)
+    constexpr float kRingThick = 0.10f;   // soft falloff on both sides of the ring
+    constexpr float kOuterCut  = 0.48f;   // hard alpha-zero past this radius
+    constexpr float kCoreFill  = 0.15f;   // soft alpha inside the ring (faint disc fill)
+
+    for (int32_t py = 0; py < kHaloTexPx; ++py)
+    {
+        for (int32_t px = 0; px < kHaloTexPx; ++px)
+        {
+            const float u  = (float(px) + 0.5f) / float(kHaloTexPx);
+            const float v  = (float(py) + 0.5f) / float(kHaloTexPx);
+            const float dx = u - 0.5f;
+            const float dy = v - 0.5f;
+            const float r  = std::sqrt(dx * dx + dy * dy);
+
+            // Ring intensity: peaks at r==kRingR, linear falloff over
+            // kRingThick on each side. Cubic shape gives a crisper rim.
+            const float d  = std::fabs(r - kRingR);
+            float ring     = (d < kRingThick) ? (1.0f - d / kRingThick) : 0.0f;
+            ring           = ring * ring * ring;
+
+            // Faint core fill inside the ring — keeps the halo from
+            // looking like a hollow donut and adds a sense of "this
+            // is filled with light", which matches the LS coupling.
+            float core     = (r < kRingR)
+                             ? kCoreFill * (1.0f - r / kRingR)
+                             : 0.0f;
+
+            // Combine + hard-cut outside.
+            float inten    = ring + core;
+            if (r > kOuterCut) inten = 0.0f;
+            if (inten < 0.0f)  inten = 0.0f;
+            if (inten > 1.0f)  inten = 1.0f;
+
+            const uint8_t byte = uint8_t(inten * 255.0f);
+            const int32_t idx  = (py * kHaloTexPx + px) * 4;
+            pixels[idx + 0] = byte;   // premultiplied alpha: rgb == a
+            pixels[idx + 1] = byte;
+            pixels[idx + 2] = byte;
+            pixels[idx + 3] = byte;
+        }
+    }
+
+    return Renderer->RegisterTextureAsset(kKey, pixels, sizeof(pixels),
+                                          kHaloTexPx, kHaloTexPx,
+                                          ERendererTextureFormat::RGBA8,
+                                          uint64_t(sizeof(pixels)));
+}
+
+}   // namespace
+
+void THaloEffect::Initialize()
+{
+    // Pre-release THaloEffect::Initialize is empty (effect_old.cpp:10571).
+    // Per-instance kinematic state (haloscale_, frameon_) lives on this
+    // class now (animator state collapsed onto effect — same as H03 / M05).
+}
+
+void THaloEffect::Pulse()
+{
+    TEffect::Pulse();
+    // Pre-release Pulse just chains to base (effect_old.cpp:10575). The
+    // visible per-frame work runs through TickAndSubmitForTest from the
+    // harness; the in-game caller path is data-script-blocked (no live
+    // "Halo" spawn site exists in the port today — see INVENTORY L02 §5).
+}
+
+THaloEffect* THaloEffect::SpawnForTest(const S3DPoint& origin)
+{
+    if (!Renderer)
+    {
+        log_error("[halo] SpawnForTest: renderer not initialized");
+        return nullptr;
+    }
+
+    // No imagery — the halo texture is procedural (see L02 gap 7.2).
+    auto* halo = new THaloEffect(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(halo, origin);
+    halo->SetMapIndex(MapPane.MakeIndex());
+    halo->InitParams(kHaloDefaultTotFrames, kHaloDefaultHaloStep);
+    halo->ActivateComponents();
+
+    // Pre-register the texture so the first frame's submit doesn't pay
+    // the bake cost (~64KB; cheap, but log once so we know it landed).
+    const TTextureHandle tex = HaloRingTexture();
+    if (tex == kInvalidTexture)
+    {
+        log_warn("[halo] SpawnForTest: ring texture register failed; L02 will draw nothing");
+    }
+
+    log_info("[halo] SpawnForTest: map_index=%d origin=(%d,%d,%d) "
+             "totframes=%d halostep=%.3f tex=%u",
+             halo->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             halo->GetTotalFrames(), double(halo->GetHaloStep()), tex);
+    return halo;
+}
+
+void THaloEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer)
+        return;
+
+    // 24 Hz sim-tick gate. Pre-release animator was ungated -- at modern
+    // render rates the triangle-wave pulse runs ~2.5x too fast at 60 fps,
+    // so we accumulate DeltaTime and integrate one logical tick per
+    // kHaloSimTickMs (matches H03 / M05 / F01 cadence-gate decision).
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kHaloSimTickMs))
+    {
+        sim_accum_ms_ -= double(kHaloSimTickMs);
+
+        // Pre-release THaloAnimator::Animate (effect_old.cpp:10605-10623).
+        // Triangle-wave envelope: grow for totframes/2 ticks then shrink
+        // linearly back to (near) zero by totframes.
+        if (frameon_ < totframes / 2)
+            haloscale_ += halostep;
+        else
+            haloscale_ -= halostep;
+        ++frameon_;
+
+        if (frameon_ > totframes)
+        {
+            alive_ = false;
+            return;
+        }
+    }
+
+    // Pre-release gates render on `haloscale > 0` (effect_old.cpp:10639).
+    // Triangle-wave with the default 24-tick / 0.08-step settings peaks
+    // at ~0.96 and dips to ~0 at the lifetime edge; clamp negative to
+    // avoid a degenerate one-frame mirror.
+    if (haloscale_ <= 0.0f)
+        return;
+
+    const TTextureHandle tex = HaloRingTexture();
+    if (tex == kInvalidTexture)
+        return;
+
+    const S3DPoint& p = IntPos(*this);
+
+    // FB pipeline: single additive billboard. Lifted slightly so the
+    // halo doesn't z-fight the ground when scenes have one (the harness
+    // empty tile pass has none; harmless). Color = warm gold to read as
+    // a "magic ring of light" — matches the X17 placeholder flare's
+    // gold tint so LS-pipeline effects share a visual family.
+    //
+    // Retail anchor convention (effect_old.cpp:10632-10666
+    // THaloAnimator::Render): the matrix path applies
+    // `RotateX(-π/2)` to the originally-vertical sprite plane, tipping
+    // it onto z=0 -- confirming the halo lies flat on the GROUND plane
+    // at the effect's `inst pos`. Caller (spell / script) is responsible
+    // for setting pos to ground center of the caster; if a future
+    // caller has the caster's chest position it must snap pos.z to
+    // `GroundZAt(x,y)` first. In the harness PickPreviewOrigin already
+    // supplies z=0.
+    SBillboardDrawItem item = {};
+    item.world_pos[0] = float(p.x);
+    item.world_pos[1] = float(p.y);
+    item.world_pos[2] = float(p.z) + 5.0f;   // pre-release's +5 wu lift (§1)
+
+    const float diameter = kHaloBaseDiameterWu * haloscale_;
+    item.size_wu[0]   = diameter;
+    item.size_wu[1]   = diameter;
+    item.color_rgba[0] = 1.0f;     // warm gold (same family as X17 flare)
+    item.color_rgba[1] = 0.85f;
+    item.color_rgba[2] = 0.40f;
+    item.color_rgba[3] = 1.0f;     // per-pixel alpha lives in the texture
+
+    item.uv_rect[0] = 0.0f;
+    item.uv_rect[1] = 0.0f;
+    item.uv_rect[2] = 1.0f;
+    item.uv_rect[3] = 1.0f;
+
+    item.key.texture     = tex;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    // AdditiveStraight pairs with the premultiplied procedural texture
+    // (rgb == a, see HaloRingTexture loop). Pre-release uses
+    // `SetAddBlendState` = D3D ONE/ONE additive (forensics §1); the
+    // matching enum here is AdditiveStraight (same choice as H03 /
+    // S01 / M05).
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+    // Halo lies flat on the ground. WorldXY makes the quad foreshorten
+    // as a ground-projected ellipse under iso/perspective, matching the
+    // retail `RotateX(-π/2)` semantics (§1 forensics). Without this
+    // the gold ring would render as a camera-facing disc.
+    item.orientation     = EFxBillboardOrientation::WorldXY;
+    Renderer->SubmitFxBillboard(item);
+
+    // LS pipeline coupling: re-add a dynamic point light each frame
+    // while alive. Pre-release source doesn't do this explicitly; the
+    // LS coupling falls out of the "halo emits light" semantic and the
+    // FB+LS row tag (INVENTORY L02 §4 + gap 7.4). Intensity tracks the
+    // triangle-wave envelope so the light pulses with the visible glow.
+    // ClearPointLights() runs at the top of VfxTest::Render so the
+    // re-add is a per-frame rebuild, matching the LS pipeline contract.
+    const float light_wx  = float(p.x);
+    const float light_wy  = float(p.y);
+    const float light_wz  = float(p.z) + 5.0f;
+    const float radius    = kHaloLightRadiusWu * haloscale_;
+    const float intensity = 1.5f * haloscale_;
+    Renderer->AddPointLight(light_wx, light_wy, light_wz, radius,
+                            1.0f, 0.85f, 0.40f, intensity);
+}
+
+// *************************************************************************
+// * TFireEffect — FB-pipeline scatter-patch ambient fire (F03)            *
+// *************************************************************************
+//
+// Per-INVENTORY F03 forensics (full body at docs/vfx/INVENTORY.md row F03):
+//
+//   §1 retail src: method bodies live only in
+//      `legacy/walkcode/effect.cpp:201-218` (Pulse + builder) and
+//      `legacy/walkcode/effect.cpp:886-991` (animator). Modern src/effect.cpp
+//      has no `DEFINE_OBJECT_DEF("fire", ...)` and no
+//      `REGISTER_3DANIMATOR("Fire", ...)` — vestigial declarations only.
+//   §2 distinct from F01 TFlameEffect: YES. F01 = single torch flipbook +
+//      sparks (1 mesh + particle emitter). F03 = multi-quad scatter patch
+//      (NUMFIRES=15 random XY-offsets in a +/-50 unit patch, each with
+//      independent atlas-frame counter, additive textured billboards).
+//      Different asset (`Misc\Fire.I3D` vs. `Magic\flame.i3d`), different
+//      geometry footprint, different lifetime (spell-killed vs. infinite).
+//   §4 caller / trigger: no live retail caller; legacy/Class.Def:2015
+//      registers "Fire" "Misc\Fire.I3D" 0x119f01e3 as OBJCLASS_EFFECT
+//      but no spell.def variant or ATTACHEFFECT references it.
+//   §6 render passes / rig category: **FB only** (additive textured quads
+//      via SetBlendState; per-quad cycling is sprite atlas frame scrolling
+//      driven by per-quad `f[c]`, NOT a TParticleBucket emitter). The
+//      INVENTORY's prior `FB+PE` guess was incorrect.
+//   §7 gaps: legacy loop bound is 10 not NUMFIRES=15 (pre-release WIP);
+//      this port uses the full 15 as the modern-correct default.
+//
+// Preserved-old-code: pre-release D3D bodies live verbatim at
+// `legacy/walkcode/effect.cpp:204-218,888-991` and are not duplicated
+// here under `#if 0` — the entire legacy/walkcode/ tree is the project's
+// "preserve old code" attic for the WIP effects (see project memory note
+// "preserve old code we'll need").
+
+namespace {
+
+// Pre-release legacy/walkcode/effect.cpp:897-903: each scatter quad
+// starts at xy = random(-50..50, -50..50) with z = 0, frame counter
+// f = random(0..20) - 22 (i.e. -22..-2 startup delay before the quad
+// becomes visible). Quad bounds (+/-50 wu) ~= a small ground patch
+// (the legacy mesh scaled the textured quad by 16 wu — see §6 — so the
+// 15 quads spread across a ~100 wu patch with ~16 wu billboards
+// reads as a "field of small flame puffs"). The harness camera frames
+// roughly +/-500 wu so the patch occupies ~1/5 of the visible scene.
+constexpr int32_t kFirePatchHalfWu        = 50;       // legacy `random(0,100) - 50` extent
+constexpr float   kFireQuadSizeWu         = 32.0f;    // legacy scl=16 (half-size), so full=32
+constexpr int32_t kFireFrameStartLow      = -22;      // legacy `random(0,20) - 22`
+constexpr int32_t kFireFrameStartHighExcl = -2;       // legacy random max+1 (exclusive)
+constexpr int32_t kFireFrameRespawnAt     = 30;       // legacy `f[c] >= 30` respawn gate
+constexpr int32_t kFireSimTickMs          = 1000 / 24;// 24 Hz cadence gate (family-consistent)
+constexpr float   kFireQuadLiftWu         = 4.0f;     // small z lift so quads don't z-fight
+                                                      // the ground plane in harness scene
+
+// Real-asset path: pre-release Class.Def:2015 registers
+// "Fire" -> "Misc\Fire.I3D" (forensics §5). The I3D ships a single
+// material/texture slot with ~30 animated frames in `framehtexs[]` —
+// the per-quad `obj->textureframe[0] = f[c]` write in
+// `TFireAnimator::Render` picks one frame per quad each submit
+// (legacy/walkcode/effect.cpp:980-981; resolver lives in
+// src/3dimage.cpp:1478-1482 / SetTextureFrame in 3dimage.cpp:1814-1836).
+constexpr const char* kFireImageryPath = "Misc\\Fire.I3D";
+
+// Re-roll one scatter quad's XY offset + startup frame. Pre-release
+// legacy/walkcode/effect.cpp:897-903 (Initialize) and
+// legacy/walkcode/effect.cpp:940-943 / 963-966 (respawn-in-place) both
+// use the same formula. Factored here so Initialize() + the
+// `f[c] >= 30` respawn gate in TickAndSubmitForTest share one source.
+void RerollFireQuad(SFireScatterQuad& q)
+{
+    q.ox    = float(random(0, 2 * kFirePatchHalfWu) - kFirePatchHalfWu);
+    q.oy    = float(random(0, 2 * kFirePatchHalfWu) - kFirePatchHalfWu);
+    q.frame = random(0, kFireFrameStartHighExcl - kFireFrameStartLow)
+              + kFireFrameStartLow;
+}
+
+}   // namespace
+
+void TFireEffect::Pulse()
+{
+    // Pre-release Pulse (legacy/walkcode/effect.cpp:204-218) damages
+    // characters in range under `spell->GetFire()` and self-kills. The
+    // standalone harness has no spell context — chain to base only.
+    // The in-game caller path is data-script-blocked (no live "fire"
+    // spawn site exists; see INVENTORY F03 §4).
+    TObjectInstance::Pulse();
+}
+
+TFireEffect* TFireEffect::SpawnForTest(const S3DPoint& origin)
+{
+    if (!Renderer)
+    {
+        log_error("[fire] SpawnForTest: renderer not initialized");
+        return nullptr;
+    }
+
+    // Real-asset load. Misc\Fire.I3D isn't pre-registered by any
+    // TObjectClass::AddType in the modern data path (per F03 forensics §4
+    // — vestigial pre-release class), so do the standard
+    // FindImagery -> RegisterImagery fallback (same as M09b TTeleporterEffect).
+    int32_t img_id = TObjectImagery::FindImagery(kFireImageryPath);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFireImageryPath));
+    if (img_id < 0)
+    {
+        log_error("[fire] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
+                  kFireImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[fire] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kFireImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[fire] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kFireImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Lazy-mesh-init poke (same idiom as F01/B01/M05/H04): forces the
+    // texture-array to populate before we query frame handles.
+    (void)img3d->NumObjects();
+    if (img3d->NumTextures() <= 0)
+    {
+        log_error("[fire] SpawnForTest: imagery '%s' has 0 textures after lazy-init poke",
+                  kFireImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Pull the texture-slot-0 record. Fire.I3D has one material slot;
+    // the frame array lives in textures[0].framehtexs[0..numframes).
+    S3DTex tex0 = {};
+    img3d->GetTexture(0, &tex0);
+    const int32_t numframes = tex0.numframes > 0 ? tex0.numframes : 1;
+    if (tex0.htexture == kInvalidTexture && numframes == 1)
+    {
+        log_error("[fire] SpawnForTest: texture slot 0 handle invalid and numframes=1");
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Snapshot the per-frame texture handles. SetTextureFrame swaps
+    // `textures[t].htexture` to `framehtexs[f]` (3dimage.cpp:1827); for
+    // an FB-pipeline submit we want each billboard to reference its own
+    // frame texture directly, not mutate shared imagery state per
+    // submit. So we cache the full frame array here and index it from
+    // the submit hot path.
+    auto* fire = new TFireEffect(base);
+    fire->imagery_ = base;
+    fire->frame_textures_.resize(numframes);
+    for (int32_t f = 0; f < numframes; ++f)
+    {
+        // copyframes==false (Fire.I3D is the standard pre-baked path):
+        // each frame has its own pre-uploaded texture handle. With
+        // copyframes==true (legacy paged-pixel path) framehtexs is
+        // nullptr and only htexture is valid — fall back to that.
+        if (tex0.framehtexs && tex0.copyframes == false)
+            fire->frame_textures_[f] = tex0.framehtexs[f];
+        else
+            fire->frame_textures_[f] = tex0.htexture;
+    }
+
+    SetIntPos(fire, origin);
+    fire->SetMapIndex(MapPane.MakeIndex());
+
+    // Seed all scatter quads. Pre-release Initialize special-cased
+    // index 0 to (0,0,0) / f=0 (legacy/walkcode/effect.cpp:892-895);
+    // we keep that — the center quad is always visible immediately
+    // and anchors the patch.
+    fire->quads_[0].ox    = 0.0f;
+    fire->quads_[0].oy    = 0.0f;
+    fire->quads_[0].frame = 0;
+    for (int32_t i = 1; i < kFireScatterQuads; ++i)
+        RerollFireQuad(fire->quads_[i]);
+
+    fire->ActivateComponents();
+
+    log_info("[fire] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "quads=%d patch=%dx%d wu tex0_handle=%u numframes=%d w=%u h=%u",
+             kFireImageryPath, fire->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             kFireScatterQuads,
+             2 * kFirePatchHalfWu, 2 * kFirePatchHalfWu,
+             tex0.htexture, numframes, tex0.desc.width, tex0.desc.height);
+    return fire;
+}
+
+void TFireEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer || frame_textures_.empty())
+        return;
+
+    // 24 Hz sim-tick gate. Pre-release Animate / Render were ungated;
+    // at modern 60 fps the per-quad frame counter would cycle ~2.5x too
+    // fast (same fix applied in F01 / H03 / M05 / L02).
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kFireSimTickMs))
+    {
+        sim_accum_ms_ -= double(kFireSimTickMs);
+
+        // Pre-release legacy/walkcode/effect.cpp:937-947 (Animate) and
+        // 957-969 (Render) both advance `f[c]` and respawn-in-place
+        // when `f[c] >= 30`. The Render-side advance is the visible one
+        // (Animate only re-rolls; Render does it too, redundantly). We
+        // do it once here, in the sim-tick gate.
+        //
+        // Legacy quirk preserved-with-note: pre-release looped `c < 10`
+        // even though NUMFIRES=15 (WIP; INVENTORY F03 §7(a)). This port
+        // ticks the full kFireScatterQuads (=15) — the modern-correct
+        // behavior. The legacy quirk is documented in the inventory row,
+        // not replicated.
+        for (int32_t i = 0; i < kFireScatterQuads; ++i)
+        {
+            if (quads_[i].frame >= kFireFrameRespawnAt)
+                RerollFireQuad(quads_[i]);
+            else
+                ++quads_[i].frame;
+        }
+    }
+
+    const S3DPoint& p = IntPos(*this);
+    const int32_t   numframes = int32_t(frame_textures_.size());
+
+    // FB pipeline: one alpha-keyed billboard per visible quad. Pre-release
+    // `if (f[c] < 0) continue` (legacy effect.cpp:971-972) — the
+    // startup-delay window keeps a randomly-staggered subset of quads
+    // invisible each frame, which produces the "occasional flickering
+    // flame puff" cadence of an ambient fire. Preserved here.
+    //
+    // F03b helper-trace correction (vs. 2026-05-16 procedural port):
+    //   - blend = Alpha (pre-release `SetBlendState()` is DECAL, NOT
+    //     `SetAddBlendState()` — see F03b inventory §2)
+    //   - orientation = WorldXY (pre-release rot.x=-π/2 tips the quad
+    //     onto the ground plane — F03b §3)
+    //   - texture = per-quad framehtexs[f[c]] (real I3D atlas — F03b §1)
+    SBillboardDrawItem item = {};
+    item.size_wu[0]   = kFireQuadSizeWu;
+    item.size_wu[1]   = kFireQuadSizeWu;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = 0.0f;
+    item.uv_rect[1] = 0.0f;
+    item.uv_rect[2] = 1.0f;
+    item.uv_rect[3] = 1.0f;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::WorldXY;
+
+    for (int32_t i = 0; i < kFireScatterQuads; ++i)
+    {
+        if (quads_[i].frame < 0)
+            continue;   // startup-delay window — quad not yet visible
+
+        // Pre-release: `obj->textureframe[0] = f[c]` -> 3dimage.cpp
+        // resolves via `framehtexs[texframe % numframes]` (SetTextureFrame
+        // wraps via `framenum % numframes`, 3dimage.cpp:1820-1821).
+        // Mirror that wrap defensively in case the I3D ships fewer than
+        // 30 frames (forensics doesn't pin the exact frame count).
+        int32_t f = quads_[i].frame;
+        if (f >= numframes)
+            f = f % numframes;
+        const TTextureHandle ftex = frame_textures_[f];
+        if (ftex == kInvalidTexture)
+            continue;
+
+        item.key.texture  = ftex;
+        item.world_pos[0] = float(p.x) + quads_[i].ox;
+        item.world_pos[1] = float(p.y) + quads_[i].oy;
+        item.world_pos[2] = float(p.z) + kFireQuadLiftWu;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// *************************************************************************
+// * TFireEffect_Bespoke — F03 A/B reference (faithful direct C++ port)     *
+// *************************************************************************
+//
+// Line-by-line port of the snapshot TFireAnimator
+// (legacy/walkcode/effect.cpp:886-991): NUMFIRES=15 scatter quads, each
+// with random XY offset in +/- 50 wu patch and a per-quad startup-frame
+// counter `f[c]` in (-22..-2) (so they fade in staggered), advance each
+// tick and respawn-in-place when `f[c] >= 30`. Per quad picks
+// `framehtexs[f[c] mod numframes]` from Misc\Fire.I3D's frame array.
+// Blend = Alpha (DECAL default; snapshot SetBlendState). Orientation =
+// WorldXY (snapshot rot.x=-π/2 tips the quad onto the ground plane).
+//
+// F03c gap fix: preserve the snapshot's per-quad rot.z=-π/4 (45° in-plane
+// spin) — the SBillboardDrawItem WorldXY path has no per-instance
+// rotation lane, so submit via SubmitFxParticle (SParticleDrawItem has
+// `rotation_rad`) with the same WorldXY orientation so each quad is
+// ground-flat AND in-plane spun.
+//
+// Reuses the F03-engine-port anon-namespace helpers (kFirePatchHalfWu,
+// kFireFrameRespawnAt, RerollFireQuad) defined immediately above. This
+// file-position is intentional — keeping the bespoke after the engine
+// port lets us share the seed/respawn formula verbatim.
+
+namespace {
+
+constexpr float       kFireBespokeQuadSpinRad = -0.7853981633974483f;  // -π/4 (45° CW)
+
+}  // namespace
+
+TFireEffect_Bespoke* TFireEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    if (!Renderer)
+    {
+        log_error("[fire-bespoke] SpawnForTest: renderer not initialized");
+        return nullptr;
+    }
+
+    int32_t img_id = TObjectImagery::FindImagery(kFireImageryPath);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kFireImageryPath));
+    if (img_id < 0)
+    {
+        log_error("[fire-bespoke] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
+                  kFireImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[fire-bespoke] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kFireImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[fire-bespoke] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kFireImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+    (void)img3d->NumObjects();
+    if (img3d->NumTextures() <= 0)
+    {
+        log_error("[fire-bespoke] SpawnForTest: imagery '%s' has 0 textures after lazy-init",
+                  kFireImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    S3DTex tex0 = {};
+    img3d->GetTexture(0, &tex0);
+    const int32_t numframes = tex0.numframes > 0 ? tex0.numframes : 1;
+    if (tex0.htexture == kInvalidTexture && numframes == 1)
+    {
+        log_error("[fire-bespoke] SpawnForTest: texture slot 0 handle invalid and numframes=1");
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* fire = new TFireEffect_Bespoke(base);
+    fire->imagery_ = base;
+    fire->frame_textures_.resize(numframes);
+    for (int32_t f = 0; f < numframes; ++f)
+    {
+        if (tex0.framehtexs && tex0.copyframes == false)
+            fire->frame_textures_[f] = tex0.framehtexs[f];
+        else
+            fire->frame_textures_[f] = tex0.htexture;
+    }
+
+    SetIntPos(fire, origin);
+    fire->SetMapIndex(MapPane.MakeIndex());
+
+    // Seed NUMFIRES=15 scatter quads (snapshot Initialize :892-903).
+    // Quad 0 special-cased to (0,0,0) / f=0 — center quad always visible
+    // and anchors the patch.
+    fire->quads_[0].ox    = 0.0f;
+    fire->quads_[0].oy    = 0.0f;
+    fire->quads_[0].frame = 0;
+    for (int32_t i = 1; i < kFireScatterQuads; ++i)
+        RerollFireQuad(fire->quads_[i]);
+
+    fire->ActivateComponents();
+
+    log_info("[fire-bespoke] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "quads=%d patch=%dx%d wu tex0=%u numframes=%d w=%u h=%u",
+             kFireImageryPath, fire->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             kFireScatterQuads,
+             2 * kFirePatchHalfWu, 2 * kFirePatchHalfWu,
+             tex0.htexture, numframes, tex0.desc.width, tex0.desc.height);
+    return fire;
+}
+
+void TFireEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer || frame_textures_.empty())
+        return;
+
+    // --- Animate: port of TFireAnimator::Animate (snapshot
+    // legacy/walkcode/effect.cpp:937-947). Per-tick `f[c]++`; on
+    // `f[c] >= 30` respawn-in-place (XY + new f start in (-22..-2)).
+    // 24 Hz sim-tick gate for framerate-independence (matches F03
+    // engine-port cadence — same kFireSimTickMs).
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kFireSimTickMs))
+    {
+        sim_accum_ms_ -= double(kFireSimTickMs);
+        for (int32_t i = 0; i < kFireScatterQuads; ++i)
+        {
+            if (quads_[i].frame >= kFireFrameRespawnAt)
+                RerollFireQuad(quads_[i]);
+            else
+                ++quads_[i].frame;
+        }
+    }
+
+    // --- Render: port of TFireAnimator::Render (snapshot
+    // legacy/walkcode/effect.cpp:950-991). Per quad:
+    //   if (f[c] < 0) continue;           // startup-delay window
+    //   p[c].z = 0 (ground); rot.x = -π/2 (ground-flat); rot.z = -π/4 (45° spin)
+    //   textureframe[0] = f[c]            // pick frame from framehtexs[]
+    //   blend = Alpha (DECAL, SetBlendState — preserved per rule 3)
+    //
+    // F03c gap fix: SBillboardDrawItem WorldXY has no per-instance rotation
+    // lane; submit via SubmitFxParticle (SParticleDrawItem has rotation_rad)
+    // with the same WorldXY orientation. Each quad is ground-flat AND
+    // 45° in-plane spun.
+    const S3DPoint& p         = IntPos(*this);
+    const int32_t   numframes = int32_t(frame_textures_.size());
+
+    SParticleDrawItem item = {};
+    item.size_wu[0]    = kFireQuadSizeWu;
+    item.size_wu[1]    = kFireQuadSizeWu;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0]    = 0.0f;
+    item.uv_rect[1]    = 0.0f;
+    item.uv_rect[2]    = 1.0f;
+    item.uv_rect[3]    = 1.0f;
+    item.rotation_rad    = kFireBespokeQuadSpinRad;             // snapshot rot.z = -π/4
+    item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);            // SetBlendState (snapshot)
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode      = debug_mode;
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::WorldXY;    // rot.x = -π/2
+
+    for (int32_t i = 0; i < kFireScatterQuads; ++i)
+    {
+        if (quads_[i].frame < 0)
+            continue;   // startup-delay window — quad not yet visible
+
+        int32_t f = quads_[i].frame;
+        if (f >= numframes)
+            f = f % numframes;
+        const TTextureHandle ftex = frame_textures_[f];
+        if (ftex == kInvalidTexture)
+            continue;
+
+        item.key.texture  = ftex;
+        item.world_pos[0] = float(p.x) + quads_[i].ox;
+        item.world_pos[1] = float(p.y) + quads_[i].oy;
+        item.world_pos[2] = float(p.z) + kFireQuadLiftWu;
+        Renderer->SubmitFxParticle(item);
+    }
+}
+// --- end TFireEffect_Bespoke faithful port
+
+// *************************************************************************
+// * TTeleporterEffect — I3D cylinder rotating glow column (M09 Misthaven) *
+// *************************************************************************
+//
+// Per-INVENTORY M09 + docs/vfx/M09_FORENSICS.md (pre-release authoritative
+// — recon not yet extracted, flagged as M09a follow-up; the pre-release
+// body lives at src/effect_old.cpp:5444-5880 intact).
+//
+// What this delivers (Phase B + M09b real-mesh upgrade):
+//   1. A real `TTeleporterEffect` instance owning its lifecycle.
+//   2. Pre-release 4-phase state machine (Init→Out→Move→In) running on the
+//      24 Hz sim tick (~4.17 s total).
+//   3. Visual: the real I3D mesh from Magic\gvortex.I3D (Misthaven recall)
+//      or Magic\teleportation.I3D (Teleport variants), pulled at spawn
+//      via meshextract::ExtractSubMesh and stamped 5x per frame via
+//      SubmitHelperMesh (additive helper-mesh pass) — one per "flare" in
+//      the pre-release `for (z=0..4) RenderObject(obj)` loop, with
+//      rot.z = rotation_rad + z * 0.5f (radians) giving each cylinder a
+//      distinct phase offset so their walls beat against each other as
+//      they spin (the source of the shimmer pattern that reads as
+//      "teleport vortex"). Per-flare scale + position morph drives the
+//      grow-then-shrink triangle wave (effect_old.cpp:5838-5860).
+//   4. Payload-coupling hook: GetPhase() returns the live ETeleporterPhase
+//      so gameflow can fire its caster->SetPos(destination) on the
+//      Out→Move transition (M09_FORENSICS.md §7.6 option (a)).
+//
+// What this does NOT deliver (deferred — see forensics):
+//   - Per-spell-variant tint multiply (v1 uses the I3D's own texture
+//     unchanged; the spell.def LIGHT COLOR multiply lands when the
+//     real spell dispatch path drives variant selection).
+//   - Caster fade timing (M09c — gameflow concern; the harness rig
+//     doesn't route SetFade through its background render path).
+//   - In-game spawn through the spell.def `"Teleporter"` registration
+//     (gameflow / spell-dispatch wiring; out of scope for VFX track).
+namespace {
+
+// --- Pre-release effect-side constants (effect_old.cpp:5448-5451, 5538) -
+constexpr int32_t kTeleOutDurationTicks   = 50;   // OUT phase length (effect_old.cpp:5538)
+constexpr int32_t kTeleAnimSelfKillLife   = 100;  // animator KillThisEffect gate (effect_old.cpp:5818)
+
+// --- Pre-release animator-side constants (effect_old.cpp:5770-5785) -----
+constexpr int32_t kTeleFlares             = 5;
+constexpr int32_t kTeleIterationsCap      = 50;   // OUT-phase morph counter (effect_old.cpp:5804)
+constexpr int32_t kTeleMidWideningAt      = 25;   // when iter >= 25, p[1]/p[2] expand horizontally
+constexpr float   kTeleMidWideningStep    = 0.5f; // p[1].x +=, p[2].x -= per sim tick
+constexpr float   kTeleVerticalSqueezeStep = 1.0f;// p[3].z -=, p[4].z += per sim tick
+constexpr float   kTeleRotationStep       = 0.1f; // rotation += per sim tick (radians; ~137°/s at 24 Hz)
+constexpr float   kTeleFlarePhaseStep     = 0.5f; // per-flare rot.z offset (radians) — effect_old.cpp:5843
+
+// --- Render envelope (effect_old.cpp:5838-5860) -------------------------
+// Triangle-wave clock: ticks_in_phase < 50 → growing, else mirror-shrink.
+// Per-flare radius = (0.5*z + 2.5 * (effective_t / 30)), per-flare
+// height_z = (10 - 5*(effective_t/30) - z), spin = rotation + z*0.5.
+// `% 100` defensive wrap from pre-release (M09_FORENSICS.md §7.3).
+constexpr int32_t kTelePhaseClockPeriod   = 100;  // ticks_in_phase = ticks % 100
+constexpr int32_t kTelePhaseHalf          = 50;   // grow vs shrink split point
+constexpr float   kTelePhaseNormalizer    = 30.0f;// (effective_t / 30) in pre-release math
+
+// Pre-release p[i] base positions are in I3D-imagery local coordinates;
+// the imagery's intrinsic mesh scale defines the world-wu output. To
+// map p[i].x/z (units of ~5..65 in pre-release) into the world space
+// around the caster (anchor = bbox center), we apply a single scalar
+// converter calibrated visually so the 5-cyl stack engulfs Locke's
+// body. The CharacterRig recenters the anchor on bbox center, so our
+// local p_z is measured from body center (z=0 at anchor) — not feet.
+//
+// VFXRIG calibration: the rig draws Locke at 3.5x display scale
+// (see src/vfxtest.cpp:408 `rig.scale = 280/bbox_w`), but
+// CharacterRoot anchor returns IntPos(inst) in true world space
+// (un-scaled). For the effect to read at the visual size of the
+// drawn character, both p[i] offsets AND mesh extents must be scaled
+// up to the rig's display scale.
+constexpr float   kTeleRigVisualScale     = 3.5f; // matches src/vfxtest.cpp:408 default rig scale
+constexpr float   kTelePLocalToWu         = 1.0f * kTeleRigVisualScale;
+// Pre-release scl envelope produces scl.xy in 0..6.6 and scl.z in 0..10.
+// These multiply the imagery's intrinsic geometry. The gvortex / teleportation
+// I3D assets have small per-sub-object intrinsic extents (the cyl is
+// authored in tight local-units; with the rig drawn 3.5x display-scaled
+// they need a matching scale-up to read at character size). The pre-
+// release multiplier was designed when characters were drawn at intrinsic
+// 1:1 scale — for our 3.5x rig we apply that factor here.
+constexpr float   kTeleMeshScaleMultiplier = kTeleRigVisualScale;
+
+constexpr int32_t kTeleSimTickMs          = 1000 / 24; // 24 Hz cadence (family-consistent)
+
+// --- I3D mesh load + cache for the cylinder ----------------------------
+// One MeshHandle list (sub-objects × texslots) per imagery path. Lazy-
+// loaded on first SpawnForTest; reused across all TTeleporterEffect
+// instances targeting the same variant. Static lifetime — meshes get
+// freed at renderer shutdown when ResetAssetRefCounts runs.
+//
+// We extract the full imagery (all sub-objects × all texture slots)
+// rather than only pre-release's `GetObject(1)`. Rationale per
+// M09_FORENSICS.md §M09b: the asset is a composite (gvortex.I3D ships
+// 12 sub-objects — 5 `blast`, 2 `cylinder`, 4 `#$flare`, 1 `box01`
+// pivot — authored to draw together). Pre-release rendered only
+// sub-obj 1 stamped 5×, which produces a tall thin shape — visually
+// inconsistent with the "rotating vortex of cylinders + flares + blasts"
+// shape the asset's geometry telegraphs. We preserve the 5× stamping
+// (each stamp = full asset draw with its own rot.z + scale) since
+// that's the pre-release intent for "5 cylinders rotating at phase
+// offsets" — but each stamp draws the WHOLE asset composite, not one
+// sub-object.
+struct STeleSubMesh
+{
+    MeshHandle  handle  = 0;
+    int32_t     objnum  = -1;
+    int32_t     texslot = -1;
+    float       parent_matrix[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+};
+
+struct STeleMeshAsset
+{
+    std::string             path;
+    std::vector<STeleSubMesh> subs;
+    int32_t                 num_objects = 0;
+    int32_t                 total_verts = 0;
+    int32_t                 total_faces = 0;
+    float                   intrinsic_radius_wu = 1.0f; // half max XY of bbox at scl=1
+    float                   intrinsic_height_wu = 1.0f; // Z extent of bbox at scl=1
+};
+
+std::vector<STeleMeshAsset>& TeleMeshCache()
+{
+    static std::vector<STeleMeshAsset> cache;
+    return cache;
+}
+
+// Find existing cached mesh for `path`, or build it. Returns nullptr if
+// the imagery can't be loaded or has no usable sub-object.
+//
+// Per pre-release `obj = GetObject(1)` (effect_old.cpp:5830) we pull
+// sub-object **1** first; if that's empty (assets vary) we fall back to
+// the largest sub-object by face count (M09_FORENSICS.md §M09b/7).
+const STeleMeshAsset* GetOrLoadTeleMesh(const char* path)
+{
+    if (!path || !*path || !Renderer) return nullptr;
+
+    auto& cache = TeleMeshCache();
+    for (const auto& a : cache)
+        if (a.path == path) return &a;
+
+    // The teleporter imageries (gvortex / teleportation / jtele) aren't
+    // referenced by any TObjectClass::AddType, so they're absent from the
+    // FindImagery registry until something asks for them. RegisterImagery
+    // loads the on-disk header and inserts it idempotently (a second call
+    // for the same filename returns the existing id).
+    char path_buf[256];
+    std::strncpy(path_buf, path, sizeof(path_buf) - 1);
+    path_buf[sizeof(path_buf) - 1] = '\0';
+    int32_t img_id = TObjectImagery::FindImagery(path_buf);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(path_buf);
+    if (img_id < 0)
+    {
+        log_error("[teleporter] RegisterImagery('%s') failed (asset missing?)", path);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[teleporter] LoadImagery(id=%d '%s') failed", img_id, path);
+        return nullptr;
+    }
+    T3DImagery* img = dynamic_cast<T3DImagery*>(base);
+    if (!img)
+    {
+        log_error("[teleporter] imagery '%s' is not a T3DImagery", path);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    const int32_t num_objects = img->NumObjects();
+    if (num_objects <= 0)
+    {
+        log_error("[teleporter] imagery '%s' has 0 sub-objects", path);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Log every sub-object's structure (auditable choice for which got
+    // included).
+    for (int32_t i = 0; i < num_objects; ++i)
+    {
+        const int32_t nf = img->NumObjFaces(i);
+        const int32_t nv = img->NumObjVerts(i);
+        const char* nm = img->GetObjectName(i);
+        log_info("[teleporter]   '%s' sub-obj %d name='%s' verts=%d faces=%d",
+                 path, i, nm ? nm : "(null)", nv, nf);
+    }
+
+    // Log textures so we can audit alpha/chroma-key convention.
+    const int32_t num_textures = img->NumTextures();
+    log_info("[teleporter]   imagery '%s' num_textures=%d num_materials=%d",
+             path, num_textures, img->NumMaterials());
+    for (int32_t t = 0; t < num_textures; ++t)
+    {
+        S3DTex tex = {};
+        img->GetTexture(t, &tex);
+        log_info("[teleporter]     tex[%d]: handle=%u frames=%d "
+                 "w=%u h=%u alphaBitDepth=%u",
+                 t, tex.htexture, tex.numframes,
+                 tex.desc.width, tex.desc.height,
+                 tex.desc.alphaBitDepth);
+    }
+
+    // Pull the asset's parent transform for each sub-object (state 0,
+    // frame 0) so the per-sub-object meshes draw with their authored
+    // relative positions inside our per-flare transform.
+    STeleMeshAsset asset;
+    asset.path        = path;
+    asset.num_objects = num_objects;
+
+    float minx = 1e30f, maxx = -1e30f;
+    float miny = 1e30f, maxy = -1e30f;
+    float minz = 1e30f, maxz = -1e30f;
+    bool bbox_init = false;
+
+    for (int32_t objnum = 0; objnum < num_objects; ++objnum)
+    {
+        if (img->IsHidden(objnum, 0)) continue;
+
+        float parent_matrix[16];
+        BuildStaticObjectMatrix(img, objnum, 0, 0, parent_matrix);
+
+        const int32_t texslots = num_textures + 1;   // +1 for slot 0 (untextured)
+        bool obj_got_any = false;
+        for (int32_t texslot = 0; texslot < texslots; ++texslot)
+        {
+            std::vector<SMeshVertex> verts;
+            std::vector<uint16_t>    indices;
+            if (!ExtractSubMeshTextureSlot(img, objnum, texslot, verts, indices))
+                continue;
+            if (verts.empty() || indices.empty()) continue;
+
+            // Pick the texture: texslot==0 means untextured (use
+            // material if HELPER-style, else white). texslot>=1 maps to
+            // texture index texslot-1.
+            TTextureHandle albedo = Renderer->WhiteTextureHandle();
+            if (texslot > 0 && texslot - 1 < num_textures)
+            {
+                S3DTex tex = {};
+                img->GetTexture(texslot - 1, &tex);
+                if (tex.htexture != kInvalidTexture) albedo = tex.htexture;
+            }
+            else if (texslot == 0)
+            {
+                // Untextured slot — try material color via S3DObj.material.
+                S3DObj o = {};
+                img->GetObject(objnum, &o);
+                if (o.material >= 0 && o.material < img->NumMaterials())
+                {
+                    S3DMat mat = {};
+                    img->GetMaterial(o.material, &mat);
+                    if (mat.texture >= 0 && mat.texture < num_textures)
+                        albedo = img->GetTextureHandle(mat.texture);
+                }
+            }
+
+            const MeshHandle h = Renderer->RegisterMesh(
+                verts.data(), int32_t(verts.size()),
+                indices.data(), int32_t(indices.size()),
+                albedo);
+            if (!h)
+            {
+                log_warn("[teleporter] RegisterMesh failed for '%s' sub-obj "
+                         "%d texslot %d (%zu verts, %zu indices)",
+                         path, objnum, texslot,
+                         verts.size(), indices.size());
+                continue;
+            }
+
+            STeleSubMesh sub;
+            sub.handle  = h;
+            sub.objnum  = objnum;
+            sub.texslot = texslot;
+            std::memcpy(sub.parent_matrix, parent_matrix,
+                        sizeof(sub.parent_matrix));
+            asset.subs.push_back(sub);
+            asset.total_verts += int32_t(verts.size());
+            asset.total_faces += int32_t(indices.size() / 3);
+            obj_got_any = true;
+
+            // Update bbox using the parent-transformed verts.
+            for (const auto& v : verts)
+            {
+                const float x = v.pos[0], y = v.pos[1], z = v.pos[2];
+                const float wx = parent_matrix[0]*x + parent_matrix[1]*y + parent_matrix[2] *z + parent_matrix[3];
+                const float wy = parent_matrix[4]*x + parent_matrix[5]*y + parent_matrix[6] *z + parent_matrix[7];
+                const float wz = parent_matrix[8]*x + parent_matrix[9]*y + parent_matrix[10]*z + parent_matrix[11];
+                if (!bbox_init) {
+                    minx = maxx = wx; miny = maxy = wy; minz = maxz = wz;
+                    bbox_init = true;
+                } else {
+                    minx = std::fmin(minx, wx); maxx = std::fmax(maxx, wx);
+                    miny = std::fmin(miny, wy); maxy = std::fmax(maxy, wy);
+                    minz = std::fmin(minz, wz); maxz = std::fmax(maxz, wz);
+                }
+            }
+        }
+        (void)obj_got_any;
+    }
+
+    if (asset.subs.empty())
+    {
+        log_error("[teleporter] '%s' produced no submittable sub-meshes "
+                  "(num_objects=%d num_textures=%d)",
+                  path, num_objects, num_textures);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    asset.intrinsic_radius_wu = bbox_init
+        ? 0.5f * std::fmax(maxx - minx, maxy - miny)
+        : 1.0f;
+    asset.intrinsic_height_wu = bbox_init ? (maxz - minz) : 1.0f;
+    cache.push_back(std::move(asset));
+
+    // Free the loaded imagery — RegisterMesh has already uploaded the
+    // verts to GPU buffers and the texture handles are renderer-owned.
+    TObjectImagery::FreeImagery(base);
+
+    const STeleMeshAsset& a = cache.back();
+    log_info("[teleporter] loaded '%s' num_objects=%d submeshes=%zu "
+             "total_verts=%d total_faces=%d "
+             "intrinsic_radius=%.1f intrinsic_height=%.1f",
+             path, a.num_objects, a.subs.size(),
+             a.total_verts, a.total_faces,
+             double(a.intrinsic_radius_wu), double(a.intrinsic_height_wu));
+    return &a;
+}
+
+// Per-effect mesh binding. Held in a side table keyed by effect ptr
+// rather than as a TTeleporterEffect member to keep the header
+// imagery-API-free. (Same lookup pattern as ParticleEffectComponent's
+// bucket binding.)
+struct STeleBinding
+{
+    const STeleMeshAsset* asset = nullptr;
+};
+std::unordered_map<const TTeleporterEffect*, STeleBinding>& TeleBindings()
+{
+    static std::unordered_map<const TTeleporterEffect*, STeleBinding> bindings;
+    return bindings;
+}
+
+// Row-major 4x4 multiply: out = a * b.
+void MatMul16Local(const float a[16], const float b[16], float out[16])
+{
+    for (int32_t r = 0; r < 4; ++r)
+        for (int32_t c = 0; c < 4; ++c)
+        {
+            float s = 0.0f;
+            for (int32_t k = 0; k < 4; ++k)
+                s += a[r * 4 + k] * b[k * 4 + c];
+            out[r * 4 + c] = s;
+        }
+}
+
+// Compose a row-major 4x4 affine matrix:
+//   M = T(tx, ty, tz) * Rz(theta) * S(sx, sy, sz)
+// stored in the renderer's row-major convention (translation in
+// out16[3]/[7]/[11], affine rotation+scale in upper-3×3 row blocks).
+void ComposeFlareMatrix(float tx, float ty, float tz,
+                        float theta_rad,
+                        float sx, float sy, float sz,
+                        float out16[16])
+{
+    const float c = std::cos(theta_rad);
+    const float s = std::sin(theta_rad);
+
+    // Row 0: ( c*sx, -s*sy, 0, tx )
+    out16[0]  = c * sx;
+    out16[1]  = -s * sy;
+    out16[2]  = 0.0f;
+    out16[3]  = tx;
+    // Row 1: ( s*sx,  c*sy, 0, ty )
+    out16[4]  = s * sx;
+    out16[5]  = c * sy;
+    out16[6]  = 0.0f;
+    out16[7]  = ty;
+    // Row 2: ( 0, 0, sz, tz )
+    out16[8]  = 0.0f;
+    out16[9]  = 0.0f;
+    out16[10] = sz;
+    out16[11] = tz;
+    // Row 3: ( 0, 0, 0, 1 )
+    out16[12] = 0.0f;
+    out16[13] = 0.0f;
+    out16[14] = 0.0f;
+    out16[15] = 1.0f;
+}
+
+}   // namespace
+
+TTeleporterEffect::~TTeleporterEffect()
+{
+    // Release the per-instance entry in the mesh-binding side table.
+    // The cached STeleMeshAsset itself is process-static and shared
+    // across instances; we don't free it here.
+    TeleBindings().erase(this);
+}
+
+void TTeleporterEffect::Initialize()
+{
+    // Pre-release effect_old.cpp:5503-5506: sets my_state = TELE_STATE_INIT.
+    // Our default member initializer already sets phase_=Init, so this
+    // is effectively a no-op. Kept as a vtable hook for in-game spawn
+    // (TEffect ctor chain calls Initialize via the SObjectState path).
+    phase_ = ETeleporterPhase::Init;
+    life_ = 0;
+}
+
+void TTeleporterEffect::Pulse()
+{
+    // Pre-release Pulse body (effect_old.cpp:5508-5754) is the 4-phase
+    // state machine. We port the *visual* state transitions and the
+    // animator's life counter; the payload work (resolve destination via
+    // map walk, fire caster->SetPos, fire SetFade) is the in-game spawn
+    // path that gameflow wires when it dispatches the spell. See
+    // M09_FORENSICS.md §3, §7.5, §7.6.
+    TEffect::Pulse();
+
+    if (!alive_) return;
+
+    ++life_;
+
+    switch (phase_)
+    {
+        case ETeleporterPhase::Init:
+            // Pre-release line 5513: 1 tick to resolve variant.
+            // spell_level_ is set by the in-game spawn path (or by
+            // SpawnForTest default) — here we just transition.
+            phase_ = ETeleporterPhase::Out;
+            life_ = 0;
+            break;
+
+        case ETeleporterPhase::Out:
+            // Pre-release line 5538: transition to MOVE at life == 50.
+            if (life_ >= kTeleOutDurationTicks)
+                phase_ = ETeleporterPhase::Move;
+            break;
+
+        case ETeleporterPhase::Move:
+            // Pre-release line 5541-5736: single-tick payload. In-game
+            // this is where caster->SetPos(destination) fires and the
+            // effect itself re-anchors to the destination. The harness
+            // port keeps the effect in place (no payload destination
+            // resolved). Gameflow integrators poll GetPhase() and fire
+            // their payload here. Always transition straight to IN.
+            phase_ = ETeleporterPhase::In;
+            break;
+
+        case ETeleporterPhase::In:
+            // Pre-release line 5737-5752: shrink phase, runs until the
+            // animator's life >= 100 self-kill (effect_old.cpp:5818).
+            // The animator-life counter lives on this class (collapsed
+            // — M09_FORENSICS.md §1) via life_; the IN-phase tick budget
+            // is whatever's left out of the 100-tick total minus the 51
+            // ticks already spent (INIT + OUT + MOVE).
+            if (life_ >= (kTeleAnimSelfKillLife - kTeleOutDurationTicks - 2))
+            {
+                alive_ = false;
+                KillThisEffect();
+            }
+            break;
+    }
+}
+
+TTeleporterEffect* TTeleporterEffect::SpawnForTest(const S3DPoint& origin,
+                                                   const char* imagery_path)
+{
+    if (!Renderer)
+    {
+        log_error("[teleporter] SpawnForTest: renderer not initialized");
+        return nullptr;
+    }
+    if (!imagery_path || !*imagery_path)
+    {
+        log_error("[teleporter] SpawnForTest: null/empty imagery_path");
+        return nullptr;
+    }
+
+    // Load (or fetch cached) the I3D cylinder mesh. This must succeed —
+    // M09b explicitly rejects any procedural fallback per
+    // M09_FORENSICS.md §M09b. If the asset can't be loaded we surface a
+    // clear failure and the harness draws nothing for this slot.
+    const STeleMeshAsset* asset = GetOrLoadTeleMesh(imagery_path);
+    if (!asset)
+    {
+        log_error("[teleporter] SpawnForTest: mesh load failed for '%s'; "
+                  "no procedural fallback per M09b — effect will not draw",
+                  imagery_path);
+        return nullptr;
+    }
+
+    auto* tele = new TTeleporterEffect(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(tele, origin);
+    tele->SetMapIndex(MapPane.MakeIndex());
+    tele->ActivateComponents();
+
+    // Seed per-flare position table from pre-release Initialize
+    // (effect_old.cpp:5770-5779). Y is unused in our XZ envelope (we
+    // only consume p_x_ and p_z_); pre-release p[i].y = 20 is just the
+    // base height the imagery is positioned at relative to the
+    // effect's origin; with our anchor convention this is folded into
+    // kTeleHeightLiftWu.
+    for (int32_t i = 0; i < kTeleFlares; ++i)
+        tele->flare_p_z_[i] = 45.0f;   // base height in pre-release units
+    tele->flare_p_x_[0] = 0.0f;
+    tele->flare_p_x_[1] = -5.0f;
+    tele->flare_p_x_[2] = +5.0f;
+    tele->flare_p_x_[3] = 0.0f;
+    tele->flare_p_z_[3] = 45.0f + 20.0f;   // top flare
+    tele->flare_p_x_[4] = 0.0f;
+    tele->flare_p_z_[4] = 45.0f - 20.0f;   // bottom flare
+
+    tele->iterations_ = 0;
+    tele->ticks_ = 0;
+    tele->rotation_rad_ = 0.0f;
+
+    // Bind the loaded mesh to this effect instance.
+    TeleBindings()[tele].asset = asset;
+
+    log_info("[teleporter] SpawnForTest: map_index=%d origin=(%d,%d,%d) "
+             "flares=%d imagery='%s' submeshes=%zu "
+             "intrinsic_radius=%.1f intrinsic_height=%.1f",
+             tele->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             kTeleFlares, imagery_path,
+             asset->subs.size(),
+             double(asset->intrinsic_radius_wu),
+             double(asset->intrinsic_height_wu));
+    return tele;
+}
+
+void TTeleporterEffect::TickForTest()
+{
+    if (!alive_)
+        return;
+
+    // 24 Hz sim-tick gate. Pre-release Animate (effect_old.cpp:5787-5820)
+    // was ungated. Per M09_FORENSICS.md §3 we gate to 24 Hz so the
+    // envelope runs at retail speed regardless of render rate. Same
+    // pattern as F01 / H03 / M05 / L02 / F03.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kTeleSimTickMs))
+    {
+        sim_accum_ms_ -= double(kTeleSimTickMs);
+
+        // Pre-release Animate (effect_old.cpp:5787-5820) — the per-tick
+        // morph of the 5 flare positions + rotation increment + tick
+        // counter advance.
+        rotation_rad_ += kTeleRotationStep;
+
+        if (iterations_ < kTeleIterationsCap)
+        {
+            // Pre-release line 5806-5810: after the midpoint, p[1]/p[2]
+            // expand horizontally (the column thickens in its middle).
+            if (iterations_ >= kTeleMidWideningAt)
+            {
+                flare_p_x_[1] += kTeleMidWideningStep;
+                flare_p_x_[2] -= kTeleMidWideningStep;
+            }
+            // Pre-release line 5811-5812: vertical squeeze (top/bottom
+            // converge toward mid).
+            flare_p_z_[3] -= kTeleVerticalSqueezeStep;
+            flare_p_z_[4] += kTeleVerticalSqueezeStep;
+
+            ++iterations_;
+        }
+        ++ticks_;
+
+        // Pre-release effect-side Pulse runs at the engine sim cadence
+        // already; for the harness we drive it ourselves on the same
+        // tick so the phase state machine advances in lockstep with the
+        // animator. (In-game path: TEffect::Pulse is called by the
+        // engine's pulse loop; the animator's Animate runs at render
+        // rate gated to sim-rate by the engine's own gates.)
+        Pulse();
+    }
+}
+
+void TTeleporterEffect::SubmitWorldForTest(EFxDebugMode /*debug_mode*/)
+{
+    if (!alive_ || !Renderer)
+        return;
+
+    // Resolve the per-effect mesh binding. No mesh → nothing to draw.
+    auto it = TeleBindings().find(this);
+    if (it == TeleBindings().end() || !it->second.asset)
+        return;
+    const STeleMeshAsset& asset = *it->second.asset;
+    if (asset.subs.empty()) return;
+
+    const S3DPoint& p = IntPos(*this);
+
+    // Pre-release render envelope (effect_old.cpp:5838-5860). The
+    // triangle-wave clock + per-flare radius/height/spin formulas.
+    const int32_t curticks = ticks_ % kTelePhaseClockPeriod;
+    const int32_t effective_t = (curticks < kTelePhaseHalf)
+                                ? curticks
+                                : (kTelePhaseHalf - (curticks - kTelePhaseHalf));
+    const float   t_norm = float(effective_t) / kTelePhaseNormalizer;
+
+    // For helper-mesh sort_depth we use the effect's own world Z
+    // (smaller = drawn earlier). The 5 stamps share the same anchor;
+    // we offset their sort depths by per-flare z_index so the outermost
+    // (widest, shortest) sits behind the innermost.
+    const float base_sort_depth = float(p.z);
+
+    // Render 5 stacked textured cylinders. The pre-release per-flare
+    // rotation around Z gives each cylinder a distinct phase offset
+    // (0.5 rad ≈ 29° between adjacent stamps); their textured walls
+    // visibly cross each other as they spin, producing the shimmer
+    // pattern that defines the teleport vortex visual.
+    for (int32_t z = 0; z < kTeleFlares; ++z)
+    {
+        const float zf = float(z);
+
+        // Pre-release line 5844: per-cyl height (z-axis scale).
+        const float scl_z_units = 10.0f - 5.0f * t_norm - zf;
+        if (scl_z_units <= 0.01f)
+            continue;   // pre-release cull (effect_old.cpp:5846)
+
+        // Pre-release line 5845: per-cyl radius (x/y scale).
+        const float scl_xy_units = (0.5f * zf) + 2.5f * t_norm;
+
+        // Pre-release line 5843: per-flare rotation, radians.
+        const float theta_rad = rotation_rad_ + zf * kTeleFlarePhaseStep;
+
+        // Per-flare local position offset (pre-release p[i] in
+        // imagery-local units). Map to world wu via kTelePLocalToWu.
+        // The p[i].z=45 base is the imagery's mounting height in
+        // pre-release; we treat that as the anchor itself (subtract 45)
+        // so the column sits centred on the anchor. The ±20 z-spread
+        // of p[3]/p[4] then maps directly to vertical offset above/
+        // below the anchor.
+        const float local_x_wu = flare_p_x_[z] * kTelePLocalToWu;
+        const float local_z_wu = (flare_p_z_[z] - 45.0f) * kTelePLocalToWu;
+
+        // Scale: pre-release scl values multiply imagery intrinsic
+        // geometry. kTeleMeshScaleMultiplier is a global tuning knob
+        // (=1 unless asset reads small/large).
+        const float sx = scl_xy_units * kTeleMeshScaleMultiplier;
+        const float sy = sx;
+        const float sz = scl_z_units  * kTeleMeshScaleMultiplier;
+
+        // Per-flare world transform: T(anchor + local) * Rz(theta) * S(sx,sy,sz).
+        // We compose this once per flare; each sub-mesh of the asset is
+        // then drawn at flare_transform * parent_matrix.
+        float flare_w[16];
+        ComposeFlareMatrix(
+            float(p.x) + local_x_wu,
+            float(p.y),
+            float(p.z) + local_z_wu,
+            theta_rad,
+            sx, sy, sz,
+            flare_w);
+
+        for (const auto& sub : asset.subs)
+        {
+            float world[16];
+            MatMul16Local(flare_w, sub.parent_matrix, world);
+
+            SHelperMeshSubmit m = {};
+            m.mesh           = sub.handle;
+            m.additive_blend = true;   // M09_FORENSICS.md §M09b: additive helper-mesh pass
+            m.shadow_plane   = false;
+            std::memcpy(m.world, world, sizeof(world));
+
+            // Helper-mesh shader: final color = base * (ambient + light * ndl)
+            // + specular + emissive. For an additive glow we want pure
+            // emissive (no scene-light dependency, no specular).
+            // diffuse=1 keeps the texture's RGB; emissive boosts the
+            // overall brightness; ambient=0 + specular=0 keeps the
+            // glow self-luminant.
+            //
+            // Tint comes from the imagery's own texture (the cylinder
+            // wall texture in teleportation.I3D / gvortex.I3D is
+            // already a colored glow); we don't apply a
+            // spell-LIGHT-COLOR multiply here — that's the in-game
+            // spell-dispatch path's job (out of scope for the VFX
+            // primitive).
+            // Helper-mesh FS: col = base*(amb*la.w + lcol*li.w*ndl)
+            //                       + spec*spec*li.w + emissive,
+            // where base = tex.rgb * diffuse.rgb.
+            // For unlit additive glow we want col = tex.rgb * tint.
+            // Setting diffuse=1 + emissive=tint (with ambient=specular=0)
+            // gives: col = 0 + 0 + emissive = emissive (lighting-
+            // independent constant color). To preserve some texture
+            // RGB variation we ALSO route through ambient: ambient.rgb
+            // multiplies base by `light_col_a.w` (scene ambient
+            // intensity, ~0.2-0.4 in default rig lighting).
+            //
+            // Per-flare alpha attenuation: outer flares (higher z_index)
+            // dimmer so the additive accumulation doesn't saturate to
+            // flat white at peak. Pre-release used D3D alpha blending
+            // where this was implicit; our additive needs explicit
+            // attenuation.
+            const float fade = 0.40f - 0.06f * zf;
+            m.diffuse[0]  = 1.0f; m.diffuse[1]  = 1.0f; m.diffuse[2]  = 1.0f; m.diffuse[3]  = 1.0f;
+            m.ambient[0]  = fade; m.ambient[1]  = fade; m.ambient[2]  = fade; m.ambient[3]  = 1.0f;
+            m.specular[0] = 0.0f; m.specular[1] = 0.0f; m.specular[2] = 0.0f; m.specular[3] = 0.0f;
+            // Slight cool-blue emissive baseline so the mesh reads as
+            // "magic vortex" tint even where the texture rgb is dark.
+            m.emissive[0] = 0.10f; m.emissive[1] = 0.15f; m.emissive[2] = 0.25f; m.emissive[3] = 1.0f;
+            m.power       = 1.0f;
+            // Sort: stamp ordering by per-flare z_index (back-to-front
+            // for clean additive layering); sub-meshes within a flare
+            // are insertion-ordered, fine since additive is commutative.
+            m.sort_depth  = base_sort_depth + zf * 0.001f;
+
+            Renderer->SubmitHelperMesh(m);
+        }
+    }
+}
+
+// *************************************************************************
+// * (X22) TSparkEffect — generic spark burst ("sparks"/TSparkAnimator)    *
+// *************************************************************************
+//
+// FAITHFUL DIRECT PORT of the pre-release particle loop. See forensics
+// docs/vfx/forensics/SPARKS_TSparkAnimator.md. The three ported bodies:
+//
+//   spawn  : TCharacter::EffectBurst "sparks" branch (character.cpp:2262-2317)
+//            builds an SParticleParams + calls anim->InitParticles(&pr);
+//            InitParticles (effect_old.cpp:4752-4787) seeds the arrays.
+//   update : TParticle3DAnimator::Animate (effect_old.cpp:4790-4942) —
+//            non-seeking ballistic path only (seektargets=false for sparks).
+//   render : TParticle3DAnimator::Render (effect_old.cpp:4944-4986) — one
+//            billboard per live particle + (trails-1) ghost copies stepped
+//            forward along velocity (the motion streak).
+//
+// Engine adaptations (only what the new engine genuinely requires):
+//   - SubmitFxBillboard FB-pipeline draws instead of D3D RenderObject.
+//   - Framerate-independence: the original integrated on a 24 Hz integer
+//     game-frame (p += v; v.z -= gravity; l-- per tick). We keep the math
+//     in the original per-tick units and drive it from a 24 Hz sim-tick
+//     accumulator (same fix as F03/H03/M05), so the burst plays at the
+//     original real-world speed regardless of render framerate.
+//   - Single photon variant (objflags = 1 << (ObjId() & 3)) resolved at
+//     spawn into one UV sub-rect of the shared 2x2 atlas texture (the 4
+//     photon sub-objects partition one texture into 4 tinted cells); every
+//     particle in the burst draws that one cell = one solid color.
+//
+// NOT ported (dead code for the spark use): the seek/homing block
+// (effect_old.cpp:4859-4936) and ResetTargetInfo. The params==0 editor
+// sample defaults have a separately named diagnostic preview factory.
+
+namespace {
+
+constexpr const char* kSparkImageryPath = "Misc\\Sparks.I3D";
+
+// 24 Hz cadence gate (family-consistent with F03/H03/M05). The original
+// per-tick rates (gravity 0.25 wu/tick^2, life 20-40 ticks, etc.) are
+// integrated once per sim-tick of accumulated wall-clock time.
+constexpr double kSparkSimTickMs = 1000.0 / 24.0;
+
+// Retail spark params (TCharacter::EffectBurst "sparks" branch +
+// retail reconciliation, forensics §2.1/§3). Constant immediates live in
+// the CALLER in the original, not in the generic animator, so this is the
+// spark "constant table".
+constexpr int32_t kSparkMinCount  = 15;     // random(15,25)
+constexpr int32_t kSparkMaxCount  = 25;
+constexpr float   kSparkPosJitter = 3.0f;   // pspread ±3 wu/axis
+constexpr float   kSparkVelJitter = 0.5f;   // spread ±0.5 wu/tick/axis
+constexpr float   kSparkGravity   = 0.25f;  // retail (snapshot 0.2)
+constexpr int32_t kSparkTrails    = 2;      // retail (snapshot 1)
+constexpr bool    kSparkBounce    = true;   // retail (snapshot false)
+constexpr int32_t kSparkMinStart  = 0;      // start-delay 0..8 ticks
+constexpr int32_t kSparkMaxStart  = 8;
+constexpr int32_t kSparkMinLife   = 20;     // lifetime 20..40 ticks
+constexpr int32_t kSparkMaxLife   = 40;
+constexpr int32_t kSparkPosZBias  = 45;     // emit z +45 wu (~impact height)
+constexpr int32_t kSparkFaceJitterLo = -80; // facing ± random(-80,80) byte-angle
+constexpr int32_t kSparkFaceJitterHi =  80;
+constexpr int32_t kSparkDirSpeed  = 100;    // ConvertToVector mag, then /100 (≈1 wu/tick)
+
+// Native InitParticles keeps the float reciprocal/product in x87 precision
+// through spread and base-position arithmetic, then stores each axis once.
+double SparkUnitJitter()
+{
+    return double(random(-100, 100)) * double(0.01f);
+}
+
+}   // namespace
+
+TSparkEffect* TSparkEffect::SpawnForTest(const S3DPoint& origin)
+{
+    return SpawnPreview(origin, false);
+}
+
+TSparkEffect* TSparkEffect::SpawnEditorDefaultForTest(const S3DPoint& origin)
+{
+    return SpawnPreview(origin, true);
+}
+
+TSparkEffect* TSparkEffect::SpawnPreview(const S3DPoint& origin, bool editor_default,
+                                       const SParticleParams* params)
+{
+    // --- Load the REAL Misc\Sparks.I3D imagery (no procedural stand-in).
+    const int32_t img_id = TObjectImagery::FindImagery(kSparkImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[spark] SpawnForTest: FindImagery('%s') failed", kSparkImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[spark] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kSparkImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[spark] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kSparkImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* spark = new TSparkEffect(base);
+    SetIntPos(spark, origin);
+    spark->SetMapIndex(MapPane.MakeIndex());
+    spark->ActivateComponents();
+
+    spark->gravity_ = editor_default ? 0.2f : kSparkGravity;
+    spark->trails_  = editor_default ? 1 : kSparkTrails;
+    spark->bounce_  = editor_default ? false : kSparkBounce;
+
+    // --- Single color per burst (objflags = 1 << (ObjId() & 3)).
+    // The original selects exactly one of the 4 photon sub-objects for the
+    // WHOLE burst, keyed off the attacker's object id. A sector-less
+    // harness effect has no valid TObjectDef (ObjId() would null-deref),
+    // so for the standalone rig we rotate a static counter — each fresh
+    // burst picks the NEXT photon variant, giving the same per-burst (not
+    // per-particle) single-color behavior with cycling variety. The four
+    // photon sub-objects select distinct cells of one shared atlas texture.
+    (void)img3d->NumObjects();   // lazy-mesh-init poke (same as F01/B01/H04)
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_tex <= 0)
+    {
+        log_error("[spark] SpawnForTest: imagery has 0 textures after lazy-init poke");
+        delete spark;
+        return nullptr;
+    }
+    S3DTex tex = {};
+    img3d->GetTexture(0, &tex);
+    spark->texture_ = tex.htexture;
+    if (spark->texture_ == kInvalidTexture)
+    {
+        log_error("[spark] SpawnForTest: texture slot 0 handle invalid");
+        delete spark;
+        return nullptr;
+    }
+
+    // The Sparks.I3D texture is a 2x2 ATLAS — the 4 photon sub-objects
+    // (photon / photon01 / photon02 / photon03, object indices 0..3) each
+    // select ONE atlas cell via their authored UVs. The 4 cells are distinct
+    // SHAPES (4-pointed stars and blobs), not just color tints. Selecting one
+    // sub-object = one cell = one shape/color for the whole burst (the correct
+    // single-cell look — drawing the full atlas mixes all 4 = the grid bug).
+    //
+    // In the game, objflags = 1 << (ObjId() & 3) keys the cell off the
+    // attacker's object id, so different attackers/hits land on different
+    // cells and the combat sparks alternate stars/blobs across hits. A
+    // sector-less harness effect has no valid TObjectDef (ObjId() would
+    // null-deref), so we rotate a static counter: each successive burst
+    // advances the cell 0->1->2->3->wrap, reproducing that in-game shape
+    // variety (one clean single-cell burst at a time, consecutive bursts
+    // alternate). The editor sample instead permits all four variants.
+    const int32_t num_obj = img3d->NumObjects();
+    if (num_obj < 4)
+    {
+        log_error("[spark] expected four authored photon sub-objects, got %d", num_obj);
+        delete spark;
+        return nullptr;
+    }
+    static int32_t s_variant_rotor = 0;
+    const int32_t variant = (editor_default || params) ? 0 : ((s_variant_rotor++) & 0x3);
+
+    // Compute the chosen sub-object's UV sub-rect from its authored vertex
+    // UVs (the faithful equivalent of RenderObject drawing that sub-object's
+    // quad with its baked UVs). Drawing the full [0,0,1,1] rect would show
+    // all 4 atlas cells on every particle (the mixed-color grid bug).
+    for (int32_t obj = 0; obj < 4; ++obj)
+    {
+        const int32_t nverts = img3d->NumObjVerts(obj);
+        if (nverts != 4)
+        {
+            log_error("[spark] photon sub-object %d must be an authored four-vertex quad", obj);
+            delete spark;
+            return nullptr;
+        }
+        img3d->GetObjVerts(obj, spark->variants_[obj].vertices, 0, 0, ERender3DVertex::Vertex);
+    }
+    if (params)
+    {
+        if (!spark->InitParticles(*params))
+        {
+            delete spark;
+            return nullptr;
+        }
+        return spark;
+    }
+
+    // --- Port of EffectBurst "sparks" param build (character.cpp:2273-2313)
+    // + InitParticles seeding (effect_old.cpp:4774-4787).
+    //
+    // The combat caller computes the emit origin/facing from the
+    // attacker->target geometry (GetFace, ConvertToFacing, Distance). The
+    // harness has no target, so we synthesize: a random horizontal facing
+    // for the cone direction, emit at the harness origin with z += 45.
+    // Everything downstream (the cone fan, jitter, lifetimes, bounce) is
+    // the exact original math.
+    const int32_t ang = editor_default ? 0 :
+        (random(0, 255) + random(kSparkFaceJitterLo, kSparkFaceJitterHi)) & 0xff;
+    S3DPoint vect = {};
+    if (!editor_default)
+        ConvertToVector(ang, kSparkDirSpeed, vect);
+
+    // params.pos = vect0 = caster-local impact offset with z += 45. In the
+    // harness the burst is the centerpiece, so we emit at the local origin
+    // (0,0,+45); the effect object itself sits at `origin`.
+    // hmm_vec3 uses uppercase .X/.Y/.Z; S3DPoint `vect` uses lowercase .x/.y/.z.
+    const hmm_vec3 ppos   = { 0.0f, 0.0f, editor_default ? 70.0f : float(kSparkPosZBias) };
+    const hmm_vec3 pdir   = editor_default ? hmm_vec3{1.0f, -1.0f, 0.5f} : hmm_vec3{
+                              float(vect.x) / float(kSparkDirSpeed),
+                              float(vect.y) / float(kSparkDirSpeed),
+                              float(vect.z) / float(kSparkDirSpeed) };
+
+    // `min` is a macro (revtypes.h) — std::min would mis-expand; use a ternary.
+    const int32_t rcount = editor_default ? 10 : random(kSparkMinCount, kSparkMaxCount);
+    const int32_t count  = rcount < kSparkMaxParticles ? rcount : kSparkMaxParticles;
+    SParticleParams pr = {};
+    pr.particles = count;
+    pr.pos = ppos;
+    pr.dir = pdir;
+    pr.pspread = {kSparkPosJitter, kSparkPosJitter, kSparkPosJitter};
+    pr.spread = {kSparkVelJitter, kSparkVelJitter, kSparkVelJitter};
+    pr.gravity = spark->gravity_;
+    pr.trails = spark->trails_;
+    pr.bounce = spark->bounce_;
+    pr.minlife = editor_default ? 10 : kSparkMinLife;
+    pr.maxlife = editor_default ? 30 : kSparkMaxLife;
+    pr.minstart = kSparkMinStart;
+    pr.maxstart = kSparkMaxStart;
+    pr.killobj = !editor_default;
+    pr.objflags = editor_default ? 0xf : 1 << variant;
+    if (!spark->InitParticles(pr))
+    {
+        delete spark;
+        return nullptr;
+    }
+    log_info("[spark] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "particles=%d variant=%d/%d tex=%u editor_default=%d "
+             "face=%d gravity=%.2f trails=%d bounce=%d",
+             kSparkImageryPath, spark->GetMapIndex(),
+             origin.x, origin.y, origin.z, count, variant, num_obj,
+             spark->texture_, editor_default ? 1 : 0,
+             ang, spark->gravity_, spark->trails_, spark->bounce_ ? 1 : 0);
+    return spark;
+}
+
+void TSparkEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+    Advance(TTime::DeltaTime());
+    Submit(*Renderer, *this, debug_mode);
+}
+
+bool TSparkEffect::InitParticles(const SParticleParams& params)
+{
+    if (params.particles < 0 || params.particles > kSparkMaxParticles ||
+        params.trails < 1 || params.trails > kSparkMaxParticles ||
+        params.numtargets != 0 || params.seektargets)
+    {
+        log_error("[spark] unsupported particle params: count=%d trails=%d targets=%d seeking=%d",
+                  params.particles, params.trails, params.numtargets, params.seektargets ? 1 : 0);
+        return false;
+    }
+    int32_t allowed[4] = {};
+    int32_t num_allowed = 0;
+    for (int32_t variant = 0; variant < 4; ++variant)
+        if (params.objflags & (1 << variant))
+            allowed[num_allowed++] = variant;
+    if (num_allowed == 0)
+        allowed[num_allowed++] = 0;
+    num_particles_ = params.particles;
+    gravity_ = params.gravity;
+    trails_ = params.trails;
+    bounce_ = params.bounce;
+    sim_accum_ms_ = 0.0;
+    for (int32_t c = 0; c < num_particles_; ++c)
+    {
+        SSparkParticle& pt = particles_[c];
+        pt.pos.X = params.pos.X + params.pspread.X * SparkUnitJitter();
+        pt.pos.Y = params.pos.Y + params.pspread.Y * SparkUnitJitter();
+        pt.pos.Z = params.pos.Z + params.pspread.Z * SparkUnitJitter();
+        pt.vel.X = params.dir.X + params.spread.X * SparkUnitJitter();
+        pt.vel.Y = params.dir.Y + params.spread.Y * SparkUnitJitter();
+        pt.vel.Z = params.dir.Z + params.spread.Z * SparkUnitJitter();
+        pt.life = float(random(params.minlife, params.maxlife));
+        pt.start = float(random(params.minstart, params.maxstart));
+        pt.variant = allowed[random(0, num_allowed - 1)];
+    }
+    alive_ = num_particles_ > 0;
+    return true;
+}
+
+void TSparkEffect::Advance(double seconds)
+{
+
+    // --- Update: port of TParticle3DAnimator::Animate (non-seeking path,
+    // effect_old.cpp:4826-4941), framerate-independent via the 24 Hz
+    // sim-tick accumulator. Each accumulated tick runs the original
+    // per-tick integration exactly once.
+    if (alive_)
+    {
+        sim_accum_ms_ += seconds * 1000.0;
+        while (sim_accum_ms_ + 1e-7 >= kSparkSimTickMs)
+        {
+            sim_accum_ms_ -= double(kSparkSimTickMs);
+
+            bool isdone = true;
+            for (int32_t c = 0; c < num_particles_; ++c)
+            {
+                SSparkParticle& pt = particles_[c];
+                if (pt.life <= 0.0f)           // already dead
+                    continue;
+                isdone = false;
+
+                if (pt.start > 0.0f)           // still in start delay
+                {
+                    pt.start -= 1.0f;
+                    continue;
+                }
+
+                // p += v;  l--;  v.z -= gravity  (effect_old.cpp:4842-4851)
+                pt.pos.X += pt.vel.X;
+                pt.pos.Y += pt.vel.Y;
+                pt.pos.Z += pt.vel.Z;
+                pt.life  -= 1.0f;
+                pt.vel.Z -= gravity_;
+
+                // bounce block (effect_old.cpp:4852-4858) — retail bounce=true
+                if (bounce_ && pt.pos.Z < 0.0f)
+                {
+                    pt.pos.Z = -pt.pos.Z;
+                    pt.vel.Z = -pt.vel.Z * 0.5f;
+                    if (pt.vel.Z < 2.0f)       // don't bounce too much
+                        pt.life = 0.0f;
+                }
+            }
+
+            // killobj=true: object self-destructs once all particles expire
+            // (effect_old.cpp:4939-4941). The harness reads alive_ to know
+            // when to allow a re-trigger.
+            if (isdone)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+}
+
+void TSparkEffect::Submit(TRenderer& renderer, const TObjectInstance& owner,
+                          EFxDebugMode debug_mode) const
+{
+    if (texture_ == kInvalidTexture || !alive_)
+        return;
+
+    // --- Render: port of TParticle3DAnimator::Render (effect_old.cpp:4944-4986).
+    // One screen-aligned billboard per live, started particle, plus
+    // (trails-1) ghost copies stepped forward along velocity (the 2-step
+    // motion streak; retail trails=2).
+    const hmm_mat4& world = owner.Transform().Matrix();
+    const float between_ticks = float(sim_accum_ms_ > 0.0 ? sim_accum_ms_ / kSparkSimTickMs : 0.0);
+
+    SQuadDrawItem item = {};
+    item.color_rgba[0] = 1.0f;     // no per-vertex tint in the original; color
+    item.color_rgba[1] = 1.0f;     // lives entirely in the photon sprite texture
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.key.texture     = texture_;
+    // Blend = Alpha (SRC_ALPHA / INV_SRC_ALPHA) — the combat-spark Render body
+    // calls SetBlendState (= Alpha), and forensics §7 records Alpha. The
+    // earlier "additive" comparison turned out to be the GREEN Fountain /
+    // Sparkle effect (GREENFONT family), a DIFFERENT effect — not combat
+    // sparks. The snapshot uses Alpha. (Still snapshot-only: the retail
+    // TParticle3DAnimator::Render TU was never decompiled; vet against real
+    // combat-spark footage, not the fountain video.)
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.debug_mode      = debug_mode;
+
+    for (int32_t c = 0; c < num_particles_; ++c)
+    {
+        const SSparkParticle& pt = particles_[c];
+        if (pt.start > 0.0f || pt.life <= 0.0f)   // skip delayed/dead
+            continue;
+        const auto& shape = variants_[pt.variant];
+
+        // Trails: the render walks a local copy forward along velocity,
+        // drawing trails_ ghost copies (the motion streak). Identical to
+        // the original inner loop (effect_old.cpp:4961-4978).
+        hmm_vec3 pp = pt.pos;
+        hmm_vec3 vv = pt.vel;
+        // Interpolate the same Euler path between authored 24 Hz states.
+        // Lifecycle events remain on simulation ticks; motion can render
+        // smoothly at any display rate without changing those tick states.
+        hmm_vec3 next = {pp.X + vv.X, pp.Y + vv.Y, pp.Z + vv.Z};
+        if (bounce_ && next.Z < 0.0f)
+            next.Z = -next.Z;
+        pp.X += (next.X - pp.X) * between_ticks;
+        pp.Y += (next.Y - pp.Y) * between_ticks;
+        pp.Z += (next.Z - pp.Z) * between_ticks;
+        for (int32_t d = 0; d < trails_; ++d)
+        {
+            for (int32_t vertex = 0; vertex < 4; ++vertex)
+            {
+                const auto& authored = shape.vertices[vertex];
+                hmm_vec3 local = {authored.pos.X + pp.X, authored.pos.Y + pp.Y, authored.pos.Z + pp.Z};
+                hmm_vec3 corner = {};
+                MtxTransform(&world, &local, &corner);
+                item.world_pos[vertex][0] = corner.X;
+                item.world_pos[vertex][1] = corner.Y;
+                item.world_pos[vertex][2] = corner.Z;
+                item.uv[vertex][0] = debug_mode == EFxDebugMode::FullTexture ? float(vertex & 1) : authored.tu;
+                item.uv[vertex][1] = debug_mode == EFxDebugMode::FullTexture ? float(vertex >> 1) : authored.tv;
+            }
+            renderer.SubmitFxQuad(item);
+
+            pp.X += vv.X;
+            pp.Y += vv.Y;
+            pp.Z += vv.Z;
+            vv.Z -= gravity_;
+            if (bounce_ && pp.Z < 0.0f)
+            {
+                pp.Z = -pp.Z;
+                vv.Z = -vv.Z * 0.5f;
+                if (vv.Z < 2.0f)
+                    break;
+            }
+        }
+    }
+}
+
+// Map ownership adapter for the fixed Sparks reference implementation.
+// Only OnUpdate advances state; render submission never consumes time.
+class TSparkBurstComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    TSparkBurstComponent(TObjectPtr<TSparkEffect> burst, bool kill_owner)
+        : burst_(std::move(burst)), kill_owner_(kill_owner) {}
+
+    [[nodiscard]] const char* ComponentName() const override { return "spark-burst"; }
+    void Submit(TRenderer& renderer, const TObjectInstance& owner) const override
+    {
+        burst_->Submit(renderer, owner, DebugMode());
+    }
+
+  protected:
+    void OnUpdate() override
+    {
+        burst_->Advance(TTime::DeltaTime());
+        if (kill_owner_ && !burst_->IsAlive())
+            if (TObjectInstance* owner = OwnerInstance())
+                owner->SetFlags(OF_KILL);
+    }
+
+  private:
+    TObjectPtr<TSparkEffect> burst_;
+    bool kill_owner_ = false;
+};
+
+bool TSparkEffect::AttachBurst(TObjectInstance& owner, const SParticleParams& params)
+{
+    if (owner.GetComponent<TFlipbookBillboardComponent>())
+    {
+        log_error("[spark] refusing duplicate visual component on instance=%p", (void*)&owner);
+        return false;
+    }
+    auto burst = TObjectPtr<TSparkEffect>(SpawnPreview(IntPos(owner), false, &params));
+    if (!burst)
+        return false;
+    const TTextureHandle texture = burst->texture_;
+    auto component = std::make_unique<TSparkBurstComponent>(std::move(burst), params.killobj);
+    // Configure provides the shared map submission guard and replaces the
+    // static I3D visual. Authored per-variant quad dimensions live in burst_.
+    component->Configure(texture, 64, 80, 1, 1, 1, 0.0f, 0.0f, false, true);
+    owner.AddComponent(std::move(component));
+    return true;
+}
+
+// *************************************************************************
+// * (F07) TFireBallEffect — TMissileEffect : TEffect leaf, faithful port  *
+// *************************************************************************
+//
+// FAITHFUL DIRECT PORT of the pre-release `TMissileEffect::Pulse`
+// (src/missileeffect.cpp:52-135) + `TFireBallAnimator::Animate/::Render`
+// (src/missileeffect.cpp:549-1085). See forensics
+// docs/vfx/forensics/F07_TFireBallEffect.md.
+//
+// Engine adaptations (only what the new engine genuinely requires):
+//   - SubmitFxBillboard for box01 (ball/glow/trail/burst) and box02
+//     (spark) with per-instance UV sub-rect for atlas-cell selection.
+//     The original used D3D matrix-rotated quads (rotX-30°, rotY+60°,
+//     rotZ=spin+facing); ScreenAligned billboards are the FB-pipeline
+//     engine-native approximation. Forensics §13.6 flags this as the
+//     uncertain orientation choice.
+//   - SubmitHelperMesh for cylinder01 (the shockwave ring) — same
+//     primitive M09b TTeleporterEffect uses, additive-blend pass.
+//   - Framerate-independent 24 Hz sim-tick accumulator (per-tick rates
+//     integrated once per accumulated wall-clock tick of 1/24 s),
+//     family-consistent with B01/X22/F03/H03/M05.
+//   - Per-frame Renderer->AddPointLight at the ball position with the
+//     retail spell-LIGHT colour (255,130,0) for the warm scene glow.
+
+namespace {
+
+constexpr const char* kFireBallImageryPath = "Magic\\NewFireBall.I3D";
+
+// Sub-object indices inside NewFireBall.I3D (forensics §4).
+constexpr int32_t kFireBallObjBox01      = 0;   // ball / glow / trail / burst
+constexpr int32_t kFireBallObjBox02      = 1;   // spark quad
+constexpr int32_t kFireBallObjCylinder01 = 2;   // shockwave ring
+
+// Pre-release `ROLLOVER = 1 << 16` (revdefs.h:447) — sub-unit precision
+// used by TMissileEffect's `speed = newspeed * ROLLOVER` integer math.
+// We carry the same constant so the port's Pulse arithmetic matches the
+// snapshot literal-for-literal (forensics §3).
+constexpr int32_t kFireBallRollover = 1 << 16;
+
+// Resolve which texture slot a sub-object draws from by walking its
+// texfaces[] table. Duplicates the blood-side helper (effect.cpp B01
+// block) — left local to keep the file's section boundaries clean
+// rather than pulling the blood namespace open here.
+int32_t FireBallSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
+{
+    if (!img3d || objnum < 0 || objnum >= img3d->NumObjects())
+        return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0)
+        return -1;
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
+}
+
+}   // namespace
+
+void TFireBallEffect::Initialize()
+{
+    // Port of TMissileEffect::Initialize (missileeffect.cpp:31-40) +
+    // TFireBallEffect::Initialize (:482-487) + TFireBallAnimator::
+    // Initialize (:501-546). The animator-side init is folded onto the
+    // class since the per-frame state lives here.
+    state_      = 0;   // MISSILE_LAUNCH
+    aim_angle_  = 0;
+    range_      = 32768;
+    status_     = true; // Actual retail Fireball Initialize 0x510bd0 stores status=1.
+    damage_armed_ = true;   // and +0x194 = 1, the blast armed
+    vel_        = {0.0f, 0.0f, 0.0f};
+    old_state_  = 0;
+    firsttime_  = 0;
+    explode_    = 0;
+
+    // FireBallAnimator init (missileeffect.cpp:516-545):
+    fireball_.pos    = {0.0f, 0.0f, 0.0f};
+    fireball_.scale  = kFireBallMaxSize / 2.0f;   // 0.30
+    fireball_.frame  = 0.0f;
+    fireball_.glow   = 1.5f;
+    fireball_.used   = true;
+    frame_count_     = kFireBallMaxFrame;
+    glow_frame_      = kFireBallGlowFrame;
+    for (auto& t : trail_)   t = SFireBallData{};
+    for (auto& b : burst_)   b = SFireBallData{};
+    for (auto& s : sparks_)  s = SFireBallSpark{};
+    ring_active_    = false;
+    ring_done_      = true;
+    ring_scale_     = kFireBallRingScale;
+    alive_          = true;
+    sim_accum_ms_   = 0.0;
+    missile_motion_=missile_state::State{};
+    missile_motion_.speed_fixed=int32_t(kFireBallSpeed)*missile_state::Rollover;
+    flags=(flags&~(OF_MOVING|OF_WEIGHTLESS))|OF_IMMOBILE|OF_PULSE;
+}
+
+void TFireBallEffect::Pulse()
+{
+    // The normal map/cast path advances the same verified controller as the
+    // preview. Render submission does not drive the actual map's simulation.
+    if(alive_)
+    {
+        PulseMissile();
+        // Original Animate510e5b calls SetCommandDone(false). The collapsed
+        // simulator must retain this handshake before generic effect cleanup.
+        SetCommandDone(false);
+        StepAnimate();
+    }
+    if(!alive_)KillThisEffect();
+    TEffect::Pulse();
+}
+
+void TFireBallEffect::PulseMissile()
+{
+    StepMissilePulse();
+    if (state_ != 2 /*MISSILE_EXPLODE*/ || !damage_armed_ || !spell)
+        return;
+    // The ball's offset from the object (the animator's +0x4ac..+0x4b4,
+    // truncated as retail's ftol does).
+    S3DPoint at = IntPos(*this);
+    if (alive_)
+    {
+        at.x += int32_t(fireball_.pos.X);
+        at.y += int32_t(fireball_.pos.Y);
+        at.z += int32_t(fireball_.pos.Z);
+    }
+    // REVSYNC-DIVERGENCE: retail hands AreaDamage the invoker pointer the
+    // spell keeps, which dangles once the caster is gone; the port's safe
+    // reference gives none then, and nobody is hurt.
+    const SSpellVariant* variant = spell->VariantData();
+    AreaDamage(spell->GetInvokerRef().Get(), at, 150, variant->mindamage, variant->maxdamage,
+               spell->SpellData()->damagetype, 0);
+    damage_armed_ = false;
+}
+
+bool TFireBallEffect::SetProjectileEndpoints(const S3DPoint& source,const S3DPoint& destination)
+{
+    if(state_!=0||(source.x==destination.x&&source.y==destination.y&&source.z==destination.z))
+        return false;
+    SetIntPos(*this, source);
+    projectile_destination_=destination;
+    has_projectile_destination_=true;
+    return true;
+}
+
+DEFINE_OBJECT_DEF("FireBall", TFireBallEffect)
+REGISTER_OBJECT_DEF(TFireBallEffect)
+
+void TFireBallEffect::FillAtlasUv(int32_t frame_idx, float out_uv[4]) const
+{
+    // Port of TFireBallAnimator::SetAnimFrame (missileeffect.cpp:761-779):
+    // 4×4 grid, cell size 0.25 × 0.25, u=(f%4)*.25, v=(f/4)*.25.
+    const int32_t f = ((frame_idx % frame_count_) + frame_count_) % frame_count_;
+    out_uv[0] = float(f % 4) * asset_.atlas_cell_w;
+    out_uv[1] = float(f / 4) * asset_.atlas_cell_h;
+    out_uv[2] = asset_.atlas_cell_w;
+    out_uv[3] = asset_.atlas_cell_h;
+}
+
+bool TFireBallEffect::IsTrailDraining() const
+{
+    // Port of TFireBallAnimator::IsTrail (missileeffect.cpp:781-791):
+    // true while the trail head ≠ tail position (the ball still moved
+    // recently). Used as the "trail still draining" gate for death.
+    const SFireBallData& head = trail_[0];
+    const SFireBallData& tail = trail_[kFireBallTrailSize - 1];
+    return head.pos.X != tail.pos.X
+        || head.pos.Y != tail.pos.Y
+        || head.pos.Z != tail.pos.Z;
+}
+
+bool TFireBallEffect::AnyBurstAlive() const
+{
+    for (const auto& b : burst_)
+        if (b.used) return true;
+    return false;
+}
+
+int32_t TFireBallEffect::LiveSparkCount() const
+{
+    int32_t c = 0;
+    for (const auto& s : sparks_)
+        if (s.used) ++c;
+    return c;
+}
+
+void TFireBallEffect::StepMissilePulse()
+{
+    // Shared module is checked against original Move 0x470920 and Pulse
+    // 0x510220, including fractional accumulators and real collision inputs.
+    const S3DPoint position=IntPos(*this);
+    missile_motion_.position={position.x,position.y,position.z};
+    missile_motion_.flags=GetFlags();
+    missile_state::Inputs input;
+    input.in_inventory=IsInInventory();input.object_class=ObjClass();
+    input.launch_ready=status_;input.animator_present=alive_;
+    S3DPoint next{};GetNextMove(next);input.next_move_fixed={next.x,next.y,next.z};
+    input.ground_height=[this](const missile_state::Point& point)
+    {
+        if(preview_mode_)return int32_t(1); // Selected fixture plane, not map geometry.
+        S3DPoint query{point.x,point.y,point.z};return MapPane.GetWalkHeight(query);
+    };
+    input.aim_angle=[this]()
+    {
+        if(spell)
+        {
+            TObjectInstance* invoker=spell->GetInvokerRef().Get();
+            TObjectInstance* target=spell->GetTargetRef(0).Get();
+            if(target&&target!=invoker)return ConvertToFacing(IntPos(*this),IntPos(target));
+            if(invoker)return IntFacing(invoker);
+        }
+        if(has_projectile_destination_)return ConvertToFacing(IntPos(*this),projectile_destination_);
+        return aim_angle_;
+    };
+    input.convert_vector=[](int facing,int32_t speed)
+    {
+        S3DPoint velocity{};ConvertToVector(facing,speed,velocity);
+        return missile_state::Point{velocity.x,velocity.y,velocity.z};
+    };
+    // REVSYNC: TMissileEffect::Pulse @ 0x00510220, the fly state's hit test:
+    // the map's characters within 256 (retail's iterator: this level, the
+    // loaded sectors, flags 0xe0) -- the first one not the caster, alive,
+    // within 32 and the caster's enemy (anyone, with no caster) explodes it.
+    input.character_hit=[this](const missile_state::Point& point)
+    {
+        if(preview_mode_) {
+            if(!preview_target_collision_ || !has_projectile_destination_)return false;
+            const S3DPoint query{point.x,point.y,point.z};
+            return ::Distance(query,projectile_destination_)<=32;
+        }
+        TObjectInstance* invoker_object=spell?spell->GetInvokerRef().Get():nullptr;
+        TCharacter* invoker=dynamic_cast<TCharacter*>(invoker_object);
+        const S3DPoint query{point.x,point.y,point.z};
+        std::vector<TCharacter*> around;
+        if(TCharacter::nearbyCharactersSeam)around=TCharacter::nearbyCharactersSeam(query,256);
+        else
+        {
+            SRect r{query.x-256,query.y-256,query.x+256,query.y+256};
+            for(TMapIterator iterator(GetLevel(),&r,CHECK_NOINVENT,OBJSET_CHARACTER);iterator;iterator++)
+                if(auto* character=dynamic_cast<TCharacter*>(iterator.Item()))around.push_back(character);
+        }
+        for(TCharacter* character:around)
+        {
+            if(character==invoker_object||character->Health()<=0)continue;
+            if(::Distance(query,IntPos(character))>32)continue;
+            if(invoker&&!invoker->IsEnemy(character))continue;
+            return true;
+        }
+        return false;
+    };
+    const missile_state::Result result=missile_motion_.Advance(input);
+    const S3DPoint updated{missile_motion_.position.x,missile_motion_.position.y,missile_motion_.position.z};
+    if(updated.x!=position.x||updated.y!=position.y||updated.z!=position.z)
+    {
+        if(preview_mode_||!GetSector())SetIntPos(*this, updated);
+        else SetPos(updated,-1,false);
+    }
+    flags=missile_motion_.flags;SetMoveBits(result.move_bits);
+    state_=missile_motion_.state;range_=missile_motion_.range;aim_angle_=missile_motion_.angle;
+    // The shipped NewFireball imagery has launch/fly/explode states. Keep
+    // normal object observers and the animator on the same transition.
+    if(state_!=GetState())SetState(state_);
+    vel_={float(missile_motion_.velocity_fixed.x)/float(missile_state::Rollover),
+          float(missile_motion_.velocity_fixed.y)/float(missile_state::Rollover),
+          float(missile_motion_.velocity_fixed.z)/float(missile_state::Rollover)};
+    if(result.kill_requested)KillThisEffect();
+}
+
+void TFireBallEffect::StepAnimate()
+{
+    // Port of TFireBallAnimator::Animate (missileeffect.cpp:549-759),
+    // translated line-by-line. SetCommandDone / SetStatus(false) handshakes
+    // collapse to direct boolean assignments on the leaf since there is
+    // no separate animator object.
+
+    status_ = false;
+    firsttime_ = (old_state_ != state_) ? 1 : 0;
+
+    // explode-edge tracker (:564-567).
+    if (explode_ == 1)
+        explode_ = -1;
+    else if (explode_ == 0 && state_ == 2 /*MISSILE_EXPLODE*/)
+        explode_ = 1;
+
+    const S3DPoint effect_pos = IntPos(*this);
+
+    // --- spark trail params (:573-621) ---
+    int32_t spark_target = 0;
+    if (explode_ == -1)
+        spark_target = 0;
+    else if (explode_ == 1)
+        spark_target = kFireBallMaxSpark;
+    else
+        spark_target = kFireBallNormSpark;
+
+    int32_t spark_chance = 0;
+    if (state_ == 0 /*LAUNCH*/)
+        spark_chance = 25;
+    else if (state_ == 1 /*FLY*/)
+        spark_chance = 30;
+    else
+        spark_chance = 100;
+
+    // velocity spread per state (:604-610).
+    const float spread_xy = (state_ == 0) ? 3.0f : 1.0f;
+    const float spread_z  = 1.0f;
+
+    // Actual shared subparticle semantics run before the head's glow RNG.
+    // Creation attempts are desired-minus-live, and expired particles still
+    // receive their final scale/motion update on that tick.
+    fireball_spark::Advance(sparks_, spark_target, spark_chance,
+        float(effect_pos.x), float(effect_pos.y), float(effect_pos.z),
+        int32_t(spread_xy), int32_t(spread_z), kFireBallSparkScale,
+        kFireBallSparkScaleDec, kFireBallSparkGravity,
+        kFireBallSparkMinLife, kFireBallSparkMaxLife,
+        [](int lo, int hi) { return random(lo, hi); });
+
+    // Actual head/history stage, shared with the original-CPU state probe.
+    // Sparks above retain ownership of the preceding random draws.
+    fireball_core::Advance(fireball_, trail_, float(effect_pos.x),
+        float(effect_pos.y), float(effect_pos.z), frame_count_, glow_frame_,
+        kFireBallTrailScale, [](int lo, int hi) { return random(lo, hi); });
+
+    // --- state-specific actions (:657-757) ---
+    int32_t live_burst_count = 0;
+    switch (state_)
+    {
+        case 0: /* MISSILE_LAUNCH */
+            status_ = true;   // tell base Pulse to launch (handshake)
+            break;
+
+        case 1: /* MISSILE_FLY */
+            if (fireball_.scale < kFireBallMaxSize)
+                fireball_.scale += kFireBallGrowRate;
+            break;
+
+        case 2: /* MISSILE_EXPLODE */
+            if (fireball_.scale < kFireBallMaxSize)
+                fireball_.scale += kFireBallGrowRate;
+
+            if (firsttime_)
+            {
+                // The blast's damage is the object's, not the animator's: retail
+                // moved it into TFireBallEffect::Pulse (0x00510c10, PulseMissile).
+
+                // Burst quads (:687-699). Pre-release sets
+                // `burst[i].rotation = 0` (missileeffect.cpp:694); the
+                // draw at :846 then applies `-burst[i].rotation *
+                // TORADIANf` = 0, so all burst cards share the no-spin
+                // orientation. Seed the same so the WorldXY matrix tilt
+                // + facing-rotation composes consistently across slots.
+                for (int32_t i = 0; i < kFireBallMaxBurst; ++i)
+                {
+                    SFireBallData& bq = burst_[i];
+                    bq.used    = true;
+                    bq.pos.X   = fireball_.pos.X + float(random(-15, 20));
+                    bq.pos.Y   = fireball_.pos.Y + float(random(-15, 20));
+                    bq.pos.Z   = fireball_.pos.Z + float(random(-15, 20));
+                    bq.scale   = 0.75f + float(random(0, 5)) * 0.15f;
+                    bq.glow    = 1.0f + 0.05f * float(random(0, 15));
+                    bq.frame   = float(random(0, frame_count_ - 1));
+                    bq.rotation = 0.0f;   // snapshot :694
+                    if (int32_t(bq.frame) == glow_frame_)
+                        bq.frame += 1.0f;
+                    ++live_burst_count;
+                }
+
+                // Shockwave ring init (:701-731). Color stops are stored
+                // implicitly — the ring helper-mesh draws use the
+                // texture-modulated cylinder geometry, and the four
+                // RGBA color stops fade together via per-frame alpha.
+                ring_active_ = true;
+                ring_done_   = false;
+                ring_scale_  = kFireBallRingScale;
+                ring_pos_.X  = fireball_.pos.X + float(effect_pos.x);
+                ring_pos_.Y  = fireball_.pos.Y + float(effect_pos.y);
+                ring_pos_.Z  = fireball_.pos.Z + float(effect_pos.z);
+            }
+            else
+            {
+                // Continuing EXPLODE ticks (:734-749). Ring grows
+                // 1.085 / tick until > 120 → done. Burst quads shrink
+                // 0.90 / tick, culled at < 0.50.
+                if (ring_active_ && !ring_done_)
+                {
+                    ring_scale_ *= kFireBallRingFactor;
+                    // Original shock Animate retains the first overshoot;
+                    // the done flag suppresses subsequent growth/drawing.
+                    if (ring_scale_ > kFireBallRingMaxSize)
+                        ring_done_ = true;
+                }
+                for (auto& bq : burst_)
+                {
+                    if (!bq.used) continue;
+                    ++live_burst_count;
+                    bq.scale *= 0.90f;
+                    // Retail511421 clears used but still consumes this
+                    // slot's final glow RNG and advances its atlas frame.
+                    if (bq.scale < 0.50f)
+                        bq.used = false;
+                    bq.glow = 1.0f + 0.05f * float(random(0, 15));
+                    bq.frame += 1.0f;
+                    if (int32_t(bq.frame) == glow_frame_)
+                        bq.frame += 1.0f;
+                    bq.frame = float(int32_t(bq.frame) % frame_count_);
+                }
+            }
+
+            // Death gate (:752-755). The original checks IsTrail() &&
+            // spark.GetCount() == 0 && no burst alive && ring.IsDone().
+            // All four must be true simultaneously.
+            if (!IsTrailDraining()
+                && LiveSparkCount() == 0
+                && live_burst_count == 0
+                && (ring_done_ || !ring_active_))
+            {
+                alive_ = false;
+            }
+            break;
+    }
+
+    old_state_ = state_;
+}
+
+TFireBallEffect* TFireBallEffect::SpawnForTest(const S3DPoint& origin)
+{
+    return SpawnForTestWithAsset(origin,kFireBallImageryPath,
+        [](TObjectImagery* imagery)->TFireBallEffect* { return new TFireBallEffect(imagery); });
+}
+
+TFireBallEffect* TFireBallEffect::SpawnForTestWithAsset(const S3DPoint& origin,
+    const char* asset_path,TFireBallEffect* (*factory)(TObjectImagery*))
+{
+    if (!Renderer)
+    {
+        log_error("[fireball] SpawnForTest: renderer not initialized");
+        return nullptr;
+    }
+
+    // FindImagery → RegisterImagery fallback: NewFireBall.I3D is not
+    // registered when class.def has not yet requested the imagery. The
+    // active FireBall object builder above now serves map/cast creation too.
+    int32_t img_id = TObjectImagery::FindImagery(asset_path);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(asset_path));
+    if (img_id < 0)
+    {
+        log_error("[fireball] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
+                  asset_path);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[fireball] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, asset_path);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[fireball] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  asset_path);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Lazy-mesh-init poke (same idiom F01/B01/H04/X22 use).
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj < 3 || num_tex <= 0)
+    {
+        log_error("[fireball] SpawnForTest: imagery '%s' underspec'd "
+                  "(objects=%d, textures=%d) — expected ≥3 sub-objects "
+                  "(box01/box02/cylinder01)",
+                  asset_path, num_obj, num_tex);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    auto* fb = factory(base);
+    fb->preview_mode_=true;
+    SetIntPos(fb, origin);
+    fb->SetMapIndex(MapPane.MakeIndex());
+    fb->ActivateComponents();
+    if(!fb->EnsureAuthoredQuad())
+    {
+        log_error("[fireball] missing authored box01 geometry/material");delete fb;return nullptr;
+    }
+
+    // Resolve box01 (idx 0) and box02 (idx 1) textures via their texfaces
+    // table. NewFireBall.I3D's texture[0] is the warm-orange 4×4 atlas;
+    // texture[1] (if present) is the spark sprite. Pre-release picks
+    // these via GetObject(0)/GetObject(1) at register time.
+    auto resolve_subobj_tex = [&](int32_t obj_idx, const char* tag) -> TTextureHandle {
+        const int32_t slot = FireBallSubObjTextureSlot(img3d, obj_idx);
+        const int32_t actual = (slot >= 0 && slot < num_tex) ? slot : 0;
+        S3DTex tex = {};
+        img3d->GetTexture(actual, &tex);
+        log_info("[fireball]   %s sub-obj=%d -> texture slot=%d handle=%u "
+                 "w=%u h=%u frames=%d",
+                 tag, obj_idx, actual, tex.htexture,
+                 tex.desc.width, tex.desc.height, tex.numframes);
+        return tex.htexture;
+    };
+    fb->asset_.box01_tex = resolve_subobj_tex(kFireBallObjBox01, "box01(ball/atlas)");
+    fb->asset_.box02_tex = resolve_subobj_tex(kFireBallObjBox02, "box02(spark)");
+
+    if (fb->asset_.box01_tex == kInvalidTexture)
+    {
+        log_error("[fireball] SpawnForTest: box01 texture unresolved — port broken");
+        delete fb;
+        return nullptr;
+    }
+    if (fb->asset_.box02_tex == kInvalidTexture)
+        fb->asset_.box02_tex = fb->asset_.box01_tex;   // safe fallback (atlas has warm cells)
+
+    // Harness aim: random horizontal byte-angle (in-game caller would
+    // supply via TSpell::Timer + GetAngle()).
+    fb->aim_angle_ = random(0, 255);
+
+    // Mirror TFireBallAnimator::Initialize z-lift (:511-514): nudge the
+    // effect +50 wu on z so the ball grows above the caster.
+    S3DPoint p = IntPos(fb);
+    p.z += int32_t(kFireBallSpawnLiftZ);
+    SetIntPos(fb, p);
+    S3DPoint direction{};ConvertToVector(fb->aim_angle_,480,direction);
+    S3DPoint destination{p.x+direction.x,p.y+direction.y,p.z};
+    fb->SetProjectileEndpoints(p,destination);
+
+    log_info("[fireball] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "aim=%d box01_tex=%u box02_tex=%u "
+             "fly_range_ticks=%d",
+             asset_path, fb->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             fb->aim_angle_,
+             fb->asset_.box01_tex, fb->asset_.box02_tex,
+             kFireBallFlyRangeTicks);
+    return fb;
+}
+
+void TFireBallEffect::TickAndSubmit(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24 Hz sim-tick accumulator (family pattern). Each drained tick
+    // runs the full state machine + animator + spark integration once.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ + 1e-7 >= kFireBallSimTickMs)
+        {
+            sim_accum_ms_ -= double(kFireBallSimTickMs);
+            StepMissilePulse();
+            StepAnimate();
+            if (!alive_)
+                break;
+        }
+    }
+
+    // Submit billboards every render frame (the sim cadence is the
+    // simulation; rendering reads the latest tick state). The box01
+    // ball/glow/trail/burst + box02 spark quads all go through the
+    // FB pipeline.
+    SubmitBillboards(debug_mode);
+
+    // Spell-carried point light (forensics §9). Re-added each frame
+    // while alive (LS-pipeline contract: ClearPointLights() at the top
+    // of VfxTest::Render, effects rebuild per frame).
+    if (alive_)
+    {
+        const S3DPoint p = IntPos(*this);
+        const float wx = float(p.x) + fireball_.pos.X;
+        const float wy = float(p.y) + fireball_.pos.Y;
+        const float wz = float(p.z) + fireball_.pos.Z;
+        // Intensity tracks the ball's glow flicker (×1.0..1.75 jitter
+        // re-rolled each tick) so the warm scene light visibly pulses
+        // with the ball's flame flicker.
+        const float intensity = kFireBallLightInt * fireball_.glow;
+        Renderer->AddPointLight(wx, wy, wz,
+                                kFireBallLightRadiusWu,
+                                light_color_.X, light_color_.Y, light_color_.Z,
+                                intensity);
+    }
+}
+
+bool TFireBallEffect::EnsureAuthoredQuad() const
+{
+    if(asset_.has_box01_quad&&asset_.box01_tex!=kInvalidTexture)return true;
+    auto* mesh=dynamic_cast<T3DImagery*>(imagery);
+    if(!mesh||mesh->NumObjects()<1||mesh->NumObjVerts(0)!=4||mesh->NumObjFaces(0)!=2)return false;
+    S3DFace faces[2]{};int32_t starts[9]{},counts[9]{};mesh->GetObjFaces(0,faces,starts,counts);
+    // The shared quad pipeline already preserves this original diagonal.
+    if(faces[0].v1!=2||faces[0].v2!=0||faces[0].v3!=3||
+       faces[1].v1!=1||faces[1].v2!=3||faces[1].v3!=0)return false;
+    mesh->GetObjVerts(0,asset_.box01_vertices,0,0,ERender3DVertex::Vertex);
+    const int32_t slot=FireBallSubObjTextureSlot(mesh,0);
+    if(slot<0||slot>=mesh->NumTextures())return false;
+    S3DTex texture{};mesh->GetTexture(slot,&texture);
+    asset_.box01_argb4444=RetailMeshTextureLighting(texture.desc.pixelFormat)==3;
+    asset_.box01_tex=texture.htexture;asset_.has_box01_quad=texture.htexture!=kInvalidTexture;
+    return asset_.has_box01_quad;
+}
+
+bool TFireBallEffect::EnsureAuthoredSpark() const
+{
+    if(asset_.has_box02_quad&&asset_.box02_tex!=kInvalidTexture)return true;
+    auto* mesh=dynamic_cast<T3DImagery*>(imagery);
+    if(!mesh||mesh->NumObjects()<2||mesh->NumObjVerts(1)!=4||mesh->NumObjFaces(1)!=2)return false;
+    S3DFace faces[2]{};int32_t starts[9]{},counts[9]{};mesh->GetObjFaces(1,faces,starts,counts);
+    if(faces[0].v1!=2||faces[0].v2!=0||faces[0].v3!=3||
+       faces[1].v1!=1||faces[1].v2!=3||faces[1].v3!=0)return false;
+    mesh->GetObjVerts(1,asset_.box02_vertices,0,0,ERender3DVertex::Vertex);
+    const int32_t slot=FireBallSubObjTextureSlot(mesh,1);
+    if(slot<0||slot>=mesh->NumTextures())return false;
+    S3DTex texture{};mesh->GetTexture(slot,&texture);
+    asset_.box02_argb4444=RetailMeshTextureLighting(texture.desc.pixelFormat)==3;
+    asset_.box02_tex=texture.htexture;asset_.has_box02_quad=texture.htexture!=kInvalidTexture;
+    return asset_.has_box02_quad;
+}
+
+void TFireBallEffect::SubmitAuthoredSpark(const SFireBallSpark& spark,EFxDebugMode debug_mode) const
+{
+    if(!Renderer||!spark.used||!EnsureAuthoredSpark())return;
+    std::array<hmm_vec3,4> authored{};std::array<std::array<float,2>,4> uv{};
+    for(int i=0;i<4;++i)
+    {
+        authored[size_t(i)]=asset_.box02_vertices[i].pos;
+        uv[size_t(i)]={asset_.box02_vertices[i].tu,asset_.box02_vertices[i].tv};
+    }
+    const float scale=spark.scale*(spark.flicker_status?kFireBallSparkFlicker:1.0f);
+    const auto quad=native_domain_ ? fireball_quad::BuildSparkNativeD3D(authored,uv,scale,spark.pos) :
+        fireball_quad::BuildSpark(authored,uv,scale,spark.pos);
+    SQuadDrawItem item{};
+    for(int i=0;i<4;++i)
+    {
+        item.world_pos[i][0]=quad.position[size_t(i)].X;
+        item.world_pos[i][1]=quad.position[size_t(i)].Y;
+        item.world_pos[i][2]=quad.position[size_t(i)].Z;
+        item.uv[i][0]=quad.uv[size_t(i)][0];item.uv[i][1]=quad.uv[size_t(i)][1];
+    }
+    item.retail_argb4444=asset_.box02_argb4444;item.retail_software_projection=native_domain_;
+    item.key.texture=asset_.box02_tex;item.key.blend=uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);item.light_mode=EFxLightMode::Unlit;
+    item.debug_mode=debug_mode;Renderer->SubmitFxQuad(item);
+}
+
+void TFireBallEffect::SubmitAuthoredCard(const SFireBallData& pose,int32_t frame,bool glow,EFxDebugMode debug_mode) const
+{
+    if(!Renderer||!EnsureAuthoredQuad())return;
+    std::array<hmm_vec3,4> authored{};
+    for(int i=0;i<4;++i)authored[size_t(i)]=asset_.box01_vertices[i].pos;
+    const float scale=glow?pose.scale*pose.glow:pose.scale;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) { const auto p=IntPos(*this); BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(*this))); }
+    const auto quad=fireball_quad::Build(authored,frame,glow?0:int(pose.rotation),IntFacing(*this),scale,pose.pos,owner);
+    SQuadDrawItem item{};
+    for(int i=0;i<4;++i)
+    {
+        item.world_pos[i][0]=quad.position[size_t(i)].X;
+        item.world_pos[i][1]=quad.position[size_t(i)].Y;
+        item.world_pos[i][2]=quad.position[size_t(i)].Z;
+        item.uv[i][0]=quad.uv[size_t(i)][0];item.uv[i][1]=quad.uv[size_t(i)][1];
+    }
+    item.retail_argb4444=asset_.box01_argb4444;item.retail_software_projection=native_domain_;
+    item.key.texture=asset_.box01_tex;item.key.blend=uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);item.debug_mode=debug_mode;
+    item.light_mode=EFxLightMode::Unlit;
+    Renderer->SubmitFxQuad(item);
+}
+
+void TFireBallEffect::SubmitAuthoredTrail(EFxDebugMode debug_mode) const
+{
+    // Retail511950: history ends at the newest repeated position. Draw all
+    // old glow cards back-to-front, then all old body cards. Slot0 is the
+    // current head record, not an extra visible trail sprite.
+    int32_t start=kFireBallTrailSize;
+    for(int32_t i=kFireBallTrailSize-1;i>=1;--i)
+    {
+        if(trail_[i].pos.X==trail_[0].pos.X&&trail_[i].pos.Y==trail_[0].pos.Y&&
+           trail_[i].pos.Z==trail_[0].pos.Z)break;
+        start=i;
+    }
+    const S3DPoint owner=IntPos(*this);
+    for(int pass=0;pass<2;++pass)
+        for(int32_t i=kFireBallTrailSize-1;i>=start;--i)
+        {
+            SFireBallData local=trail_[i];
+            local.pos.X-=float(owner.x);local.pos.Y-=float(owner.y);local.pos.Z-=float(owner.z);
+            SubmitAuthoredCard(local,pass==0?glow_frame_:int32_t(local.frame),pass==0,debug_mode);
+        }
+}
+
+void TFireBallEffect::SubmitAuthoredBurst(EFxDebugMode debug_mode) const
+{
+    if(!Renderer||!EnsureAuthoredQuad())return;
+    std::array<hmm_vec3,4> authored{};
+    for(int i=0;i<4;++i)authored[size_t(i)]=asset_.box01_vertices[i].pos;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) { const auto p=IntPos(*this); BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(*this))); }
+    for(const auto& burst:burst_) {
+        if(!burst.used)continue;
+        const auto glow=fireball_quad::BuildBurstGlow(authored,glow_frame_,burst.scale*burst.glow,burst.pos,owner);
+        SQuadDrawItem item{};
+        for(int i=0;i<4;++i) {
+            const auto& p=glow.position[size_t(i)];
+            item.world_pos[i][0]=p.X;item.world_pos[i][1]=p.Y;item.world_pos[i][2]=p.Z;
+            item.uv[i][0]=glow.uv[size_t(i)][0];item.uv[i][1]=glow.uv[size_t(i)][1];
+        }
+        item.key.texture=asset_.box01_tex;item.key.blend=uint8_t(EFxBlend::Alpha);
+        item.retail_argb4444=asset_.box01_argb4444;item.retail_software_projection=native_domain_;
+        item.debug_mode=debug_mode;Renderer->SubmitFxQuad(item);
+        SubmitAuthoredCard(burst,int(burst.frame),false,debug_mode);
+    }
+}
+
+void TFireBallEffect::SubmitBillboards(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || asset_.box01_tex == kInvalidTexture)
+        return;
+
+    // Original512150 dispatches sparks before the state-specific cards.
+    for(const auto& spark:sparks_)SubmitAuthoredSpark(spark,debug_mode);
+
+    if (state_ == 0 /*LAUNCH*/ || state_ == 1 /*FLY*/)
+    {
+        // --- Glow (RenderFireBallGlow — missileeffect.cpp:1022-1057).
+        // box01 quad with atlas cell = glow_frame, scale = scale * glow.
+        // The original glow has NO per-instance spin (only the static
+        // -30°/+60° tilt + facing — :1039-1041), so we leave its
+        // rotation_rad at facing_rad with no rotation term.
+        SubmitAuthoredCard(fireball_,glow_frame_,true,debug_mode);
+
+        // --- Mesh trail (RenderFireBallTrail — :871-973). The original
+        // applies `RotateZ(-trail[i].rotation * TORADIAN)` PER SLOT
+        // (:948), where trail[i].rotation is the stale snapshot of the
+        // ball's rotation at the moment that slot was recorded (via
+        // `trail[0] = fireball` at :632). That stale-spin propagation is
+        // what gives the trail its tumbling streak look — each card sits
+        // at a frozen angle in the WorldXY plane, NOT camera-facing.
+        SubmitAuthoredTrail(debug_mode);
+
+        // --- Ball (RenderFireBall — :975-1020). Per-instance spin from
+        // the ball-head accumulator (`fireball_.rotation`, +2°/tick).
+        SubmitAuthoredCard(fireball_,int32_t(fireball_.frame),false,debug_mode);
+    }
+    else /* state_ == MISSILE_EXPLODE */
+    {
+        // EXPLODE branch (:1075-1079): trail, burst, ring. The trail
+        // keeps draining at the frozen stale-spin angles; ring is drawn
+        // after the burst through the same ordered quad queue.
+        SubmitAuthoredTrail(debug_mode);
+
+        SubmitAuthoredBurst(debug_mode);
+    }
+}
+
+void TFireBallEffect::SubmitWorldRing(EFxDebugMode debug_mode)
+{
+    if(!Renderer || !ring_active_ || ring_done_)return;
+    if(asset_.ring_vertices.empty()) {
+        auto* image=dynamic_cast<T3DImagery*>(imagery);
+        if(!image || image->NumObjects()<3 || image->NumObjVerts(2)!=96 || image->NumObjFaces(2)!=144)return;
+        asset_.ring_vertices.resize(96);asset_.ring_faces.resize(144);
+        image->GetObjVerts(2,asset_.ring_vertices.data(),0,0,ERender3DVertex::Vertex);
+        int32_t starts[9]{},counts[9]{};
+        image->GetObjFaces(2,asset_.ring_faces.data(),starts,counts);
+        // Original ring is untextured and draws every authored cylinder face.
+        if(counts[0]!=144) { asset_.ring_vertices.clear();asset_.ring_faces.clear();return; }
+    }
+    const float native_z=RetailSoftwareOwnerZ(int32_t(ring_pos_.Z));
+    for(const auto& face:asset_.ring_faces) {
+        SQuadDrawItem item{};item.corner_count=3;item.per_corner_color=true;
+        item.key.texture=Renderer->WhiteTextureHandle();item.key.blend=uint8_t(EFxBlend::Alpha);
+        item.retail_software_projection=native_domain_;item.debug_mode=debug_mode;
+        const int indices[3]={face.v1,face.v2,face.v3};
+        for(int corner=0;corner<3;++corner) {
+            const int index=indices[corner];if(index<0||index>=96)return;
+            const auto& p=asset_.ring_vertices[size_t(index)].pos;
+            item.world_pos[corner][0]=p.X*ring_scale_+ring_pos_.X;
+            item.world_pos[corner][1]=p.Y*ring_scale_+ring_pos_.Y;
+            const float z=p.Z*ring_scale_+native_z;
+            item.world_pos[corner][2]=native_domain_?z:z*1.4600000381469727f;
+            const uint32_t color=fireball_ring::PackedColor(index/24,ring_scale_,y_ring_palette_);
+            item.corner_color_rgba[corner][0]=float((color>>16)&255)/255.0f;
+            item.corner_color_rgba[corner][1]=float((color>>8)&255)/255.0f;
+            item.corner_color_rgba[corner][2]=float(color&255)/255.0f;
+            item.corner_color_rgba[corner][3]=float(color>>24)/255.0f;
+        }
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
+#if 0
+// REFERENCE — in-game `TMissileEffect::Pulse` impact-detection block.
+// Historical snapshot reference only. Active StepMissilePulse now uses the
+// original-executable-verified missilestate controller and actual map ground,
+// character, source/target and enemy inputs. The selected preview has an
+// explicit empty-character/plane fixture; it does not alter speed or motion.
+// Preserve this older spelling for comparison, not as unwired runtime code.
+case 1 /* MISSILE_FLY */:
+{
+    bool explode = false;
+    range_--;
+    if (range_ <= 0)
+        explode = true;
+    if (bits & MOVE_BLOCKED)
+        explode = true;
+    else
+    {
+        PTCharacter invoker = spell ? (PTCharacter)spell->GetInvoker() : nullptr;
+        for (TMapIterator i(nullptr, CHECK_NOINVENT, OBJSET_CHARACTER); i; i++)
+        {
+            PTCharacter chr = (PTCharacter)i.Item();
+            if (chr == invoker)            continue;
+            if (chr->IsDead())             continue;
+            if (this->Distance(chr) > 32)  continue;
+            if (invoker && !invoker->IsEnemy(chr)) continue;
+            explode = true;
+            break;
+        }
+    }
+    if (explode)
+    {
+        flags = (flags & ~OF_MOVING & ~OF_WEIGHTLESS) | OF_IMMOBILE;
+        state_ = 2 /*MISSILE_EXPLODE*/;
+    }
+    break;
+}
+#endif
+
+// *************************************************************************
+// * Ice family bespoke ports — wave-bespoke-03-ice                         *
+// *************************************************************************
+//
+// Three sister effects: I20 (TIceEffect stub — no body), I21
+// (TIceBoltEffect — composite freeze beam), I22 (TIcedEffect — frozen
+// overlay + shatter). Faithful direct ports of the snapshot animator
+// bodies at src/effect_old.cpp:8015-8688 (I21) and :8749-8953 (I22).
+// Only render API calls change (Renderer->SubmitFxBillboard); per-tick
+// math, variable names, constants, and pass order preserved.
+//
+// Forensics: docs/vfx/forensics/I21_TIceBoltEffect.md,
+//            docs/vfx/forensics/I22_TIcedEffect.md.
+
+// --- I20 TIceEffect stub ------------------------------------------------
+// Brief: "needs forensics doc first — DO NOT port code blind". Snapshot
+// has only class declarations (effect.h:607-615), no Animate/Render
+// body anywhere in src/effect_old.cpp or src/effectcomp.cpp. SpawnForTest
+// returns nullptr + log_warn; harness draws nothing. Re-enable once a
+// forensics doc exists. Status: BLOCKED.
+TIceEffect_Bespoke* TIceEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& /*origin*/)
+{
+    log_warn("[ice/I20] SpawnForTest: BLOCKED — no snapshot body and no "
+             "forensics doc; harness draws nothing for this id. "
+             "See wave-bespoke-03-ice brief: 'needs forensics doc first — "
+             "DO NOT port code blind'.");
+    return nullptr;
+}
+
+void TIceEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode /*debug_mode*/)
+{
+    // No-op (paired with the nullptr SpawnForTest above).
+}
+
+// --- IceBolt: original stationary beam, animator Pulse4eba00/Render4ebea0 ---
+
+TIceBoltEffect_Bespoke::~TIceBoltEffect_Bespoke()
+{
+    if(Renderer)for(const auto& part:parts_)if(part.mesh)Renderer->ReleaseMeshAssetRef(part.mesh);
+}
+
+bool TIceBoltEffect_Bespoke::BindMeshes()
+{
+    auto* image=dynamic_cast<T3DImagery*>(imagery);
+    if(!Renderer||!image||image->NumObjects()!=7||image->NumTextures()!=3)return false;
+    constexpr int slots[7]={0,0,0,0,1,2,3};
+    constexpr int vertex_counts[7]={24,24,24,24,4,26,26};
+    constexpr int index_counts[7]={72,72,72,72,6,72,72};
+    for(int i=0;i<7;++i) {
+        auto& part=parts_[i];if(part.mesh)continue;
+        std::vector<SMeshVertex> vertices;std::vector<uint16_t> indices;
+        if(!ExtractSubMeshTextureSlot(image,i,slots[i],vertices,indices)||
+           int(vertices.size())!=vertex_counts[i]||int(indices.size())!=index_counts[i])return false;
+        S3DObj object{};image->GetObject(i,&object);image->GetMaterial(object.material,&part.material);
+        TTextureHandle texture=Renderer->WhiteTextureHandle();part.lighting=4;
+        if(slots[i]) {
+            S3DTex tex{};image->GetTexture(slots[i]-1,&tex);
+            if(tex.htexture==kInvalidTexture||tex.numframes!=1||RetailMeshTextureLighting(tex.desc.pixelFormat)!=3)return false;
+            texture=tex.htexture;part.lighting=3;
+        }
+        const uint64_t key=0x4943454200000000ull^(uint64_t(uint32_t(image->ImageryId()))<<16)^uint64_t(i);
+        part.mesh=Renderer->RegisterMeshAsset(key,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()),texture);
+        if(!part.mesh)return false;Renderer->AddMeshAssetRef(part.mesh);
+        if(part.lighting==4){part.vertices=std::move(vertices);part.indices=std::move(indices);}
+    }
+    return true;
+}
+
+TIceBoltEffect_Bespoke* TIceBoltEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* image=LoadWaterImagery("Magic\\icebolt.I3D","icebolt");if(!image)return nullptr;
+    auto* bolt=new TIceBoltEffect_Bespoke(image);
+    S3DPoint anchor=origin;anchor.z+=50;SetIntPos(bolt, anchor);
+    bolt->SetMapIndex(MapPane.MakeIndex());bolt->ActivateComponents();
+    bolt->icebolt_core::State::Initialize([](int low,int high){return random(low,high);});
+    if(!bolt->BindMeshes()) {delete bolt;return nullptr;}
+    log_info("[icebolt] original stationary beam source=%d,%d,%d length=500 face=0",anchor.x,anchor.y,anchor.z);
+    return bolt;
+}
+
+bool TIceBoltEffect_Bespoke::SetBeamEndpoints(const S3DPoint& source,const S3DPoint& destination)
+{
+    if(frameon_!=0)return false;
+    const double dx=double(destination.x)-source.x,dy=double(destination.y)-source.y;
+    const double distance=std::sqrt(dx*dx+dy*dy);if(distance<=0)return false;
+    // Explicit preview world boundary at the requested planar endpoint. Original
+    // Initialize tests one ten-unit step at a time and caps the march at50 steps.
+    angle_=ConvertToFacing(source,destination);
+    length_=icebolt_core::MarchLength(source.x,source.y,uint8_t(angle_),[&](int32_t x,int32_t y) {
+        const double qx=double(x)-source.x,qy=double(y)-source.y;
+        return qx*qx+qy*qy>=distance*distance;
+    });
+    SetIntFacing(*this, angle_);SetIntPos(*this, source);return true;
+}
+
+void TIceBoltEffect_Bespoke::Pulse()
+{
+    if(alive_) {icebolt_core::State::Pulse([](int low,int high){return random(low,high);});alive_=frameon_<120;}
+    SetCommandDone(false);if(!alive_)KillThisEffect();TEffect::Pulse();
+}
+
+void TIceBoltEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode)
+{
+    constexpr double step=1.0/24.0;sim_accum_+=TTime::DeltaTime();
+    while(alive_&&sim_accum_+1e-9>=step) {
+        sim_accum_-=step;icebolt_core::State::Pulse([](int low,int high){return random(low,high);});alive_=frameon_<120;
+    }
+}
+
+void TIceBoltEffect_Bespoke::SubmitWorldMeshes_BESPOKE(EFxDebugMode)
+{
+    if(!alive_||!BindMeshes())return;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) {const auto p=IntPos(*this);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(*this)));}
+    icebolt_core::Render(*this,uint8_t(IntFacing(*this)),[&](const icebolt_core::Packet& packet) {
+        const auto& part=parts_[packet.object];hmm_mat4 world;MtxMultiply(&world,&packet.local,&owner);
+        SHelperMeshSubmit submit{};submit.mesh=part.mesh;submit.retail_source_alpha=true;
+        submit.retail_lighting=part.lighting;submit.retail_software_projection=native_domain_;
+        submit.retail_normal_z_scale=native_domain_?1.0f:1.0f/WORLD3D_Z_SCALE;
+        for(int row=0;row<4;++row)for(int col=0;col<4;++col)submit.world[row*4+col]=world.Elements[col][row];
+        const auto& material=part.material.matdesc;
+        std::memcpy(submit.diffuse,&material.diffuse,4*sizeof(float));
+        std::memcpy(submit.ambient,&material.ambient,4*sizeof(float));
+        std::memcpy(submit.specular,&material.specular,4*sizeof(float));
+        std::memcpy(submit.emissive,&material.emissive,4*sizeof(float));submit.power=material.power;
+        // Identical sort depth preserves the original RenderObject sequence.
+        submit.sort_depth=float(IntPos(*this).z);
+        if(part.lighting==4 && Renderer->UsesRetailSoftwareMeshLighting()) {
+            // Actual untextured raster uses trunc(max of the triangle's three
+            // projected depths) for every covered pixel, even with ZWRITE=0.
+            // Keep source triangle order; textured packets remain whole draws.
+            submit.retail_flat_depth=true;submit.index_count=3;
+            for(size_t face=0;face<part.indices.size();face+=3) {
+                float farthest=-1.0e30f;
+                for(int corner=0;corner<3;++corner) {
+                    const auto& v=part.vertices[part.indices[face+corner]];
+                    hmm_vec3 local={v.pos[0],v.pos[1],v.pos[2]},point;MtxTransform(&world,&local,&point);
+                    const float offset=native_domain_
+                        ? -.8748177289962769f*(point.X+point.Y)-.7142857909202576f*point.Z
+                        : -.8660254037844386f*(point.X+point.Y)-.5f*point.Z;
+                    if(offset>farthest)farthest=offset;
+                }
+                submit.index_offset=int(face);submit.retail_flat_depth_offset=farthest;
+                Renderer->SubmitHelperMesh(submit);
+            }
+        } else Renderer->SubmitHelperMesh(submit);
+    });
+}
+
+// --- I22 TIcedEffect bespoke -------------------------------------------
+//
+// FAITHFUL DIRECT PORT of TIcedAnimator (snapshot effect_old.cpp:
+// 8749-8953). 3-phase state machine: HOLD (240 ticks reveal facets) →
+// SHATTER (seed 30 chunks) → TUMBLE/BOUNCE (gravity + bounce death).
+// Posted by I21 (and retail-only TStormAnimator); harness runs it
+// standalone — no victim coupling (icedchar = nullptr; SetParalize,
+// IsIced, IsDead, Stop branches are guarded out for sector-less preview;
+// lifecycle ticks purely on frameon).
+//
+// Engine adaptations:
+//   - Render path swaps RenderObject(obj) for SubmitFxBillboard. Phase A
+//     (HOLD): draws min(frameon*4, 50) face billboards stacked at the
+//     origin (snapshot transforms cycle facets via D3DMATRIXRotateZ).
+//     Phase B+C (SHATTER+TUMBLE): one billboard per live chunk at p[i]
+//     world position.
+//   - 24 Hz sim-tick gate (family pattern). Per-tick math (gravity,
+//     bounce, rotation) runs once per accumulated 1/24 s.
+//   - icedchar lifecycle paths (SetParalize/Stop/IsDead) guarded out;
+//     lifecycle is "elapsed frameon" only.
+
+namespace {
+
+constexpr const char* kIcedImageryPath = "Magic\\iced.I3D";
+
+// Snapshot constants. Variable names follow effect_old.cpp:8715-8721.
+constexpr float kIcedBouncePlane    = 16.0f;   // p.z <= 16 (snapshot :8876)
+constexpr float kIcedBounceLift     = 20.0f;   // p.z = 20 (:8878)
+constexpr float kIcedBounceVelMul   = -0.5f;   // v.z *= -0.5 (:8879)
+constexpr float kIcedBounceSpinMul  = 2.0f;    // w *= 2 (:8880-8882)
+constexpr int32_t kIcedRowsPerSide  = 5;       // chunk z-row spread (:8819: i/6 implies ~5 rows)
+constexpr float kIcedRowSpacingZ    = 25.0f;   // :8819 row spacing 25 wu
+constexpr float kIcedFacetSizeWu    = 24.0f;   // single-facet billboard size
+
+}   // namespace
+
+TIcedEffect_Bespoke* TIcedEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                              const char* asset_override)
+{
+    auto* img = LoadWaterImagery(asset_override ? asset_override : kIcedImageryPath, "Iced");
+    if (!img || img->NumObjects() != 50 || img->NumTextures() != 2) return nullptr;
+    auto* iced = new TIcedEffect_Bespoke(img);
+    SetIntPos(iced, origin);
+    iced->SetMapIndex(MapPane.MakeIndex());
+    iced->ActivateComponents();
+    iced->parts_.resize(50);
+    for (int j=0; j<50; ++j) {
+        S3DObj object{}; S3DTex texture{};
+        img->GetObject(j,&object);
+        if (object.material<0 || object.material>=2) { delete iced; return nullptr; }
+        auto& part=iced->parts_[j];
+        img->GetMaterial(object.material,&part.material);
+        img->GetTexture(object.material,&texture);
+        if (texture.htexture==kInvalidTexture || texture.numframes!=1 ||
+            !ExtractSubMeshTextureSlot(img,j,object.material+1,part.vertices,part.indices)) {
+            delete iced; return nullptr;
+        }
+        part.texture=texture.htexture;
+    }
+    iced->frameon_=0;
+    // Original4eca7c..90 multiplies the integer by a binary64 angle constant.
+    iced->angle_=float(double(random(0,359))*0.017453292519943295);
+    iced->donebouncing_=0;
+    log_info("[iced] actual50meshes owner-policy=stationary-live-victim origin=(%d,%d,%d) angle=%.9g",
+             origin.x,origin.y,origin.z,iced->angle_);
+    return iced;
+}
+
+void TIcedEffect_Bespoke::Advance(double seconds)
+{
+    if (!std::isfinite(seconds) || seconds<=0.0) return;
+
+    // --- Update: port of TIcedAnimator::Animate (effect_old.cpp:
+    // 8777-8891), framerate-independent via 24 Hz sim-tick gate.
+    if (alive_)
+    {
+        sim_accum_ms_ += seconds * 1000.0;
+        while (sim_accum_ms_ + 1e-9 >= kIcedSimTickMs)
+        {
+            sim_accum_ms_ -= double(kIcedSimTickMs);
+
+            frameon_++;   // :8783
+
+            // Victim-coupling lifecycle (:8785-8797): all branches are
+            // guarded out for the harness — no icedchar, no Stop(), no
+            // IsIced/IsDead. Lifecycle is "elapsed frameon" only.
+
+            // Phase B: SHATTER seed (snapshot :8798-8847, frameon==DURATION).
+            if (frameon_ == kIcedDuration)
+            {
+                // icedchar SetParalize(false) (:8800-8804) guarded out.
+                // Snapshot :8807-8846 — seed MAX_ICED_CHUNKS in 4
+                // quadrants × 5 rows pattern. Same RNG sequence.
+                int32_t a = 0, b = 0;
+                for (int32_t i = 0; i < MAX_ICED_CHUNKS; ++i)
+                {
+                    const int32_t c = (a ? 1 : -1);              // :8810
+                    const int32_t d = (b ? 1 : -1);              // :8811
+                    SIcedChunk& ch = chunks_[i];
+
+                    // velocity (:8813-8815)
+                    ch.vel.X = float(c * random(5, 10) / 10.0
+                                     + random(-5, 5) / 10.0);
+                    ch.vel.Y = float(d * random(5, 10) / 10.0
+                                     + random(-5, 5) / 10.0);
+                    ch.vel.Z = float(random(0, 10) / 10.0);
+                    // position (:8817-8819)
+                    ch.pos.X = float(c * random(20, 40) + random(-20, 20));
+                    ch.pos.Y = float(d * random(20, 40) + random(-20, 20));
+                    ch.pos.Z = float(int32_t(i / 6) * 25);
+                    // angular velocity (:8821)
+                    ch.ang.X = ch.ang.Y = float(random(0, 25) / 100.0);
+                    // angular position (:8826: t.z = atan2(v.y, v.x))
+                    // Native FPATAN widens the stored float inputs before rounding.
+                    ch.rot.Z = float(std::atan2(double(ch.vel.Y), double(ch.vel.X)));
+                    // scale (:8828-8839)
+                    if (random(0, 1))
+                    {
+                        ch.scl.X = float(random(25, 75) / 100.0);
+                        ch.scl.Y = float(random(25, 75) / 100.0);
+                        ch.scl.Z = float(random(25, 75) / 100.0);
+                    }
+                    else
+                    {
+                        ch.scl.X = float(random(10, 15) / 100.0);
+                        ch.scl.Y = float(random(10, 15) / 100.0);
+                        ch.scl.Z = float(random(10, 15) / 100.0);
+                    }
+                    // life (bounces left, :8841)
+                    ch.life = random(2, 3);
+                    // separator (:8843-8845)
+                    a = 1 - a;
+                    if (a)
+                        b = 1 - b;
+                }
+            }
+
+            // Phase C: TUMBLE+BOUNCE (snapshot :8848-8886, frameon>DURATION).
+            if (frameon_ > kIcedDuration)
+            {
+                donebouncing_ = 1;
+                for (int32_t i = 0; i < MAX_ICED_CHUNKS; ++i)
+                {
+                    SIcedChunk& ch = chunks_[i];
+                    if (ch.life == 0)
+                        continue;
+                    donebouncing_ = 0;
+                    ch.pos.X += ch.vel.X;                        // :8856
+                    ch.pos.Y += ch.vel.Y;                        // :8857
+                    ch.pos.Z += ch.vel.Z;                        // :8858
+                    ch.vel.Z -= kIcedChunkGravity;               // :8859
+                    ch.rot.X += ch.ang.X;                        // :8860
+                    ch.rot.Y += ch.ang.Y;                        // :8861
+                    ch.rot.Z += ch.ang.Z;                        // :8862
+                    // wrap angles 0..2π (:8863-8874)
+                    auto wrap = [](float& r) {
+                        if (r > float(M_2PI)) r -= float(M_2PI);
+                        if (r < 0.0f)         r += float(M_2PI);
+                    };
+                    wrap(ch.rot.X);
+                    wrap(ch.rot.Y);
+                    wrap(ch.rot.Z);
+                    // bounce (:8876-8884)
+                    if (ch.pos.Z <= kIcedBouncePlane)
+                    {
+                        ch.pos.Z = kIcedBounceLift;
+                        ch.vel.Z *= kIcedBounceVelMul;
+                        ch.ang.X *= kIcedBounceSpinMul;
+                        ch.ang.Y *= kIcedBounceSpinMul;
+                        ch.ang.Z *= kIcedBounceSpinMul;
+                        ch.life--;
+                    }
+                }
+            }
+
+            if (frameon_==239 || frameon_==240 || frameon_==241)
+                log_info("[iced-runtime-phase] frame=%d alive=1 rng_draws=%llu", frameon_, static_cast<unsigned long long>(RandomDraws()));
+
+            // Self-destruct (snapshot :8887-8890).
+            if (donebouncing_)
+            {
+                alive_ = false;
+                log_info("[iced-runtime-phase] frame=%d alive=0 rng_draws=%llu", frameon_, static_cast<unsigned long long>(RandomDraws()));
+                break;
+            }
+        }
+    }
+
+}
+
+TIcedEffect_Bespoke::~TIcedEffect_Bespoke()
+{
+    if (Renderer) for (const auto& part : parts_) if (part.mesh) Renderer->ReleaseMeshAssetRef(part.mesh);
+}
+
+void TIcedEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_=enabled;
+    const auto p=IntPos(*this);
+    if (enabled) BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(IntFacing(*this)));
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Iced victim=stationary-live",int(enabled));
+}
+
+void TIcedEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !alive_ || debug_mode!=EFxDebugMode::Normal) return;
+    auto* img=dynamic_cast<T3DImagery*>(GetImagery());
+    if (!img) return;
+    const auto& owner=native_domain_ ? native_owner_ : Transform().Matrix();
+    auto submit=[&](int index,const hmm_mat4& local) {
+        const auto& part=parts_[index];
+        if (!part.mesh) {
+            const uint64_t key=0x4943454400000000ull ^ (uint64_t(uint32_t(img->ImageryId()))<<16) ^ uint64_t(index);
+            part.mesh=Renderer->RegisterMeshAsset(key,part.vertices.data(),int32_t(part.vertices.size()),
+                part.indices.data(),int32_t(part.indices.size()),part.texture);
+            if (part.mesh) Renderer->AddMeshAssetRef(part.mesh);
+        }
+        if (!part.mesh) return;
+        hmm_mat4 world{}; MtxMultiply(&world,&local,&owner);
+        SHelperMeshSubmit draw{};
+        draw.mesh=part.mesh; draw.retail_lighting=3; draw.retail_positive_face_cull=true;
+        draw.retail_software_projection=native_domain_; draw.sort_depth=0.0f;
+        for (int row=0; row<4; ++row) for (int col=0; col<4; ++col) draw.world[row*4+col]=world.Elements[col][row];
+        const auto& m=part.material.matdesc;
+        std::memcpy(draw.diffuse,&m.diffuse,4*sizeof(float));
+        std::memcpy(draw.ambient,&m.ambient,4*sizeof(float));
+        std::memcpy(draw.specular,&m.specular,4*sizeof(float));
+        std::memcpy(draw.emissive,&m.emissive,4*sizeof(float)); draw.power=m.power;
+        Renderer->SubmitHelperMesh(draw);
+    };
+    if (frameon_<kIcedDuration) {
+        hmm_mat4 local{}; MtxClear(&local); MtxRotateZ(&local,angle_);
+        const int count=frameon_*4<50 ? frameon_*4 : 50;
+        for (int index=1; index<count; ++index) submit(index,local);
+    } else {
+        for (const auto& chunk : chunks_) {
+            if (chunk.life==0) continue;
+            hmm_mat4 local{}; MtxClear(&local); MtxScale(&local,&chunk.scl);
+            MtxRotateX(&local,chunk.rot.X); MtxRotateY(&local,chunk.rot.Y); MtxRotateZ(&local,chunk.rot.Z);
+            MtxTranslate(&local,&chunk.pos); submit(0,local);
+        }
+    }
+}
+
+void TIcedEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime());
+    Submit(debug_mode);
+}
+// --- end ice bespoke first-pass
+
+// *************************************************************************
+// * Magic family bespoke first-pass ports (wave-bespoke-04-aura-magic)     *
+// *************************************************************************
+//
+// Faithful direct ports of the snapshot animator bodies for M01/M03/M05/X09.
+// Translation rules (per task brief): per-tick math/variable names/constants
+// preserved from the snapshot; blend mode preserved AS WRITTEN
+// (SetAddBlendState -> AdditiveStraight; SetBlendState -> Alpha); 24Hz
+// sim-tick gate for framerate-independent motion (same pattern as B01).
+// First-pass renders mesh-based draws as billboards positioned at the
+// original sub-object pos/scl — verifies compile + boot + something draws.
+
+namespace {
+
+// ---- M01 / M03 / X09 share the lazy-load helper pattern ---------------------
+// Tries a list of candidate imagery paths in order (the snapshot animator
+// classes don't specify a canonical I3D — `Magic\\aura.i3d`, `Magic\\heal*.i3d`,
+// `Magic\\shield.i3d` are guesses pending forensics). Falls through to a
+// kInvalidTexture handle if nothing loads; the harness will still draw
+// nothing visibly but the effect compiles + boots.
+TTextureHandle TryLoadMagicTexture(const char* const* candidate_paths,
+                                   int32_t num_candidates,
+                                   float out_uv_rect[4],
+                                   const char* tag)
+{
+    for (int32_t i = 0; i < num_candidates; ++i)
+    {
+        const int32_t img_id = TObjectImagery::FindImagery(candidate_paths[i]);
+        if (img_id < 0)
+            continue;
+        TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+        if (!base)
+            continue;
+        T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+        if (!img3d)
+        {
+            TObjectImagery::FreeImagery(base);
+            continue;
+        }
+        // Lazy-mesh-init poke (mirror F01/B01/H04/X22): NumObjects() triggers
+        // the actual texture-slot population; NumTextures() alone doesn't.
+        (void)img3d->NumObjects();
+        const int32_t num_tex = img3d->NumTextures();
+        if (num_tex <= 0)
+            continue;
+        S3DTex tex = {};
+        img3d->GetTexture(0, &tex);
+        if (tex.htexture == kInvalidTexture)
+            continue;
+        out_uv_rect[0] = 0.0f;
+        out_uv_rect[1] = 0.0f;
+        out_uv_rect[2] = 1.0f;
+        out_uv_rect[3] = 1.0f;
+        log_info("[%s] resolved imagery='%s' tex=%u", tag,
+                 candidate_paths[i], tex.htexture);
+        return tex.htexture;
+    }
+    log_warn("[%s] no candidate imagery resolved (tried %d paths); will draw "
+             "untextured/invisible billboards (first-pass blocker note)",
+             tag, num_candidates);
+    return kInvalidTexture;
+}
+
+}   // namespace
+
+// =========================================================================
+// M01 — TAuraEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TAuraAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:3535-3667). The snapshot uses a TParticleSystem
+// emitting AURA_COUNT=100 particles randomly distributed across the
+// character's animator sub-objects. The harness has no live character,
+// so we collapse the per-frame emission onto a single emit-radius around
+// the effect's pos (preserving the random spread + Z-range + life span).
+// Per-tick scale decay (scl *= AURA_DEC=0.97) is preserved verbatim.
+// Render: AdditiveStraight (was SetAddBlendState).
+
+TAuraEffect_Bespoke* TAuraEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Imagery guess list (no forensics doc yet — aura* candidates).
+    static const char* kAuraCandidates[] = {
+        "Magic\\aura.i3d",
+        "Magic\\Aura.I3D",
+        "Magic\\flare.i3d",      // TFlareAnimator uses a similar emit pattern
+    };
+
+    // Spawn with no imagery (we resolve textures separately via TryLoad).
+    auto* aura = new TAuraEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(aura, origin);
+    aura->SetMapIndex(MapPane.MakeIndex());
+    aura->ActivateComponents();
+
+    aura->texture_ = TryLoadMagicTexture(kAuraCandidates,
+                                         int32_t(sizeof(kAuraCandidates) / sizeof(*kAuraCandidates)),
+                                         aura->uv_rect_, "aura");
+
+    aura->frame_  = 0;
+    aura->to_add_ = 0;
+    aura->alive_  = true;
+
+    log_info("[aura] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u",
+             aura->GetMapIndex(), origin.x, origin.y, origin.z, aura->texture_);
+    return aura;
+}
+
+void TAuraEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24Hz sim-tick gate for framerate-independent integration.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kAuraSimTickMs))
+        {
+            sim_accum_ms_ -= double(kAuraSimTickMs);
+
+            // Snapshot effect_old.cpp:3571-3575 — `to_add` ramps up/down
+            // bracketing the AURA_FRAME window.
+            ++frame_;
+            if (frame_ < kAuraFrameCap && to_add_ < kAuraAdd)
+                ++to_add_;
+            else if (frame_ >= kAuraFrameCap && to_add_ > 0)
+                --to_add_;
+
+            // Snapshot effect_old.cpp:3587-3636 — emit `to_add` new
+            // particles per tick. Without a character animator we emit
+            // around the effect's local origin (the snapshot picks a
+            // random sub-object and offsets by ±AURA_SPREAD).
+            for (int32_t i = 0; i < to_add_; ++i)
+            {
+                // Find a free slot
+                int32_t slot = -1;
+                for (int32_t k = 0; k < kAuraCount; ++k)
+                {
+                    if (!particles_[k].used)
+                    {
+                        slot = k;
+                        break;
+                    }
+                }
+                if (slot < 0)
+                    break;
+
+                SAuraParticle& p = particles_[slot];
+                p.used = true;
+                p.pos.X = float(random(-kAuraSpread, kAuraSpread));
+                p.pos.Y = float(random(-kAuraSpread, kAuraSpread));
+                p.pos.Z = float(random(-kAuraSpread, kAuraSpread));
+
+                const float scale = float(random(kAuraMinScl, kAuraMaxScl)) * 0.01f;
+                p.scl.X = p.scl.Y = p.scl.Z = scale;
+
+                // snapshot acc is unused for these single-tick particles;
+                // velocity is only the Z component (ascending aura motes).
+                p.vel.X = 0.0f;
+                p.vel.Y = 0.0f;
+                p.vel.Z = float(random(kAuraMinZ, kAuraMaxZ)) * 0.1f;
+
+                p.life_span = random(kAuraMinLife, kAuraMaxLife);
+            }
+
+            // Snapshot effect_old.cpp:3641-3651 — per-particle scale decay
+            // each tick. Combined with the inline integration TParticleSystem
+            // does (pos += vel; life_span--; kill when life_span <= 0).
+            bool done = true;
+            for (int32_t i = 0; i < kAuraCount; ++i)
+            {
+                SAuraParticle& p = particles_[i];
+                if (!p.used)
+                    continue;
+                done = false;
+                p.pos.X += p.vel.X;
+                p.pos.Y += p.vel.Y;
+                p.pos.Z += p.vel.Z;
+                p.scl.X *= kAuraDec;
+                p.scl.Y *= kAuraDec;
+                p.scl.Z *= kAuraDec;
+                --p.life_span;
+                if (p.life_span <= 0)
+                    p.used = false;
+            }
+
+            // Snapshot effect_old.cpp:3653-3654 — self-destruct when emit
+            // window closes and all particles have died.
+            if (frame_ >= kAuraFrameCap && to_add_ == 0 && done)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    // --- Render (port of TAuraAnimator::Render, effect_old.cpp:3657-3667).
+    // SetAddBlendState -> AdditiveStraight, preserved AS WRITTEN.
+    if (texture_ == kInvalidTexture)
+        return;
+
+    const S3DPoint& base = IntPos(*this);
+    for (int32_t i = 0; i < kAuraCount; ++i)
+    {
+        const SAuraParticle& p = particles_[i];
+        if (!p.used)
+            continue;
+
+        SBillboardDrawItem item = {};
+        // size_wu scaled by per-particle scl (snapshot ranges 0.25..0.6).
+        const float size = 32.0f * p.scl.X;
+        item.size_wu[0] = size;
+        item.size_wu[1] = size;
+        // Aura tint — warm gold (placeholder until forensics confirms).
+        item.color_rgba[0] = 1.0f;
+        item.color_rgba[1] = 0.85f;
+        item.color_rgba[2] = 0.40f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = uv_rect_[0];
+        item.uv_rect[1] = uv_rect_[1];
+        item.uv_rect[2] = uv_rect_[2];
+        item.uv_rect[3] = uv_rect_[3];
+        item.key.texture     = texture_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        item.world_pos[0] = float(base.x) + p.pos.X;
+        item.world_pos[1] = float(base.y) + p.pos.Y;
+        item.world_pos[2] = float(base.z) + p.pos.Z;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// =========================================================================
+// M03 — THealEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of THealAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:628-833). NUM_HEAL_BUBBLES=60 bubbles + a
+// cylindrical glow at the feet. HEAL_DURATION=40 ticks total: glow
+// grows for HEAL_DURATION/2, then shrinks once activebubbles==0.
+// Per-bubble: random pos in ±HEALING_RADIUS=20, rises with `rise` at
+// random(3,6)*4/3 wu/tick, scale shrinks by HEAL_SCALE_STEP=0.15
+// until invisible; respawns until framenum[0] > HEAL_DURATION.
+// SetBlendState -> Alpha (preserved AS WRITTEN).
+
+THealEffect_Bespoke* THealEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* img = LoadWaterImagery("Magic/Heal.I3D", "heal");
+    if (!img || img->NumObjects() != 8 || img->NumTextures() != 8) return nullptr;
+    auto* heal = new THealEffect_Bespoke(img);
+    SetIntPos(heal, origin);
+    heal->SetMapIndex(MapPane.MakeIndex());
+    heal->ActivateComponents();
+    for (int j = 0; j < 2; ++j) {
+        S3DObj object = {}; S3DTex texture = {};
+        img->GetObject(j, &object);
+        if (object.material != j) { delete heal; return nullptr; }
+        img->GetMaterial(j, &heal->materials_[j]);
+        img->GetTexture(j, &texture);
+        if (texture.htexture == kInvalidTexture || texture.numframes != 1 ||
+            !ExtractSubMeshTextureSlot(img, j, j + 1, heal->vertices_[j], heal->indices_[j]) ||
+            heal->vertices_[j].size() != size_t(j ? 174 : 12) ||
+            heal->indices_[j].size() != size_t(j ? 576 : 36)) {
+            delete heal; return nullptr;
+        }
+        (j ? heal->glow_tex_ : heal->bubble_tex_) = texture.htexture;
+    }
+
+    // Snapshot effect_old.cpp:628-685 — Initialize. heal_num/glow_num
+    // depend on spell level; default branch is heal_num=0, glow_num=1.
+    heal->heal_num_ = 0;
+    heal->glow_num_ = 1;
+
+    // Glow at the player's feet (index 0).
+    heal->p_[0]        = {0.0f, 0.0f, 0.0f};
+    heal->scale_[0]    = 2.0f;
+    heal->framenum_[0] = 0;
+    heal->rotation_    = 0.0f;
+
+    for (int32_t n = 1; n < kHealBubbles; ++n)
+    {
+        heal->p_[n].X = float(random(-kHealingRadius, kHealingRadius));
+        heal->p_[n].Y = float(random(-kHealingRadius, kHealingRadius));
+        heal->p_[n].Z = 2.0f;
+        heal->rise_[n] = float(random(3, 6)) * 1.3333333730697632f;
+        // snapshot assigns scale[n] = 0 then immediately scale[n] = 4.5 —
+        // preserve the second assignment (the live value); the leading 0
+        // assignment is dead per snapshot effect_old.cpp:682-683.
+        heal->scale_[n] = 4.5f;
+        heal->framenum_[n] = random(-kHealBubbles / 2, -1);
+    }
+    heal->activebubbles_ = 0;
+    heal->alive_ = true;
+
+    log_info("[heal] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "bubble_tex=%u glow_tex=%u",
+             heal->GetMapIndex(), origin.x, origin.y, origin.z,
+             heal->bubble_tex_, heal->glow_tex_);
+    return heal;
+}
+
+void THealEffect_Bespoke::Advance(double seconds)
+{
+    if (!std::isfinite(seconds) || seconds <= 0.0) return;
+
+    // --- Animate port (effect_old.cpp:695-760), 24Hz sim-tick gated.
+    if (alive_)
+    {
+        sim_accum_ms_ += seconds * 1000.0;
+        while (sim_accum_ms_ + 1e-9 >= kHealSimTickMs)
+        {
+            sim_accum_ms_ -= double(kHealSimTickMs);
+
+            // Snapshot :701-719 — glow framenum/scale lifecycle.
+            ++framenum_[0];
+            if (framenum_[0] < kHealDuration / 2)
+            {
+                if (scale_[0] < 7.0f)
+                    scale_[0] += 1.0f;
+            }
+            else if (framenum_[0] > kHealDuration && activebubbles_ == 0)
+            {
+                if (scale_[0] > 0.0f)
+                    scale_[0] -= 1.0f;
+                else
+                {
+                    alive_ = false;
+                    break;
+                }
+            }
+
+            // Snapshot :722 — rotation += 0.1f.
+            rotation_ += 0.1f;
+
+            // Snapshot :725-759 — per-bubble integration.
+            for (int32_t n = 1; n < kHealBubbles; ++n)
+            {
+                ++framenum_[n];
+                if (framenum_[n] == 0)
+                    ++activebubbles_;
+
+                if (framenum_[n] > 0)
+                {
+                    p_[n].Z += rise_[n];
+
+                    if (scale_[n] > 0.0f)
+                    {
+                        scale_[n] -= kHealScaleStep;
+                        if (scale_[n] <= 0.0f)
+                        {
+                            --activebubbles_;
+
+                            if (framenum_[0] < kHealDuration)
+                            {
+                                // Snapshot :749-755 — respawn bubble.
+                                p_[n].X = float(random(-kHealingRadius, kHealingRadius));
+                                p_[n].Y = float(random(-kHealingRadius, kHealingRadius));
+                                p_[n].Z = 2.0f;
+                                rise_[n] = float(random(3, 6)) * 1.3333333730697632f;
+                                scale_[n] = 4.5f;
+                                framenum_[n] = -1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+}
+
+THealEffect_Bespoke::~THealEffect_Bespoke()
+{
+    if (Renderer) for (auto mesh : meshes_) if (mesh) Renderer->ReleaseMeshAssetRef(mesh);
+}
+
+void THealEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled;
+    const auto p = IntPos(*this);
+    if (enabled) BuildRetailSoftwareOwner(native_owner_, p.x, p.y, p.z, uint8_t(IntFacing(*this)));
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Heal level=1", int(enabled));
+}
+
+void THealEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !alive_ || debug_mode != EFxDebugMode::Normal) return;
+    auto* img = dynamic_cast<T3DImagery*>(GetImagery());
+    if (!img) return;
+    for (int j = 0; j < 2; ++j) {
+        if (meshes_[j]) continue;
+        const uint64_t key = 0x4845414c00000000ull ^ (uint64_t(uint32_t(img->ImageryId())) << 16) ^ uint64_t(j);
+        meshes_[j] = Renderer->RegisterMeshAsset(key, vertices_[j].data(), int32_t(vertices_[j].size()),
+            indices_[j].data(), int32_t(indices_[j].size()), j ? glow_tex_ : bubble_tex_);
+        if (meshes_[j]) Renderer->AddMeshAssetRef(meshes_[j]);
+    }
+    if (!meshes_[0] || !meshes_[1]) return;
+    const auto& owner = native_domain_ ? native_owner_ : Transform().Matrix();
+    auto submit = [&](int part, const hmm_mat4& local) {
+        hmm_mat4 world{}; MtxMultiply(&world, &local, &owner);
+        SHelperMeshSubmit draw{};
+        draw.mesh = meshes_[part]; draw.retail_lighting = 3;
+        draw.retail_positive_face_cull = true;
+        draw.retail_software_projection = native_domain_;
+        for (int row=0; row<4; ++row) for (int col=0; col<4; ++col)
+            draw.world[row*4+col] = world.Elements[col][row];
+        const auto& m = materials_[part].matdesc;
+        std::memcpy(draw.diffuse, &m.diffuse, 4*sizeof(float));
+        std::memcpy(draw.ambient, &m.ambient, 4*sizeof(float));
+        std::memcpy(draw.specular, &m.specular, 4*sizeof(float));
+        std::memcpy(draw.emissive, &m.emissive, 4*sizeof(float));
+        draw.power=m.power;
+        // Keep the original ordered alpha composite, including both glow passes.
+        draw.sort_depth=0.0f;
+        Renderer->SubmitHelperMesh(draw);
+    };
+    // Original4dfa9c starts at zero: slot0 is also a visible central heal mesh.
+    for (int n=0; n<kHealBubbles; ++n) {
+        if (framenum_[n]<=0 || scale_[n]<=0.0f) continue;
+        hmm_mat4 local{}; MtxClear(&local);
+        if (n) {
+            MtxRotateX(&local, -1.5707963705062866f);
+            MtxRotateY(&local, 0.0f);
+            MtxRotateZ(&local, -0.7853981852531433f);
+            const int degrees = (-int(uint8_t(IntFacing(*this))) * 360) / 256;
+            MtxRotateZ(&local, float(double(degrees) * 0.017453292519943295));
+        }
+        const hmm_vec3 scale={scale_[n],scale_[n],scale_[n]};
+        MtxScale(&local,&scale); MtxTranslate(&local,&p_[n]); submit(0,local);
+    }
+    // Original CalcObjectMatrix rejects the exhausted zero-scale glow.
+    if (scale_[0] <= 0.0f) return;
+    // Source0x9c flags: authored TRS composition is decoded by the shared
+    // original-compatible CalcObjectMatrix; two distinct signed rotations.
+    for (int pass=0; pass<2; ++pass) {
+        S3DAnimObj object{}; object.objnum=glow_num_; object.flags=0x9c;
+        object.pos=p_[0]; object.rot={0,0,pass ? -rotation_ : rotation_};
+        const float scale=scale_[0]*0.75f; object.scl={scale,scale,scale};
+        if (img->CalcObjectMatrix(&object,0,0,const_cast<hmm_mat4*>(&owner),false)) submit(1,object.matrix);
+    }
+}
+
+void THealEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime()); Submit(debug_mode);
+}
+
+// =========================================================================
+// M05 — TMistEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TMistAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:11376-11502). The engine TMistEffect path lives at
+// src/effect.cpp:3241 (engine-driven via TParticleEffectComponent +
+// effects.def); this bespoke class is the BESPOKE canonical per the
+// wave-04 pivot. Both coexist; the harness picks one via the test ID.
+//
+// 50 drops with retail pos/vel envelope (MIST_LENGTH=64 etc.); ascends,
+// falls under gravity (RIPPLE_GRAVITY=0.37 wu/tick²), respawns-in-place
+// on landing (pos.z <= 0). SetAddBlendState -> AdditiveStraight.
+// One authored sub-object (snapshot GetObject(0)) renders all 50 drops.
+
+namespace {
+class TMistReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    const char* ComponentName() const override { return "mist_reference"; }
+    void Submit(TRenderer&, const TObjectInstance& owner) const override
+    {
+        if (auto* mist = dynamic_cast<const TMistEffect_Bespoke*>(&owner))
+            mist->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* mist = dynamic_cast<TMistEffect_Bespoke*>(OwnerInstance()))
+            mist->Advance(TTime::DeltaTime());
+    }
+};
+static TObjectDef::SRegistrar g_mist_reference_builder("Mist", MakeWaterReferenceDef<TMistEffect_Bespoke>);
+TWaterReferenceAnimatorBuilder<TMistEffect_Bespoke> g_mist_reference_animator_builder("Mist");
+} // namespace
+
+void TMistEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if (initialized_ || GetComponent<TMistReferenceComponent>()) return;
+    auto* imagery = dynamic_cast<T3DImagery*>(GetImagery());
+    // The lazy map hook runs after final identity and GPU upload. Do not
+    // consume random draws until the actual owner asset can be submitted.
+    if (!imagery || GetMapIndex() < 0 ||
+        !LoadWaterQuad(imagery, 0, authored_vertices_, texture_)) return;
+    S3DTex source_texture = {};
+    imagery->GetTexture(0, &source_texture);
+    retail_argb4444_ = RetailMeshTextureLighting(source_texture.desc.pixelFormat) == 3;
+    // Snapshot effect_old.cpp:11383-11392 — seed all 50 drops up-front.
+    for (int32_t i = 0; i < kMistMaxDrops; ++i)
+    {
+        SMistDrop& d = drops_[i];
+        d.vel.X = float(random(-kMistLength, kMistLength) / 32.0f);
+        d.vel.Y = float(random(-kMistWidth,  kMistWidth)  / 32.0f);
+        d.vel.Z = float(random(kMistHeight / 2, kMistHeight));
+        d.pos.X = float(random(-kMistLength, kMistLength) / 2.0f);
+        d.pos.Y = float(random(-kMistWidth,  kMistWidth)  / 2.0f);
+        d.pos.Z = kMistSpawnZ;
+        d.dead = false;
+    }
+    alive_ = true;
+
+    initialized_ = true;
+    if (!attach_runtime_component) return;
+    auto component = std::make_unique<TMistReferenceComponent>();
+    S3DTex texture = {};
+    imagery->GetTexture(0, &texture);
+    component->Configure(texture_, int32_t(texture.desc.width), int32_t(texture.desc.height),
+                         1, 1, 1, 1.0f, 1.0f, false, true);
+    AddComponent(std::move(component));
+    const auto origin = IntPos(*this);
+    log_info("[mist-runtime] attached id=%08x map_index=%d origin=(%d,%d,%d) drops=%d",
+             ObjId(), GetMapIndex(), origin.x, origin.y, origin.z, kMistMaxDrops);
+}
+
+TMistEffect_Bespoke* TMistEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    T3DImagery* imagery = LoadWaterImagery("Magic\\mist.i3d", "mist");
+    if (!imagery) return nullptr;
+    auto* mist = new TMistEffect_Bespoke(imagery);
+    SetIntPos(mist, origin);
+    mist->SetMapIndex(MapPane.MakeIndex());
+    mist->ActivateComponents();
+    mist->Initialize(false); // harness drives its own update; no map component
+    if (!mist->initialized_) { delete mist; return nullptr; }
+    return mist;
+}
+
+void TMistEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode,
+                                                    bool software_alpha_diagnostic)
+{
+    if (!Renderer) return;
+    Advance(TTime::DeltaTime());
+    Submit(debug_mode, software_alpha_diagnostic);
+}
+
+void TMistEffect_Bespoke::Advance(double elapsed_seconds)
+{
+    if (!initialized_) return;
+    // 24Hz sim-tick gate (snapshot was ungated; at modern 60fps drops fly
+    // 2.5x too fast — same gate fix as B01/H03/M05-engine/H04/L02).
+    sim_accum_ms_ += elapsed_seconds * 1000.0;
+    while (sim_accum_ms_ + 1e-9 >= kMistSimTickMs)
+    {
+        sim_accum_ms_ -= double(kMistSimTickMs);
+
+        // Snapshot effect_old.cpp:11432-11453 — per-drop Animate. dead
+        // drops re-roll pos+vel; live drops integrate Euler with gravity;
+        // pos.z <= 0 -> dead.
+        for (int32_t i = 0; i < kMistMaxDrops; ++i)
+        {
+            SMistDrop& d = drops_[i];
+            if (d.dead)
+            {
+                d.vel.X = float(random(-kMistLength, kMistLength) / 32.0f);
+                d.vel.Y = float(random(-kMistWidth,  kMistWidth)  / 32.0f);
+                d.vel.Z = float(random(kMistHeight / 2, kMistHeight));
+                d.pos.X = float(random(-kMistLength, kMistLength) / 2.0f);
+                d.pos.Y = float(random(-kMistWidth,  kMistWidth)  / 2.0f);
+                d.pos.Z = kMistSpawnZ;
+                d.dead = false;
+            }
+            d.pos.X += d.vel.X;
+            d.pos.Y += d.vel.Y;
+            d.pos.Z += d.vel.Z;
+            d.vel.Z -= kMistGravity;
+            if (d.pos.Z <= 0.0f)
+            {
+                d.dead = true;
+                // Snapshot AddNewRipple call is commented-out per M05 §7.6.
+            }
+        }
+    }
+
+}
+
+void TMistEffect_Bespoke::Submit(EFxDebugMode debug_mode, bool software_alpha_diagnostic) const
+{
+    if (!Renderer || !initialized_) return;
+    // --- Render port (effect_old.cpp:11463-11502). SetAddBlendState ->
+    // AdditiveStraight. Preserve sub-object 0's vertices and UVs, not a
+    // guessed screen-aligned damage rectangle. The original does not tint.
+    if (texture_ == kInvalidTexture)
+        return;
+
+    SQuadDrawItem item = {};
+    item.retail_argb4444 = retail_argb4444_;
+    item.key.texture     = texture_;
+    // Preserve the canonical additive request outside the software policy.
+    // Exact4444 source metadata lets SubmitFxQuad select the native kernel;
+    // the optional diagnostic can still request alpha under modern policy.
+    item.key.blend       = uint8_t(software_alpha_diagnostic
+                                  ? EFxBlend::Alpha : EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.debug_mode      = debug_mode;
+    hmm_mat4 local = {};
+    MtxClear(&local);
+    const hmm_vec3 scale = {kMistScale, kMistScale, kMistScale};
+    MtxScale(&local, &scale);
+    MtxRotateZ(&local, -float(M_PI / 4.0));
+    // Preserve the original integer degree conversion before TORADIAN.
+    MtxRotateZ(&local, -float((IntFacing(*this) * 360) / 256) * float(M_PI / 180.0));
+    const hmm_mat4& world = Transform().Matrix();
+
+    for (int32_t i = 0; i < kMistMaxDrops; ++i)
+    {
+        const SMistDrop& d = drops_[i];
+        if (d.dead)
+            continue;
+        for (int32_t corner = 0; corner < 4; ++corner)
+        {
+            const S3DVertex& vertex = authored_vertices_[size_t(corner)];
+            hmm_vec3 point = {};
+            MtxTransform(&local, &vertex.pos, &point);
+            point += d.pos;
+            hmm_vec3 transformed = {};
+            MtxTransform(&world, &point, &transformed);
+            item.world_pos[corner][0] = transformed.X;
+            item.world_pos[corner][1] = transformed.Y;
+            item.world_pos[corner][2] = transformed.Z;
+            item.uv[corner][0] = vertex.tu;
+            item.uv[corner][1] = vertex.tv;
+        }
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
+// =========================================================================
+// X09 — TShieldEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TShieldAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:4336-4392). Animator-only in pre-release; bridges
+// via an existing TEffect on the caster object. Animator is the simplest
+// in this batch: Animate is a no-op; Render draws ONE mesh sub-object at
+// pos.z=40 with SHIELD_SCALE=2.0 and a fixed -π/3 X-rotation + -π/4
+// Z-rotation. SetBlendState -> Alpha (preserved AS WRITTEN).
+//
+// First-pass: single Alpha billboard at the shield position; real mesh
+// (sphere/ellipsoid enveloping the victim) is a follow-up upgrade.
+
+TShieldEffect_Bespoke* TShieldEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kShieldCandidates[] = {
+        "Magic\\shield.i3d",
+        "Magic\\Shield.I3D",
+        "Magic\\shield1.i3d",
+    };
+
+    auto* shield = new TShieldEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(shield, origin);
+    shield->SetMapIndex(MapPane.MakeIndex());
+    shield->ActivateComponents();
+
+    shield->texture_ = TryLoadMagicTexture(kShieldCandidates,
+                                           int32_t(sizeof(kShieldCandidates) / sizeof(*kShieldCandidates)),
+                                           shield->uv_rect_, "shield");
+
+    // Snapshot effect_old.cpp:4336-4342 — Initialize sets pos = (0,0,40).
+    shield->pos_.X = 0.0f;
+    shield->pos_.Y = 0.0f;
+    shield->pos_.Z = kShieldLiftZ;
+    shield->framenum_ = 0;
+    shield->alive_ = true;
+
+    log_info("[shield] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             shield->GetMapIndex(), origin.x, origin.y, origin.z, shield->texture_);
+    return shield;
+}
+
+void TShieldEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Animate port (effect_old.cpp:4351-4355): empty (base call only,
+    // a no-op). 24Hz sim-tick gate runs an empty body — kept here for
+    // symmetry with the other bespoke effects.
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kShieldSimTickMs))
+        {
+            sim_accum_ms_ -= double(kShieldSimTickMs);
+            ++framenum_;
+            // Snapshot Animate is empty — no state change.
+        }
+    }
+
+    // --- Render port (effect_old.cpp:4364-4391). SetBlendState -> Alpha.
+    // Snapshot binds GetObject(0) and applies:
+    //   scl = SHIELD_SCALE=2.0
+    //   pos = (0,0,40)
+    //   RotateX(-π/3), RotateZ(-π/4)
+    // Then RenderObject(obj). One mesh draw per frame.
+    if (texture_ == kInvalidTexture)
+        return;
+
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kShieldSizeWu * kShieldScale;
+    item.size_wu[1] = kShieldSizeWu * kShieldScale;
+    // Pale blue shield tint.
+    item.color_rgba[0] = 0.6f;
+    item.color_rgba[1] = 0.85f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 0.8f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    const S3DPoint& base = IntPos(*this);
+    item.world_pos[0] = float(base.x) + pos_.X;
+    item.world_pos[1] = float(base.y) + pos_.Y;
+    item.world_pos[2] = float(base.z) + pos_.Z;
+    Renderer->SubmitFxBillboard(item);
+}
+
+// *************************************************************************
+// * wave-bespoke-05: sparkle/glow family bespoke ports                     *
+// *************************************************************************
+//
+// X03 TFlareEffect_Bespoke / X10 TSymGlowEffect_Bespoke / M07
+// TPhotonEffect_Bespoke / M08 TPixieEffect_Bespoke — faithful direct
+// ports of the snapshot animators (effect_old.cpp + missileeffect.cpp)
+// driving the --test=vfx harness for the FB+LS / PE+LS / IM+LS
+// pipelines. See class doc-comments in effect.h for per-effect notes.
+
+namespace {
+
+// Asset paths from Class.Def (registered names → I3D paths). The harness
+// loads via TObjectImagery::FindImagery + LoadImagery so paths are
+// matched against the canonical registry name.
+constexpr const char* kFlareBespokeImageryPath   = "Misc\\IrisFlare.I3D";
+constexpr const char* kSymGlowBespokeImageryPath = "Misc\\SymGlow.I3D";
+constexpr const char* kPhotonBespokeImageryPath  = "Magic\\Photon.I3D";
+constexpr const char* kPixieBespokeImageryPath   = "misc\\Pixies.i3d";
+
+// Local helpers — mirrors SubObjTextureSlot / ResolveSubObjUv at
+// effect.cpp:1484 / :1507 (anonymous-namespace scoped there so we
+// re-declare here for the sparkle/glow batch).
+int32_t SparkleSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
+{
+    if (!img3d || objnum < 0 || objnum >= img3d->NumObjects())
+        return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0)
+        return -1;
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
+}
+
+void SparkleResolveSubObjUv(T3DImagery* img3d, int32_t objnum, float out[4])
+{
+    out[0] = 0.0f; out[1] = 0.0f; out[2] = 1.0f; out[3] = 1.0f;
+    if (!img3d) return;
+    const int32_t nverts = img3d->NumObjVerts(objnum);
+    if (nverts <= 0) return;
+    std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
+    img3d->GetObjVerts(objnum, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+    float minu = vbuf[0].tu, maxu = vbuf[0].tu;
+    float minv = vbuf[0].tv, maxv = vbuf[0].tv;
+    for (int32_t i = 1; i < nverts; ++i)
+    {
+        if (vbuf[i].tu < minu) minu = vbuf[i].tu;
+        if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
+        if (vbuf[i].tv < minv) minv = vbuf[i].tv;
+        if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
+    }
+    out[0] = minu;
+    out[1] = minv;
+    out[2] = maxu - minu;
+    out[3] = maxv - minv;
+}
+
+// Load + sanity-check an imagery path. Returns a (TObjectImagery*,
+// T3DImagery*) pair or {nullptr, nullptr} on failure. Caller owns the
+// returned imagery (delete via TObjectImagery::FreeImagery only if not
+// passed into a TEffect — once the TEffect takes it the effect owns it).
+struct SLoadedImagery
+{
+    TObjectImagery* base  = nullptr;
+    T3DImagery*     img3d = nullptr;
+};
+
+SLoadedImagery SparkleLoadImagery(const char* path, const char* tag)
+{
+    SLoadedImagery out;
+    const int32_t img_id = TObjectImagery::FindImagery(path);
+    if (img_id < 0)
+    {
+        log_error("[%s] SpawnForTest: FindImagery('%s') failed", tag, path);
+        return out;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[%s] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  tag, img_id, path);
+        return out;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[%s] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  tag, path);
+        TObjectImagery::FreeImagery(base);
+        return out;
+    }
+    out.base  = base;
+    out.img3d = img3d;
+    return out;
+}
+
+}   // namespace
+
+// ----- X03 TFlareEffect_Bespoke -------------------------------------------
+
+TFlareEffect_Bespoke* TFlareEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                const char* asset_override)
+{
+    // Wave-4 variant entries (Teleporter) reuse this animator. Default path
+    // is the IrisFlare asset; override is honored if present.
+    const char* asset_path = asset_override ? asset_override : kFlareBespokeImageryPath;
+    SLoadedImagery loaded = SparkleLoadImagery(asset_path, "flare");
+    if (!loaded.img3d)
+    {
+        log_error("[flare] SpawnForTest: SparkleLoadImagery('%s') failed — asset missing",
+                  asset_path);
+        return nullptr;
+    }
+
+    auto* flare = new TFlareEffect_Bespoke(loaded.base);
+    SetIntPos(flare, origin);
+    flare->SetMapIndex(MapPane.MakeIndex());
+    flare->ActivateComponents();
+
+    // Lazy-mesh-init poke (NumObjects triggers actual mesh load).
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[flare] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
+                  num_obj, num_tex);
+        delete flare;
+        return nullptr;
+    }
+
+    // Resolve sub-object 0's texture + UV. TFlareAnimator only uses
+    // GetObject(0) (effect_old.cpp:586).
+    const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, 0);
+    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    loaded.img3d->GetTexture(slot, &tex);
+    flare->texture_ = tex.htexture;
+    SparkleResolveSubObjUv(loaded.img3d, 0, flare->uv_rect_);
+    flare->size_wu_ = kFlareBespokeBaseSizeWu;
+    if (flare->texture_ == kInvalidTexture)
+    {
+        log_error("[flare] SpawnForTest: sub-object 0 texture unresolved");
+        delete flare;
+        return nullptr;
+    }
+
+    // --- Port of TFlareAnimator::Initialize (effect_old.cpp:517-550).
+    // Zero out per-spark position/velocity; the material zeroing in the
+    // original is a D3D-specific tint setup we don't need (the renderer
+    // applies its own per-instance color modulation).
+    for (int32_t c = 0; c < kFlareBespokeNumSparks; ++c)
+    {
+        flare->sparks_[c].p = hmm_vec3{0.0f, 0.0f, 0.0f};
+        flare->sparks_[c].v = hmm_vec3{0.0f, 0.0f, 0.0f};
+    }
+
+    log_info("[flare] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "texture=%u uv=[%.3f,%.3f %.3fx%.3f]",
+             asset_path, flare->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             flare->texture_,
+             flare->uv_rect_[0], flare->uv_rect_[1],
+             flare->uv_rect_[2], flare->uv_rect_[3]);
+    return flare;
+}
+
+void TFlareEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Update: port of TFlareAnimator::Animate (effect_old.cpp:557-582).
+    // Framerate-independent via the 24Hz sim-tick accumulator. Each tick
+    // runs the original per-tick integration exactly once.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kFlareBespokeSimTickMs))
+    {
+        sim_accum_ms_ -= double(kFlareBespokeSimTickMs);
+
+        for (int32_t c = 0; c < kFlareBespokeNumSparks; ++c)
+        {
+            // effect_old.cpp:564-575: ground-bounce respawn.
+            if (sparks_[c].p.Z <= 0.0f)
+            {
+                sparks_[c].p.Z = 0.0f;
+                sparks_[c].v.Z = -sparks_[c].v.Z * 0.5f;
+                if (std::fabs(sparks_[c].v.Z) < 0.4f)
+                {
+                    sparks_[c].p.X = sparks_[c].p.Y = sparks_[c].p.Z = 0.0f;
+                    sparks_[c].v.X = float(random(0, 6) - 3) / 2.0f;
+                    sparks_[c].v.Y = float(random(0, 6) - 3) / 2.0f;
+                    sparks_[c].v.Z = float(random(5, 8));
+                }
+            }
+            // effect_old.cpp:576: gravity.
+            sparks_[c].v.Z -= 0.5f;
+
+            // effect_old.cpp:578-580: position integration.
+            sparks_[c].p.X += sparks_[c].v.X;
+            sparks_[c].p.Y += sparks_[c].v.Y;
+            sparks_[c].p.Z += sparks_[c].v.Z;
+        }
+    }
+
+    // --- Render: port of TFlareAnimator::Render (effect_old.cpp:584-611).
+    // SetBlendState (= Alpha — the snapshot writes SRC_ALPHA / INV_SRC_ALPHA
+    // factors; we preserve that verbatim per the no-reinterpretation rule).
+    // Each spark drawn with obj->scl=4 and obj->rot=(-pi/2, 0, -pi/4) —
+    // the ground-flat tip + 45-degree in-plane spin (F03 pattern). The
+    // engine analog for the rot.x=-pi/2 tip is WorldXY orientation; the
+    // rot.z=-pi/4 in-plane spin folds into the particle's rotation_rad on
+    // a WorldXY quad.
+    const S3DPoint& base = IntPos(*this);
+    SParticleDrawItem item = {};
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::WorldXY;
+    item.debug_mode      = debug_mode;
+    item.key.texture     = texture_;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    // Static in-plane spin (-pi/4) — the original obj->rot.z.
+    item.rotation_rad = -float(M_PI) / 4.0f;
+    // obj->scl = 4 — the original scales the unit-size quad by 4.
+    item.size_wu[0] = size_wu_ * kFlareBespokeScale;
+    item.size_wu[1] = size_wu_ * kFlareBespokeScale;
+
+    for (int32_t c = 0; c < kFlareBespokeNumSparks; ++c)
+    {
+        // effect_old.cpp:600: obj->pos = p[c].
+        item.world_pos[0] = float(base.x) + sparks_[c].p.X;
+        item.world_pos[1] = float(base.y) + sparks_[c].p.Y;
+        item.world_pos[2] = float(base.z) + sparks_[c].p.Z;
+        Renderer->SubmitFxParticle(item);
+    }
+
+    // --- LS coupling: re-add one point light at the effect origin per
+    // frame. The flare is "sparkle/glow family"; in-game it would be the
+    // L01 TLightSource bound to the effect via spell.def. Warm-yellow
+    // 240wu radius matches X17 / F03 family conventions.
+    Renderer->AddPointLight(float(base.x), float(base.y), float(base.z) + 16.0f,
+                            kFlareBespokeLightRadiusWu,
+                            1.0f, 0.85f, 0.35f,
+                            kFlareBespokeLightIntensity);
+}
+
+// ----- X10 SymGlow: original scrolling, breathing cylinder ---------------
+namespace {
+class TSymGlowReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    const char* ComponentName() const override { return "symglow_reference"; }
+    void Submit(TRenderer&, const TObjectInstance& owner) const override
+    {
+        if (auto* effect = dynamic_cast<const TSymGlowEffect_Bespoke*>(&owner))
+            effect->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* effect = dynamic_cast<TSymGlowEffect_Bespoke*>(OwnerInstance()))
+            effect->Advance(TTime::DeltaTime());
+    }
+};
+static TObjectDef::SRegistrar g_symglow_reference_builder("SymGlow", MakeWaterReferenceDef<TSymGlowEffect_Bespoke>);
+TWaterReferenceAnimatorBuilder<TSymGlowEffect_Bespoke> g_symglow_reference_animator_builder("SymGlow");
+}
+
+void TSymGlowEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if (initialized_ || GetMapIndex() < 0 || GetComponent<TSymGlowReferenceComponent>()) return;
+    if (attach_runtime_component && (ObjClass() != OBJCLASS_EFFECT || ObjId() != 0x27df45beu)) return;
+    auto* img = dynamic_cast<T3DImagery*>(GetImagery());
+    if (!img || img->NumObjects() != 1 || img->NumTextures() != 1) return;
+    S3DTex tex = {};
+    img->GetTexture(0, &tex);
+    if (tex.htexture == kInvalidTexture ||
+        !ExtractSubMeshTextureSlot(img, 0, 1, vertices_, indices_) || indices_.empty()) return;
+    retail_argb4444_ = RetailMeshTextureLighting(tex.desc.pixelFormat) == 3;
+    // SetupObjects changes V once; Render advances U by the Animate random step.
+    for (auto& v : vertices_) v.uv[1] -= 0.01f;
+    texture_ = tex.htexture;
+    timer_ = 0; zscale_ = 2.0f; dz_ = 0.1f; u_step_ = 0.0f; uv_timer_ = -1; sim_accum_ms_ = 0.0;
+    initialized_ = true;
+    if (attach_runtime_component) {
+        auto c = std::make_unique<TSymGlowReferenceComponent>();
+        c->Configure(texture_, int32_t(tex.desc.width), int32_t(tex.desc.height),
+                     1, 1, 1, 1.0f, 1.0f, false, true);
+        AddComponent(std::move(c));
+    }
+    const auto pos = IntPos(*this);
+    log_info("[symglow-runtime] initialized id=%08x map_index=%d origin=(%d,%d,%d) runtime=%d vertices=%zu triangles=%zu",
+             attach_runtime_component ? ObjId() : 0x27df45beu, GetMapIndex(), pos.x, pos.y, pos.z,
+             int(attach_runtime_component), vertices_.size(), indices_.size()/3);
+}
+
+TSymGlowEffect_Bespoke* TSymGlowEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* img = LoadWaterImagery(kSymGlowBespokeImageryPath, "symglow");
+    if (!img) return nullptr;
+    auto* effect = new TSymGlowEffect_Bespoke(img);
+    SetIntPos(effect, origin);
+    effect->SetMapIndex(MapPane.MakeIndex());
+    effect->ActivateComponents();
+    effect->Initialize(false);
+    if (!effect->initialized_) { delete effect; return nullptr; }
+    return effect;
+}
+
+void TSymGlowEffect_Bespoke::Advance(double elapsed_seconds)
+{
+    if (!initialized_) return;
+    sim_accum_ms_ += elapsed_seconds * 1000.0;
+    while (sim_accum_ms_ + 1e-9 >= kSymGlowBespokeSimTickMs) {
+        sim_accum_ms_ -= kSymGlowBespokeSimTickMs;
+        ++timer_;
+        if (!(timer_ % 40)) dz_ *= -1.0f;
+        zscale_ += dz_;
+        zscale_ = (std::max)(2.0f, (std::min)(5.0f, zscale_));
+        // Native Animate stores the last random scroll step. Render adds it
+        // to each vertex separately; a shared accumulated offset rounds
+        // differently, and advancing without drawing must not scroll UVs.
+        u_step_ = float(random(2,8)) * 0.01f;
+        SetCommandDone(false);
+    }
+}
+
+void TSymGlowEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !initialized_) return;
+    if (uv_timer_ != timer_) {
+        for (auto& v : vertices_) v.uv[0] += u_step_;
+        uv_timer_ = timer_;
+    }
+    // RenderObject draws original triangles with alpha blending and no depth
+    // writes. Preserve the cylinder; a screen-aligned rectangle is incorrect.
+    SQuadDrawItem item = {};
+    item.corner_count = 3;
+    item.retail_texture = 1;
+    item.retail_argb4444 = retail_argb4444_;
+    item.key.texture = texture_;
+    item.key.blend = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode = debug_mode;
+    const auto& world = Transform().Matrix();
+    for (size_t face = 0; face + 2 < indices_.size(); face += 3) {
+        for (int corner = 0; corner < 3; ++corner) {
+            const auto& v = vertices_[indices_[face+corner]];
+            const hmm_vec3 local = {v.pos[0]*1.4f, v.pos[1]*1.4f, v.pos[2]*zscale_};
+            hmm_vec3 p = {};
+            MtxTransform(&world, &local, &p);
+            item.world_pos[corner][0] = p.X; item.world_pos[corner][1] = p.Y; item.world_pos[corner][2] = p.Z;
+            item.uv[corner][0] = v.uv[0]; item.uv[corner][1] = v.uv[1];
+        }
+        // Original SymGlow requests mode2, which selects CULL_NONE. Retain
+        // the earlier face filter only outside the audited software policy. Classic
+        // isometric projection has constant positive zoom, so translation and
+        // zoom cancel from the determinant. Blue tests Y-up before negating Y,
+        // so the screen-down determinant has the opposite sign.
+        float sx[3], sy[3];
+        for (int k=0;k<3;++k) {
+            const auto* p = item.world_pos[k]; sx[k]=p[0]-p[1]; sy[k]=.5f*(p[0]+p[1])-.867f*p[2];
+        }
+        if (!(retail_argb4444_ && Renderer->UsesRetailSoftwareMeshLighting()) &&
+            (sx[1]-sx[0])*(sy[2]-sy[0]) < (sx[2]-sx[0])*(sy[1]-sy[0])) continue;
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
+void TSymGlowEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime());
+    Submit(debug_mode);
+}
+
+// ----- M07 TPhotonEffect_Bespoke ------------------------------------------
+
+void TPhotonEffect_Bespoke::Initialize()
+{
+    particles_.Initialize([](int low,int high){return random(low,high);});
+    missile_=missile_state::State{};missile_.speed_fixed=16*missile_state::Rollover;
+    flags=(flags&~(OF_MOVING|OF_WEIGHTLESS))|OF_IMMOBILE|OF_PULSE;
+}
+
+bool TPhotonEffect_Bespoke::SetProjectileEndpoints(const S3DPoint& source,const S3DPoint& destination)
+{
+    if(missile_.state!=0 || (source.x==destination.x&&source.y==destination.y&&source.z==destination.z))return false;
+    SetIntPos(*this, source);destination_=destination;has_destination_=true;return true;
+}
+
+void TPhotonEffect_Bespoke::PrimeLaunchForTest()
+{
+    if(missile_.state==0)particles_.Animate(0,{0,0,0},[](int low,int high){return random(low,high);});
+}
+
+void TPhotonEffect_Bespoke::AdvanceTick()
+{
+    const auto position=IntPos(*this);missile_.position={position.x,position.y,position.z};missile_.flags=GetFlags();
+    missile_state::Inputs input;input.in_inventory=IsInInventory();input.object_class=ObjClass();
+    input.launch_ready=particles_.ready;input.animator_present=true;
+    S3DPoint next{};GetNextMove(next);input.next_move_fixed={next.x,next.y,next.z};
+    input.ground_height=[this](const missile_state::Point& p) {
+        if(preview_mode_)return int32_t(1);
+        S3DPoint query{p.x,p.y,p.z};return MapPane.GetWalkHeight(query);
+    };
+    input.aim_angle=[this]() {
+        if(spell) {
+            auto* invoker=spell->GetInvokerRef().Get();auto* target=spell->GetTargetRef(0).Get();
+            if(target&&target!=invoker)return ConvertToFacing(IntPos(*this),IntPos(target));
+            if(invoker)return IntFacing(invoker);
+        }
+        return has_destination_?ConvertToFacing(IntPos(*this),destination_):IntFacing(*this);
+    };
+    input.convert_vector=[](int facing,int32_t speed) {
+        S3DPoint v{};ConvertToVector(facing,speed,v);return missile_state::Point{v.x,v.y,v.z};
+    };
+    input.character_hit=[this](const missile_state::Point& p) {
+        if(preview_mode_) {
+            // Explicit gallery target boundary; range-only fixtures retain false.
+            if(!preview_target_collision_ || !has_destination_)return false;
+            const S3DPoint query{p.x,p.y,p.z};
+            return ::Distance(query,destination_)<=32;
+        }
+        TObjectInstance* invoker_object=spell?spell->GetInvokerRef().Get():nullptr;
+        auto* invoker=dynamic_cast<TCharacter*>(invoker_object);const S3DPoint query{p.x,p.y,p.z};
+        std::vector<TCharacter*> around;
+        if(TCharacter::nearbyCharactersSeam)around=TCharacter::nearbyCharactersSeam(query,256);
+        else {
+            SRect r{query.x-256,query.y-256,query.x+256,query.y+256};
+            for(TMapIterator it(GetLevel(),&r,CHECK_NOINVENT,OBJSET_CHARACTER);it;it++)
+                if(auto* character=dynamic_cast<TCharacter*>(it.Item()))around.push_back(character);
+        }
+        for(auto* character:around) {
+            if(character==invoker_object||character->Health()<=0||::Distance(query,IntPos(character))>32)continue;
+            if(invoker&&!invoker->IsEnemy(character))continue;
+            return true;
+        }
+        return false;
+    };
+    const auto result=missile_.Advance(input);const auto p=missile_.position;const S3DPoint updated{p.x,p.y,p.z};
+    if(p.x!=position.x||p.y!=position.y||p.z!=position.z) {
+        if(preview_mode_||!GetSector())SetIntPos(*this, updated);else SetPos(updated,-1,false);
+    }
+    flags=missile_.flags;SetMoveBits(result.move_bits);
+    if(GetState()!=missile_.state)SetState(missile_.state);
+    const auto v=missile_.velocity_fixed;
+    particles_.Animate(missile_.state,{v.x,v.y,v.z},[](int low,int high){return random(low,high);});
+}
+
+void TPhotonEffect_Bespoke::Pulse()
+{
+    if(IsAlive())AdvanceTick();
+    // Keep the collapsed visual controller until every positive-scale slot drains.
+    SetCommandDone(false);if(!IsAlive())KillThisEffect();TEffect::Pulse();
+}
+
+bool TPhotonEffect_Bespoke::EnsureAsset()
+{
+    if(!texture_frames_.empty())return true;
+    auto* image=dynamic_cast<T3DImagery*>(imagery);
+    if(!image||image->NumObjects()!=1||image->NumObjVerts(0)!=4||image->NumObjFaces(0)!=2||image->NumTextures()!=1)return false;
+    S3DFace faces[2]{};image->GetObjFaces(0,faces);
+    constexpr uint16_t expected[6]={0,1,3,3,2,0};if(std::memcmp(faces,expected,sizeof(expected)))return false;
+    image->GetObjVerts(0,authored_.data(),0,0,ERender3DVertex::Vertex);
+    S3DTex texture{};image->GetTexture(0,&texture);
+    if(texture.numframes!=5||!texture.framehtexs)return false;
+    argb4444_=RetailMeshTextureLighting(texture.desc.pixelFormat)==3;
+    texture_frames_.assign(texture.framehtexs,texture.framehtexs+texture.numframes);return true;
+}
+
+TPhotonEffect_Bespoke* TPhotonEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    SLoadedImagery loaded=SparkleLoadImagery(kPhotonBespokeImageryPath,"photon");if(!loaded.img3d)return nullptr;
+    auto* effect=new TPhotonEffect_Bespoke(loaded.base);effect->preview_mode_=true;
+    effect->SetMapIndex(MapPane.MakeIndex());effect->ActivateComponents();
+    const S3DPoint destination{origin.x+1000,origin.y,origin.z};effect->SetProjectileEndpoints(origin,destination);
+    if(!effect->EnsureAsset()) {delete effect;return nullptr;}
+    log_info("[photon] authored moving preview source=%d,%d,%d target=%d,%d,%d frames=5",origin.x,origin.y,origin.z,destination.x,destination.y,destination.z);
+    return effect;
+}
+
+void TPhotonEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    constexpr double step=1.0/24.0;sim_accum_+=TTime::DeltaTime();
+    while(sim_accum_+1e-9>=step) {
+        sim_accum_-=step;
+        if(IsAlive()) {
+            AdvanceTick();
+            if(getenv("REV_VFX_REVIEW_CLOCK_TRACE") && !stricmp(StartupTestMode,"vfx-review"))
+                log_info("[vfx-photon-clock] object=%d time=%.9f render=%lld state=%d frame0=%d active=%d ready=%d",
+                    GetMapIndex(),TTime::Time(),(long long)TTime::FrameCount(),missile_.state,
+                    particles_.frame[0],particles_.active,int(particles_.ready));
+        }
+    }
+    Submit(debug_mode);
+}
+
+void TPhotonEffect_Bespoke::Submit(EFxDebugMode debug_mode)
+{
+    if(!Renderer||!EnsureAsset())return;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) {const auto p=IntPos(*this);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(*this)));}
+    std::array<hmm_vec3,4> vertices{};for(int i=0;i<4;++i)vertices[i]=authored_[i].pos;
+    for(int slot=0;slot<32;++slot) {
+        if(particles_.frame[slot]<0||particles_.scale[slot]<=0)continue;
+        const auto quad=photon_core::BuildQuad(vertices,particles_.scale[slot],particles_.position[slot],owner);
+        SQuadDrawItem item{};item.key.texture=texture_frames_[size_t(particles_.frame[slot])%texture_frames_.size()];
+        item.key.blend=uint8_t(EFxBlend::Alpha);item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
+        item.retail_argb4444=argb4444_;item.retail_software_projection=native_domain_;item.debug_mode=debug_mode;
+        // Reverse the four corners so the shared diagonal emits original
+        // triangles (0,1,3),(3,2,0), each with its original UV and winding.
+        for(int corner=0;corner<4;++corner) {
+            const int source=3-corner;const auto p=quad[source];
+            item.world_pos[corner][0]=p.X;item.world_pos[corner][1]=p.Y;item.world_pos[corner][2]=p.Z;
+            item.uv[corner][0]=authored_[source].tu;item.uv[corner][1]=authored_[source].tv;
+        }
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
+DEFINE_OBJECT_DEF("Photon",TPhotonEffect_Bespoke)
+REGISTER_OBJECT_DEF(TPhotonEffect_Bespoke)
+
+// ----- M08 TPixieEffect_Bespoke -------------------------------------------
+
+namespace {
+class TPixieReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    const char* ComponentName() const override { return "pixie_reference"; }
+    void Submit(TRenderer&, const TObjectInstance& owner) const override
+    {
+        if (auto* effect=dynamic_cast<const TPixieEffect_Bespoke*>(&owner))
+            effect->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* effect=dynamic_cast<TPixieEffect_Bespoke*>(OwnerInstance()))
+            effect->Advance(TTime::DeltaTime());
+    }
+};
+static TObjectDef::SRegistrar g_pixie_reference_builder("Pixie", MakeWaterReferenceDef<TPixieEffect_Bespoke>);
+TWaterReferenceAnimatorBuilder<TPixieEffect_Bespoke> g_pixie_reference_animator_builder("Pixie");
+}
+
+void TPixieEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if (initialized_ || GetMapIndex()<0 || GetComponent<TPixieReferenceComponent>()) return;
+    if (attach_runtime_component && (ObjClass()!=OBJCLASS_EFFECT || ObjId()!=0x89abcde1u)) return;
+    auto* img=dynamic_cast<T3DImagery*>(GetImagery());
+    if (!img || img->NumObjects()!=2 || img->NumTextures()!=2) return;
+    for (int j=0;j<2;++j) {
+        S3DObj object={}; S3DMat material={}; S3DTex tex={};
+        img->GetObject(j,&object);
+        if (object.material<0 || object.material>=img->NumMaterials()) return;
+        img->GetMaterial(object.material,&material);
+        if (material.texture!=j) return;
+        img->GetTexture(j,&tex);
+        if (tex.htexture==kInvalidTexture ||
+            !ExtractSubMeshTextureSlot(img,j,j+1,vertices_[j],indices_[j]) ||
+            vertices_[j].size()!=4 || indices_[j].size()!=6) return;
+        textures_[j]=tex.htexture;
+    }
+    // --- Port of TPixieAnimator::Initialize (effect_old.cpp:12109-12127).
+    for (int32_t i = 0; i < kPixieBespokeNumParts; i++)
+    {
+        // scale.x/y/z = random(MINSCALE*1000, MAXSCALE*1000) / 1000.
+        // Retail 0x4f3843 requests 59..79: conversion truncates the
+        // unrounded float-constant product, before a float store.
+        const float s = float(double(random(int32_t(double(kPixieBespokeMinScale) * 1000.0),
+                                            int32_t(double(kPixieBespokeMaxScale) * 1000.0))) * double(0.001f));
+        pix_[i].scale.X = pix_[i].scale.Y = pix_[i].scale.Z = s;
+        pix_[i].pos.X = float(random(-32, 32));
+        pix_[i].pos.Y = float(random(-32, 32));
+        pix_[i].pos.Z = float(random(-32, 32));
+        pix_[i].vel.X = float(double(random(-32, 32)) * double(0.04f));
+        pix_[i].vel.Y = float(double(random(-32, 32)) * double(0.04f));
+        pix_[i].vel.Z = float(double(random(-32, 32)) * double(0.04f));
+        pix_[i].time  = random(0, 1);
+    }
+    charnear_     = 100;
+    sim_accum_ms_ = 0.0;
+
+    original_position_=IntPos(*this); initialized_=true; runtime_owned_=attach_runtime_component;
+    if (attach_runtime_component) {
+        auto c=std::make_unique<TPixieReferenceComponent>();
+        c->Configure(textures_[0],16,16,1,1,1,1.0f,1.0f,false,true);
+        AddComponent(std::move(c));
+    }
+    const auto pos=IntPos(*this);
+    log_info("[pixie-runtime] initialized id=%08x map_index=%d origin=(%d,%d,%d) runtime=%d particles=25 objects=2 vertices=8 triangles=4 textures=2",
+             attach_runtime_component?ObjId():0x89abcde1u,GetMapIndex(),pos.x,pos.y,pos.z,int(attach_runtime_component));
+}
+
+TPixieEffect_Bespoke* TPixieEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* img=LoadWaterImagery(kPixieBespokeImageryPath,"pixie");
+    if (!img) return nullptr;
+    auto* effect=new TPixieEffect_Bespoke(img);
+    SetIntPos(effect, origin); effect->SetMapIndex(MapPane.MakeIndex());
+    effect->ActivateComponents(); effect->Initialize(false);
+    if (!effect->initialized_) { delete effect; return nullptr; }
+    return effect;
+}
+
+void TPixieEffect_Bespoke::Advance(double elapsed_seconds)
+{
+    if (!initialized_ || !std::isfinite(elapsed_seconds) || elapsed_seconds<=0.0) return;
+    // --- Update: port of TPixieAnimator::Animate (effect_old.cpp:12129-12227).
+    sim_accum_ms_ += elapsed_seconds * 1000.0;
+    while (sim_accum_ms_ + 1e-9 >= kPixieBespokeSimTickMs)
+    {
+        sim_accum_ms_ -= double(kPixieBespokeSimTickMs);
+
+        // Per-particle integration (effect_old.cpp:12134-12163).
+        for (int32_t i = 0; i < kPixieBespokeNumParts; i++)
+        {
+            // scale.x += random(-35, 35) / 1000.
+            const double next_scale = double(random(-35, 35)) * double(0.001f) + double(pix_[i].scale.X);
+            pix_[i].scale.X = float(next_scale);
+            // The snapshot has scale.y = scale.z = scale.x commented out
+            // (effect_old.cpp:12137 — "//pix[i].scale.y = pix[i].scale.z =
+            // pix[i].scale.x;"). We DO NOT re-instate it (preserve dead-
+            // code form as written). Only scale.x is mutated.
+            if (next_scale > double(0.07f))
+                pix_[i].scale.X = 0.07f;
+
+            // pos += vel.
+            pix_[i].pos.X += pix_[i].vel.X;
+            pix_[i].pos.Y += pix_[i].vel.Y;
+            pix_[i].pos.Z += pix_[i].vel.Z;
+
+            // Centring restorative force (effect_old.cpp:12143-12154).
+            if (pix_[i].pos.X > 0.0f)
+                pix_[i].vel.X -= kPixieBespokeAcc;
+            if (pix_[i].pos.X < 0.0f)
+                pix_[i].vel.X += kPixieBespokeAcc;
+            if (pix_[i].pos.Y > 0.0f)
+                pix_[i].vel.Y -= kPixieBespokeAcc;
+            if (pix_[i].pos.Y < 0.0f)
+                pix_[i].vel.Y += kPixieBespokeAcc;
+            if (pix_[i].pos.Z > 0.0f)
+                pix_[i].vel.Z -= kPixieBespokeAcc;
+            if (pix_[i].pos.Z < 0.0f)
+                pix_[i].vel.Z += kPixieBespokeAcc;
+
+            // Time-flip on a 1/49 chance (effect_old.cpp:12155-12156).
+            if (random(0, 48) == 17)
+                pix_[i].time = 1 - pix_[i].time;
+
+            // Floor clamp (effect_old.cpp:12157-12158).
+            if (pix_[i].pos.Z < -float(kPixieBespokeHeight))
+                pix_[i].pos.Z = -float(kPixieBespokeHeight);
+
+            // Scale clamp (effect_old.cpp:12159-12162).
+            if (pix_[i].scale.X < kPixieBespokeMinScale)
+                pix_[i].scale.X = kPixieBespokeMinScale;
+            if (pix_[i].scale.X > kPixieBespokeMaxScale)
+                pix_[i].scale.X = kPixieBespokeMaxScale;
+        }
+
+        SetCommandDone(false);
+        if (runtime_owned_) {
+            // Snapshot searches characters first, then players, skipping index0.
+            S3DPoint pos=IntPos(*this); int32_t targets[MAXFOUNDOBJS]={};
+            TObjectInstance* nearby=nullptr;
+            for (int object_class:{OBJCLASS_CHARACTER,OBJCLASS_PLAYER}) {
+                int count=MapPane.FindObjectsInRange(pos,targets,90,0,object_class);
+                for (int i=0;i<count;++i) {
+                    if (targets[i]) { nearby=MapPane.GetInstance(targets[i]); break; }
+                }
+                if (nearby) break;
+            }
+            if (nearby) {
+                const auto target=IntPos(nearby);
+                if (pos.x>=target.x) pos.x+=random(2,4);
+                if (pos.x<target.x) pos.x-=random(2,4);
+                if (pos.y>=target.y) pos.y+=random(2,4);
+                if (pos.y<target.y) pos.y-=random(2,4);
+            } else {
+                // Preserve separate ifs: crossing the rest point can consume a
+                // second random step on the same tick. Z is never restored.
+                if (pos.x>original_position_.x) pos.x-=random(2,4);
+                if (pos.x<original_position_.x) pos.x+=random(2,4);
+                if (pos.y>original_position_.y) pos.y-=random(2,4);
+                if (pos.y<original_position_.y) pos.y+=random(2,4);
+            }
+            SetPos(pos);
+        }
+    }
+}
+
+void TPixieEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !initialized_) return;
+    const auto& world=Transform().Matrix();
+    SQuadDrawItem item={}; item.corner_count=3; item.retail_texture=1;
+    item.key.blend=uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode=debug_mode;
+    for (const auto& particle:pix_) {
+        const int j=particle.time; item.key.texture=textures_[j];
+        const float scl=particle.scale.X/(1.0f+float(j)*2.0f);
+        hmm_mat4 local={}; MtxClear(&local);
+        const hmm_vec3 scale={scl,scl,scl}; MtxScale(&local,&scale);
+        MtxRotateZ(&local,-float((IntFacing(*this)*360)/256)*float(M_PI/180.0));
+        // Retail 0x4f3dc1 uses the float 0.01 reciprocal and retains both
+        // products until the final position store.
+        const hmm_vec3 pos={float(double(charnear_)*double(particle.pos.X)*double(0.01f)),
+                           float(double(charnear_)*double(particle.pos.Y)*double(0.01f)),
+                           float(kPixieBespokeHeight)+particle.pos.Z};
+        MtxTranslate(&local,&pos);
+        for (size_t face=0;face+2<indices_[j].size();face+=3) {
+            for (int k=0;k<3;++k) {
+                const auto& v=vertices_[j][indices_[j][face+k]];
+                const hmm_vec3 authored={v.pos[0],v.pos[1],v.pos[2]};
+                hmm_vec3 point={},p={};
+                MtxTransform(&local,&authored,&point); MtxTransform(&world,&point,&p);
+                item.world_pos[k][0]=p.X; item.world_pos[k][1]=p.Y; item.world_pos[k][2]=p.Z;
+                item.uv[k][0]=v.uv[0]; item.uv[k][1]=v.uv[1];
+            }
+            // Blue tests positive Y-up before negating raster Y.
+            float sx[3],sy[3];
+            for (int k=0;k<3;++k) {
+                const auto* p=item.world_pos[k];sx[k]=p[0]-p[1];sy[k]=.5f*(p[0]+p[1])-.867f*p[2];
+            }
+            if ((sx[1]-sx[0])*(sy[2]-sy[0])<(sx[2]-sx[0])*(sy[1]-sy[0])) continue;
+            Renderer->SubmitFxQuad(item);
+        }
+    }
+}
+
+void TPixieEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime()); Submit(debug_mode);
+}
+
+// *************************************************************************
+// * Wave 2 batch wave-bespoke-06-strip-ribbon: faithful direct ports of   *
+// * pre-release snapshot animator bodies for Strip / ribbon family.       *
+// * Translation rules: identical math, identical variable names where     *
+// * legal in C++, identical per-tick step and render-pass order. Only the *
+// * render API changes (RenderObject -> SubmitFxBillboard / SubmitFxStrip).
+// *************************************************************************
+
+namespace {
+
+// Shared procedural-glow texture for the strip/ribbon family — used as a
+// first-pass stand-in for the real Magic\Lightning Spark.I3D /
+// Magic\NewLightStrip.I3D / Magic\ribbon.I3D assets which aren't bound
+// yet. White cubic-falloff core, transparent edges, pairs with
+// AdditiveStraight (premultiplied). 1 x 64 RGBA8 strip.
+TTextureHandle StripFamilyGlowTexture()
+{
+    if (!Renderer) return kInvalidTexture;
+    constexpr uint64_t kKey = 0x46584C4753545246ull;   // "FXLGSTRF"
+    constexpr int32_t  kH   = 64;
+    uint8_t rgba[kH * 4];
+    for (int32_t i = 0; i < kH; ++i)
+    {
+        const float v       = float(i) / float(kH - 1);
+        const float center  = std::abs(v - 0.5f) * 2.0f;
+        const float falloff = (std::max)(0.0f, 1.0f - center);
+        const float a       = falloff * falloff * falloff;
+        const uint8_t byte  = uint8_t(a * 255.0f);
+        rgba[i * 4 + 0] = byte;
+        rgba[i * 4 + 1] = byte;
+        rgba[i * 4 + 2] = byte;
+        rgba[i * 4 + 3] = byte;
+    }
+    return Renderer->RegisterTextureAsset(kKey, rgba, sizeof(rgba),
+                                          1, kH,
+                                          ERendererTextureFormat::RGBA8,
+                                          uint64_t(sizeof(rgba)));
+}
+
+// Round soft-edge billboard texture for the spark/streamer/ribbon-spark
+// placeholders (no Magic\<x>.I3D bound yet). 32x32 white disc with
+// quadratic-falloff alpha.
+TTextureHandle StripFamilySparkTexture()
+{
+    if (!Renderer) return kInvalidTexture;
+    constexpr uint64_t kKey = 0x46584C475350524Bull;   // "FXLGSPRK"
+    constexpr int32_t  kS   = 32;
+    uint8_t rgba[kS * kS * 4];
+    for (int32_t y = 0; y < kS; ++y)
+    {
+        for (int32_t x = 0; x < kS; ++x)
+        {
+            const float dx = (float(x) + 0.5f) / float(kS) * 2.0f - 1.0f;
+            const float dy = (float(y) + 0.5f) / float(kS) * 2.0f - 1.0f;
+            const float r  = std::sqrt(dx * dx + dy * dy);
+            const float a  = (std::max)(0.0f, 1.0f - r);
+            const float aa = a * a;
+            const uint8_t b = uint8_t(aa * 255.0f);
+            const int32_t off = (y * kS + x) * 4;
+            rgba[off + 0] = b;
+            rgba[off + 1] = b;
+            rgba[off + 2] = b;
+            rgba[off + 3] = b;
+        }
+    }
+    return Renderer->RegisterTextureAsset(kKey, rgba, sizeof(rgba),
+                                          kS, kS,
+                                          ERendererTextureFormat::RGBA8,
+                                          uint64_t(sizeof(rgba)));
+}
+
+// 24 Hz sim tick (~41.7 ms) — matches the snapshot's tick rate.
+constexpr int32_t kStripFamilySimTickMs = 1000 / 24;
+
+}  // namespace
+
+// =========================================================================
+// S04 TLightningAnimator_Bespoke
+// =========================================================================
+// Snapshot source: src/stripeffect.cpp `#if 0` Initialize/SetupObjects/
+// Animate/Render (:472-915) + TStripEffect Pulse (:406-457). Constants
+// from src/stripeffect.h (STRIP_*, LIGHTNING_SCALE_*, ADD_FACTOR=2,
+// SMOOTH_SIZE=4). The retail animator owns three sub-objects:
+//   obj 0 = the LightStrip strip geometry (TStripAnimator)
+//   obj 1 = the glow halo
+//   obj 2 = the spark sub-emitter image
+// First-pass port covers the strip + a tiny glow stand-in; sparks are
+// stubbed (the SPARKS_TSparkAnimator forensics doc owns that sub-emitter,
+// porting it lives in a follow-up slice).
+
+TLightningAnimator_Bespoke* TLightningAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // --- Load Magic\NewLightStrip.I3D — the authored bolt asset
+    // (Class.Def:2034 `"LightStrip" "Magic\NewLightStrip.I3D" 0x10da54d0`,
+    // per LIGHTNING_TLightningAnimator.md §4). Per AGENT_GUIDE §4.2.1
+    // (no procedural stand-ins for asset-driven effects) we MUST load
+    // and draw the real asset; failure to bind is a blocker, not an
+    // excuse to render a procedural disc. The retail asset has 3 sub-
+    // objects (`start`/`sparks`/`end` — forensics §4 / §2.1); on the
+    // flat material-slot indexing exposed by T3DImagery::GetTexture,
+    // slot 0 holds the strip body texture (the bolt-crackle the
+    // snapshot's `striplaunch` carrier sampled). For the halo
+    // billboards we sample the same imagery's glow/end material
+    // (slot 1 if present, else fall back to slot 0).
+    constexpr const char* kAssetPath = "Magic\\NewLightStrip.I3D";
+    int32_t img_id = TObjectImagery::FindImagery(kAssetPath);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(kAssetPath));
+    if (img_id < 0)
+    {
+        log_error("[S04 lightning_bespoke] SpawnForTest: FindImagery/RegisterImagery('%s')"
+                  " failed — asset missing; cannot render LightStrip without"
+                  " the authored bolt-crackle texture (forensics §4 + AGENT_GUIDE §4.2.1)",
+                  kAssetPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[S04 lightning_bespoke] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kAssetPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[S04 lightning_bespoke] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kAssetPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+    (void)img3d->NumObjects();   // lazy-mesh-init poke (sister idiom F01/B01/M05/H04)
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_tex <= 0)
+    {
+        log_error("[S04 lightning_bespoke] SpawnForTest: imagery '%s' has 0 textures"
+                  " after lazy-init",
+                  kAssetPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+
+    // Resolve textures. Slot 0 = strip body (the bolt-crackle on the
+    // `start`/`striplaunch` sub-object per forensics §4). The glow
+    // halo prefers a separate slot if the retail asset exposes one
+    // (likely slot 2 = `end` sub-object's authored disc), else falls
+    // back to slot 0.
+    S3DTex tex_strip = {};
+    img3d->GetTexture(0, &tex_strip);
+    if (tex_strip.htexture == kInvalidTexture)
+    {
+        log_error("[S04 lightning_bespoke] SpawnForTest: texture slot 0 handle invalid"
+                  " for '%s'", kAssetPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+    S3DTex tex_glow = {};
+    if (num_tex > 1)
+    {
+        // Retail asset's `end` sub-object likely lives at material slot
+        // 1 or 2; pick the highest-indexed slot whose handle is valid
+        // (the snapshot's render reads glow from sub-object 2, even
+        // though that's a snapshot bug per forensics §13.4; the
+        // retail's `end` sub-object is what we want here).
+        const int32_t glow_slot = (num_tex >= 3) ? 2 : 1;
+        img3d->GetTexture(glow_slot, &tex_glow);
+        if (tex_glow.htexture == kInvalidTexture)
+            img3d->GetTexture(0, &tex_glow);
+    }
+    else
+    {
+        tex_glow = tex_strip;
+    }
+
+    auto* eff = new TLightningAnimator_Bespoke(base);
+    eff->strip_tex_ = tex_strip.htexture;
+    eff->glow_tex_  = tex_glow.htexture;
+    // iter5: flipbook frame count investigated and DISPROVEN — strip_tex
+    // is 64×64 with nframes=1 (one pattern). 50KB retail asset bulk
+    // lives in sub-object meshes, not extra texture cells. Plumbing
+    // inert. See .vfx_logs/lightstrip.md 2026-05-31 04:15.
+    eff->num_frames_ = (tex_strip.numframes > 1) ? tex_strip.numframes : 1;
+    eff->frame_idx_  = 0;
+
+    // --- iter5 glow-mesh registration: replace iter4's
+    // SubmitFxBillboard stand-in with a SubmitHelperMesh of the
+    // snapshot's actual glow sub-object (`stripfly` per snapshot
+    // SetupObjects:655 / retail `end` per forensics §2.1). The
+    // snapshot's render draws this sub-object TWICE with counter-
+    // rotating matrices (stripeffect.cpp:861-902); SubmitHelperMesh
+    // is the modern 1:1 of RenderObject per AGENT_GUIDE §3.5 (dual-
+    // track: bone-animated I3D meshes are direct mesh ports, not
+    // engine-particle conversions).
+    const int32_t num_objs = img3d->NumObjects();
+    int32_t       glow_obj_idx = -1;
+    {
+        std::string names_log;
+        for (int32_t o = 0; o < num_objs; ++o)
+        {
+            const char* nm   = img3d->GetObjectName(o);
+            const std::string nm_s = nm ? std::string(nm) : std::string("<null>");
+            if (!names_log.empty()) names_log += ", ";
+            names_log += std::to_string(o) + "='" + nm_s + "'";
+            if (glow_obj_idx < 0)
+            {
+                // iter6 sub-object discovery: the retail Magic\NewLight
+                // Strip.I3D has 13 sub-objects, NOT the 3 forensics §2.1
+                // listed. Actual enumeration logged at iter5: 0='#flare',
+                // 1..10=rectangle02..11 (the 10 alternative bolt-strip
+                // meshes — what the user described as "8 parallel strips"
+                // turned out to be 10 mesh sub-objects), 11='#sparks',
+                // 12='csparks'. The bright impact-end disc the reference
+                // shows is `#flare`. Match it explicitly.
+                if (nm_s == "#flare" || nm_s == "flare" ||
+                    nm_s == "end" || nm_s == "stripfly" ||
+                    nm_s.find("glow") != std::string::npos ||
+                    nm_s.find("halo") != std::string::npos)
+                    glow_obj_idx = o;
+            }
+        }
+        // Final fallback: sub-object 0 (for NewLightStrip that IS #flare).
+        if (glow_obj_idx < 0 && num_objs > 0) glow_obj_idx = 0;
+        log_info("[S04 lightning_bespoke] asset sub-objects: %s — picked glow_obj=%d",
+                 names_log.c_str(), glow_obj_idx);
+    }
+
+    if (glow_obj_idx >= 0)
+    {
+        const int32_t texslots_total = num_tex + 1;   // +1 for slot 0 (untextured)
+        for (int32_t texslot = 0; texslot < texslots_total; ++texslot)
+        {
+            std::vector<SMeshVertex> verts;
+            std::vector<uint16_t>    indices;
+            if (!ExtractSubMeshTextureSlot(img3d, glow_obj_idx, texslot,
+                                           verts, indices))
+                continue;
+            if (verts.empty() || indices.empty())
+                continue;
+            TTextureHandle albedo = Renderer->WhiteTextureHandle();
+            if (texslot > 0 && texslot - 1 < num_tex)
+            {
+                S3DTex t = {};
+                img3d->GetTexture(texslot - 1, &t);
+                if (t.htexture != kInvalidTexture)
+                    albedo = t.htexture;
+            }
+            eff->glow_mesh_ = Renderer->RegisterMesh(
+                verts.data(), int32_t(verts.size()),
+                indices.data(), int32_t(indices.size()),
+                albedo);
+            if (eff->glow_mesh_ != 0)
+            {
+                S3DMat m = {};
+                img3d->GetMaterial(0, &m);
+                eff->glow_diffuse_[0] = m.matdesc.diffuse.r;
+                eff->glow_diffuse_[1] = m.matdesc.diffuse.g;
+                eff->glow_diffuse_[2] = m.matdesc.diffuse.b;
+                eff->glow_diffuse_[3] = m.matdesc.diffuse.a;
+                eff->glow_emissive_[0] = m.matdesc.emissive.r;
+                eff->glow_emissive_[1] = m.matdesc.emissive.g;
+                eff->glow_emissive_[2] = m.matdesc.emissive.b;
+                eff->glow_emissive_[3] = m.matdesc.emissive.a;
+                log_info("[S04 lightning_bespoke] glow_mesh: obj=%d texslot=%d "
+                         "handle=%u verts=%zu idxs=%zu diff=(%.2f,%.2f,%.2f,%.2f)",
+                         glow_obj_idx, texslot, eff->glow_mesh_,
+                         verts.size(), indices.size(),
+                         double(eff->glow_diffuse_[0]),
+                         double(eff->glow_diffuse_[1]),
+                         double(eff->glow_diffuse_[2]),
+                         double(eff->glow_diffuse_[3]));
+                break;
+            }
+        }
+        if (eff->glow_mesh_ == 0)
+        {
+            log_warn("[S04 lightning_bespoke] glow_mesh registration FAILED "
+                     "for obj=%d on '%s' — falling back to iter4 billboard",
+                     glow_obj_idx, kAssetPath);
+        }
+    }
+
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    // Caster facing — randomized yaw so successive Combat-cadence re-fires
+    // point in different directions (same intuition as TStripEffect).
+    const float yaw =
+        (float(std::rand()) / float(RAND_MAX)) * 6.28318530718f;
+    eff->forward_dir_[0] = std::cos(yaw);
+    eff->forward_dir_[1] = std::sin(yaw);
+    eff->forward_dir_[2] = 0.0f;
+
+    // Retail SetupObjects walks a raycast up to MAX_MAXPOINTS=100 to find
+    // the target range; in the harness we pick a plausible random length
+    // in segments (10..40), matching ~100..400 wu (STRIP_SEG_LEN=10).
+    eff->maxpoints_ = random(10, 40) * STRIP_SMOOTH_SIZE;
+    if (eff->maxpoints_ > 100) eff->maxpoints_ = 100;
+
+    // Snapshot SetupObjects seeds the strip with `numpoints = 2` initial
+    // anchors at the local origin offset down-Y (the strip is authored in
+    // a local frame with p.y = -10 * i).
+    eff->numpoints_ = 2;
+    for (int32_t i = 0; i < 2; ++i)
+    {
+        SBoltAnchor& a = eff->anchors_[i];
+        a.pos[0] = float(origin.x) + eff->forward_dir_[0] * float(i * STRIP_SEG_LEN);
+        a.pos[1] = float(origin.y) + eff->forward_dir_[1] * float(i * STRIP_SEG_LEN);
+        a.pos[2] = float(origin.z) + 50.0f;   // matches Initialize() z+=50
+    }
+
+    eff->state_     = kLaunch;
+    eff->duration_  = STRIP_FLY_DURATION;
+    eff->glow_scale_ = 3.4f;       // retail initial
+    eff->alive_     = true;
+
+    log_info("[S04 lightning_bespoke] SpawnForTest: origin=(%d,%d,%d) "
+             "maxpoints=%d yaw=%.2frad asset='%s' strip_tex=%u(w=%u h=%u nframes=%d) "
+             "glow_tex=%u(w=%u h=%u) num_tex=%d num_frames=%d frame_idx=%d",
+             origin.x, origin.y, origin.z,
+             eff->maxpoints_, double(yaw), kAssetPath,
+             eff->strip_tex_, uint32_t(tex_strip.desc.width), uint32_t(tex_strip.desc.height),
+             tex_strip.numframes,
+             eff->glow_tex_, uint32_t(tex_glow.desc.width), uint32_t(tex_glow.desc.height),
+             num_tex, eff->num_frames_, eff->frame_idx_);
+    return eff;
+}
+
+void TLightningAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || !alive_)
+        return;
+
+    // --- Sim-tick gate: original animator runs at 24 Hz.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStripFamilySimTickMs))
+    {
+        sim_accum_ms_ -= double(kStripFamilySimTickMs);
+
+        // --- Pulse() state machine (stripeffect.cpp :406-457):
+        switch (state_)
+        {
+            case kLaunch:
+                state_ = kFly;
+                break;
+            case kFly:
+                --duration_;
+                if (duration_ <= 0)
+                {
+                    state_ = kExplode;
+                    duration_ = STRIP_EXPLODE_TICKS;
+                }
+                break;
+            case kExplode:
+                if (duration_ > 0) --duration_;
+                break;
+        }
+
+        // --- Animate() body (stripeffect.cpp :664-820):
+        // EXPLODE: shrink the tail at ADD_FACTOR=2 / tick, glow *= 0.8.
+        if (state_ == kExplode)
+        {
+            for (int32_t i = 0; i < 2 && numpoints_ > 0; ++i)
+                --numpoints_;
+            glow_scale_ *= 0.8f;
+        }
+        // FLY: grow at ADD_FACTOR=2 anchors / tick until numpoints == maxpoints.
+        else if (numpoints_ < maxpoints_)
+        {
+            for (int32_t i = 0; i < 2 && numpoints_ < maxpoints_; ++i)
+            {
+                // Snapshot stores p in local frame with p.y = -10 * numpoints,
+                // p.x = p.z = 0; we project that to world space along
+                // forward_dir_, anchored at the spawn origin.
+                SBoltAnchor& a = anchors_[numpoints_];
+                a.pos[0] = float(IntPos(*this).x) +
+                           forward_dir_[0] * float(numpoints_ * STRIP_SEG_LEN);
+                a.pos[1] = float(IntPos(*this).y) +
+                           forward_dir_[1] * float(numpoints_ * STRIP_SEG_LEN);
+                a.pos[2] = float(IntPos(*this).z) + 50.0f;
+                ++numpoints_;
+            }
+        }
+
+        // Smoothing calculations (stripeffect.cpp :741-792).
+        // Allocate the px/pz arrays of size numpoints+SMOOTH_SIZE; fill
+        // every SMOOTH_SIZE-th index with random(-13, 13); interpolate
+        // intermediate indices with the snapshot's 0.5/2.0/3.5 weights.
+        const int32_t n = numpoints_;
+        if (n >= 2)
+        {
+            float px[100 + STRIP_SMOOTH_SIZE] = {0};
+            float pz[100 + STRIP_SMOOTH_SIZE] = {0};
+            for (int32_t i = 1; i < n; ++i)
+            {
+                if (!(i % STRIP_SMOOTH_SIZE))
+                {
+                    px[i] = float(random(-STRIP_JITTER_MAG, STRIP_JITTER_MAG));
+                    pz[i] = float(random(-STRIP_JITTER_MAG, STRIP_JITTER_MAG));
+                }
+            }
+            int32_t last_point = 0;
+            int32_t next_point = STRIP_SMOOTH_SIZE;
+            for (int32_t i = 1; i < n; ++i)
+            {
+                if (i == next_point)
+                {
+                    last_point = next_point;
+                    next_point += STRIP_SMOOTH_SIZE;
+                }
+                const int32_t mod = i % STRIP_SMOOTH_SIZE;
+                if (mod)
+                {
+                    if (mod == 1)
+                    {
+                        px[i] = ((px[next_point] - px[last_point]) * 0.5f) /
+                                float(STRIP_SMOOTH_SIZE);
+                        pz[i] = ((pz[next_point] - pz[last_point]) * 0.5f) /
+                                float(STRIP_SMOOTH_SIZE);
+                    }
+                    else if (mod == 2)
+                    {
+                        px[i] = ((px[next_point] - px[last_point]) * 2.0f) /
+                                float(STRIP_SMOOTH_SIZE);
+                        pz[i] = ((pz[next_point] - pz[last_point]) * 2.0f) /
+                                float(STRIP_SMOOTH_SIZE);
+                    }
+                    else if (mod == 3)
+                    {
+                        px[i] = ((px[next_point] - px[last_point]) * 3.5f) /
+                                float(STRIP_SMOOTH_SIZE);
+                        pz[i] = ((pz[next_point] - pz[last_point]) * 3.5f) /
+                                float(STRIP_SMOOTH_SIZE);
+                    }
+                    px[i] += px[last_point];
+                    pz[i] += pz[last_point];
+                }
+            }
+            // Apply jitter to every anchor's xy + z, anchor 0 stays clean.
+            // Snapshot also has a "down ? p->z = -(i-1)*20/(maxpoints-1)" droop
+            // which we omit for first-pass (looks subtle and adds nothing for
+            // the boot-render smoke test); keep px/pz only.
+            for (int32_t i = 1; i < n; ++i)
+            {
+                anchors_[i].jitter[0] = px[i];
+                anchors_[i].jitter[1] = pz[i];
+            }
+        }
+
+        // ScrollTexture(-0.1) (stripeffect.cpp :817).
+        u_scroll_ += -0.1f;
+        if (u_scroll_ < -1.0f) u_scroll_ += 1.0f;
+        if (u_scroll_ >  1.0f) u_scroll_ -= 1.0f;
+
+        // iter5 NEGATIVE FINDING: the retail strip texture is single-
+        // cell (64×64, nframes=1). The frame_idx_ cycle is a no-op at
+        // current asset binding but retained as plumbing in case a
+        // future loader path discovers per-sub-object frame arrays
+        // (e.g. SetTextureFrame on the strip carrier sub-object). See
+        // .vfx_logs/lightstrip.md 2026-05-31 04:15 for the inspection
+        // log that surfaced this.
+        if (num_frames_ > 1)
+            frame_idx_ = (frame_idx_ + 1) % num_frames_;
+
+        // Rotating glow degrees (stripeffect.cpp :814-815).
+        rotdegree_    = std::fmod(rotdegree_ + 12.0f, 360.0f);
+        morrotdegree_ = std::fmod(morrotdegree_ + 16.0f, 360.0f);
+
+        // Self-destruct when EXPLODE drains all points + the glow is dim
+        // (snapshot equivalent: `if (my_state == EXPLODE && !spark.GetCount()
+        // && !impact_spark.GetCount()) KillThisEffect()`). We approximate
+        // by waiting until numpoints == 0 AND glow_scale_ < 0.05.
+        if (state_ == kExplode && numpoints_ <= 1 && glow_scale_ < 0.05f)
+        {
+            alive_ = false;
+            break;
+        }
+    }
+
+    if (numpoints_ < 2)
+        return;
+
+    // --- Render() — port of stripeffect.cpp :822-915. Strip half is the
+    // SR pipeline submission (AdditiveStraight per snapshot SetAddBlendState
+    // -- ALPHABLENDENABLE is on in the snapshot's Render :701 enable). The
+    // glow uses two AdditiveStraight billboards as a stand-in for the
+    // RenderObject(obj 1) RotateZ()+RotateZ() pair.
+
+    // Perpendicular axes for applying jitter in world XY (matches
+    // src/stripeffect.cpp's perp_x/perp_y).
+    const float perp_x = -forward_dir_[1];
+    const float perp_y =  forward_dir_[0];
+
+    // Build SStripSegment[] for the strip body.
+    static thread_local std::vector<SStripSegment> seg_scratch;
+    seg_scratch.clear();
+    const int32_t n_seg = numpoints_ - 1;
+    seg_scratch.reserve(size_t(n_seg));
+    for (int32_t i = 0; i < n_seg; ++i)
+    {
+        const SBoltAnchor& a = anchors_[i];
+        const SBoltAnchor& b = anchors_[i + 1];
+        const float ta = float(i)     / float(n_seg);
+        const float tb = float(i + 1) / float(n_seg);
+        SStripSegment seg = {};
+        seg.world_a[0] = a.pos[0] + perp_x * a.jitter[0];
+        seg.world_a[1] = a.pos[1] + perp_y * a.jitter[0];
+        seg.world_a[2] = a.pos[2] + a.jitter[1];
+        seg.world_b[0] = b.pos[0] + perp_x * b.jitter[0];
+        seg.world_b[1] = b.pos[1] + perp_y * b.jitter[0];
+        seg.world_b[2] = b.pos[2] + b.jitter[1];
+        // Width hilt -> tip, LIGHTNING_SCALE constants -> STRIP_WIDTH_*.
+        seg.width_a_wu = STRIP_WIDTH_HILT * (1.0f - ta) + STRIP_WIDTH_TIP * ta;
+        seg.width_b_wu = STRIP_WIDTH_HILT * (1.0f - tb) + STRIP_WIDTH_TIP * tb;
+        // Snapshot sets every vertex color to D3DRGBA(1,1,1,1) (line :848),
+        // so all four corners are full white.
+        for (int32_t k = 0; k < 4; ++k)
+        {
+            seg.color_a[k] = 1.0f;
+            seg.color_b[k] = 1.0f;
+        }
+        seg.u_a = ta + u_scroll_;
+        seg.u_b = tb + u_scroll_;
+        // iter5 NEGATIVE FINDING: SpawnForTest's spawn log reports
+        // strip_tex=14(w=64 h=64 nframes=1) — the retail strip texture
+        // is a single 64×64 pattern, not 8 stacked frames. The
+        // "8 parallel strips" hypothesis is disproven by asset
+        // inspection. SStripSegment.v_left/v_right stay at default 0/1
+        // (the engine extension lands for future strip animators that
+        // DO have V-cell flipbook layouts). The 50,643 B retail asset's
+        // bulk (vs snapshot's 18,680 B) lives in the sub-object meshes
+        // (start/sparks/end geometry per forensics §2.1) — not in extra
+        // texture frames. Log: .vfx_logs/lightstrip.md 2026-05-31 04:15.
+        seg_scratch.push_back(seg);
+    }
+
+    // Per-vertex colour stays pure-white per snapshot stripeffect.cpp:848
+    // (`obj->lverts[i].color = D3DRGBA(1.0f, 1.0f, 1.0f, 1.0f)`). Under
+    // MODULATE the strip texture passes through at full intensity — the
+    // authored bolt-crackle's colour (white/blue electric per forensics
+    // §10) IS the colour the bolt reads. Iter1-3 invented an RGB tint to
+    // compensate for the missing asset texture; iter4 binds the real
+    // Magic\NewLightStrip.I3D texture (above) so the snapshot's white
+    // ground-truth is correct again — the texture carries the hue.
+    // Already initialised to {1,1,1,1} in the seg loop above; no
+    // further modification.
+
+    SStripDrawItem strip_item = {};
+    strip_item.segments     = seg_scratch.data();
+    strip_item.num_segments = int32_t(seg_scratch.size());
+    strip_item.key.texture     = strip_tex_;
+    strip_item.key.pipeline_id = uint16_t(EFxPipeline::Strip);
+    // Forensics §7 SANITY-CHECK + §13.2: snapshot drew Alpha for the
+    // whole composite, but every sprite is bright-on-black and the
+    // sister TWindStripAnimator switches to additive for its halo. The
+    // authored bolt-crackle texture is bright-on-black per forensics §4
+    // (knowledge 02_ASSETS_IMAGERY.md §4 — black-keyed effect textures).
+    // AdditiveStraight is the textbook self-lit-bolt blend.
+    strip_item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    strip_item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    strip_item.debug_mode      = debug_mode;
+    Renderer->SubmitFxStrip(strip_item);
+
+    // iter8: glow halos moved to SubmitWorldMeshes_BESPOKE (drains
+    // from the harness submit_world callback inside BeginTilePass
+    // scope). SubmitHelperMesh from the regular submit path gets its
+    // queue cleared by BeginTilePass; sister TIceBoltEffect_Bespoke
+    // hit this and resolved by splitting (src/effect.cpp:8280 +
+    // vfxtest.cpp:1971). LightStrip follows the same pattern.
+    //
+    // NOTE: spark + impact_spark sub-emitter particle systems remain
+    // unported (forensics SPARKS_TSparkAnimator.md owns that slice).
+    //
+    // Billboard fallback path kept here for the case where glow_mesh_
+    // registration failed at spawn — preserves a visible halo so the
+    // effect doesn't go completely dark on asset issues.
+    if (glow_scale_ > 0.005f && glow_mesh_ == 0 && glow_tex_ != kInvalidTexture)
+    {
+        // Per-frame scale jitter (snapshot stripeffect.cpp:870:
+        // `random(0, 4f/10.0)` ⇒ 0..0.4).
+        const float scl = glow_scale_ + (float(random(0, 4)) / 10.0f);
+
+        // Caster-end glow at anchor 0; impact-end glow at the live
+        // tail anchor (= retail end_p).
+        const float wx_start = anchors_[0].pos[0];
+        const float wy_start = anchors_[0].pos[1];
+        const float wz_start = anchors_[0].pos[2];
+
+        // Impact halo only lights when the bolt has reached its target
+        // (forensics §6.2): impact_spark.particles = 20 the tick
+        // mystrip.curpoints == maxpoints; stays lit through EXPLODE
+        // while the spark tails drain.
+        const bool    impact_lit = (numpoints_ >= maxpoints_ - 1) ||
+                                    (state_ == kExplode);
+        const int32_t tail_idx   = (numpoints_ > 0) ? numpoints_ - 1 : 0;
+        const float wx_end = anchors_[tail_idx].pos[0];
+        const float wy_end = anchors_[tail_idx].pos[1];
+        const float wz_end = anchors_[tail_idx].pos[2];
+
+        struct SHalo
+        {
+            float wx;
+            float wy;
+            float wz;
+        };
+        const SHalo halos[2] = {
+            { wx_start, wy_start, wz_start },
+            { wx_end,   wy_end,   wz_end   },
+        };
+        const int32_t n_halos = impact_lit ? 2 : 1;
+
+        // Iter4 billboard fallback path — only runs when glow_mesh_=0
+        // (asset bind failed at spawn). The SubmitHelperMesh primary
+        // path runs in SubmitWorldMeshes_BESPOKE below.
+        for (int32_t h = 0; h < n_halos; ++h)
+        {
+            const SHalo& halo = halos[h];
+            constexpr float kGlowQuadWu = 16.0f;
+            const float     size_wu     = kGlowQuadWu * scl;
+            for (int32_t pass = 0; pass < 2; ++pass)
+            {
+                SBillboardDrawItem item = {};
+                item.world_pos[0] = halo.wx;
+                item.world_pos[1] = halo.wy;
+                item.world_pos[2] = halo.wz;
+                item.size_wu[0] = size_wu;
+                item.size_wu[1] = size_wu;
+                item.color_rgba[0] = 1.0f;
+                item.color_rgba[1] = 1.0f;
+                item.color_rgba[2] = 1.0f;
+                item.color_rgba[3] = 1.0f;
+                item.uv_rect[0] = 0.0f;
+                item.uv_rect[1] = 0.0f;
+                item.uv_rect[2] = 1.0f;
+                item.uv_rect[3] = 1.0f;
+                item.key.texture     = glow_tex_;
+                item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+                item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+                item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+                item.light_mode      = EFxLightMode::Unlit;
+                item.orientation     = EFxBillboardOrientation::ScreenAligned;
+                item.debug_mode      = debug_mode;
+                Renderer->SubmitFxBillboard(item);
+            }
+        }
+    }
+}
+
+// iter8 submit_world callback target: drains the glow halo Submit
+// HelperMesh draws. The harness calls this inside BeginTilePass scope
+// AFTER that call clears the transparent_world_queue. Mirrors sister
+// TIceBoltEffect_Bespoke's SubmitWorldMeshes_BESPOKE at
+// src/effect.cpp:8280+ and vfxtest.cpp's IceBoltBespokeSubmitWorld
+// at :1971-1977.
+void TLightningAnimator_Bespoke::SubmitWorldMeshes_BESPOKE(EFxDebugMode /*debug_mode*/)
+{
+    if (!Renderer || !alive_)
+        return;
+    if (numpoints_ < 2)
+        return;
+    if (!(glow_scale_ > 0.005f) || glow_mesh_ == 0)
+        return;
+
+    // Per-frame scale jitter (snapshot stripeffect.cpp:870:
+    // `random(0, 4f/10.0)` ⇒ 0..0.4).
+    //
+    // iter9 retail-asset scale correction: snapshot's glow_scale=3.4 was
+    // tuned for the 18,680 B dev asset's tiny `stripfly` sub-object
+    // quad. The retail `#flare` sub-object (50,643 B asset, 2.7× larger
+    // per forensics §2.1) has a much bigger authored quad — applying
+    // glow_scale=3.4 directly produces a flare that dominates the
+    // screen at ~25% height (iter8 capture). Multiply by 0.40 to bring
+    // it into the reference proportions (~10% screen height per the
+    // reference frames 02-04). This is a per-asset visual-tuning
+    // constant, not a snapshot constant; the snapshot's 3.4 stays as
+    // the base.
+    constexpr float kRetailFlareScaleCorrection = 0.40f;
+    const float scl = (glow_scale_ + (float(random(0, 4)) / 10.0f))
+                      * kRetailFlareScaleCorrection;
+
+    // Caster-end glow at anchor 0; impact-end glow at the live tail
+    // anchor (= retail end_p).
+    const float wx_start = anchors_[0].pos[0];
+    const float wy_start = anchors_[0].pos[1];
+    const float wz_start = anchors_[0].pos[2];
+    const bool    impact_lit = (numpoints_ >= maxpoints_ - 1) ||
+                                (state_ == kExplode);
+    const int32_t tail_idx   = (numpoints_ > 0) ? numpoints_ - 1 : 0;
+    const float wx_end = anchors_[tail_idx].pos[0];
+    const float wy_end = anchors_[tail_idx].pos[1];
+    const float wz_end = anchors_[tail_idx].pos[2];
+
+    struct SHalo
+    {
+        float wx;
+        float wy;
+        float wz;
+    };
+    const SHalo halos[2] = {
+        { wx_start, wy_start, wz_start },
+        { wx_end,   wy_end,   wz_end   },
+    };
+    const int32_t n_halos = impact_lit ? 2 : 1;
+
+    // Row-major 4×4, column-vector convention (vertex shader does
+    // wp = M * v per src/shaders/mesh.glsl.h:36-41). Same idiom as
+    // icebolt's submit_mesh lambda at src/effect.cpp:8293-8398.
+    auto mat_identity = [](float m[16]) {
+        for (int i = 0; i < 16; ++i) m[i] = 0.0f;
+        m[0] = m[5] = m[10] = m[15] = 1.0f;
+    };
+    auto mat_mul = [](const float a[16], const float b[16], float r[16]) {
+        float tmp[16];
+        for (int i = 0; i < 4; ++i)
+            for (int j = 0; j < 4; ++j)
+            {
+                float s = 0.0f;
+                for (int k = 0; k < 4; ++k) s += a[i * 4 + k] * b[k * 4 + j];
+                tmp[i * 4 + j] = s;
+            }
+        std::memcpy(r, tmp, sizeof(tmp));
+    };
+    // Snapshot D3D row-vector composition (stripeffect.cpp:872-896):
+    //   M *= S; M *= Rx; M *= Ry; M *= Rz_face; M *= T_local; M *= Rz_local
+    // → column-vector form (apply right-to-left to a column vector):
+    //   M = Rz_local · T_local · Rz_face · Ry · Rx · S
+    // For the glow, obj->pos = (0,0,0) authored, so T_local = I. The
+    // world halo position is applied via the outer inst_world matrix.
+    auto build_glow_local = [&mat_identity, &mat_mul](
+                                float rotz_local_rad,
+                                float face_offset_rad,
+                                float scl_local,
+                                float out[16])
+    {
+        const float c_lz = std::cos(rotz_local_rad), s_lz = std::sin(rotz_local_rad);
+        float Rz_local[16]; mat_identity(Rz_local);
+        Rz_local[0]=c_lz; Rz_local[1]=-s_lz; Rz_local[4]=s_lz; Rz_local[5]=c_lz;
+        const float rx = -30.0f * 3.14159265359f / 180.0f;
+        const float c_x = std::cos(rx), s_x = std::sin(rx);
+        float Rx[16]; mat_identity(Rx);
+        Rx[5]=c_x; Rx[6]=-s_x; Rx[9]=s_x; Rx[10]=c_x;
+        const float ry = 60.0f * 3.14159265359f / 180.0f;
+        const float c_y = std::cos(ry), s_y = std::sin(ry);
+        float Ry[16]; mat_identity(Ry);
+        Ry[0]=c_y; Ry[2]=s_y; Ry[8]=-s_y; Ry[10]=c_y;
+        const float c_face = std::cos(face_offset_rad), s_face = std::sin(face_offset_rad);
+        float Rz_face[16]; mat_identity(Rz_face);
+        Rz_face[0]=c_face; Rz_face[1]=-s_face; Rz_face[4]=s_face; Rz_face[5]=c_face;
+        float S[16]; mat_identity(S); S[0]=scl_local; S[5]=scl_local; S[10]=scl_local;
+        // local = Rz_local · Rx · Ry · Rz_face · S   (T_local=I, dropped)
+        float M1[16], M2[16], M3[16];
+        mat_mul(Rz_face,  S,        M1);   // M1 = Rz_face · S
+        mat_mul(Ry,       M1,       M2);   // M2 = Ry · M1
+        mat_mul(Rx,       M2,       M3);   // M3 = Rx · M2
+        mat_mul(Rz_local, M3,       out);  // out = Rz_local · M3
+    };
+
+    for (int32_t h = 0; h < n_halos; ++h)
+    {
+        const SHalo& halo = halos[h];
+        // inst_world translates the glow to its halo world center.
+        float inst_world[16];
+        for (int i = 0; i < 16; ++i) inst_world[i] = 0.0f;
+        inst_world[0]  = 1.0f;
+        inst_world[5]  = 1.0f;
+        inst_world[10] = 1.0f;
+        inst_world[15] = 1.0f;
+        inst_world[3]  = halo.wx;
+        inst_world[7]  = halo.wy;
+        inst_world[11] = halo.wz;
+
+        const float face_rad = 0.0f;  // harness face = 0
+        // Two passes — Half-A RotZ(-rotdegree), Half-B RotZ(+morrotdegree).
+        const float rotz_a = -rotdegree_    * 3.14159265359f / 180.0f;
+        const float rotz_b =  morrotdegree_ * 3.14159265359f / 180.0f;
+        const float rotz_list[2] = { rotz_a, rotz_b };
+        for (int32_t pass = 0; pass < 2; ++pass)
+        {
+            float local[16];
+            build_glow_local(rotz_list[pass], face_rad, scl, local);
+            float world[16];
+            mat_mul(inst_world, local, world);
+            SHelperMeshSubmit m = {};
+            m.mesh           = glow_mesh_;
+            m.additive_blend = true;       // forensics §13.2 — bright-on-black glow
+            m.shadow_plane   = false;
+            std::memcpy(m.world, world, sizeof(world));
+            std::memcpy(m.diffuse,  glow_diffuse_,  4 * sizeof(float));
+            std::memcpy(m.ambient,  glow_diffuse_,  4 * sizeof(float));
+            m.specular[0] = m.specular[1] = m.specular[2] = m.specular[3] = 0.0f;
+            std::memcpy(m.emissive, glow_emissive_, 4 * sizeof(float));
+            m.power      = 1.0f;
+            m.sort_depth = halo.wz;
+            Renderer->SubmitHelperMesh(m);
+        }
+    }
+}
+
+// =========================================================================
+// S05 TShockAnimator_Bespoke
+// =========================================================================
+// Snapshot source: src/effectcomp.cpp :609-770. The retail TShockAnimator
+// is embedded in I21 TIceBoltAnimator at the target/caster end. Animator
+// owns one ring TStripAnimator-shaped object with N vertices; per-tick
+// scale_factor *= component-wise; when any axis crosses max_size, either
+// flip to SHRINK or set done. Per-frame Render: rotate/scale/translate
+// the object's matrix, optionally fade alpha by
+// (max - scale)/(max - init), submit. We approximate the ring with N
+// billboards arrayed in a circle on the world XY plane.
+
+TShockAnimator_Bespoke* TShockAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TShockAnimator_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    // Snapshot Set() copies the incoming SShockParam and sets init_scale.
+    // For the harness we use defaults consistent with the I21 ring usage:
+    // start small, grow to ~50 wu over ~30 ticks (scale_factor 1.10/tick),
+    // then shrink back via shrink_factor 0.92/tick. Pos lives at origin.
+    // hmm_vec3 in this codebase uses uppercase .X/.Y/.Z (snapshot used lower).
+    eff->pos_.X = float(origin.x);
+    eff->pos_.Y = float(origin.y);
+    eff->pos_.Z = float(origin.z) + 4.0f;
+    eff->rot_   = {0.0f, 0.0f, 0.0f};
+    eff->scale_         = {2.0f, 2.0f, 2.0f};         // start radius ~2 wu
+    eff->scale_factor_  = {1.10f, 1.10f, 1.10f};
+    eff->shrink_factor_ = {0.92f, 0.92f, 0.92f};
+    eff->max_size_      = {50.0f, 50.0f, 50.0f};
+    eff->min_size_      = {0.5f, 0.5f, 0.5f};
+    eff->init_scale_    = eff->scale_;
+    eff->flags_         = kFlagShrink | kFlagFade;
+    eff->ring_color_[0] = 0.5f;
+    eff->ring_color_[1] = 0.7f;
+    eff->ring_color_[2] = 1.0f;
+    eff->ring_color_[3] = 1.0f;
+    eff->done_  = false;
+    eff->grow_  = kGrow;
+
+    log_info("[S05 shock_bespoke] SpawnForTest: origin=(%d,%d,%d) flags=%d "
+             "init_scale=(%.2f,%.2f,%.2f) max=(%.2f,%.2f,%.2f)",
+             origin.x, origin.y, origin.z, eff->flags_,
+             double(eff->init_scale_.X), double(eff->init_scale_.Y), double(eff->init_scale_.Z),
+             double(eff->max_size_.X), double(eff->max_size_.Y), double(eff->max_size_.Z));
+    return eff;
+}
+
+void TShockAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Animate() (effectcomp.cpp :636-663):
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStripFamilySimTickMs))
+    {
+        sim_accum_ms_ -= double(kStripFamilySimTickMs);
+        if (done_)
+            break;
+
+        // scaling
+        scale_.X *= scale_factor_.X;
+        scale_.Y *= scale_factor_.Y;
+        scale_.Z *= scale_factor_.Z;
+
+        // check growth, and shrinking
+        if ((scale_.X > max_size_.X || scale_.Y > max_size_.Y || scale_.Z > max_size_.Z)
+            && grow_ == kGrow)
+        {
+            if (flags_ & kFlagShrink)
+            {
+                grow_ = kShrink;
+                scale_factor_.X = shrink_factor_.X;
+                scale_factor_.Y = shrink_factor_.Y;
+                scale_factor_.Z = shrink_factor_.Z;
+            }
+            else
+            {
+                done_ = true;
+            }
+        }
+        else if ((scale_.X < min_size_.X || scale_.Y < min_size_.Y || scale_.Z < min_size_.Z)
+                 && grow_ == kShrink)
+        {
+            done_ = true;
+        }
+    }
+
+    if (done_)
+        return;
+
+    // --- Render() (effectcomp.cpp :689-770):
+    // Snapshot computes alpha_blend_factor = (max - scale) / (max - init) when
+    // SHOCKWAVE_FLAG_FADE set, and multiplies the alpha by it. (RGB
+    // commented out in snapshot.) We do the same.
+    float alpha_blend_factor = 1.0f;
+    if (flags_ & kFlagFade)
+    {
+        alpha_blend_factor = (max_size_.X - scale_.X) /
+                             (max_size_.X - init_scale_.X);
+        if (alpha_blend_factor < 0.0f) alpha_blend_factor = 0.0f;
+        if (alpha_blend_factor > 1.0f) alpha_blend_factor = 1.0f;
+    }
+
+    // Snapshot draws ONE object with `ring_count * vertex_count` lverts.
+    // We collapse to one ring of kRingVertices billboards on the world XY
+    // plane, radius = scale.x * 10wu (the snapshot mesh shape isn't
+    // directly accessible — first-pass approximation).
+    const TTextureHandle spark_tex = StripFamilySparkTexture();
+    if (spark_tex == kInvalidTexture)
+        return;
+
+    const float r = scale_.X * 10.0f;
+    const float a = ring_color_[3] * alpha_blend_factor;
+    for (int32_t j = 0; j < kRingVertices; ++j)
+    {
+        const float th = float(j) / float(kRingVertices) * 6.28318530718f;
+        const float wx = pos_.X + std::cos(th) * r;
+        const float wy = pos_.Y + std::sin(th) * r;
+        const float wz = pos_.Z;
+
+        SBillboardDrawItem item = {};
+        item.world_pos[0] = wx;
+        item.world_pos[1] = wy;
+        item.world_pos[2] = wz;
+        // Per-vertex size = a bit of the radius so consecutive billboards
+        // overlap into a continuous ring.
+        const float ring_segment_wu = r * 0.35f + 4.0f;
+        item.size_wu[0] = ring_segment_wu;
+        item.size_wu[1] = ring_segment_wu;
+        item.color_rgba[0] = ring_color_[0];
+        item.color_rgba[1] = ring_color_[1];
+        item.color_rgba[2] = ring_color_[2];
+        item.color_rgba[3] = a;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        // Snapshot Render() :756-758 sets SRCBLEND=SRC_ALPHA /
+        // DESTBLEND=INV_SRC_ALPHA -> EFxBlend::Alpha. (Preserved verbatim;
+        // do not reinterpret as Additive.)
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        // Ground-plane ring -> WorldXY so it foreshortens correctly.
+        item.orientation     = EFxBillboardOrientation::WorldXY;
+        item.debug_mode      = debug_mode;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// =========================================================================
+// S07 TStreamerEffect_Bespoke
+// =========================================================================
+// Snapshot source: src/effect_old.cpp :10248-10434 (TStreamerAnimator).
+// 4 streams (j=0..3), each per tick spawns STREAMER_SKIP*(4-j) new
+// particles via InitStreamer(j); particle pos is sphere-mapped from
+// (th, h) into (cos*r, sin*r, vertical), with modif = 0.5*(1+cos(2h+PI))
+// for a smooth ring growth. Lifetime gated by frameon > STREAMER_DURATION.
+// Render uses SetAddBlendState (AdditiveStraight).
+
+// Authored initialization/submission follows the shared imagery/runtime helpers below.
+
+// Snapshot InitStreamer (effect_old.cpp :10276-10295) — adds one particle
+// to stream x at the current (th, h) parametric point, advances angles,
+// short-circuits frameon if h crosses PI.
+void TStreamerEffect_Bespoke::InitStreamerSnap(int32_t x)
+{
+    // hmm_vec3 in this codebase uses uppercase .X/.Y/.Z (snapshot used lower).
+    hmm_vec3 pos = {0.0f, 0.0f, 0.0f};
+    // Retail 0x4efa90 retains the trig/product and angle sums in x87 until
+    // their final float stores. In particular, wrap subtracts from the
+    // unrounded sum; rounding first accumulates a different spiral phase.
+    const double modif = 0.5 * (1.0 + std::cos(2.0 * double(h_[x]) + M_PI));
+    const double radius = double(kStreamerModifier) / double(kStreamerMaxStreams);
+    pos.X = float(std::cos(double(th_[x])) * modif * double(x + 1) * radius);
+    pos.Y = float(std::sin(double(th_[x])) * modif * double(x + 1) * radius);
+    pos.Z = float((std::cos(double(h_[x])) + 1.0) * double(kStreamerModifierV));
+    const double next_h = double(h_[x]) + double(dh_[x]);
+    h_[x] = float(next_h);
+    if (next_h > M_PI)
+    {
+        // h_[x] -= M_PI;  (commented out in snapshot)
+        frameon_ = kStreamerDuration + 1;
+    }
+    if (double(h_[x]) > 2.0 * M_PI)
+        h_[x] -= float(2.0 * M_PI);
+    const double next_th = double(th_[x]) + double(dth_[x]);
+    th_[x] = float(next_th > 2.0 * M_PI ? next_th - double(float(2.0 * M_PI)) : next_th);
+    AddStreamerSnap(x, pos, float(double(scl_init_[x]) * modif));
+}
+
+// Snapshot AddStreamer (effect_old.cpp :10324-10347) — finds the LAST
+// dead slot (snapshot does `if (count <= 0) p = i` in a forward sweep,
+// so p ends as the last free index), populates it, then decrements all
+// counts and scales for the whole stream.
+void TStreamerEffect_Bespoke::AddStreamerSnap(int32_t num, const hmm_vec3& pos, float scl)
+{
+    int32_t p = -1;
+    for (int32_t i = 0; i < kStreamerMaxParticles; ++i)
+    {
+        if (stream_[num][i].count <= 0)
+            p = i;
+    }
+    if (p > -1)
+    {
+        stream_[num][p].pos.X = pos.X;
+        stream_[num][p].pos.Y = pos.Y;
+        stream_[num][p].pos.Z = pos.Z;
+        stream_[num][p].scl = scl;
+        stream_[num][p].count = kStreamerMaxParticles;
+    }
+    for (int32_t i = 0; i < kStreamerMaxParticles; ++i)
+    {
+        stream_[num][i].count--;
+        stream_[num][i].scl -= dscl_[num];
+    }
+}
+
+// =========================================================================
+// X11 TRibbonAnimator_Bespoke
+// =========================================================================
+// Snapshot source: src/effect_old.cpp :4069-4321. The revive halo's
+// composite: NUM_RIBBON_SPARKS=30 small sparks orbiting in a column above
+// the ribbon position, plus a slow-growing center spark at the floor,
+// plus NUM_RIBBONS=3 rotating ribbons. Pre-release reads
+// (PTReviveEffect)inst->stage / ->target — neither exists in the harness,
+// so we land in the "no spell" branch (effect_old.cpp :4180-4186, grow
+// ribscale to RIBBON_MAXSCALE then hold).
+
+TRibbonAnimator_Bespoke* TRibbonAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                      const char* asset_override)
+{
+    // Wave-4 variant entries (RibbonB/G/O/P/R/W/Y) supply per-variant I3D
+    // paths (Magic\RibbonB.I3D etc.). The current X11 port draws sparks via
+    // StripFamilySparkTexture() (shared family texture) — no per-variant
+    // imagery is loaded yet; record the requested override so future
+    // per-variant texture binding can pick it up.
+    if (asset_override)
+        log_info("[X11 ribbon_bespoke] SpawnForTest: variant asset override='%s' "
+                 "(animator still uses shared spark texture)",
+                 asset_override);
+    auto* eff = new TRibbonAnimator_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    // Snapshot Initialize() (effect_old.cpp :4084-4134):
+    // numtexframes from imagery (NOT bound; default 1).
+    // hmm_vec3 in this codebase uses uppercase .X/.Y/.Z (snapshot used lower).
+    eff->ribbontimer_ = 0;
+    eff->ribpos_.X = float(origin.x);
+    eff->ribpos_.Y = float(origin.y);
+    eff->ribpos_.Z = float(origin.z);
+    eff->ribscale_ = 0.05f;   // RIBBON_MINSCALE
+    for (int32_t n = 0; n < NUM_RIBBONS; ++n)
+        eff->rotation_[n] = float(n) * 2.0f;
+    for (int32_t n = 0; n < NUM_RIBBON_SPARKS; ++n)
+    {
+        eff->p_[n].X = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
+        eff->p_[n].Y = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
+        eff->p_[n].Z = float(random(0, RIBBON_RADIUS / 2));
+        eff->v_[n].X = -eff->p_[n].X / float(RIBBON_SPARK_DURATION) / 2.0f;
+        eff->v_[n].Y = -eff->p_[n].Y / float(RIBBON_SPARK_DURATION) / 2.0f;
+        eff->v_[n].Z = 0.5f;
+        eff->scale_spark_[n] = 0.0f;
+        eff->framenum_[n] = random(-NUM_RIBBON_SPARKS, 0);
+    }
+    eff->centertilt_     = 0.0f;
+    eff->centertilt_dx_  = 0.001f;
+    eff->alive_          = true;
+
+    log_info("[X11 ribbon_bespoke] SpawnForTest: origin=(%d,%d,%d)",
+             origin.x, origin.y, origin.z);
+    return eff;
+}
+
+void TRibbonAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // --- Animate() (effect_old.cpp :4143-4235):
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStripFamilySimTickMs))
+    {
+        sim_accum_ms_ -= double(kStripFamilySimTickMs);
+        if (!alive_)
+            break;
+        ribbontimer_++;
+        // Rotate ribbons (snapshot :4157).
+        for (int32_t n = 0; n < NUM_RIBBONS; ++n)
+            rotation_[n] += 0.2f;
+        // No PTReviveEffect in harness — take the else-branch (snapshot
+        // :4180-4186): grow ribscale to RIBBON_MAXSCALE.
+        const float RIBBON_MAXSCALE = 4.5f;
+        const float RIBBON_MINSCALE = 0.05f;
+        const float RIBBON_SCALEINC =
+            (RIBBON_MAXSCALE - RIBBON_MINSCALE) / float(kRibbonGrowFrames);
+        if (ribscale_ <= RIBBON_MAXSCALE)
+            ribscale_ += RIBBON_SCALEINC;
+
+        // Update all ribbon sparks (snapshot :4191-4228).
+        for (int32_t n = 0; n < NUM_RIBBON_SPARKS; ++n)
+        {
+            framenum_[n]++;
+            if (framenum_[n] > 0)
+            {
+                if (framenum_[n] >= RIBBON_SPARK_DURATION)
+                {
+                    p_[n].X = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
+                    p_[n].Y = float(random(-RIBBON_RADIUS, RIBBON_RADIUS));
+                    p_[n].Z = float(random(0, RIBBON_RADIUS / 2));
+                    v_[n].X = -p_[n].X / float(RIBBON_SPARK_DURATION) / 2.0f;
+                    v_[n].Y = -p_[n].Y / float(RIBBON_SPARK_DURATION) / 2.0f;
+                    v_[n].Z = 0.5f;
+                    framenum_[n] = 0;
+                    scale_spark_[n] = 0.0f;
+                }
+                else if (framenum_[n] > RIBBON_SPARK_DURATION / 2)
+                    scale_spark_[n] -= float(RIBBON_SPARK_SCALE_STEP);
+                else
+                    scale_spark_[n] += float(RIBBON_SPARK_SCALE_STEP);
+                p_[n].X += v_[n].X;
+                p_[n].Y += v_[n].Y;
+                p_[n].Z += v_[n].Z;
+                v_[n].Z += 0.5f;
+            }
+        }
+        centertilt_ += centertilt_dx_;
+        if (centertilt_ > 0.25f || centertilt_ < -0.25f)
+            centertilt_dx_ = -centertilt_dx_;
+
+        // Harness self-kill — snapshot relies on PTReviveEffect to KillThisEffect;
+        // we use a fixed one-shot duration so the Combat-cadence harness can
+        // re-trigger cleanly.
+        if (ribbontimer_ >= kRibbonLifeTicks)
+        {
+            alive_ = false;
+            break;
+        }
+    }
+
+    if (!alive_)
+        return;
+
+    // --- Render() (effect_old.cpp :4244-4321):
+    const TTextureHandle spark_tex = StripFamilySparkTexture();
+    if (spark_tex == kInvalidTexture)
+        return;
+
+    const float ox = ribpos_.X;
+    const float oy = ribpos_.Y;
+    const float oz = ribpos_.Z;
+
+    // 1) Ribbon sparks (snapshot :4257-4277). For each spark with framenum>0
+    // and scale>0, draw the obj at p_[n] with scale_spark_[n].
+    for (int32_t n = 0; n < NUM_RIBBON_SPARKS; ++n)
+    {
+        if (framenum_[n] > 0 && scale_spark_[n] > 0.0f)
+        {
+            SBillboardDrawItem item = {};
+            item.world_pos[0] = ox + p_[n].X;
+            item.world_pos[1] = oy + p_[n].Y;
+            item.world_pos[2] = oz + p_[n].Z;
+            const float size_wu = scale_spark_[n] * 16.0f;
+            item.size_wu[0] = size_wu;
+            item.size_wu[1] = size_wu;
+            item.color_rgba[0] = 1.0f;
+            item.color_rgba[1] = 1.0f;
+            item.color_rgba[2] = 1.0f;
+            item.color_rgba[3] = 1.0f;
+            item.uv_rect[0] = 0.0f;
+            item.uv_rect[1] = 0.0f;
+            item.uv_rect[2] = 1.0f;
+            item.uv_rect[3] = 1.0f;
+            item.key.texture     = spark_tex;
+            item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+            // Snapshot Render() :4248-4249 SetBlendState -> Alpha.
+            item.key.blend       = uint8_t(EFxBlend::Alpha);
+            item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+            item.light_mode      = EFxLightMode::Unlit;
+            item.orientation     = EFxBillboardOrientation::ScreenAligned;
+            item.debug_mode      = debug_mode;
+            Renderer->SubmitFxBillboard(item);
+        }
+    }
+
+    // 2) Center floor spark (snapshot :4283-4294).
+    {
+        const float scl = ribscale_ * 2.5f + (float(random(0, 10)) / 20.0f);
+        SBillboardDrawItem item = {};
+        item.world_pos[0] = ox;
+        item.world_pos[1] = oy;
+        item.world_pos[2] = oz;
+        const float size_wu = scl * 12.0f;
+        item.size_wu[0] = size_wu;
+        item.size_wu[1] = size_wu;
+        item.color_rgba[0] = 1.0f;
+        item.color_rgba[1] = 1.0f;
+        item.color_rgba[2] = 1.0f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::WorldXY;
+        item.debug_mode      = debug_mode;
+        Renderer->SubmitFxBillboard(item);
+    }
+
+    // 3) Ribbons (snapshot :4301-4316). Three rotating ribbons sitting at
+    // ribpos. Each ribbon's z is scaled 2x x/y (snapshot :4308-4309); we
+    // stand them in as three world-XY-tipped billboards offset upward,
+    // rotating around ribpos via rotation_[n].
+    for (int32_t n = 0; n < NUM_RIBBONS; ++n)
+    {
+        const float ang = rotation_[n];
+        const float offs = ribscale_ * 8.0f;
+        SBillboardDrawItem item = {};
+        item.world_pos[0] = ox + std::cos(ang) * offs;
+        item.world_pos[1] = oy + std::sin(ang) * offs;
+        item.world_pos[2] = oz + ribscale_ * 10.0f;
+        const float ribbon_size_wu = ribscale_ * 16.0f;
+        item.size_wu[0] = ribbon_size_wu;
+        item.size_wu[1] = ribbon_size_wu * 2.0f;       // snapshot scl.z = 2x scl.x/y
+        item.color_rgba[0] = 0.9f;
+        item.color_rgba[1] = 0.85f;
+        item.color_rgba[2] = 0.55f;                    // pale gold
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// *************************************************************************
+// * TWaterFallEffect_Bespoke (H02) + TWaterEffect_Bespoke (H01)            *
+// *   first-pass faithful direct ports of the snapshot TWaterFallAnimator  *
+// *   and TWaterAnimator render/integration bodies.                        *
+// *                                                                        *
+// * Source of truth:                                                       *
+// *   - TWaterFallAnimator: src/effect_old.cpp:11685-11873                 *
+// *   - TWaterAnimator:     src/effect_old.cpp:11895-12073                 *
+// *                                                                        *
+// * Render path note: the snapshot Render() bodies for BOTH effects        *
+// * write D3DRENDERSTATE_SRCBLEND=ONE / DESTBLEND=ONE (additive accumulate)*
+// * with the SetAddBlendState() call commented out. We honour the WRITTEN  *
+// * factor pair verbatim — EFxBlend::AdditiveStraight (ONE/ONE). Per       *
+// * orchestrator brief: "PRESERVE the snapshot's blend mode AS WRITTEN.    *
+// * Don't reinterpret."                                                    *
+// *                                                                        *
+// * Asset: both classes share `misc\Water.i3d` (imagery.rvi confirms;      *
+// * H01 entry maps "Water" -> misc\Water.i3d, H02 entry "Waterfall" ->     *
+// * misc\Water.i3d). Single sub-object, single texture — billboard the    *
+// * drop sprite per particle. Snapshot rendered with full D3D matrices    *
+// * (RotateZ -π/4 + per-instance face rotation); we collapse to a         *
+// * screen-aligned billboard for first-pass since the rotation knob isn't *
+// * on SBillboardDrawItem.                                                 *
+// *************************************************************************
+
+namespace {
+
+constexpr const char* kWaterImageryPath = "misc\\Water.i3d";   // shared H01/H02
+
+// Snapshot constants — direct from effect_old.cpp:11693-11699.
+constexpr int32_t kWaterFallMaxDrops  = 100;
+constexpr int32_t kWaterFallLength    = 64;
+constexpr int32_t kWaterFallHeight    = 64;
+constexpr float   kWaterFallScale     = 0.1f;
+constexpr float   kWaterFallGravity   = 0.25f;
+constexpr float   kWaterFallTallScale = 2.0f;
+
+// Snapshot constants — direct from effect_old.cpp:11903-11909.
+constexpr int32_t kWaterMaxDrops      = 25;
+constexpr int32_t kWaterLength        = 64;
+constexpr int32_t kWaterWidth         = 64;
+constexpr float   kWaterScale         = 0.2f;
+constexpr float   kWaterTallScale     = 0.1f;
+constexpr float   kWaterSpeed         = 2.0f;
+
+// 24 Hz sim-tick gate — every animator on the project ports to this.
+constexpr int32_t kWaterSimTickMs     = 1000 / 24;
+
+// First-pass billboard size in world units (drop billboard, ~16 wu base
+// scaled per-particle by drops[i].scale.x for visual variance). The
+// snapshot drove this through D3DMATRIXScale + Render with vertices in
+// a unit box mesh; we collapse to a single billboard scaled by an
+// average of (scale.x, scale.y) so the per-drop fall-time stretch is
+// approximated rather than dropped.
+constexpr float   kWaterBaseSizeWu    = 16.0f;
+
+// Resolve the .I3D's first nonzero texture slot via the shared helper.
+// (SubObjTextureSlot / ResolveSubObjUv are file-static in the blood
+// namespace above; re-declared as forward-only refs here.)
+//
+// Forward refs into the blood namespace above. Re-implement small
+// wrappers in this anonymous namespace to keep coupling explicit and
+// avoid yanking the blood namespace open here.
+int32_t WaterSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
+{
+    if (!img3d || objnum < 0 || objnum >= img3d->NumObjects())
+        return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0) return -1;
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
+}
+
+void WaterResolveSubObjUv(T3DImagery* img3d, int32_t objnum, float out[4])
+{
+    out[0] = 0.0f; out[1] = 0.0f; out[2] = 1.0f; out[3] = 1.0f;
+    if (!img3d) return;
+    const int32_t nverts = img3d->NumObjVerts(objnum);
+    if (nverts <= 0) return;
+    std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
+    img3d->GetObjVerts(objnum, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+    float minu = vbuf[0].tu, maxu = vbuf[0].tu;
+    float minv = vbuf[0].tv, maxv = vbuf[0].tv;
+    for (int32_t i = 1; i < nverts; ++i)
+    {
+        if (vbuf[i].tu < minu) minu = vbuf[i].tu;
+        if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
+        if (vbuf[i].tv < minv) minv = vbuf[i].tv;
+        if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
+    }
+    out[0] = minu;
+    out[1] = minv;
+    out[2] = maxu - minu;
+    out[3] = maxv - minv;
+}
+
+// Load Misc\Water.i3d, resolve sub-object 0's texture/UV. Shared by
+// both effects (imagery.rvi entries "Water" and "Waterfall" both point
+// at misc\Water.i3d). Wave-4 waterfall variants pass alternate paths
+// (WFall.i3d, WCap.i3d, Riverfall.i3d, etc.).
+bool LoadWaterImagery(TObjectImagery*& out_base,
+                      T3DImagery*&    out_img3d,
+                      TTextureHandle& out_texture,
+                      float           out_uv_rect[4],
+                      const char*     path = nullptr)
+{
+    out_base = nullptr;
+    out_img3d = nullptr;
+    out_texture = kInvalidTexture;
+    out_uv_rect[0] = 0.0f; out_uv_rect[1] = 0.0f;
+    out_uv_rect[2] = 1.0f; out_uv_rect[3] = 1.0f;
+
+    const char* asset_path = path ? path : kWaterImageryPath;
+    int32_t img_id = TObjectImagery::FindImagery(asset_path);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(asset_path));
+    if (img_id < 0)
+    {
+        log_error("[water] LoadWaterImagery: FindImagery/RegisterImagery('%s') failed"
+                  " — asset missing",
+                  asset_path);
+        return false;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[water] LoadWaterImagery: LoadImagery(id=%d '%s') failed",
+                  img_id, asset_path);
+        return false;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[water] LoadWaterImagery: imagery '%s' is not T3DImagery",
+                  asset_path);
+        TObjectImagery::FreeImagery(base);
+        return false;
+    }
+    // Lazy mesh-load poke pattern (B01/F01/H04/X22).
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj <= 0 || num_tex <= 0)
+    {
+        log_error("[water] LoadWaterImagery: imagery underspec'd "
+                  "(objects=%d, textures=%d)", num_obj, num_tex);
+        return false;
+    }
+    const int32_t tex_slot = WaterSubObjTextureSlot(img3d, 0);
+    const int32_t slot = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    img3d->GetTexture(slot, &tex);
+    out_base = base;
+    out_img3d = img3d;
+    out_texture = tex.htexture;
+    WaterResolveSubObjUv(img3d, 0, out_uv_rect);
+    return true;
+}
+
+}   // namespace
+
+// =========================================================================
+// * H02 — TWaterFallEffect_Bespoke                                         *
+// =========================================================================
+
+namespace {
+constexpr uint32_t kLiteralWaterfallId = 0xa907dabfu;
+class TWaterfallReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    const char* ComponentName() const override { return "waterfall_reference"; }
+    void Submit(TRenderer&, const TObjectInstance& owner) const override
+    {
+        if (auto* effect = dynamic_cast<const TWaterFallEffect_Bespoke*>(&owner))
+            effect->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* effect = dynamic_cast<TWaterFallEffect_Bespoke*>(OwnerInstance()))
+            effect->Advance(TTime::DeltaTime());
+    }
+};
+class TLiteralWaterfallAnimatorBuilder final : public T3DAnimatorBuilder
+{
+  public:
+    TLiteralWaterfallAnimatorBuilder() : T3DAnimatorBuilder("Waterfall") {}
+    T3DAnimator* Build(TObjectInstance* owner) override { return new T3DAnimator(owner); }
+    void AttachComponents(TObjectInstance* owner) override
+    {
+        if (!owner || owner->GetMapIndex() <= 0 || owner->ObjClass() != OBJCLASS_EFFECT ||
+            owner->ObjId() != kLiteralWaterfallId || (owner->Flags() & OF_KILL)) return;
+        if (auto* effect = dynamic_cast<TWaterFallEffect_Bespoke*>(owner)) effect->Initialize();
+    }
+};
+static TObjectDef::SRegistrar g_literal_waterfall_builder("Waterfall", MakeWaterReferenceDef<TWaterFallEffect_Bespoke>);
+TLiteralWaterfallAnimatorBuilder g_literal_waterfall_animator_builder;
+} // namespace
+
+TWaterFallEffect_Bespoke::~TWaterFallEffect_Bespoke()
+{
+    if (Renderer && software_mesh_) Renderer->ReleaseMeshAssetRef(software_mesh_);
+    delete[] drops_;
+    drops_ = nullptr;
+}
+
+void TWaterFallEffect_Bespoke::InitParticle(int32_t i)
+{
+    // VERBATIM port of TWaterFallAnimator::InitParticle
+    // (src/effect_old.cpp:11701-11715).
+    float grav = (float)(kWaterFallGravity * ((i % 2) + 1));
+    drops_[i].pos.X = (float)(random(-kWaterFallLength, kWaterFallLength) / 2.0);
+    drops_[i].pos.Y = (float)0.0f;
+    drops_[i].pos.Z = (float)kWaterFallHeight;
+    drops_[i].vel.X = (float)0.0f;
+    drops_[i].vel.Y = (float)0.0f;
+    drops_[i].vel.Z = (float)0.0f;
+    drops_[i].scale.X = (float)(random(2, 4) * kWaterFallScale);
+    drops_[i].scale.Y = (float)(kWaterFallTallScale * grav
+        * std::sqrt(2 * (kWaterFallHeight - drops_[i].pos.Z) / grav));
+    drops_[i].scale.Z = (float)1.0f;
+    drops_[i].time = i;
+}
+
+void TWaterFallEffect_Bespoke::UpdateStuff()
+{
+    // VERBATIM port of TWaterFallAnimator::UpdateStuff
+    // (src/effect_old.cpp:11717-11745).
+    int32_t i;
+    for (i = 0; i < numdrops_; i++)
+    {
+        if (drops_[i].time > 0)
+        {
+            drops_[i].time--;
+            continue;
+        }
+        if (drops_[i].time == -1)
+        {
+            InitParticle(i);
+            drops_[i].pos.Z = (float)kWaterFallHeight;
+            drops_[i].vel.Z = 0.0f;
+            drops_[i].time = 0;
+        }
+        drops_[i].pos.X += drops_[i].vel.X;
+        drops_[i].pos.Y += drops_[i].vel.Y;
+        drops_[i].pos.Z += drops_[i].vel.Z;
+        float grav = (float)(kWaterFallGravity * ((i % 2) + 1));
+        drops_[i].vel.Z -= grav;
+        drops_[i].scale.Y = (float)(kWaterFallTallScale * grav
+            * std::sqrt(2 * (kWaterFallHeight - drops_[i].pos.Z) / grav));
+        if (drops_[i].pos.Z <= 0)
+        {
+            drops_[i].time = -1;
+        }
+    }
+}
+
+void TWaterFallEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if (initialized_) return;
+    auto* imagery = dynamic_cast<T3DImagery*>(GetImagery());
+    // Retry lazily without RNG draws until final owner imagery is uploaded.
+    if (!LoadWaterQuad(imagery, 0, authored_vertices_, texture_)) return;
+    exact_water_mesh_ = literal_water_mesh::Matches(imagery);
+    S3DObj object = {};
+    imagery->GetObject(0, &object);
+    if (object.material >= 0 && object.material < imagery->NumMaterials())
+    {
+        S3DMat material = {};
+        imagery->GetMaterial(object.material, &material);
+        material_diffuse_[0] = material.matdesc.diffuse.r;
+        material_diffuse_[1] = material.matdesc.diffuse.g;
+        material_diffuse_[2] = material.matdesc.diffuse.b;
+        material_diffuse_[3] = material.matdesc.diffuse.a;
+    }
+    numdrops_ = kWaterFallMaxDrops;
+    drops_ = new SWaterParticle[numdrops_]();
+    for (int32_t i = 0; i < numdrops_; ++i) InitParticle(i);
+    for (int32_t k = 0; k < numdrops_; ++k) UpdateStuff();
+    initialized_ = true;
+    runtime_id_ = attach_runtime_component ? ObjId() : 0u;
+    if (attach_runtime_component)
+    {
+        S3DTex texture = {};
+        imagery->GetTexture(0, &texture);
+        auto component = std::make_unique<TWaterfallReferenceComponent>();
+        component->Configure(texture_, int32_t(texture.desc.width), int32_t(texture.desc.height),
+                             1, 1, 1, 1.0f, 1.0f, false, true);
+        AddComponent(std::move(component));
+    }
+    const S3DPoint origin = IntPos(*this);
+    log_info("[waterfall-runtime] initialized type='%s' id=%08x map_index=%d "
+             "origin=(%d,%d,%d) drops=%d warmup=%d texture=%u runtime=%d "
+             "material=(%.3f,%.3f,%.3f,%.3f)",
+             attach_runtime_component ? GetTypeName() : "preview",
+             attach_runtime_component ? ObjId() : 0u,
+             GetMapIndex(), origin.x, origin.y, origin.z,
+             numdrops_, numdrops_, texture_, int(attach_runtime_component),
+             material_diffuse_[0], material_diffuse_[1], material_diffuse_[2], material_diffuse_[3]);
+}
+
+TWaterFallEffect_Bespoke* TWaterFallEffect_Bespoke::SpawnForTest_BESPOKE(
+    const S3DPoint& origin, const char* asset_override)
+{
+    auto* imagery = LoadWaterImagery(asset_override ? asset_override : kWaterImageryPath, "waterfall");
+    if (!imagery) return nullptr;
+    auto* effect = new TWaterFallEffect_Bespoke(imagery);
+    SetIntPos(effect, origin);
+    effect->SetMapIndex(MapPane.MakeIndex());
+    // Preview owns its Advance call; never attach a global update component.
+    effect->Initialize(false);
+    if (!effect->initialized_) { delete effect; return nullptr; }
+    return effect;
+}
+
+void TWaterFallEffect_Bespoke::Advance(double seconds)
+{
+    if (!initialized_ || (Flags() & OF_KILL) || !std::isfinite(seconds) || seconds <= 0.0) return;
+    sim_accum_seconds_ += seconds;
+    while (sim_accum_seconds_ + 1e-12 >= TTime::LegacyFrameSeconds)
+    {
+        sim_accum_seconds_ -= TTime::LegacyFrameSeconds;
+        SetCommandDone(false);
+        UpdateStuff();
+        ++ticks_;
+    }
+    if (!logged_tick_ && ticks_ > 0)
+    {
+        logged_tick_ = true;
+        log_info("[waterfall-runtime] first simulation tick id=%08x map_index=%d ticks=%d",
+                 runtime_id_, GetMapIndex(), ticks_);
+    }
+}
+
+void TWaterFallEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !initialized_ || (Flags() & OF_KILL)) return;
+    const hmm_mat4& world = native_domain_ ? native_owner_ : Transform().Matrix();
+    const bool normal_mesh = exact_water_mesh_ && Renderer->UsesRetailSoftwareMeshLighting() && debug_mode == EFxDebugMode::Normal;
+    if (normal_mesh && !software_mesh_) software_mesh_ = literal_water_mesh::Cache(*Renderer, dynamic_cast<T3DImagery*>(GetImagery()), texture_);
+    for (int32_t i = 0; i < numdrops_; ++i)
+    {
+        // Source Render skips delayed and reset drops before any lighting.
+        if (drops_[i].time != 0) continue;
+        hmm_mat4 local = {};
+        MtxClear(&local);
+        MtxScale(&local, &drops_[i].scale);
+        MtxRotateZ(&local, -float(M_PI / 4.0));
+        // Retail integer division truncates the negative face angle.
+        const int32_t face_degrees = -(IntFacing(*this) * 360) / 256;
+        MtxRotateZ(&local, float(double(face_degrees) * TORADIAN));
+        MtxTranslate(&local, &drops_[i].pos);
+        if (normal_mesh) {
+            if (software_mesh_) { hmm_mat4 composed={}; MtxMultiply(&composed,&local,&world); literal_water_mesh::Submit(*Renderer,software_mesh_,composed,native_domain_); }
+            continue;
+        }
+        SQuadDrawItem item = {};
+        for (int32_t corner = 0; corner < 4; ++corner)
+        {
+            hmm_vec3 point = {}, transformed = {};
+            MtxTransform(&local, &authored_vertices_[size_t(corner)].pos, &point);
+            MtxTransform(&world, &point, &transformed);
+            item.world_pos[corner][0] = transformed.X;
+            item.world_pos[corner][1] = transformed.Y;
+            item.world_pos[corner][2] = transformed.Z;
+            item.uv[corner][0] = authored_vertices_[size_t(corner)].tu;
+            item.uv[corner][1] = authored_vertices_[size_t(corner)].tv;
+        }
+        // Retail Render resets flags to OBJ3D_MATRIX (0x4f30be), clearing
+        // OBJ3D_VERTS. RenderObject selects authored XYZ|NORMAL|TEX1 vertices
+        // (0x40ac4d/0x40ac7a), so DoLighting's copied LVERTEX colors are unused.
+        // Keep authored material inputs; normal/device illumination is an
+        // explicit open gate, not the ignored CPU grayscale or LitFlat proxy.
+        for (int32_t channel = 0; channel < 4; ++channel)
+            item.color_rgba[channel] = material_diffuse_[channel];
+        item.key.texture = texture_;
+        item.key.blend = uint8_t(EFxBlend::AdditiveStraight); // ONE/ONE
+        item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode = EFxLightMode::Unlit; // authored-normal illumination parity remains open
+        item.debug_mode = debug_mode;
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
+void TWaterFallEffect_Bespoke::SetNativeDomain(bool enabled)
+{
+    native_domain_ = enabled && exact_water_mesh_ && runtime_id_ == 0;
+    if (native_domain_) { const auto p=IntPos(*this); BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(IntFacing(*this))); }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Waterfall",int(native_domain_));
+}
+
+void TWaterFallEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime());
+    Submit(debug_mode);
+}
+
+// =========================================================================
+// * H01 — TWaterEffect_Bespoke                                             *
+// =========================================================================
+
+namespace {
+constexpr uint32_t kLiteralWaterId = 0x1903abcdu;
+class TLiteralWaterReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    const char* ComponentName() const override { return "water_reference"; }
+    void Submit(TRenderer&, const TObjectInstance& owner) const override
+    {
+        if (auto* effect = dynamic_cast<const TWaterEffect_Bespoke*>(&owner))
+            effect->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* effect = dynamic_cast<TWaterEffect_Bespoke*>(OwnerInstance()))
+            effect->Advance(TTime::DeltaTime());
+    }
+};
+class TLiteralWaterAnimatorBuilder final : public T3DAnimatorBuilder
+{
+  public:
+    TLiteralWaterAnimatorBuilder() : T3DAnimatorBuilder("Water") {}
+    T3DAnimator* Build(TObjectInstance* owner) override { return new T3DAnimator(owner); }
+    void AttachComponents(TObjectInstance* owner) override
+    {
+        if (!owner || owner->GetMapIndex() <= 0 || owner->ObjClass() != OBJCLASS_EFFECT ||
+            owner->ObjId() != kLiteralWaterId || (owner->Flags() & OF_KILL)) return;
+        if (auto* effect = dynamic_cast<TWaterEffect_Bespoke*>(owner)) effect->Initialize();
+    }
+};
+static TObjectDef::SRegistrar g_literal_water_builder("Water", MakeWaterReferenceDef<TWaterEffect_Bespoke>);
+TLiteralWaterAnimatorBuilder g_literal_water_animator_builder;
+} // namespace
+
+TWaterEffect_Bespoke::~TWaterEffect_Bespoke()
+{
+    if (Renderer && software_mesh_) Renderer->ReleaseMeshAssetRef(software_mesh_);
+    delete[] drops_;
+    drops_ = nullptr;
+}
+
+void TWaterEffect_Bespoke::InitParticle(int32_t i)
+{
+    // VERBATIM port of TWaterAnimator::InitParticle
+    // (src/effect_old.cpp:11911-11923).
+    drops_[i].pos.X = (float)(-kWaterLength / 2);
+    drops_[i].pos.Y = (float)(random(-kWaterWidth, kWaterWidth) / 2.0);
+    drops_[i].pos.Z = (float)0.0f;
+    drops_[i].vel.X = (float)(kWaterSpeed * ((i % 2) + 1));
+    drops_[i].vel.Y = (float)0.0f;
+    drops_[i].vel.Z = (float)0.0f;
+    drops_[i].scale.X = (float)(random(17, 30) * kWaterTallScale);
+    drops_[i].scale.Y = (float)(random(2, 4) * kWaterScale);
+    drops_[i].scale.Z = (float)1.0f;
+    drops_[i].time = i;
+}
+
+void TWaterEffect_Bespoke::UpdateStuff()
+{
+    // VERBATIM port of TWaterAnimator::UpdateStuff
+    // (src/effect_old.cpp:11925-11948).
+    int32_t i;
+    for (i = 0; i < numdrops_; i++)
+    {
+        if (drops_[i].time > 0)
+        {
+            drops_[i].time--;
+            continue;
+        }
+        if (drops_[i].time == -1)
+        {
+            InitParticle(i);
+            drops_[i].time = 0;
+        }
+        drops_[i].pos.X += drops_[i].vel.X;
+        drops_[i].pos.Y += drops_[i].vel.Y;
+        drops_[i].pos.Z += drops_[i].vel.Z;
+        if (drops_[i].pos.X >= kWaterLength / 2)
+        {
+            drops_[i].time = -1;
+        }
+    }
+}
+
+void TWaterEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if (initialized_) return;
+    if (attach_runtime_component && (ObjClass() != OBJCLASS_EFFECT ||
+        GetMapIndex() <= 0 || (Flags() & OF_KILL) || ObjId() != kLiteralWaterId)) return;
+    auto* imagery = dynamic_cast<T3DImagery*>(GetImagery());
+    // Do not allocate or consume RNG while the final imagery is unavailable.
+    if (!LoadWaterQuad(imagery, 0, authored_vertices_, texture_)) return;
+    exact_water_mesh_ = literal_water_mesh::Matches(imagery);
+    S3DObj object = {};
+    imagery->GetObject(0, &object);
+    if (object.material >= 0 && object.material < imagery->NumMaterials())
+    {
+        S3DMat material = {};
+        imagery->GetMaterial(object.material, &material);
+        material_diffuse_[0] = material.matdesc.diffuse.r;
+        material_diffuse_[1] = material.matdesc.diffuse.g;
+        material_diffuse_[2] = material.matdesc.diffuse.b;
+        material_diffuse_[3] = material.matdesc.diffuse.a;
+    }
+    numdrops_ = kWaterMaxDrops;
+    drops_ = new SWaterParticle[numdrops_]();
+    for (int32_t i = 0; i < numdrops_; ++i) InitParticle(i);
+    for (int32_t k = 0; k < numdrops_; ++k) UpdateStuff();
+    literal_geometry_ = initialized_ = true;
+    if (attach_runtime_component)
+    {
+        S3DTex texture = {};
+        imagery->GetTexture(0, &texture);
+        auto component = std::make_unique<TLiteralWaterReferenceComponent>();
+        component->Configure(texture_, int32_t(texture.desc.width), int32_t(texture.desc.height),
+                             1, 1, 1, 1.0f, 1.0f, false, true);
+        AddComponent(std::move(component));
+    }
+    log_info("[water-runtime] initialized id=%08x map_index=%d drops=%d warmup=%d runtime=%d",
+             attach_runtime_component ? ObjId() : kLiteralWaterId,
+             GetMapIndex(), numdrops_, numdrops_, int(attach_runtime_component));
+}
+
+TWaterEffect_Bespoke*
+TWaterEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                          const char* asset_override)
+{
+    TObjectImagery* base = nullptr;
+    T3DImagery*     img3d = nullptr;
+    TTextureHandle  texture = kInvalidTexture;
+    float           uv_rect[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+    if (!LoadWaterImagery(base, img3d, texture, uv_rect, asset_override))
+        return nullptr;
+    const char* asset_path = asset_override ? asset_override : kWaterImageryPath;
+
+    auto* w = new TWaterEffect_Bespoke(base);
+    SetIntPos(w, origin);
+    w->SetMapIndex(MapPane.MakeIndex());
+    w->ActivateComponents();
+
+    w->texture_ = texture;
+    w->uv_rect_[0] = uv_rect[0];
+    w->uv_rect_[1] = uv_rect[1];
+    w->uv_rect_[2] = uv_rect[2];
+    w->uv_rect_[3] = uv_rect[3];
+    w->size_wu_ = kWaterBaseSizeWu;
+
+    // Literal Water1903abcd: native Render4f3610 transforms the shipped
+    // XY quad by each drop's scale then translation, with no billboard fit.
+    // Alternate paths lack this retail mapping and keep their prior preview.
+    if (!asset_override || !stricmp(asset_override, kWaterImageryPath))
+    {
+        w->Initialize(false);
+        if (!w->initialized_) { delete w; return nullptr; }
+    }
+    else
+    {
+        // Existing unaudited alternate-asset delegates, without new mapping credit.
+        w->numdrops_ = kWaterMaxDrops;
+        w->drops_ = new SWaterParticle[w->numdrops_]();
+        for (int32_t i = 0; i < w->numdrops_; i++) w->InitParticle(i);
+        for (int32_t k = 0; k < w->numdrops_; k++) w->UpdateStuff();
+    }
+
+    log_info("[water] SpawnForTest_BESPOKE: '%s' map_index=%d "
+             "origin=(%d,%d,%d) drops=%d texture=%u uv=(%.3f,%.3f,%.3f,%.3f)",
+             asset_path, w->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             w->numdrops_, w->texture_,
+             w->uv_rect_[0], w->uv_rect_[1],
+             w->uv_rect_[2], w->uv_rect_[3]);
+    return w;
+}
+
+void TWaterEffect_Bespoke::Advance(double seconds)
+{
+    if (!literal_geometry_ || !drops_ || (Flags() & OF_KILL) ||
+        !std::isfinite(seconds) || seconds <= 0.0) return;
+    sim_accum_seconds_ += seconds;
+    while (sim_accum_seconds_ + 1e-12 >= TTime::LegacyFrameSeconds)
+    {
+        sim_accum_seconds_ -= TTime::LegacyFrameSeconds;
+        SetCommandDone(false);
+        UpdateStuff();
+        ++ticks_;
+    }
+}
+
+void TWaterEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !literal_geometry_ || !drops_ ||
+        texture_ == kInvalidTexture || authored_vertices_.size() != 4 ||
+        (Flags() & OF_KILL)) return;
+    const hmm_mat4& world = native_domain_ ? native_owner_ : Transform().Matrix();
+    const bool normal_mesh = exact_water_mesh_ && Renderer->UsesRetailSoftwareMeshLighting() && debug_mode == EFxDebugMode::Normal;
+    if (normal_mesh && !software_mesh_) software_mesh_ = literal_water_mesh::Cache(*Renderer, dynamic_cast<T3DImagery*>(GetImagery()), texture_);
+    const float fraction = float(std::clamp(sim_accum_seconds_ / TTime::LegacyFrameSeconds,
+                                          0.0, 1.0));
+    for (int32_t i = 0; i < numdrops_; ++i)
+    {
+        if (drops_[i].time != 0) continue;
+        hmm_mat4 local = {};
+        MtxClear(&local);
+        MtxScale(&local, &drops_[i].scale);
+        // Display motion between original24Hz updates; never mutate the pool.
+        const hmm_vec3 position = {drops_[i].pos.X + drops_[i].vel.X * fraction,
+                                   drops_[i].pos.Y + drops_[i].vel.Y * fraction,
+                                   drops_[i].pos.Z + drops_[i].vel.Z * fraction};
+        MtxTranslate(&local, &position);
+        if (normal_mesh) {
+            if (software_mesh_) { hmm_mat4 composed={}; MtxMultiply(&composed,&local,&world); literal_water_mesh::Submit(*Renderer,software_mesh_,composed,native_domain_); }
+            continue;
+        }
+        SQuadDrawItem item = {};
+        for (int32_t corner = 0; corner < 4; ++corner)
+        {
+            hmm_vec3 point = {}, transformed = {};
+            MtxTransform(&local, &authored_vertices_[size_t(corner)].pos, &point);
+            MtxTransform(&world, &point, &transformed);
+            item.world_pos[corner][0] = transformed.X;
+            item.world_pos[corner][1] = transformed.Y;
+            item.world_pos[corner][2] = transformed.Z;
+            item.uv[corner][0] = authored_vertices_[size_t(corner)].tu;
+            item.uv[corner][1] = authored_vertices_[size_t(corner)].tv;
+        }
+        for (int32_t channel = 0; channel < 4; ++channel)
+            item.color_rgba[channel] = material_diffuse_[channel];
+        item.key.texture = texture_;
+        item.key.blend = uint8_t(EFxBlend::AdditiveStraight); // native mode16
+        item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
+        // Native OBJ3D_MATRIX clears copied-vertex colors. Authored normal /
+        // device lighting is an open gate, not a fitted flat-light proxy.
+        item.light_mode = EFxLightMode::Unlit;
+        item.debug_mode = debug_mode;
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
+void TWaterEffect_Bespoke::SetNativeDomain(bool enabled)
+{
+    // Only the isolated preview calls this opt-in; live map components stay
+    // in the common world domain and use the ordinary scene camera.
+    native_domain_ = enabled && exact_water_mesh_ && !GetComponent<TFlipbookBillboardComponent>();
+    if (native_domain_) { const auto p=IntPos(*this); BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(IntFacing(*this))); }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Water",int(native_domain_));
+}
+
+void TWaterEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (literal_geometry_)
+    {
+        Advance(TTime::DeltaTime());
+        Submit(debug_mode);
+        return;
+    }
+    if (!Renderer || !drops_)
+        return;
+
+    // 24 Hz sim-tick gate — same family pattern as H02 / B01 / M05.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kWaterSimTickMs))
+    {
+        sim_accum_ms_ -= double(kWaterSimTickMs);
+        UpdateStuff();
+    }
+
+    // VERBATIM port of TWaterAnimator::Render
+    // (src/effect_old.cpp:12016-12062). Snapshot sets:
+    //   D3DRENDERSTATE_SRCBLEND  = D3DBLEND_ONE
+    //   D3DRENDERSTATE_DESTBLEND = D3DBLEND_ONE
+    // -> AdditiveStraight (ONE/ONE) verbatim. ZWRITE=false ZENABLE=true
+    // -> EFxDepthMode::TestNoWrite. The Render() body for TWaterAnimator
+    // commented out ALL three rotation lines (RotateX, RotateZ -π/4,
+    // RotateZ inst-face) — so the snapshot already collapses to axis-
+    // aligned which maps directly to ScreenAligned billboard.
+    static const bool s_logged_first_submit = []{
+        log_info("[water] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    const S3DPoint& base = IntPos(*this);
+    for (int32_t i = 0; i < numdrops_; i++)
+    {
+        if (drops_[i].time != 0)
+            continue;
+        const float wx = float(base.x) + drops_[i].pos.X;
+        const float wy = float(base.y) + drops_[i].pos.Y;
+        const float wz = float(base.z) + drops_[i].pos.Z;
+
+        SBillboardDrawItem item = {};
+        // Snapshot: scale.x tall (long stream), scale.y narrow (thin spray).
+        item.size_wu[0] = size_wu_ * drops_[i].scale.X;
+        item.size_wu[1] = size_wu_ * drops_[i].scale.Y;
+        item.color_rgba[0] = 1.0f;
+        item.color_rgba[1] = 1.0f;
+        item.color_rgba[2] = 1.0f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = uv_rect_[0];
+        item.uv_rect[1] = uv_rect_[1];
+        item.uv_rect[2] = uv_rect_[2];
+        item.uv_rect[3] = uv_rect_[3];
+        item.key.texture     = texture_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::LitFlat;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        item.world_pos[0]    = wx;
+        item.world_pos[1]    = wy;
+        item.world_pos[2]    = wz;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// =========================================================================
+// wave-bespoke-W2A — weather A: ground & atmospheric scatter
+// =========================================================================
+//
+// Three faithful direct ports of snapshot animator bodies (W06 fog, W04
+// sandswirl, W05 quicksand). Each effect:
+//   - Loads its real .I3D imagery via TryLoadMagicTexture.
+//   - Runs the snapshot's per-tick state machine LINE BY LINE against an
+//     internal state array (no live TObjectInstance machinery — the
+//     harness has no characters, spells, or particle child effects).
+//   - Submits one or more billboards per tick with the snapshot's literal
+//     blend mode preserved AS WRITTEN (SetBlendState -> Alpha;
+//     SetAddBlendState -> AdditiveStraight).
+// Constants are snapshot-only (no retail recon for any of W06/W04/W05).
+
+// =========================================================================
+// Fog: original4e84c0/4e86f0/4e8b10 prelit animated authored grid.
+// =========================================================================
+TFogEffect_Bespoke* TFogEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* img=LoadWaterImagery("Misc\\Fog.I3D","Fog");
+    if (!img || img->NumObjects()!=1 || img->NumVerts()!=36 ||
+        img->NumFaces()!=50 || img->NumTextures()!=0) return nullptr;
+    auto* fog=new TFogEffect_Bespoke(img);
+    SetIntPos(fog, origin); fog->SetMapIndex(MapPane.MakeIndex()); fog->ActivateComponents();
+    img->GetObjVerts(0,fog->vertices_);
+    img->GetObjFaces(0,fog->faces_);
+    const auto* indices=reinterpret_cast<const uint16_t*>(fog->faces_);
+    for(int i=0;i<150;++i) if(indices[i]>=36) {delete fog;return nullptr;}
+    fog->state_.Initialize([](int low,int high){return random(low,high);});
+    log_info("[fog-asset] objectverts=%d objectfaces=%d p0=(%.9g,%.9g,%.9g) firstface=(%u,%u,%u)",
+        img->NumObjVerts(0),img->NumObjFaces(0),fog->vertices_[0].pos.X,fog->vertices_[0].pos.Y,fog->vertices_[0].pos.Z,
+        unsigned(indices[0]),unsigned(indices[1]),unsigned(indices[2]));
+    log_info("[fog] authored36-vertex/50-triangle prelit grid, no texture; origin=(%d,%d,%d) rng_draws=%llu",
+             origin.x,origin.y,origin.z,static_cast<unsigned long long>(RandomDraws()));
+    return fog;
+}
+void TFogEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_=enabled;
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Fog",int(enabled));
+}
+void TFogEffect_Bespoke::Advance(double seconds)
+{
+    if(!std::isfinite(seconds)||seconds<=0) return;
+    state_.Advance(seconds,[](int low,int high){return random(low,high);});
+}
+void TFogEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if(!Renderer) return;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_) {const auto p=IntPos(*this);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(*this)));}
+    const bool native_prelit = native_domain_ && Renderer->UsesRetailSoftwareMeshLighting();
+    hmm_vec3 points[36];
+    float colors[36][4];
+    for(int i=0;i<36;++i) {
+        const auto& v=state_.vertices[i];
+        const auto& original=vertices_[i];
+        hmm_vec3 local{{(original.pos.X+v.offset[0])*retail_fog::Scale,
+                       (original.pos.Y+v.offset[1])*retail_fog::Scale,original.pos.Z+v.offset[2]}};
+        MtxTransform(&owner,&local,&points[i]);
+        // Original Render packs8-bit color, FVF_LVERTEX converts to RGB5/A5.
+        // The untextured alpha lookup uses (A5+1)/32 and writes depth even
+        // though Scene mode2 requests ZWRITE=false. GPU interpolation remains
+        // higher precision than the original scanline/RGB565 framebuffer.
+        // The explicit native policy carries raw RGBA5 to its quantized fragment path.
+        const int color=int(double(v.c)*255.0)>>3;
+        const int alpha=int(double(v.a)*255.0)>>3;
+        colors[i][0]=colors[i][2]=native_prelit?float(color):float(color)/31.0f;
+        colors[i][1]=native_prelit?float(color):float(color*2)/63.0f;
+        colors[i][3]=native_prelit?float(alpha):float(alpha+1)/32.0f;
+    }
+    const auto* indices=reinterpret_cast<const uint16_t*>(faces_);
+    if(state_.ticks==2) log_info("[fog-draw] firstworld=(%.9g,%.9g,%.9g) lastworld=(%.9g,%.9g,%.9g) rgba0=(%.9g,%.9g,%.9g,%.9g)",
+        points[0].X,points[0].Y,points[0].Z,points[35].X,points[35].Y,points[35].Z,
+        colors[0][0],colors[0][1],colors[0][2],colors[0][3]);
+    for(int face=0;face<50;++face) {
+        SQuadDrawItem draw{};draw.corner_count=3;draw.per_corner_color=true;
+        draw.key.texture=Renderer->WhiteTextureHandle(); // identity carrier for untextured vertex color
+        draw.key.blend=uint8_t(EFxBlend::Alpha);draw.key.depth_mode=uint8_t(EFxDepthMode::TestWrite);
+        draw.retail_software_projection=native_domain_;draw.retail_prelit_rgba5=native_prelit;draw.debug_mode=debug_mode;
+        for(int c=0;c<3;++c) {
+            const int i=indices[face*3+c];
+            std::memcpy(draw.world_pos[c],points[i].Elements,3*sizeof(float));
+            std::memcpy(draw.corner_color_rgba[c],colors[i],4*sizeof(float));
+        }
+        Renderer->SubmitFxQuad(draw);
+    }
+}
+void TFogEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime());
+    if(state_.ticks==2 || state_.ticks==30 || state_.ticks==120)
+        log_info("[fog-phase] tick=%d rng_draws=%llu c2=%.9g a2=%.9g offset2=(%.9g,%.9g,%.9g)",
+            state_.ticks,static_cast<unsigned long long>(RandomDraws()),state_.vertices[2].c,state_.vertices[2].a,
+            state_.vertices[2].offset[0],state_.vertices[2].offset[1],state_.vertices[2].offset[2]);
+    Submit(debug_mode);
+}
+
+// =========================================================================
+// W04 — TSandswirlEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TSandswirlAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:9476-9683). Snapshot spawns a child sand particle
+// effect (TParticle3DAnimator) with random(50, 100) particles, sets a
+// seek-target at (0, 0, 100), and ramps seekspeed = 5.0 + frameon/10.0
+// over SANDSWIRL_DURATION (75) ticks. After SANDSWIRL_DURATION the
+// snapshot retargets to nearby characters (up to 5) and spawns child
+// Quicksand effects on them; at SANDSWIRL_DURATION*4 (=300) it self-
+// destructs. Render() in the snapshot is fully commented-out -- the
+// visual is entirely the child sand PE.
+//
+// First-pass bespoke owns its own particle pool (no child effect),
+// reproducing the seek-target curve and per-particle motion. Retarget-
+// to-characters is stubbed (harness has none); the original (0,0,100)
+// seek target is retained for the entire run. KillThisEffect at
+// frameon == SANDSWIRL_DURATION*4 preserved.
+
+TSandswirlEffect_Bespoke* TSandswirlEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kSandCandidates[] = {
+        "Magic\\sandswirl.i3d",
+        "Magic\\sand.i3d",
+        "Misc\\sand.i3d",
+    };
+
+    auto* sw = new TSandswirlEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(sw, origin);
+    sw->SetMapIndex(MapPane.MakeIndex());
+    sw->ActivateComponents();
+
+    sw->texture_ = TryLoadMagicTexture(kSandCandidates,
+                                       int32_t(sizeof(kSandCandidates) / sizeof(*kSandCandidates)),
+                                       sw->uv_rect_, "sandswirl");
+
+    // Snapshot effect_old.cpp:9479-9544 — Initialize. frameon=0,
+    // angle = inst->GetAngle() (harness: 0). Particle pool of random(50,100)
+    // particles is created with pos.x=0,y=0,z=70 and a pspread of (50,50,50).
+    sw->frameon_  = 0;
+    sw->angle_    = 0;
+    sw->alive_    = true;
+    sw->seektarget_.X = 0.0f;
+    sw->seektarget_.Y = 0.0f;
+    sw->seektarget_.Z = kSandSeekTargetZ;
+
+    sw->numparticles_ = random(50, 100);
+    if (sw->numparticles_ > kSandMaxParticles)
+        sw->numparticles_ = kSandMaxParticles;
+    const int32_t maxstart = sw->numparticles_ / 2;
+    for (int32_t i = 0; i < sw->numparticles_; ++i)
+    {
+        SSandParticle& p = sw->parts_[i];
+        // Snapshot pr.pos + pr.pspread => uniform in cube around pos.
+        p.pos.X = 0.0f + float(random(-int32_t(kSandSpreadXY), int32_t(kSandSpreadXY)));
+        p.pos.Y = 0.0f + float(random(-int32_t(kSandSpreadXY), int32_t(kSandSpreadXY)));
+        p.pos.Z = kSandSpawnZ + float(random(-int32_t(kSandSpreadZ), int32_t(kSandSpreadZ)));
+        // Snapshot pr.dir scaled by pr.spread (0.5 in each axis) -- harness
+        // has no firing direction (angle=0 -> ConvertToVector yields x=100
+        // along the X axis), so we init zero velocity and let seek do the
+        // work (consistent with snapshot's seektargets=true behavior).
+        p.vel.X = 0.0f;
+        p.vel.Y = 0.0f;
+        p.vel.Z = 0.0f;
+        p.life  = random(kSandMinLife, kSandMaxLife);
+        p.start = random(0, maxstart);
+        p.alive = false;   // becomes true once start delay expires
+    }
+
+    log_info("[sandswirl-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u particles=%d",
+             sw->GetMapIndex(), origin.x, origin.y, origin.z,
+             sw->texture_, sw->numparticles_);
+    return sw;
+}
+
+void TSandswirlEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24Hz sim-tick gate.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kSandSimTickMs))
+    {
+        sim_accum_ms_ -= double(kSandSimTickMs);
+
+        // Snapshot effect_old.cpp:9553-9635 — Animate.
+        // frameon++; seek-target retarget for frameon < SANDSWIRL_DURATION;
+        // character retarget at frameon == SANDSWIRL_DURATION (stubbed
+        // here -- harness has no characters); self-kill at SANDSWIRL_
+        // DURATION*4.
+        frameon_++;
+        // Seekspeed ramp per snapshot: 5.0 + frameon/10.0 while <
+        // SANDSWIRL_DURATION.
+        const float seekspeed = (frameon_ < int32_t(kSandswirlDuration))
+            ? (kSandSeekSpeedBase + float(frameon_) / 10.0f)
+            : 7.5f;   // snapshot post-duration retarget speed
+
+        // Per-particle motion. Snapshot delegates to TParticle3DAnimator
+        // which: (1) decrements life, (2) seeks toward the target via
+        // turn-toward + push, (3) integrates pos += vel. Faithfully
+        // reproduced here.
+        for (int32_t i = 0; i < numparticles_; ++i)
+        {
+            SSandParticle& p = parts_[i];
+            if (!p.alive)
+            {
+                // Activate when start-delay expires (one tick per delay
+                // unit per snapshot pr.maxstart pattern).
+                if (p.start > 0)
+                {
+                    p.start--;
+                    continue;
+                }
+                p.alive = true;
+            }
+            if (p.life <= 0)
+            {
+                // Respawn at base envelope -- snapshot's pr.killobj=true
+                // path; the snapshot then re-emits via the trail counter,
+                // we just bounce back to fresh spawn.
+                p.pos.X = float(random(-int32_t(kSandSpreadXY), int32_t(kSandSpreadXY)));
+                p.pos.Y = float(random(-int32_t(kSandSpreadXY), int32_t(kSandSpreadXY)));
+                p.pos.Z = kSandSpawnZ + float(random(-int32_t(kSandSpreadZ), int32_t(kSandSpreadZ)));
+                p.vel.X = 0.0f;
+                p.vel.Y = 0.0f;
+                p.vel.Z = 0.0f;
+                p.life  = random(kSandMinLife, kSandMaxLife);
+                continue;
+            }
+            p.life--;
+
+            // Seek -- snapshot turnang=0.5, seekspeed=ramped.
+            const float dx = seektarget_.X - p.pos.X;
+            const float dy = seektarget_.Y - p.pos.Y;
+            const float dz = seektarget_.Z - p.pos.Z;
+            const float dlen = std::sqrt(dx*dx + dy*dy + dz*dz);
+            if (dlen > 0.001f)
+            {
+                const float inv = 1.0f / dlen;
+                const float tx = dx * inv;
+                const float ty = dy * inv;
+                const float tz = dz * inv;
+                // Push velocity toward target at seekspeed (per-tick).
+                p.vel.X = p.vel.X * (1.0f - kSandTurnAng) + tx * seekspeed * kSandTurnAng;
+                p.vel.Y = p.vel.Y * (1.0f - kSandTurnAng) + ty * seekspeed * kSandTurnAng;
+                p.vel.Z = p.vel.Z * (1.0f - kSandTurnAng) + tz * seekspeed * kSandTurnAng;
+            }
+            p.pos.X += p.vel.X;
+            p.pos.Y += p.vel.Y;
+            p.pos.Z += p.vel.Z;
+        }
+
+        // Snapshot character-retarget at frameon == SANDSWIRL_DURATION is
+        // STUBBED (harness has no characters / no quicksand child spawn).
+        // The seek target stays at (0,0,100) for the remainder of the run.
+
+        if (frameon_ == int32_t(kSandswirlDuration * 4))
+        {
+            alive_ = false;
+        }
+    }
+
+    // --- Render. Snapshot TSandswirlAnimator::Render is fully commented
+    // out (effect_old.cpp:9647-9677); the visual is the child sand PE.
+    // First-pass bespoke draws one AdditiveStraight billboard per alive
+    // particle (sister sand/dust PE blend per W2A gotcha).
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_sand_logged_first_submit = []{
+        log_info("[sandswirl-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_sand_logged_first_submit;
+
+    const S3DPoint& base = IntPos(*this);
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kSandBaseSizeWu;
+    item.size_wu[1] = kSandBaseSizeWu;
+    // Sand: warm tan tint, opaque alpha for AdditiveStraight.
+    item.color_rgba[0] = 0.85f;
+    item.color_rgba[1] = 0.70f;
+    item.color_rgba[2] = 0.45f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+
+    for (int32_t i = 0; i < numparticles_; ++i)
+    {
+        const SSandParticle& p = parts_[i];
+        if (!p.alive)
+            continue;
+        item.world_pos[0] = float(base.x) + p.pos.X;
+        item.world_pos[1] = float(base.y) + p.pos.Y;
+        item.world_pos[2] = float(base.z) + p.pos.Z;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// =========================================================================
+// * W2D batch — Misc A — character/ambient particle emitters (X01, B04)    *
+// =========================================================================
+// Localized-at-end additions for clean wave-3 merge. Faithful direct ports
+// of the snapshot animator bodies in src/effect_old.cpp.
+
+namespace {
+constexpr const char* kFlyBespokeImageryPath = "Misc\\Flies.I3D";
+}  // namespace
+
+// ----- X01 TFlyEffect_Bespoke --------------------------------------------
+// FAITHFUL DIRECT PORT of TFlyAnimator (snapshot src/effect_old.cpp:
+// 6514-6603 — Initialize/Animate/Render).
+//
+// Spawn ports TFlyAnimator::Initialize: 20 flies, each pre-seeded at a
+// random position inside a (FLY_RANGE_X,FLY_RANGE_Y,FLY_RANGE_Z) = 30 wu
+// cube (per-axis range [-30, 30]), all marked used=false (staged
+// activation). Scale = .3 uniformly, rotation zero.
+//
+// TickAndSubmit ports TFlyAnimator::Animate: each 24 Hz sim tick rolls one
+// (chance = random(0,1)) per-tick activation of a single dormant fly, then
+// per-fly velocity = random(-2,2) in each axis, pos += velocity, and a
+// hard-bounce-back (pos -= velocity*2) when over the cube edge. Render is
+// SetBlendState() (Alpha) with cull=NONE — billboards already no-cull.
+
+namespace {
+static TObjectDef::SRegistrar g_flies_reference_builder("Flies", MakeWaterReferenceDef<TFlyEffect_Bespoke>);
+TWaterReferenceAnimatorBuilder<TFlyEffect_Bespoke> g_flies_reference_animator_builder("Flies");
+}
+
+void TFlyEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if(initialized_)return;
+    if(attach_runtime_component && (ObjClass()!=OBJCLASS_EFFECT || ObjId()!=retail_flies::Id || GetMapIndex()<=0 || (Flags()&OF_KILL)))return;
+    auto* imagery=dynamic_cast<T3DImagery*>(GetImagery());
+    if(!retail_flies::Matches(imagery))return;
+    S3DTex texture={};imagery->GetTexture(0,&texture);
+    if(texture.htexture==kInvalidTexture)return;
+    texture_=texture.htexture;imagery->GetObjVerts(0,vertices_,0,0);
+    // Actual4e8180: all20 records are seeded, including dormant particles.
+    for(auto&fly:flies_) {
+        fly.pos={float(random(-30,30)),float(random(-30,30)),float(random(-30,30))};
+        fly.scl={.3f,.3f,.3f};fly.rot={0,0,0};fly.used=false;
+    }
+    initialized_=true;runtime_owned_=attach_runtime_component;
+    if(attach_runtime_component) {
+        auto component=std::make_unique<TWaterReferenceComponent<TFlyEffect_Bespoke>>();
+        component->Configure(texture_,8,8,1,1,1,1.0f,1.0f,false,true);
+        AddComponent(std::move(component));
+    }
+    log_info("[flies-runtime] initialized id=%08x map_index=%d particles=20 texture=%u runtime=%d exact_profile=1",attach_runtime_component?ObjId():0u,GetMapIndex(),texture_,int(attach_runtime_component));
+}
+
+TFlyEffect_Bespoke* TFlyEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* imagery=LoadWaterImagery(kFlyBespokeImageryPath,"flies");
+    if(!imagery)return nullptr;
+    auto* fly=new TFlyEffect_Bespoke(imagery);SetIntPos(fly, origin);fly->SetMapIndex(MapPane.MakeIndex());
+    fly->Initialize(false);if(!fly->initialized_){delete fly;return nullptr;}return fly;
+}
+
+void TFlyEffect_Bespoke::Advance(double seconds)
+{
+    if(!initialized_ || (Flags()&OF_KILL) || !std::isfinite(seconds) || seconds<=0)return;
+    tick_seconds_+=seconds;
+    while(tick_seconds_+1e-12>=TTime::LegacyFrameSeconds) {
+        tick_seconds_-=TTime::LegacyFrameSeconds;SetCommandDone(false);
+        int32_t chance=random(0,1);
+        // Actual4e8280 keeps moving dormant particles and consumes all60
+        // velocity draws each tick, before or after a staged activation.
+        for(auto&fly:flies_) {
+            if(!fly.used && chance){fly.used=true;chance=0;}
+            const hmm_vec3 velocity={float(random(-2,2)),float(random(-2,2)),float(random(-2,2))};
+            fly.pos+=velocity;
+            for(int axis=0;axis<3;++axis)if(fly.pos.Elements[axis]>30.0f || fly.pos.Elements[axis]<-30.0f)fly.pos.Elements[axis]-=velocity.Elements[axis]+velocity.Elements[axis];
+        }
+        ++ticks_;
+    }
+}
+
+void TFlyEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if(!Renderer || !initialized_ || texture_==kInvalidTexture || (Flags()&OF_KILL))return;
+    const auto&owner=native_domain_?native_owner_:Transform().Matrix();
+    SQuadDrawItem item={};item.key.texture=texture_;item.key.blend=uint8_t(EFxBlend::Alpha);item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);item.light_mode=EFxLightMode::Unlit;item.retail_argb4444=true;item.retail_software_projection=native_domain_;item.debug_mode=debug_mode;
+    for(const auto&fly:flies_) {
+        if(!fly.used)continue;
+        // Whole original TParticleSystem::Render(false,false): local rotations,
+        // fixed tip/spin, scale, raw relative translation, then real owner.
+        hmm_mat4 local={};MtxClear(&local);MtxRotateX(&local,float(fly.rot.X*TORADIAN));MtxRotateY(&local,float(fly.rot.Y*TORADIAN));MtxRotateZ(&local,float(fly.rot.Z*TORADIAN));MtxRotateX(&local,-float(M_PI/2.0));MtxRotateZ(&local,-float(M_PI/4.0));MtxScale(&local,&fly.scl);MtxTranslate(&local,&fly.pos);
+        for(int corner=0;corner<4;++corner) {
+            hmm_vec3 p={},world={};MtxTransform(&local,&vertices_[corner].pos,&p);MtxTransform(&owner,&p,&world);
+            std::memcpy(item.world_pos[corner],world.Elements,3*sizeof(float));item.uv[corner][0]=vertices_[corner].tu;item.uv[corner][1]=vertices_[corner].tv;
+        }
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
+void TFlyEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_=enabled && initialized_ && !runtime_owned_;
+    if(native_domain_){const auto p=IntPos(*this);BuildRetailSoftwareOwner(native_owner_,p.x,p.y,p.z,uint8_t(IntFacing(*this)));}
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Flies",int(native_domain_));
+}
+
+void TFlyEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime());Submit(debug_mode);
+}
+
+// *************************************************************************
+// * Wave 3 batch W2E (Misc B): faithful direct port of TFountainAnimator. *
+// * One bespoke class covers X04 base + X05/X06/X07/X08 color subclasses  *
+// * via a `colorobj` parameter selecting one of 4 sub-objects in the      *
+// * shared Misc\Sparkle.I3D asset. Identical per-tick math, identical    *
+// * render-pass order to effect_old.cpp:3786-3903. Only the render API   *
+// * adapted to Sokol/SQuadDrawItem using the authored mesh.              *
+// *************************************************************************
+
+namespace {
+constexpr const char* kFountainBespokeImageryPath = "Misc\\Sparkle.I3D";
+}   // namespace
+
+// ----- X04 TFountainAnimator_Bespoke --------------------------------------
+
+TFountainAnimator_Bespoke* TFountainAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                          int32_t colorobj,
+                                                                          const char* asset_override)
+{
+    if (colorobj < 0 || colorobj >= kFountainBespokeNumSubObjs)
+    {
+        log_warn("[fountain] SpawnForTest: colorobj=%d out of [0,%d); clamping to 0",
+                 colorobj, kFountainBespokeNumSubObjs);
+        colorobj = 0;
+    }
+
+    // Wave-4 sign variants (OlihootSign, OgrokSign, ...) reuse the fountain
+    // animator with marker-specific I3D assets (Misc\Olihoot.I3D etc.).
+    const char* asset_path = asset_override ? asset_override : kFountainBespokeImageryPath;
+    SLoadedImagery loaded = SparkleLoadImagery(asset_path, "fountain");
+    if (!loaded.img3d)
+    {
+        log_error("[fountain] SpawnForTest: SparkleLoadImagery('%s') failed — asset missing",
+                  asset_path);
+        return nullptr;
+    }
+
+    auto* fount = new TFountainAnimator_Bespoke(loaded.base);
+    SetIntPos(fount, origin);
+    fount->SetMapIndex(MapPane.MakeIndex());
+    fount->ActivateComponents();
+
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[fountain] SpawnForTest: imagery underspec'd (objects=%d, textures=%d)",
+                  num_obj, num_tex);
+        delete fount;
+        return nullptr;
+    }
+
+    // Resolve all 4 sub-objects (photon/photon01/02/03). If the asset has
+    // fewer sub-objects, fall back to sub-object 0 for the missing slots
+    // (matches the Pixie pattern at effect.cpp:9976-9985).
+    for (int32_t i = 0; i < kFountainBespokeNumSubObjs; ++i)
+    {
+        const int32_t obj = (num_obj > i) ? i : 0;
+        const int32_t tex_slot = SparkleSubObjTextureSlot(loaded.img3d, obj);
+        const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+        S3DTex tex = {};
+        loaded.img3d->GetTexture(slot, &tex);
+        fount->textures_[i] = tex.htexture;
+        if (loaded.img3d->NumObjVerts(obj) != 4)
+        {
+            log_error("[fountain] sub-object %d requires an authored four-vertex quad", obj);
+            delete fount;
+            return nullptr;
+        }
+        loaded.img3d->GetObjVerts(obj, fount->vertices_[i], 0, 0, ERender3DVertex::Vertex);
+        S3DObj object = {};
+        loaded.img3d->GetObject(obj, &object);
+        if (object.material >= 0 && object.material < loaded.img3d->NumMaterials())
+        {
+            S3DMat material = {};
+            loaded.img3d->GetMaterial(object.material, &material);
+            const auto& color = material.matdesc.diffuse;
+            fount->diffuse_[i][0] = color.r;
+            fount->diffuse_[i][1] = color.g;
+            fount->diffuse_[i][2] = color.b;
+            fount->diffuse_[i][3] = color.a;
+        }
+    }
+    fount->colorobj_ = colorobj;
+    if (fount->textures_[colorobj] == kInvalidTexture)
+    {
+        log_error("[fountain] SpawnForTest: sub-object %d texture unresolved", colorobj);
+        delete fount;
+        return nullptr;
+    }
+
+    // --- Port of TFountainAnimator::Initialize (effect_old.cpp:3797-3813).
+    // Seed all 10 bubbles simultaneously, each with an independent rise
+    // speed (3 quantized values) and an independent negative start delay.
+    for (int32_t n = 0; n < kFountainBespokeNumBubbles; n++)
+    {
+        // p[n].x/y = random(-FOUNTAIN_RADIUS, FOUNTAIN_RADIUS); p[n].z = 0.
+        fount->p_[n].X = float(random(-kFountainBespokeRadius, kFountainBespokeRadius));
+        fount->p_[n].Y = float(random(-kFountainBespokeRadius, kFountainBespokeRadius));
+        fount->p_[n].Z = 0.0f;
+        // rise[n] = random(1,3) / 2.0 -> {0.5, 1.0, 1.5} wu/tick.
+        fount->rise_[n]  = float(random(1, 3)) / 2.0f;
+        fount->scale_[n] = kFountainBespokeInitScale;     // 2.0
+        // framenum[n] = random(-NUM_FOUNTAIN_BUBBLES/2, 0) = random(-5,0).
+        fount->framenum_[n] = random(-kFountainBespokeNumBubbles / 2, 0);
+    }
+    // SetColorObject() is the per-leaf virtual; we set colorobj_ above.
+
+    log_info("[fountain] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "colorobj=%d texture=%u num_obj=%d diffuse=(%.2f,%.2f,%.2f,%.2f)",
+             asset_path, fount->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             colorobj, fount->textures_[colorobj], num_obj,
+             fount->diffuse_[colorobj][0], fount->diffuse_[colorobj][1],
+             fount->diffuse_[colorobj][2], fount->diffuse_[colorobj][3]);
+    return fount;
+}
+
+void TFountainAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[fountain] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    // --- Update: port of TFountainAnimator::Animate (effect_old.cpp:3822-3852).
+    // Framerate-independent via the 24Hz sim-tick accumulator. Each tick
+    // runs the original per-tick integration exactly once.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kFountainBespokeSimTickMs))
+    {
+        sim_accum_ms_ -= double(kFountainBespokeSimTickMs);
+
+        for (int32_t n = 0; n < kFountainBespokeNumBubbles; n++)
+        {
+            // framenum++ always — even waiting bubbles advance (effect_old.cpp:3830).
+            framenum_[n]++;
+
+            if (framenum_[n] > 0)
+            {
+                // Float the bubbles up (effect_old.cpp:3835).
+                p_[n].Z += rise_[n];
+
+                // Scale the bubbles down (effect_old.cpp:3838).
+                scale_[n] -= kFountainBespokeScaleStep;
+
+                // See if bubble shrunk out of sight, respawn at floor
+                // (effect_old.cpp:3841-3849).
+                if (scale_[n] <= 0.0f)
+                {
+                    p_[n].X = float(random(-kFountainBespokeRadius, kFountainBespokeRadius));
+                    p_[n].Y = float(random(-kFountainBespokeRadius, kFountainBespokeRadius));
+                    p_[n].Z = 0.0f;
+                    rise_[n]  = float(random(1, 3)) / 2.0f;
+                    scale_[n] = kFountainBespokeInitScale;
+                    framenum_[n] = random(-kFountainBespokeNumBubbles / 2, 0);
+                }
+            }
+        }
+    }
+
+    // --- Render: port of TFountainAnimator::Render (effect_old.cpp:3861-3887).
+    // SaveBlendState / SetBlendState (= Alpha — MODULATE + SRC_ALPHA /
+    // INV_SRC_ALPHA). Forensics §7 flags this as SUSPECT but the rule
+    // is preserve-as-written; we pick EFxBlend::Alpha verbatim.
+    // GetObject(colorobj) once -- only that sub-object renders.
+    const hmm_mat4& world = Transform().Matrix();
+    SQuadDrawItem item = {};
+    std::memcpy(item.color_rgba, diffuse_[colorobj_], sizeof(item.color_rgba));
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;             // self-lit photon sprite
+    item.debug_mode      = debug_mode;
+    item.key.texture     = textures_[colorobj_];
+
+    for (int32_t n = 0; n < kFountainBespokeNumBubbles; n++)
+    {
+        if (framenum_[n] > 0)
+        {
+            // OBJ3D_SCL1 | OBJ3D_POS2: scale the authored mesh, translate
+            // the bubble, then concatenate the owning effect's transform.
+            for (int32_t vertex = 0; vertex < 4; ++vertex)
+            {
+                const S3DVertex& authored = vertices_[colorobj_][vertex];
+                const hmm_vec3 local = authored.pos * scale_[n] + p_[n];
+                hmm_vec3 corner = {};
+                MtxTransform(&world, &local, &corner);
+                item.world_pos[vertex][0] = corner.X;
+                item.world_pos[vertex][1] = corner.Y;
+                item.world_pos[vertex][2] = corner.Z;
+                item.uv[vertex][0] = debug_mode == EFxDebugMode::FullTexture ? float(vertex & 1) : authored.tu;
+                item.uv[vertex][1] = debug_mode == EFxDebugMode::FullTexture ? float(vertex >> 1) : authored.tv;
+            }
+            Renderer->SubmitFxQuad(item);
+        }
+    }
+}
+// --- end TFountainAnimator_Bespoke source port (native comparison pending)
+
+// ----- B04 TPulpEffect_Bespoke — STUBBED ---------------------------------
+// BLOCKED. TPulpEffect::Set requires a live PTCharacter + TCharAnimator
+// to source per-bone body-part sub-object meshes (head/limb chunks)
+// ejected as falling rigid bodies. The harness has no SubmitFx* path
+// for animated character sub-object meshes (only billboards/particles);
+// and the bespoke effect would need to couple against the rig from
+// inside its Tick path — both out of W2D scope. STUB per brief.
+// Re-enable when (a) char-mesh submission lands or (b) we accept the
+// blood-only subset (which would just re-use the canonical B01
+// TBloodEffect_Bespoke path per brief: "keep B01 path canonical").
+
+TPulpEffect_Bespoke* TPulpEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& /*origin*/)
+{
+    log_warn("[pulp/B04] SpawnForTest: BLOCKED — TPulpEffect::Set requires a "
+             "live PTCharacter + TCharAnimator for body-part sub-object meshes, "
+             "and there is no SubmitFx* path for animated character sub-object "
+             "meshes from a bespoke effect in the --test=vfx harness. "
+             "Harness draws nothing for this id. Per brief: 'May share particles "
+             "with B01 — keep B01 path canonical' for the blood subset.");
+    return nullptr;
+}
+
+void TPulpEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode /*debug_mode*/)
+{
+    // No-op (paired with the nullptr SpawnForTest above).
+}
+// --- end TPulpEffect_Bespoke STUB
+
+// *************************************************************************
+// * Wave 3 batch W2C: Weather C — character-cast storm + wind strip       *
+// *                                                                       *
+// * Faithful direct ports of:                                              *
+// *   W07 TStormAnimator (effectcomp.cpp:38-380)                          *
+// *   S02 TWindStripAnimator (stripeffect.cpp:1063-1417)                  *
+// *                                                                       *
+// * Translation rules: identical math, identical per-tick constants,      *
+// * identical render-pass order. Only the render API adapts: D3D          *
+// * matrix/RenderObject -> SubmitFxBillboard / SubmitFxStrip; we reuse    *
+// * StripFamilySparkTexture (procedural disc) and StripFamilyGlowTexture  *
+// * (vertical falloff strip) already proven by S04 lightning bespoke.     *
+// *                                                                       *
+// * Localized-at-end of file for clean merge with adjacent W2A/W2B/W2D    *
+// * batches.                                                              *
+// *************************************************************************
+
+// Forward decls for the StripFamily procedural textures defined in the
+// anonymous namespace at effect.cpp:10164/10191 (TU-internal linkage but
+// still resolvable below the namespace's closing brace since they share
+// the same translation unit).
+namespace { TTextureHandle StripFamilyGlowTexture(); TTextureHandle StripFamilySparkTexture(); }
+
+// =========================================================================
+// W07 TStormAnimator_Bespoke
+// =========================================================================
+// Snapshot source: src/effectcomp.cpp:38-380 (TStormAnimator::Init,
+// GetCount, Set, Get, Create, Animate, Render). The retail outer wrapper
+// is TMeteorStormAnimator (effect_old.cpp:6365-6503) which populates an
+// SStormParams struct then ramps the particle count up over ticks (size 8
+// in METEOR_STORM_SIZE). We mirror that ramp here so the single bespoke
+// effect plays as a self-contained storm burst.
+//
+// Per-instance per-tick:
+//   particle phase: pos += vel; if pos.z <= walkheight -> switch to
+//   impact; else vel.z -= gravity, frame += particle_frame_inc, wrap.
+//   impact phase:   frame += impact_frame_inc; when frame >= impact_end
+//                   -> used = false.
+//
+// Render per instance:
+//   matrix = (rotZ ±-45, rotY -90 for particle; rotX 90 for impact) *
+//            scale (part or expl) * translate (pos for particle, pos +
+//            (25,35,...) for impact).
+//   uv: u_size = 1/u, u = u_size*(frame % u); v fixed at 0 for particle,
+//       v = v_size*(frame/v) for impact.
+//   blend: snapshot TMeteorStormAnimator::Render (effect_old.cpp:6488)
+//   wraps with SetBlendState -> Alpha. Preserved AS WRITTEN.
+//
+// Harness simplification: walk-height is unavailable in --test=vfx
+// (mappane sector is empty), so we use a fixed "ground" plane at
+// origin.z and let the particle hit that to flip to impact. The damage /
+// spell-invoker / sound branches in Render are guarded out (no spell).
+
+TStormAnimator_Bespoke* TStormAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TStormAnimator_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    // --- Port of TMeteorStormAnimator::Initialize (effect_old.cpp:6367-6445).
+    // The wrapper effect copies effect_pos, then sets SStormParams. We
+    // mirror the same numbers — these are the meteor-storm defaults; a
+    // future stormbolt.i3d binding could pick blue-tint constants.
+    for (int32_t i = 0; i < kStormBespokeMaxInstance; ++i)
+        eff->storm_instance_[i].used = false;
+    memset(&eff->params_, 0, sizeof(eff->params_));
+
+    eff->ticks_   = 0;
+    eff->tracker_ = 0;
+
+    SStormBespokeParams& params = eff->params_;
+
+    // how many meteors
+    params.particles = 0;
+    // their texture size
+    params.tex_u = params.tex_v = 64;
+    // what is the meteor grid
+    params.particle_u = 8;
+    params.particle_v = 2;
+    // where do the frames begin and end
+    params.particle_begin = 0;
+    params.particle_end = 7;
+    // what is the impact grid
+    params.impact_u = 4;
+    params.impact_v = 4;
+    // where do the frames begin and end
+    params.impact_begin = 8;
+    params.impact_end = 15;
+    // gravity, duh...take physics
+    params.gravity = .37f;
+    // velocity, see above suggestion
+    params.velocity.Y = 0.0f;
+    params.velocity.X = -10.0f;
+    params.velocity.Z = -15.0f;
+    // base position value
+    params.pos.X = (float)origin.x + 120.0f;
+    params.pos.Y = (float)origin.y - 20.0f;
+    params.pos.Z = (float)origin.z + 300.0f;
+    // the spread
+    params.pos_spread.X = 100.0f;
+    params.pos_spread.Y = 100.0f;
+    params.pos_spread.Z = 0.0f;
+    // frame incrementors
+    params.impact_frame_inc = 0.7f;
+    params.particle_frame_inc = 0.5f;
+    float ratio = (float)random(5, 20) / 10.0f;
+    // scaling
+    params.impact_scale.X = 1.0f * ratio;
+    params.impact_scale.Y = 1.0f * ratio;
+    params.impact_scale.Z = 1.0f * ratio;
+    // scaling
+    params.particle_scale.X = 0.5f * ratio;
+    params.particle_scale.Y = 1.5f * ratio;
+    params.particle_scale.Z = 1.0f * ratio;
+
+    params.rot.X = 0.0f;
+    params.rot.Y = 0.0f;
+    params.rot.Z = 0.0f;
+
+    eff->alive_         = true;
+    eff->sim_accum_ms_  = 0.0;
+
+    log_info("[W07 storm_bespoke] SpawnForTest: origin=(%d,%d,%d) "
+             "particles_cap=%d duration_ticks=%d",
+             origin.x, origin.y, origin.z,
+             kStormBespokeMaxInstance, kStormBespokeDurationTicks);
+    return eff;
+}
+
+int32_t TStormAnimator_Bespoke::GetCount_() const
+{
+    // VERBATIM port of TStormAnimator::GetCount (effectcomp.cpp:53-62).
+    int32_t count = 0;
+    for (int32_t i = 0; i < kStormBespokeMaxInstance; ++i)
+    {
+        if (storm_instance_[i].used)
+            ++count;
+    }
+    return count;
+}
+
+void TStormAnimator_Bespoke::Create_()
+{
+    // VERBATIM port of TStormAnimator::Create (effectcomp.cpp:80-114).
+    int32_t i = 0;
+    // create all necessary particles
+    while (GetCount_() < params_.particles)
+    {
+        if (storm_instance_[i].used)
+        {
+            i++;
+            continue;
+        }
+        // found a instance to be created
+        storm_instance_[i].used = true;
+        storm_instance_[i].pos.X = params_.pos.X + random(-(int32_t)params_.pos_spread.X, (int32_t)params_.pos_spread.X);
+        storm_instance_[i].pos.Y = params_.pos.Y + random(-(int32_t)params_.pos_spread.Y, (int32_t)params_.pos_spread.Y);
+        storm_instance_[i].pos.Z = params_.pos.Z + random(-(int32_t)params_.pos_spread.Z, (int32_t)params_.pos_spread.Z);
+        storm_instance_[i].is_particle = true;
+        storm_instance_[i].velocity.X = params_.velocity.X;
+        storm_instance_[i].velocity.Y = params_.velocity.Y;
+        storm_instance_[i].velocity.Z = params_.velocity.Z * ((float)random(100, 150) / 100.0f);
+        storm_instance_[i].gravity = params_.gravity;
+        storm_instance_[i].frame = (float)params_.particle_begin;
+        storm_instance_[i].particle_frame_inc = params_.particle_frame_inc;
+        storm_instance_[i].impact_frame_inc = params_.impact_frame_inc;
+        storm_instance_[i].part_scl.X = params_.particle_scale.X * ((float)random(50, 150) / 100.0f);
+        storm_instance_[i].part_scl.Y = params_.particle_scale.Y;
+        storm_instance_[i].part_scl.Z = params_.particle_scale.Z;
+        storm_instance_[i].expl_scl.X = params_.impact_scale.X * ((float)random(50, 150) / 100.0f);
+        storm_instance_[i].expl_scl.Y = params_.impact_scale.Y;
+        storm_instance_[i].expl_scl.Z = params_.impact_scale.Z;
+        storm_instance_[i].explosion_sounded = false;
+        //PLAY("meteor fall");
+        i++;
+    }
+}
+
+void TStormAnimator_Bespoke::Animate_()
+{
+    // VERBATIM port of TStormAnimator::Animate (effectcomp.cpp:116-164).
+    hmm_vec3 new_pos;
+
+    // Harness simplification: no live MapPane sector. Approximate the
+    // walk-height as the spawn origin's z (the "ground" the particles
+    // crash into). The snapshot calls MapPane.GetWalkHeight(point); we
+    // substitute a fixed plane at base.z. (Drift adaptation.)
+    const float ground_z = (float)IntPos(*this).z;
+
+    // run through existing particles
+    for (int32_t i = 0; i < kStormBespokeMaxInstance; ++i)
+    {
+        if (!storm_instance_[i].used)
+            continue;
+
+        if (storm_instance_[i].is_particle)
+        {
+            new_pos.X = storm_instance_[i].pos.X + storm_instance_[i].velocity.X;
+            new_pos.Y = storm_instance_[i].pos.Y + storm_instance_[i].velocity.Y;
+            new_pos.Z = storm_instance_[i].pos.Z + storm_instance_[i].velocity.Z;
+
+            const float height = ground_z;
+
+            if (height >= new_pos.Z)
+            {
+                storm_instance_[i].frame = (float)params_.impact_begin;
+                storm_instance_[i].is_particle = false;
+            }
+            else
+            {
+                storm_instance_[i].pos.X = new_pos.X;
+                storm_instance_[i].pos.Y = new_pos.Y;
+                storm_instance_[i].pos.Z = new_pos.Z;
+                storm_instance_[i].velocity.Z -= storm_instance_[i].gravity;
+                storm_instance_[i].frame += storm_instance_[i].particle_frame_inc;
+                if (storm_instance_[i].frame >= params_.particle_end)
+                    storm_instance_[i].frame -= (params_.particle_end - params_.particle_begin);
+            }
+        }
+        else
+        {
+            if ((int32_t)storm_instance_[i].frame >= params_.impact_end)
+                storm_instance_[i].used = false;
+            else
+                storm_instance_[i].frame += storm_instance_[i].impact_frame_inc;
+        }
+    }
+    // create new particles
+    Create_();
+}
+
+void TStormAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || !alive_)
+        return;
+
+    // 24 Hz sim tick — same family pattern as S04 lightning.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStormBespokeSimTickMs))
+    {
+        sim_accum_ms_ -= double(kStormBespokeSimTickMs);
+
+        // --- Port of TMeteorStormAnimator::Animate (effect_old.cpp:6447-6483).
+        // Ramp the particle count up/down over METEOR_STORM_TICKS.
+        if (!(ticks_ % 10))
+        {
+            if (tracker_ < kStormBespokeRampSize && ticks_ <= kStormBespokeDurationTicks)
+                tracker_++;
+            if (ticks_ > kStormBespokeDurationTicks && tracker_ != 0)
+                tracker_--;
+            // params_.particles = tracker (snapshot Get/Set inlined here)
+            params_.particles = tracker_;
+            if (params_.particles > kStormBespokeMaxInstance)
+                params_.particles = kStormBespokeMaxInstance;
+        }
+
+        // animate the storm!
+        Animate_();
+
+        // check to see if finished
+        const bool storm_done = (GetCount_() == 0);
+        if (storm_done && ticks_ >= kStormBespokeDurationTicks)
+        {
+            alive_ = false;
+            break;
+        }
+
+        ++ticks_;
+    }
+
+    if (!alive_)
+        return;
+
+    // --- Render() — port of TStormAnimator::Render (effectcomp.cpp:166-293).
+    // Snapshot: SetBlendState() (Alpha) at outer wrapper (effect_old.cpp:
+    // 6488), then per-instance RenderObject. Preserve Alpha AS WRITTEN.
+    const TTextureHandle spark_tex = StripFamilySparkTexture();
+    if (spark_tex == kInvalidTexture)
+        return;
+
+    for (int32_t i = 0; i < kStormBespokeMaxInstance; ++i)
+    {
+        if (!storm_instance_[i].used)
+            continue;
+
+        // Build the world position (snapshot's pos / pos+offset for
+        // impact). The matrix rotations (RotZ -45/RotY -90 for particle,
+        // RotX 90 for impact) shape the I3D mesh — without a real asset
+        // we use screen-aligned billboards; the per-phase rotation maps
+        // to a per-phase rotation_rad on the particle item.
+        float wx, wy, wz;
+        if (storm_instance_[i].is_particle)
+        {
+            wx = storm_instance_[i].pos.X;
+            wy = storm_instance_[i].pos.Y;
+            wz = storm_instance_[i].pos.Z;   // FIX_Z_VALUE in snapshot
+        }
+        else
+        {
+            wx = storm_instance_[i].pos.X + 25.0f;
+            wy = storm_instance_[i].pos.Y + 35.0f;
+            wz = storm_instance_[i].pos.Z;
+        }
+
+        // Spell-explode-sound block (snapshot effectcomp.cpp:227-238) is
+        // guarded out — harness has no spell. Mark the slot as "sounded"
+        // so it won't keep entering this block.
+        if (!storm_instance_[i].is_particle && !storm_instance_[i].explosion_sounded)
+            storm_instance_[i].explosion_sounded = true;
+
+        // --- UV (snapshot effectcomp.cpp:241-275): pick a tile out of the
+        // particle/impact frame grid. Real asset would map to actual tiles
+        // in stormbolt.i3d; with the procedural disc spark_tex, we keep
+        // the full UV [0..1] but compute the snapshot's u/v values so a
+        // future asset hookup is trivial.
+        int32_t frame = (int32_t)storm_instance_[i].frame;
+        float u, u_size, v, v_size;
+        if (storm_instance_[i].is_particle)
+        {
+            u_size = (1.0f / (float)params_.particle_u);
+            u = u_size * (float)(frame % params_.particle_u);
+            v_size = (1.0f / (float)params_.particle_v);
+            v = 0.0f;
+        }
+        else
+        {
+            u_size = (1.0f / (float)params_.impact_u);
+            u = u_size * (float)(frame % params_.impact_u);
+            v_size = (1.0f / (float)params_.impact_v);
+            v = v_size * (float)(frame / params_.impact_v);
+        }
+
+        // Per-phase size: snapshot scales by part_scl (particle) or
+        // expl_scl (impact). We bake the X axis * a base size_wu.
+        const float base_size_wu = 24.0f;
+        const float scl = storm_instance_[i].is_particle
+                             ? storm_instance_[i].part_scl.X
+                             : storm_instance_[i].expl_scl.X;
+        const float size_wu = base_size_wu * scl;
+
+        // Per-phase tint: stormbolt = blue particles + white impact.
+        // (Procedural stand-in; real asset would carry the tint.)
+        const float r_ = storm_instance_[i].is_particle ? 0.55f : 1.0f;
+        const float g_ = storm_instance_[i].is_particle ? 0.75f : 1.0f;
+        const float b_ = storm_instance_[i].is_particle ? 1.0f  : 1.0f;
+
+        SParticleDrawItem item = {};
+        item.world_pos[0] = wx;
+        item.world_pos[1] = wy;
+        item.world_pos[2] = wz;
+        item.size_wu[0]   = size_wu;
+        item.size_wu[1]   = size_wu;
+        item.color_rgba[0] = r_;
+        item.color_rgba[1] = g_;
+        item.color_rgba[2] = b_;
+        item.color_rgba[3] = 1.0f;
+        // For now use full uv (procedural disc); preserve computed u/v as
+        // the rect for the asset path.
+        (void)u; (void)v; (void)u_size; (void)v_size;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.rotation_rad = storm_instance_[i].is_particle ? -0.7854f : 0.0f; // RotZ(-45deg)
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Particle);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        Renderer->SubmitFxParticle(item);
+    }
+
+    // Static log on first submit for harness verification.
+    static const bool s_logged_first_submit = []{
+        log_info("[W07 storm_bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+}
+
+// =========================================================================
+// S02 TWindStripAnimator_Bespoke
+// =========================================================================
+// Snapshot source: src/stripeffect.cpp:1063-1417 (TWindStripAnimator::
+// Initialize / SetupObjects / Animate / Render / RefreshZBuffer +
+// InitDrops + AddDrop). Three parallel strips walk Lissajous paths around
+// `center`; each tick the head moves a notch and the oldest point is
+// dropped, with sparks spawning at the displaced head. A central halo
+// pulses (grow then shrink) over the fadeout window.
+//
+// Per-tick (snapshot Animate :1132-1242):
+//   - first frame: seed all 10 (POINTS/2) head points.
+//   - subsequent frames: DelStartPoint + AddPoint (FIFO head-prepend);
+//     also AddDrop(p + center).
+//   - update accumulators r/th/h/ac/dac (Lissajous speeds).
+//   - haloscale grows by HALOSTEP per tick during first half of FADEOUT,
+//     shrinks past 1.5*FADEOUT.
+//   - drops integrate p += v, v.z -= SPARKGRAV, scl -= SPARKDSCALE; die
+//     when scl <= 0 OR pos.z < 20.
+//   - centerang random-walks (snapshot uses byte-angle).
+//   - if frameon > WINDSTRIP_DURATION -> kill effect.
+//
+// Render (snapshot :1244-1369):
+//   - Alpha blend (SetBlendState): strip body + drop sparks.
+//   - AdditiveStraight (SetAddBlendState): halo billboard.
+//   - Cull mode forced to NONE (preserved by submission orientation +
+//     strip pipeline handling both sides).
+
+TWindStripAnimator_Bespoke* TWindStripAnimator_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TWindStripAnimator_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    // --- Port of TWindStripAnimator::Initialize (stripeffect.cpp:1063-1101).
+    eff->center_.X = 0.0f;
+    eff->center_.Y = 0.0f;
+    eff->center_.Z = 0.0f;
+
+    eff->realpos_.X = 0.0f;
+    eff->realpos_.Y = 0.0f;
+    eff->realpos_.Z = 0.0f;
+
+    eff->centerang_ = 0;
+    eff->haloscale_ = 0.0f;
+    eff->frameon_   = 0;
+
+    for (int32_t i = 0; i < kWindStripBespokeMaxStrips; i++)
+    {
+        eff->r_[i]   = (float)random(0, 6);
+        eff->th_[i]  = (float)random(0, 6);
+        eff->h_[i]   = (float)random(0, 6);
+        eff->dr_[i]  = (float)(random(1, 20) / 100.0);
+        eff->dth_[i] = (float)(random(15, 20) / 100.0);
+        eff->dh_[i]  = (float)(random(1, 20) / 100.0);
+        eff->ac_[i]  = 0.0f;
+        eff->dac_[i] = (float)(random(5, 10) / 100.0);
+
+        // Snapshot stripeffect.cpp:1096-1098 — these lines exist as
+        // commented-out in Initialize and are restored in SetupObjects
+        // (lines 1123-1125). The TStripAnimator equivalent maps to our
+        // strip_points_ ring buffer which is implicit (no separate
+        // TStripAnimator instance needed).
+        eff->strip_count_[i] = 0;
+    }
+    eff->InitDrops_();
+
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[S02 windstrip_bespoke] SpawnForTest: origin=(%d,%d,%d) "
+             "strips=%d points/strip=%d sparks=%d",
+             origin.x, origin.y, origin.z,
+             kWindStripBespokeMaxStrips, kWindStripBespokePoints,
+             kWindStripBespokeNumSparks);
+    return eff;
+}
+
+void TWindStripAnimator_Bespoke::InitDrops_()
+{
+    // Port of stripeffect.cpp:1389-1396.
+    for (int32_t i = 0; i < kWindStripBespokeNumSparks; i++)
+        drops_[i].used = false;
+}
+
+void TWindStripAnimator_Bespoke::AddDrop_(const hmm_vec3& pos)
+{
+    // VERBATIM port of TWindStripAnimator::AddDrop (stripeffect.cpp:
+    // 1398-1418). Snapshot bug preserved (`p = i` overwrites every
+    // un-used slot's index, so AddDrop ends up writing into the LAST
+    // un-used slot — that's how it was shipped).
+    int32_t p = -1, i;
+    for (i = 0; i < kWindStripBespokeNumSparks; i++)
+    {
+        if (drops_[i].used)
+            continue;
+        p = i;
+    }
+    if (p > -1)
+    {
+        drops_[p].pos.X = pos.X;
+        drops_[p].pos.Y = pos.Y;
+        drops_[p].pos.Z = pos.Z;
+        drops_[p].vel.X = 0.0f;
+        drops_[p].vel.Y = 0.0f;
+        drops_[p].vel.Z = -kWindStripBespokeSparkFall;
+        drops_[p].scl   = kWindStripBespokeSparkScale;
+        drops_[p].used  = true;
+    }
+}
+
+void TWindStripAnimator_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || !alive_)
+        return;
+
+    // 24 Hz sim tick — matches snapshot's per-frame cadence.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kWindStripBespokeSimTickMs))
+    {
+        sim_accum_ms_ -= double(kWindStripBespokeSimTickMs);
+
+        // --- Port of TWindStripAnimator::Animate (stripeffect.cpp:1132-1242).
+        hmm_vec3 p;
+        for (int32_t j = 0; j < kWindStripBespokeMaxStrips; j++)
+        {
+            if (frameon_ == 0)
+            {
+                // First frame: seed the strip with POINTS/2 head points.
+                for (int32_t i = 0; i < kWindStripBespokePoints / 2; i++)
+                {
+                    p.X = (float)((std::cos(r_[j]) + 2) * std::cos(th_[j]) * kWindStripBespokeModifier * ac_[j] * (std::sin(h_[j]) + 1));
+                    p.Y = (float)((std::cos(r_[j]) + 2) * std::sin(th_[j]) * kWindStripBespokeModifier * ac_[j] * (std::sin(h_[j]) + 1));
+                    p.Z = (float)(std::sin(h_[j]) * kWindStripBespokeModifierV * ac_[j]);
+
+                    // strip head-prepend (mystrip[j]->AddPoint(&p)).
+                    if (strip_count_[j] < kWindStripBespokePoints)
+                    {
+                        // shift up (head at [0])
+                        for (int32_t k = strip_count_[j]; k > 0; --k)
+                            strip_points_[j][k] = strip_points_[j][k - 1];
+                        strip_points_[j][0].pos = p;
+                        strip_points_[j][0].used = true;
+                        ++strip_count_[j];
+                    }
+
+                    th_[j] += (float)dth_[j];
+                    r_[j]  += (float)dr_[j];
+                    h_[j]  += (float)dh_[j];
+                    ac_[j] += (float)dac_[j];
+                    if (ac_[j] > 5.0f)
+                        ac_[j] = 5.0f;
+                }
+            }
+            else
+            {
+                // DelStartPoint: drop the oldest point (snapshot pops from
+                // the tail of the ring-shifted buffer).
+                if (strip_count_[j] > 0)
+                {
+                    // shift down (drop tail)
+                    for (int32_t k = 0; k < strip_count_[j] - 1; ++k)
+                        strip_points_[j][k] = strip_points_[j][k + 1];
+                    strip_points_[j][strip_count_[j] - 1].used = false;
+                    --strip_count_[j];
+                }
+
+                p.X = (float)((std::cos(r_[j]) + 2) * std::cos(th_[j]) * kWindStripBespokeModifier * ac_[j] * (std::sin(h_[j]) + 1));
+                p.Y = (float)((std::cos(r_[j]) + 2) * std::sin(th_[j]) * kWindStripBespokeModifier * ac_[j] * (std::sin(h_[j]) + 1));
+                p.Z = (float)(std::sin(h_[j]) * kWindStripBespokeModifierV * ac_[j]);
+
+                // AddPoint (head-prepend).
+                if (strip_count_[j] < kWindStripBespokePoints)
+                {
+                    for (int32_t k = strip_count_[j]; k > 0; --k)
+                        strip_points_[j][k] = strip_points_[j][k - 1];
+                    strip_points_[j][0].pos = p;
+                    strip_points_[j][0].used = true;
+                    ++strip_count_[j];
+                }
+                else
+                {
+                    // ring is full -- still rotate head down then prepend.
+                    for (int32_t k = kWindStripBespokePoints - 1; k > 0; --k)
+                        strip_points_[j][k] = strip_points_[j][k - 1];
+                    strip_points_[j][0].pos = p;
+                    strip_points_[j][0].used = true;
+                }
+
+                th_[j] += (float)dth_[j];
+                r_[j]  += (float)dr_[j];
+                h_[j]  += (float)dh_[j];
+                p.X += center_.X;
+                p.Y += center_.Y;
+                p.Z += center_.Z;
+                AddDrop_(p);
+
+                if (frameon_ < kWindStripBespokeFadeout)
+                {
+                    ac_[j] += (float)dac_[j];
+                    if (ac_[j] > 5.0f)
+                        ac_[j] = 5.0f;
+                }
+                else
+                {
+                    ac_[j] -= (float)dac_[j];
+                    if (ac_[j] < 0.0f)
+                        ac_[j] = 0.0f;
+                }
+                if (frameon_ < kWindStripBespokeFadeout / 2)
+                    haloscale_ += kWindStripBespokeHaloStep;
+                if (frameon_ > (kWindStripBespokeFadeout * 3) / 2)
+                    haloscale_ -= kWindStripBespokeHaloStep;
+            }
+        }
+
+        // Drop integration (stripeffect.cpp:1199-1210).
+        for (int32_t i = 0; i < kWindStripBespokeNumSparks; i++)
+        {
+            if (!drops_[i].used)
+                continue;
+            drops_[i].pos.X += drops_[i].vel.X;
+            drops_[i].pos.Y += drops_[i].vel.Y;
+            drops_[i].pos.Z += drops_[i].vel.Z;
+            drops_[i].vel.Z -= kWindStripBespokeSparkGrav;
+            drops_[i].scl   -= kWindStripBespokeSparkDScale;
+            if (drops_[i].scl <= 0 || drops_[i].pos.Z < 20)
+                drops_[i].used = false;
+        }
+
+        // Lifetime check (stripeffect.cpp:1211-1216). The STRIP_EXPLODE
+        // branch is harness-irrelevant (no my_state); rely solely on
+        // frameon overrun.
+        if (frameon_ > kWindStripBespokeDuration)
+        {
+            alive_ = false;
+            break;
+        }
+
+        ++frameon_;
+
+        // Center wobble (stripeffect.cpp:1218-1240). Snapshot uses
+        // ConvertToVector(centerang, RADIUS, vel) which is byte-angle
+        // -> x/y. We replicate with sin/cos.
+        const float angle_rad = float(centerang_ & 255) * (6.28318530718f / 256.0f);
+        const float vx = std::cos(angle_rad) * float(kWindStripBespokeRadius);
+        const float vy = std::sin(angle_rad) * float(kWindStripBespokeRadius);
+        center_.X  += vx;
+        center_.Y  += vy;
+        // Spell-invoker branch (snapshot :1225-1227) is harness-skipped
+        // — no invoker, so realpos stays at 0 (or grows under our own
+        // angle without the face-offset).
+        realpos_.X += vx;
+        realpos_.Y += vy;
+        centerang_ = (centerang_ + random(-2, 2)) & 255;
+    }
+
+    if (!alive_)
+        return;
+
+    // --- Render() — port of TWindStripAnimator::Render (stripeffect.cpp:
+    // 1244-1369). Snapshot: SetBlendState (Alpha) for strips + drops,
+    // SetAddBlendState (AdditiveStraight) for the halo. Cull mode forced
+    // NONE; strip pipeline draws both sides natively.
+
+    const TTextureHandle glow_tex  = StripFamilyGlowTexture();
+    const TTextureHandle spark_tex = StripFamilySparkTexture();
+    if (glow_tex == kInvalidTexture || spark_tex == kInvalidTexture)
+        return;
+
+    const S3DPoint& base = IntPos(*this);
+    const float ox = float(base.x) + center_.X;
+    const float oy = float(base.y) + center_.Y;
+    const float oz = float(base.z) + center_.Z;
+
+    // 1) Strips — port of stripeffect.cpp:1276-1302 (GenerateStrip +
+    // RenderObject). Each strip is rendered as N-1 SStripSegments
+    // between adjacent points; width pinned at WINDSTRIP_WIDTH / WIDTH2.
+    static thread_local std::vector<SStripSegment> seg_scratch;
+    for (int32_t j = 0; j < kWindStripBespokeMaxStrips; j++)
+    {
+        if (strip_count_[j] < 2)
+            continue;
+        seg_scratch.clear();
+        const int32_t n = strip_count_[j];
+        seg_scratch.reserve(size_t(n - 1));
+        for (int32_t k = 0; k < n - 1; k++)
+        {
+            const SWindStripBespokePoint& a = strip_points_[j][k];
+            const SWindStripBespokePoint& b = strip_points_[j][k + 1];
+            const float ta = float(k)     / float(n - 1);
+            const float tb = float(k + 1) / float(n - 1);
+            SStripSegment seg = {};
+            seg.world_a[0] = ox + a.pos.X;
+            seg.world_a[1] = oy + a.pos.Y;
+            seg.world_a[2] = oz + a.pos.Z;
+            seg.world_b[0] = ox + b.pos.X;
+            seg.world_b[1] = oy + b.pos.Y;
+            seg.world_b[2] = oz + b.pos.Z;
+            seg.width_a_wu = float(kWindStripBespokeWidth);
+            seg.width_b_wu = float(kWindStripBespokeWidth2);
+            // Snapshot has D3DRGBA(0,0,1,(numverts-i-1)/numverts) as the
+            // commented-out vertex color (stripeffect.cpp:1296-1297); the
+            // active code path leaves vertex colors at the obj defaults
+            // (white). Preserve as written: full white.
+            for (int32_t c = 0; c < 4; ++c)
+            {
+                seg.color_a[c] = 1.0f;
+                seg.color_b[c] = 1.0f;
+            }
+            // Snapshot SetTextureRange(-1, 1); we map ta/tb to [-1..1].
+            seg.u_a = -1.0f + 2.0f * ta;
+            seg.u_b = -1.0f + 2.0f * tb;
+            seg_scratch.push_back(seg);
+        }
+        SStripDrawItem strip_item = {};
+        strip_item.segments     = seg_scratch.data();
+        strip_item.num_segments = int32_t(seg_scratch.size());
+        strip_item.key.texture     = glow_tex;
+        strip_item.key.pipeline_id = uint16_t(EFxPipeline::Strip);
+        strip_item.key.blend       = uint8_t(EFxBlend::Alpha);
+        strip_item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        strip_item.debug_mode      = debug_mode;
+        Renderer->SubmitFxStrip(strip_item);
+    }
+
+    // 2) Drop sparks — port of stripeffect.cpp:1304-1331. Snapshot only
+    // renders a drop if `!random(0,1)` (i.e. ~50% per frame); preserved.
+    for (int32_t i = 0; i < kWindStripBespokeNumSparks; i++)
+    {
+        if (!drops_[i].used || random(0, 1))
+            continue;
+        SBillboardDrawItem item = {};
+        item.world_pos[0] = drops_[i].pos.X;
+        item.world_pos[1] = drops_[i].pos.Y;
+        item.world_pos[2] = drops_[i].pos.Z;
+        const float drop_size_wu = drops_[i].scl * 24.0f;
+        item.size_wu[0] = drop_size_wu;
+        item.size_wu[1] = drop_size_wu;
+        item.color_rgba[0] = 1.0f;
+        item.color_rgba[1] = 1.0f;
+        item.color_rgba[2] = 1.0f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        Renderer->SubmitFxBillboard(item);
+    }
+
+    // 3) Halo — port of stripeffect.cpp:1333-1356. SetAddBlendState ->
+    // AdditiveStraight. Position at center.x/y/z+haloscale (z-offset by
+    // haloscale per snapshot :1352).
+    if (haloscale_ > 0.0f)
+    {
+        SBillboardDrawItem item = {};
+        item.world_pos[0] = ox;
+        item.world_pos[1] = oy;
+        item.world_pos[2] = oz + haloscale_;
+        const float halo_size_wu = haloscale_ * 32.0f;
+        item.size_wu[0] = halo_size_wu;
+        item.size_wu[1] = halo_size_wu;
+        item.color_rgba[0] = 0.55f;
+        item.color_rgba[1] = 0.75f;
+        item.color_rgba[2] = 1.0f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = 0.0f;
+        item.uv_rect[1] = 0.0f;
+        item.uv_rect[2] = 1.0f;
+        item.uv_rect[3] = 1.0f;
+        item.key.texture     = spark_tex;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        Renderer->SubmitFxBillboard(item);
+    }
+
+    // Static log on first submit for harness verification.
+    static const bool s_logged_first_submit = []{
+        log_info("[S02 windstrip_bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+}
+
+// =========================================================================
+// * Wave-2B Weather B stubs (W01/W02/W03) — see effect.h banner.           *
+// *                                                                       *
+// * These three classes are placeholders. The snapshot animator bodies   *
+// * (src/effect_old.cpp:6367-6503 / :9769-10218 / :12860-13605) depend   *
+// * on infrastructure not yet available in the bespoke pipeline:         *
+// *                                                                      *
+// *   - TStormAnimator (effectcomp.cpp) — entire body is `#if 0` Phase-3 *
+// *     sokol-pipeline TODO. W01 cannot be faithfully ported until that  *
+// *     subsystem is brought back online.                                *
+// *   - T3DAnimator::GetObject(N) + RenderObject() multi-sub-object I3D  *
+// *     mesh draws with full per-instance D3DMATRIX stacks. The bespoke  *
+// *     pipeline only submits billboards/strips/lights today. W02 and   *
+// *     W03 each render 3-4 distinct mesh sub-objects per frame, plus    *
+// *     per-vertex alpha writeback into LVERTEX.color for W03.           *
+// *                                                                      *
+// * Per batch protocol, SpawnForTest returns nullptr + log_warn so the   *
+// * harness entries register cleanly and the cycle skips past these,    *
+// * status = blocked.                                                    *
+// =========================================================================
+
+// ----- W01 TMeteorStormEffect_Bespoke -------------------------------------
+//
+// Faithful direct port of TMeteorStormAnimator (effect_old.cpp:6365-6503)
+// + its inner TStormAnimator helper (effectcomp.cpp:38-380). The outer
+// wrapper configures SStormParams with the meteor defaults and ramps
+// `params.particles` up over METEOR_STORM_TICKS ticks, then back down at
+// the end. The inner helper integrates each meteor (gravity-fall in the
+// PARTICLE phase, swap to a flat IMPACT splash when the meteor hits walk-
+// height, kill after impact frames play out).
+//
+// Snapshot Render (effectcomp.cpp:166-293) draws each meteor as the REAL
+// 3D MESH `obj = anim->GetObject(0)` of Magic\comet.I3D — a textured quad
+// authored in I3D-local space — with per-instance D3DMATRIX composed of:
+//   particle phase: D3DMATRIXClear; RotZ(-45deg); RotX(0); RotY(-90deg);
+//                   Scale(part_scl); Translate(pos).
+//   impact phase:   D3DMATRIXClear; RotZ(0);   RotX(+90deg); RotY(0);
+//                   Scale(expl.x uniform);    Translate(pos + (25,35,0)).
+// Then `animator->RenderObject(obj)` issues the indexed-tri draw on the
+// I3D's authored mesh. D3D matrix functions concatenate on the right
+// (post-multiply), so for a row-vector point: M = Rz * Rx * Ry * S * T;
+// for our renderer's column-vector convention the same transform is
+// M = T * S * Ry * Rx * Rz applied as M * p_local (transpose).
+//
+// Per-frame atlas UV (snapshot rewrites obj->lverts[0..3].tu/tv at
+// effectcomp.cpp:241-275) is baked into 16 pre-registered MeshHandles
+// (one per cell) at SpawnForTest, since SHelperMeshSubmit has no per-
+// instance UV transform. cell_meshes_[0..7] = particle row (8x2 grid);
+// [8..15] = impact 4x4 sub-grid.
+//
+// Snapshot Render blend = SetBlendState() (Alpha, effect_old.cpp:221-233
+// + 6488). Map to SHelperMeshSubmit{ additive_blend = false } — i.e.
+// alpha-blend transparent mesh (the standard non-additive helper path).
+//
+// Z handling: the harness has no MapPane sector loaded so GetWalkHeight is
+// unavailable. We substitute a fixed ground plane at origin.z (the W07
+// simplification, retained).
+
+namespace
+{
+
+// Row-major 4x4 helpers (column-vector convention — world = M * p_local;
+// translation stored in indices [3]/[7]/[11]).
+void MakeMeteorIdentity16(float out[16])
+{
+    for (int32_t i = 0; i < 16; ++i) out[i] = 0.0f;
+    out[0] = out[5] = out[10] = out[15] = 1.0f;
+}
+
+void MakeMeteorTranslate16(float tx, float ty, float tz, float out[16])
+{
+    MakeMeteorIdentity16(out);
+    out[3] = tx; out[7] = ty; out[11] = tz;
+}
+
+void MakeMeteorScale16(float sx, float sy, float sz, float out[16])
+{
+    MakeMeteorIdentity16(out);
+    out[0] = sx; out[5] = sy; out[10] = sz;
+}
+
+void MakeMeteorRotX16(float rad, float out[16])
+{
+    MakeMeteorIdentity16(out);
+    const float c = std::cos(rad), s = std::sin(rad);
+    out[5]  =  c; out[6]  = -s;
+    out[9]  =  s; out[10] =  c;
+}
+
+void MakeMeteorRotY16(float rad, float out[16])
+{
+    MakeMeteorIdentity16(out);
+    const float c = std::cos(rad), s = std::sin(rad);
+    out[0]  =  c; out[2]  =  s;
+    out[8]  = -s; out[10] =  c;
+}
+
+void MakeMeteorRotZ16(float rad, float out[16])
+{
+    MakeMeteorIdentity16(out);
+    const float c = std::cos(rad), s = std::sin(rad);
+    out[0] =  c; out[1] = -s;
+    out[4] =  s; out[5] =  c;
+}
+
+constexpr float kMeteorDegToRad = 3.14159265358979323846f / 180.0f;
+
+}   // namespace
+
+TMeteorStormEffect_Bespoke*
+TMeteorStormEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    constexpr const char* kImageryPath = "Magic\\comet.I3D";
+
+    const int32_t img_id = TObjectImagery::FindImagery(kImageryPath);
+    if (img_id < 0)
+    {
+        log_error("[meteorstorm] SpawnForTest: FindImagery('%s') failed",
+                  kImageryPath);
+        return nullptr;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[meteorstorm] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  img_id, kImageryPath);
+        return nullptr;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[meteorstorm] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  kImageryPath);
+        TObjectImagery::FreeImagery(base);
+        return nullptr;
+    }
+    // Force lazy mesh init so sub-objects + texture slots are populated.
+    (void)img3d->NumObjects();
+
+    // --- DIAGNOSTIC ENUMERATION (icebolt iter4 pattern, src/effect.cpp:
+    // 7872-7886). Confirms what is actually in Magic\comet.I3D: how many
+    // sub-objects exist, how many textures, per-sub-obj vert bbox and UV
+    // extent, and which sub-objs carry materials.
+    log_info("[meteorstorm] comet.I3D contents: NumObjects=%d NumTextures=%d NumMaterials=%d",
+             img3d->NumObjects(), img3d->NumTextures(), img3d->NumMaterials());
+    for (int32_t i = 0; i < img3d->NumObjects(); ++i)
+    {
+        S3DObj o = {};
+        img3d->GetObject(i, &o);
+        const int32_t nv = img3d->NumObjVerts(i);
+        const int32_t nf = img3d->NumObjFaces(i);
+        float minx=0,maxx=0,miny=0,maxy=0,minz=0,maxz=0;
+        float umin=0,umax=0,vmin=0,vmax=0;
+        if (nv > 0)
+        {
+            std::vector<S3DVertex> vbuf(static_cast<size_t>(nv));
+            img3d->GetObjVerts(i, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+            minx = maxx = vbuf[0].pos.X; miny = maxy = vbuf[0].pos.Y; minz = maxz = vbuf[0].pos.Z;
+            umin = umax = vbuf[0].tu;    vmin = vmax = vbuf[0].tv;
+            for (const auto& v : vbuf)
+            {
+                if (v.pos.X < minx) minx = v.pos.X; if (v.pos.X > maxx) maxx = v.pos.X;
+                if (v.pos.Y < miny) miny = v.pos.Y; if (v.pos.Y > maxy) maxy = v.pos.Y;
+                if (v.pos.Z < minz) minz = v.pos.Z; if (v.pos.Z > maxz) maxz = v.pos.Z;
+                if (v.tu    < umin) umin = v.tu;    if (v.tu    > umax) umax = v.tu;
+                if (v.tv    < vmin) vmin = v.tv;    if (v.tv    > vmax) vmax = v.tv;
+            }
+        }
+        log_info("[meteorstorm]   sub-obj %d name='%s' verts=%d faces=%d "
+                 "bbox=[%.1f..%.1f, %.1f..%.1f, %.1f..%.1f] uv=[%.3f..%.3f, %.3f..%.3f] material=%d",
+                 i, o.name, nv, nf,
+                 minx, maxx, miny, maxy, minz, maxz,
+                 umin, umax, vmin, vmax, o.material);
+    }
+
+    auto* eff = new TMeteorStormEffect_Bespoke(base);
+    eff->imagery_ = base;
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    // --- Extract Comet.I3D GetObject(0)'s mesh + its albedo texture, and
+    // pre-register 16 atlas-cell mesh handles (one per animation frame).
+    //
+    // Retail confirmation: TMeteorStormAnimator::Initialize (effect_old.cpp:
+    // 6371) calls `PS3DAnimObj o = GetObject(0); meteor_storm.Init(this, o);`
+    // — passes sub-object 0 ONCE. TStormAnimator::Render (effectcomp.cpp:
+    // 166-293) reuses that single `obj` for every meteor instance, rewriting
+    // obj->lverts[0..3].tu/tv per draw to pick an atlas cell. Sub-objs 1..N
+    // (if comet.I3D has them) are NOT touched by this animator. The "all
+    // quads" appearance is retail-accurate; the comet's falling-meteor and
+    // ground-impact visuals are ALL on sub-object 0's single quad with
+    // animated UVs.
+    //
+    // SHelperMeshSubmit exposes no per-instance UV transform, so we bake
+    // each cell rect into its own MeshHandle (16 cells total).
+    constexpr int32_t kCometSubObj = 0;
+    TTextureHandle           albedo = kInvalidTexture;
+    std::vector<SMeshVertex> base_verts;
+    std::vector<uint16_t>    base_indices;
+    int32_t                  used_texslot = -1;
+
+    // Per the engine's RenderObject convention slot 0 = untextured,
+    // slot k>=1 = texture index k-1. Walk slots to find the first with
+    // faces (comet is a single textured quad — expect slot 1).
+    const int32_t texslots = img3d->NumTextures() + 1;
+    for (int32_t ts = 0; ts < texslots; ++ts)
+    {
+        base_verts.clear();
+        base_indices.clear();
+        if (!ExtractSubMeshTextureSlot(img3d, kCometSubObj, ts,
+                                       base_verts, base_indices))
+            continue;
+        if (base_verts.empty() || base_indices.empty())
+            continue;
+        used_texslot = ts;
+        if (ts > 0)
+        {
+            S3DTex t = {};
+            img3d->GetTexture(ts - 1, &t);
+            albedo = t.htexture;
+        }
+        else
+        {
+            albedo = Renderer->WhiteTextureHandle();
+        }
+        break;
+    }
+
+    if (used_texslot < 0)
+    {
+        log_error("[meteorstorm] SpawnForTest: ExtractSubMeshTextureSlot "
+                  "failed for sub-obj 0 of '%s' — cannot draw mesh. "
+                  "BLOCKER: T3DImagery exposes no mesh data for the comet "
+                  "quad. (NumObjects=%d, NumTextures=%d)",
+                  kImageryPath, img3d->NumObjects(), img3d->NumTextures());
+        TObjectImagery::FreeImagery(base);
+        delete eff;
+        return nullptr;
+    }
+    if (albedo == kInvalidTexture)
+        albedo = Renderer->WhiteTextureHandle();
+
+    // Capture the comet quad's authored UV bounds. ExtractSubMeshTextureSlot
+    // returns the raw S3DVertex UVs that retail's RenderObject sampled
+    // from. Snapshot Render overwrites all 4 vertex (u,v) so the authored
+    // UVs are not load-bearing — we use the (u,v) extents only to know
+    // which sub-vertex corresponds to which corner of the cell rect we
+    // remap to.
+    float src_umin =  1e30f, src_umax = -1e30f;
+    float src_vmin =  1e30f, src_vmax = -1e30f;
+    for (const auto& v : base_verts)
+    {
+        if (v.uv[0] < src_umin) src_umin = v.uv[0];
+        if (v.uv[0] > src_umax) src_umax = v.uv[0];
+        if (v.uv[1] < src_vmin) src_vmin = v.uv[1];
+        if (v.uv[1] > src_vmax) src_vmax = v.uv[1];
+    }
+    const float src_u_extent = (src_umax > src_umin) ? (src_umax - src_umin) : 1.0f;
+    const float src_v_extent = (src_vmax > src_vmin) ? (src_vmax - src_vmin) : 1.0f;
+
+    // Static parent transform (state 0, frame 0). The comet I3D's sub-
+    // object 0 anchor in I3D-local space.
+    BuildStaticObjectMatrix(img3d, kCometSubObj, 0, 0, eff->parent_matrix_);
+
+    // Load S3DMat material for sub-object 0 (icebolt iter4 pattern at
+    // effect.cpp:7830-7852). For SubmitHelperMesh, diffuse + emissive
+    // route the I3D material colour into the helper FS so it shows
+    // through scene-lighting math: col = base*(amb*la.w) + emissive
+    // where base = tex.rgb * diffuse. We then set ambient = diffuse at
+    // submit time so col = tex.rgb * diffuse * la.w + emissive — the
+    // material colour stays visible.
+    eff->diffuse_[0]  = 1.0f; eff->diffuse_[1]  = 1.0f; eff->diffuse_[2]  = 1.0f; eff->diffuse_[3]  = 1.0f;
+    eff->emissive_[0] = 0.0f; eff->emissive_[1] = 0.0f; eff->emissive_[2] = 0.0f; eff->emissive_[3] = 1.0f;
+    {
+        S3DObj o = {};
+        img3d->GetObject(kCometSubObj, &o);
+        const bool mat_ok = (o.material >= 0 && o.material < img3d->NumMaterials());
+        if (mat_ok)
+        {
+            S3DMat mat = {};
+            img3d->GetMaterial(o.material, &mat);
+            eff->diffuse_[0]  = mat.matdesc.diffuse.r;
+            eff->diffuse_[1]  = mat.matdesc.diffuse.g;
+            eff->diffuse_[2]  = mat.matdesc.diffuse.b;
+            eff->diffuse_[3]  = mat.matdesc.diffuse.a > 0.001f ? mat.matdesc.diffuse.a : 1.0f;
+            eff->emissive_[0] = mat.matdesc.emissive.r;
+            eff->emissive_[1] = mat.matdesc.emissive.g;
+            eff->emissive_[2] = mat.matdesc.emissive.b;
+            eff->emissive_[3] = 1.0f;
+        }
+        log_info("[meteorstorm] sub-obj 0 material_idx=%d (valid=%d) "
+                 "diffuse=(%.2f,%.2f,%.2f,%.2f) emissive=(%.2f,%.2f,%.2f)",
+                 o.material, int(mat_ok),
+                 eff->diffuse_[0], eff->diffuse_[1], eff->diffuse_[2], eff->diffuse_[3],
+                 eff->emissive_[0], eff->emissive_[1], eff->emissive_[2]);
+    }
+
+    // DBG: log the parent matrix + extents of the base verts (I3D-local).
+    float lxmin=1e30f, lxmax=-1e30f, lymin=1e30f, lymax=-1e30f, lzmin=1e30f, lzmax=-1e30f;
+    for (const auto& v : base_verts)
+    {
+        if (v.pos[0] < lxmin) lxmin = v.pos[0];
+        if (v.pos[0] > lxmax) lxmax = v.pos[0];
+        if (v.pos[1] < lymin) lymin = v.pos[1];
+        if (v.pos[1] > lymax) lymax = v.pos[1];
+        if (v.pos[2] < lzmin) lzmin = v.pos[2];
+        if (v.pos[2] > lzmax) lzmax = v.pos[2];
+    }
+    log_info("[meteorstorm-dbg] base_verts=%zu indices=%zu local_extent=[%.2f..%.2f, "
+             "%.2f..%.2f, %.2f..%.2f] uv_extent=[%.2f..%.2f, %.2f..%.2f] "
+             "parent=[%.2f %.2f %.2f %.2f / %.2f %.2f %.2f %.2f / %.2f %.2f %.2f %.2f]",
+             base_verts.size(), base_indices.size(),
+             lxmin, lxmax, lymin, lymax, lzmin, lzmax,
+             src_umin, src_umax, src_vmin, src_vmax,
+             eff->parent_matrix_[0], eff->parent_matrix_[1], eff->parent_matrix_[2], eff->parent_matrix_[3],
+             eff->parent_matrix_[4], eff->parent_matrix_[5], eff->parent_matrix_[6], eff->parent_matrix_[7],
+             eff->parent_matrix_[8], eff->parent_matrix_[9], eff->parent_matrix_[10], eff->parent_matrix_[11]);
+
+    // Register 16 atlas-cell mesh handles. Same verts/indices, only UVs
+    // differ per cell.
+    auto register_cell = [&](float u_off, float v_off,
+                             float u_size, float v_size) -> MeshHandle
+    {
+        std::vector<SMeshVertex> cell_verts = base_verts;
+        for (auto& v : cell_verts)
+        {
+            // Remap authored UV from [src_umin..src_umax] -> [u_off..u_off+u_size].
+            const float fu = (v.uv[0] - src_umin) / src_u_extent;
+            const float fv = (v.uv[1] - src_vmin) / src_v_extent;
+            v.uv[0] = u_off + fu * u_size;
+            v.uv[1] = v_off + fv * v_size;
+        }
+        return Renderer->RegisterMesh(
+            cell_verts.data(), int32_t(cell_verts.size()),
+            base_indices.data(), int32_t(base_indices.size()),
+            albedo);
+    };
+
+    // Particle phase cells 0..7 — UV `u = (1/8) * frame, v = 0,
+    // u_size = 1/8, v_size = 1/2` per effectcomp.cpp:249-253.
+    constexpr float kCellPartU = 1.0f / 8.0f;
+    constexpr float kCellPartV = 1.0f / 2.0f;
+    for (int32_t f = 0; f < kMeteorStormBespokeParticleCells; ++f)
+    {
+        eff->cell_meshes_[f] = register_cell(
+            kCellPartU * float(f), 0.0f, kCellPartU, kCellPartV);
+    }
+
+    // Impact phase cells 8..15 — UV `u = (1/4) * (f%4), v = (1/4) * (f/4),
+    // u_size = 1/4, v_size = 1/4` per effectcomp.cpp:257-262.
+    constexpr float kCellImpU = 1.0f / 4.0f;
+    constexpr float kCellImpV = 1.0f / 4.0f;
+    for (int32_t i = 0; i < kMeteorStormBespokeImpactCells; ++i)
+    {
+        const int32_t f = 8 + i;
+        eff->cell_meshes_[f] = register_cell(
+            kCellImpU * float(f % 4),
+            kCellImpV * float(f / 4),
+            kCellImpU, kCellImpV);
+    }
+
+    int32_t registered_count = 0;
+    for (int32_t f = 0; f < 16; ++f)
+        if (eff->cell_meshes_[f] != 0) ++registered_count;
+    if (registered_count == 0)
+    {
+        log_error("[meteorstorm] SpawnForTest: all 16 RegisterMesh calls "
+                  "failed for Comet.I3D atlas cells. Effect will not draw. "
+                  "BLOCKER: TRenderer::RegisterMesh path is broken for "
+                  "this mesh shape (sub-obj 0: %zu verts, %zu indices).",
+                  base_verts.size(), base_indices.size());
+        TObjectImagery::FreeImagery(base);
+        delete eff;
+        return nullptr;
+    }
+
+    // --- Port of TMeteorStormAnimator::Initialize (effect_old.cpp:6367-6445).
+    // All constants verbatim from snapshot SStormParams config.
+    for (int32_t i = 0; i < kMeteorStormBespokeMaxInstance; ++i)
+        eff->storm_instance_[i].used = false;
+    memset(&eff->params_, 0, sizeof(eff->params_));
+
+    eff->ticks_   = 0;
+    eff->tracker_ = 0;
+
+    SStormBespokeParams& params = eff->params_;
+
+    // how many meteors
+    params.particles = 0;
+    // their texture size
+    params.tex_u = params.tex_v = 64;
+    // what is the meteor grid
+    params.particle_u = 8;
+    params.particle_v = 2;
+    // where do the frames begin and end
+    params.particle_begin = 0;
+    params.particle_end = 7;
+    // what is the impact grid
+    params.impact_u = 4;
+    params.impact_v = 4;
+    // where do the frames begin and end
+    params.impact_begin = 8;
+    params.impact_end = 15;
+    // gravity, duh...take physics
+    params.gravity = .37f;
+    // velocity, see above suggestion
+    params.velocity.Y = 0.0f;
+    params.velocity.X = -10.0f;
+    params.velocity.Z = -15.0f;
+    // base position value
+    params.pos.X = (float)origin.x + 120.0f;
+    params.pos.Y = (float)origin.y - 20.0f;
+    params.pos.Z = (float)origin.z + 300.0f;
+    // the spread
+    params.pos_spread.X = 100.0f;
+    params.pos_spread.Y = 100.0f;
+    params.pos_spread.Z = 0.0f;
+    // frame incrementors
+    params.impact_frame_inc = 0.7f;
+    params.particle_frame_inc = 0.5f;
+    float ratio = (float)random(5, 20) / 10.0f;
+    // scaling
+    params.impact_scale.X = 1.0f * ratio;
+    params.impact_scale.Y = 1.0f * ratio;
+    params.impact_scale.Z = 1.0f * ratio;
+    // scaling
+    params.particle_scale.X = 0.5f * ratio;
+    params.particle_scale.Y = 1.5f * ratio;
+    params.particle_scale.Z = 1.0f * ratio;
+
+    params.rot.X = 0.0f;
+    params.rot.Y = 0.0f;
+    params.rot.Z = 0.0f;
+
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[meteorstorm] SpawnForTest: '%s' map_index=%d origin=(%d,%d,%d) "
+             "cell_meshes_registered=%d/16 texslot_used=%d "
+             "particles_cap=%d duration_ticks=%d",
+             kImageryPath, eff->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             registered_count, used_texslot,
+             kMeteorStormBespokeMaxInstance, kMeteorStormBespokeDurationTicks);
+    return eff;
+}
+
+int32_t TMeteorStormEffect_Bespoke::GetCount_() const
+{
+    // VERBATIM port of TStormAnimator::GetCount (effectcomp.cpp:53-62).
+    int32_t count = 0;
+    for (int32_t i = 0; i < kMeteorStormBespokeMaxInstance; ++i)
+    {
+        if (storm_instance_[i].used)
+            ++count;
+    }
+    return count;
+}
+
+void TMeteorStormEffect_Bespoke::Create_()
+{
+    // VERBATIM port of TStormAnimator::Create (effectcomp.cpp:80-114).
+    int32_t i = 0;
+    while (GetCount_() < params_.particles)
+    {
+        if (storm_instance_[i].used)
+        {
+            i++;
+            continue;
+        }
+        storm_instance_[i].used = true;
+        storm_instance_[i].pos.X = params_.pos.X + random(-(int32_t)params_.pos_spread.X, (int32_t)params_.pos_spread.X);
+        storm_instance_[i].pos.Y = params_.pos.Y + random(-(int32_t)params_.pos_spread.Y, (int32_t)params_.pos_spread.Y);
+        storm_instance_[i].pos.Z = params_.pos.Z + random(-(int32_t)params_.pos_spread.Z, (int32_t)params_.pos_spread.Z);
+        storm_instance_[i].is_particle = true;
+        storm_instance_[i].velocity.X = params_.velocity.X;
+        storm_instance_[i].velocity.Y = params_.velocity.Y;
+        storm_instance_[i].velocity.Z = params_.velocity.Z * ((float)random(100, 150) / 100.0f);
+        storm_instance_[i].gravity = params_.gravity;
+        storm_instance_[i].frame = (float)params_.particle_begin;
+        storm_instance_[i].particle_frame_inc = params_.particle_frame_inc;
+        storm_instance_[i].impact_frame_inc = params_.impact_frame_inc;
+        storm_instance_[i].part_scl.X = params_.particle_scale.X * ((float)random(50, 150) / 100.0f);
+        storm_instance_[i].part_scl.Y = params_.particle_scale.Y;
+        storm_instance_[i].part_scl.Z = params_.particle_scale.Z;
+        storm_instance_[i].expl_scl.X = params_.impact_scale.X * ((float)random(50, 150) / 100.0f);
+        storm_instance_[i].expl_scl.Y = params_.impact_scale.Y;
+        storm_instance_[i].expl_scl.Z = params_.impact_scale.Z;
+        storm_instance_[i].explosion_sounded = false;
+        // PLAY("meteor fall") — harness has no audio.
+        i++;
+    }
+}
+
+void TMeteorStormEffect_Bespoke::Animate_()
+{
+    // VERBATIM port of TStormAnimator::Animate (effectcomp.cpp:116-164).
+    hmm_vec3 new_pos;
+
+    // Harness simplification: no live MapPane sector. Approximate the
+    // walk-height as the spawn origin's z. The snapshot calls
+    // MapPane.GetWalkHeight(point).
+    const float ground_z = (float)IntPos(*this).z;
+
+    for (int32_t i = 0; i < kMeteorStormBespokeMaxInstance; ++i)
+    {
+        if (!storm_instance_[i].used)
+            continue;
+
+        if (storm_instance_[i].is_particle)
+        {
+            new_pos.X = storm_instance_[i].pos.X + storm_instance_[i].velocity.X;
+            new_pos.Y = storm_instance_[i].pos.Y + storm_instance_[i].velocity.Y;
+            new_pos.Z = storm_instance_[i].pos.Z + storm_instance_[i].velocity.Z;
+
+            const float height = ground_z;
+
+            if (height >= new_pos.Z)
+            {
+                storm_instance_[i].frame = (float)params_.impact_begin;
+                storm_instance_[i].is_particle = false;
+            }
+            else
+            {
+                storm_instance_[i].pos.X = new_pos.X;
+                storm_instance_[i].pos.Y = new_pos.Y;
+                storm_instance_[i].pos.Z = new_pos.Z;
+                storm_instance_[i].velocity.Z -= storm_instance_[i].gravity;
+                storm_instance_[i].frame += storm_instance_[i].particle_frame_inc;
+                if (storm_instance_[i].frame >= params_.particle_end)
+                    storm_instance_[i].frame -= (params_.particle_end - params_.particle_begin);
+            }
+        }
+        else
+        {
+            if ((int32_t)storm_instance_[i].frame >= params_.impact_end)
+                storm_instance_[i].used = false;
+            else
+                storm_instance_[i].frame += storm_instance_[i].impact_frame_inc;
+        }
+    }
+    Create_();
+}
+
+void TMeteorStormEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    (void)debug_mode;
+    if (!Renderer || !alive_)
+        return;
+
+    // 24 Hz sim tick — same family pattern as W07 / S04 etc.
+    // The mesh draws happen in SubmitWorldMeshes_BESPOKE (must run
+    // inside BeginTilePass scope so the transparent_world_queue isn't
+    // cleared before our SHelperMesh entries land). This function
+    // only advances the simulation.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kMeteorStormBespokeSimTickMs))
+    {
+        sim_accum_ms_ -= double(kMeteorStormBespokeSimTickMs);
+
+        // --- Port of TMeteorStormAnimator::Animate (effect_old.cpp:6447-6483).
+        // Ramp the particle count up over METEOR_STORM_TICKS, then back down
+        // every 10 ticks (snapshot `if (!(ticks%10))`).
+        if (!(ticks_ % 10))
+        {
+            if (tracker_ < kMeteorStormBespokeRampSize && ticks_ <= kMeteorStormBespokeDurationTicks)
+                tracker_++;
+            if (ticks_ > kMeteorStormBespokeDurationTicks && tracker_ != 0)
+                tracker_--;
+            params_.particles = tracker_;
+            if (params_.particles > kMeteorStormBespokeMaxInstance)
+                params_.particles = kMeteorStormBespokeMaxInstance;
+        }
+
+        // animate the storm!
+        Animate_();
+
+        // check to see if finished
+        const bool storm_done = (GetCount_() == 0);
+        if (storm_done && ticks_ >= kMeteorStormBespokeDurationTicks)
+        {
+            alive_ = false;
+            break;
+        }
+
+        ++ticks_;
+    }
+
+    static const bool s_logged_first_submit = []{
+        log_info("[meteorstorm] first tick (sim running; mesh draws in "
+                 "SubmitWorldMeshes_BESPOKE per submit_world callback)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+}
+
+void TMeteorStormEffect_Bespoke::SubmitWorldMeshes_BESPOKE(EFxDebugMode debug_mode)
+{
+    (void)debug_mode;   // SHelperMeshSubmit has no debug-mode lane.
+    if (!Renderer || !alive_)
+        return;
+
+    // --- Render() — line-by-line port of TStormAnimator::Render
+    // (effectcomp.cpp:166-293). Per-instance D3DMATRIX composition
+    // mirrored as a row-major 4x4 in our column-vector renderer; per-
+    // frame atlas-cell UV picks a pre-registered mesh handle.
+    //
+    // Per icebolt iter4 finding: SubmitHelperMesh must be called from
+    // the harness's `submit_world` callback (inside BeginTilePass
+    // scope) so the transparent_world_queue isn't cleared before
+    // draws emit. See vfxtest.cpp:1518-1528.
+    for (int32_t i = 0; i < kMeteorStormBespokeMaxInstance; ++i)
+    {
+        if (!storm_instance_[i].used)
+            continue;
+
+        // World position (effectcomp.cpp:211-224). Impact adds offset
+        // (25, 35, 0) to the landing point.
+        float wx, wy, wz;
+        if (storm_instance_[i].is_particle)
+        {
+            wx = storm_instance_[i].pos.X;
+            wy = storm_instance_[i].pos.Y;
+            wz = storm_instance_[i].pos.Z;
+        }
+        else
+        {
+            wx = storm_instance_[i].pos.X + 25.0f;
+            wy = storm_instance_[i].pos.Y + 35.0f;
+            wz = storm_instance_[i].pos.Z;
+        }
+
+        // Spell-explode-sound block (effectcomp.cpp:227-238) guarded out
+        // — harness has no spell.
+        if (!storm_instance_[i].is_particle && !storm_instance_[i].explosion_sounded)
+            storm_instance_[i].explosion_sounded = true;
+
+        // Atlas cell index. Snapshot uses int(frame) directly. Clamp to
+        // [0,15] so an out-of-range frame doesn't pick a null handle.
+        int32_t cell = (int32_t)storm_instance_[i].frame;
+        if (cell < 0) cell = 0;
+        if (cell > 15) cell = 15;
+        const MeshHandle mesh_h = cell_meshes_[cell];
+        if (mesh_h == 0)
+            continue;   // registration failed for this cell
+
+        // --- Compose the per-instance D3DMATRIX (effectcomp.cpp:177-224).
+        // D3D row-vector convention: world_p = p_local * (Rz * Rx * Ry * S * T).
+        // In our column-vector renderer the equivalent matrix is the
+        // transpose, M = T * S * Ry * Rx * Rz applied as M * p_local.
+        float rz[16], rx[16], ry[16], s[16], t[16];
+        if (storm_instance_[i].is_particle)
+        {
+            // effectcomp.cpp:183-185 — Rz(-45), Rx(0), Ry(-90).
+            MakeMeteorRotZ16(-45.0f * kMeteorDegToRad, rz);
+            MakeMeteorRotX16( 0.0f  * kMeteorDegToRad, rx);
+            MakeMeteorRotY16(-90.0f * kMeteorDegToRad, ry);
+            // effectcomp.cpp:198-200 — scl = part_scl (X, Y, Z distinct).
+            MakeMeteorScale16(storm_instance_[i].part_scl.X,
+                              storm_instance_[i].part_scl.Y,
+                              storm_instance_[i].part_scl.Z, s);
+        }
+        else
+        {
+            // effectcomp.cpp:190-192 — Rz(0), Rx(+90), Ry(0).
+            MakeMeteorRotZ16( 0.0f  * kMeteorDegToRad, rz);
+            MakeMeteorRotX16(90.0f  * kMeteorDegToRad, rx);
+            MakeMeteorRotY16( 0.0f  * kMeteorDegToRad, ry);
+            // effectcomp.cpp:204-206 — scl = (expl.x, expl.x, expl.x).
+            const float sx = storm_instance_[i].expl_scl.X;
+            MakeMeteorScale16(sx, sx, sx, s);
+        }
+        MakeMeteorTranslate16(wx, wy, wz, t);
+
+        // Compose T * S * Ry * Rx * Rz step by step (column-vector
+        // convention). Snapshot effectcomp.cpp:176 sets obj->flags =
+        // OBJ3D_ABSPOS which tells T3DAnimator::RenderObject to BYPASS
+        // the sub-object's authored parent transform and treat
+        // obj->matrix as the absolute world matrix. So we do NOT
+        // post-multiply by parent_matrix here — the per-frame matrix
+        // built from {Rz,Rx,Ry,S,T} IS the full world transform.
+        float tmp1[16], tmp2[16], s_rotated[16], world[16];
+        MatMul16Local(ry, rx, tmp1);
+        MatMul16Local(tmp1, rz, tmp2);
+        MatMul16Local(s, tmp2, s_rotated);
+        MatMul16Local(t, s_rotated, world);
+
+        // Modern equivalent of retail's `animator->RenderObject(obj)`
+        // (effectcomp.cpp:290). Per icebolt iter4 finding, SubmitHelperMesh
+        // with `ambient = diffuse` routes the I3D material colour
+        // through the helper FS so it shows visibly even with the chroma-
+        // keyed (mostly-transparent) Comet atlas. Snapshot blend =
+        // SetBlendState() = Alpha (SRCALPHA/INVSRCALPHA, effect_old.cpp:
+        // 221-233 + 6488) → SHelperMeshSubmit { additive_blend = false }.
+        SHelperMeshSubmit m = {};
+        m.mesh           = mesh_h;
+        m.additive_blend = false;
+        m.shadow_plane   = false;
+        std::memcpy(m.world, world, sizeof(world));
+        // Material binding. Retail Render uses D3DTBLEND_MODULATE +
+        // SetBlendState (alpha, lighting disabled) so the FF pipeline
+        // ignores material emissive — only texture * vertex diffuse
+        // contributes. Retail vertex diffuse defaults to white. So:
+        //   diffuse = white (mod by tex.rgb)
+        //   ambient = diffuse = white (carries texture under ambient
+        //             scene light, mirrors retail's no-light path)
+        //   emissive = 0 (the I3D material's emissive=(1,1,1) is
+        //             ignored by retail's modulate-only path —
+        //             plumbing it through here would saturate to
+        //             white and bury the texture colours).
+        // We keep diffuse_/emissive_ loaded for future paths that
+        // honour material emissive (e.g. an alternate variant of this
+        // animator under D3DRS_LIGHTING).
+        std::memcpy(m.diffuse, diffuse_, 4 * sizeof(float));
+        std::memcpy(m.ambient, diffuse_, 4 * sizeof(float));
+        m.specular[0] = 0.0f; m.specular[1] = 0.0f; m.specular[2] = 0.0f; m.specular[3] = 0.0f;
+        m.emissive[0] = 0.0f; m.emissive[1] = 0.0f; m.emissive[2] = 0.0f; m.emissive[3] = 1.0f;
+        m.power      = 1.0f;
+        m.sort_depth = wz;
+        Renderer->SubmitHelperMesh(m);
+    }
+
+    static const bool s_logged_first_world = []{
+        log_info("[meteorstorm] first SubmitWorldMeshes (SubmitHelperMesh "
+                 "path, comet mesh + per-cell UV atlas)");
+        return true;
+    }();
+    (void)s_logged_first_world;
+}
+
+// ----- W02 TTornadoEffect_Bespoke (BLOCKED) -------------------------------
+
+TTornadoEffect_Bespoke*
+TTornadoEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    (void)origin;
+    log_warn("[tornado] SpawnForTest_BESPOKE: BLOCKED — snapshot Render "
+             "(effect_old.cpp:9769-10218) uses T3DAnimator multi-sub-object "
+             "I3D mesh RenderObject() path not available in the bespoke "
+             "pipeline; W02 will draw nothing");
+    return nullptr;
+}
+
+void TTornadoEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    (void)debug_mode;
+    // Stub: no submission. Spawn already returned nullptr.
+}
+
+// ----- W03 TVortexEffect_Bespoke (BLOCKED) --------------------------------
+
+TVortexEffect_Bespoke*
+TVortexEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    (void)origin;
+    log_warn("[vortex] SpawnForTest_BESPOKE: BLOCKED — snapshot Render "
+             "(effect_old.cpp:12860-13605) uses T3DAnimator multi-sub-object "
+             "I3D mesh RenderObject() + per-vertex LVERTEX.color alpha "
+             "writeback not available in the bespoke pipeline; W03 will "
+             "draw nothing");
+    return nullptr;
+}
+
+void TVortexEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    (void)debug_mode;
+    // Stub: no submission. Spawn already returned nullptr.
+}
+
+// =========================================================================
+// W05 — TQuicksandEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TQuicksandAnimator::Initialize/Animate/Render
+// (src/effect_old.cpp:9137-9442 — canonical body; the 12520-12836 body
+// is dead inside /***** Old Quicksand: Redone by Pepper *****/ comment).
+// SetBlendState -> Alpha (preserved AS WRITTEN).
+//
+// Snapshot Render uses three sub-objects:
+//   GetObject(0) — spinning sand decal, 4-frame UV-flip, scale=scalesize,
+//                  rotation=ang.
+//   GetObject(1) — twin cylinders, scale=(cylscale, cylscale, cylheight),
+//                  rotations (cylrot, M_PI - cylrot).
+//   GetObject(2) — dust mesh (34 verts) U-scrolling at -0.06/tick, drawn
+//                  at scalesize / 1.0, /1.25, /1.5, /1.75 in concentric
+//                  shells, with zscalefactor ramp-down after duration.
+//
+// First-pass bespoke renders ONE ground-aligned (WorldXY) Alpha billboard
+// whose scale follows the `scalesize` curve and orientation follows `ang`
+// (the spinning sand decal — the most visually iconic of the 3 sub-
+// objects). Cylinder mesh + 4-stack dust passes are deferred until the
+// engine has axis-aligned cylinder + concentric-shell support.
+// scalesize / stage / count / cylscale / cylheight / cylrot / zscalefactor
+// state machine preserved verbatim from snapshot Animate (line 9194-9236).
+
+TQuicksandEffect_Bespoke* TQuicksandEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kQuicksandCandidates[] = {
+        "Magic\\quicksand.i3d",
+        "Magic\\Quicksand.I3D",
+        "Misc\\quicksand.i3d",
+    };
+
+    auto* qs = new TQuicksandEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(qs, origin);
+    qs->SetMapIndex(MapPane.MakeIndex());
+    qs->ActivateComponents();
+
+    qs->texture_ = TryLoadMagicTexture(kQuicksandCandidates,
+                                       int32_t(sizeof(kQuicksandCandidates) / sizeof(*kQuicksandCandidates)),
+                                       qs->uv_rect_, "quicksand");
+
+    // Snapshot effect_old.cpp:9137-9170 — Initialize.
+    //   frameon = 0; scalesize = 0.0; stage = 0; count = 0;
+    //   cylscale = 0.0; cylheight = 1.0; cylrot = 0.0; cylcount = 0;
+    //   ang = 0.0; z_level = 0; zscalefactor = 1.0;
+    qs->frameon_      = 0;
+    qs->scalesize_    = 0.0f;
+    qs->stage_        = 0;
+    qs->count_        = 0;
+    qs->cylscale_     = 0.0f;
+    qs->cylheight_    = 1.0f;
+    qs->cylrot_       = 0.0f;
+    qs->cylcount_     = 0;
+    qs->ang_          = 0.0f;
+    qs->zscalefactor_ = 1.0f;
+    qs->alive_        = true;
+
+    // Snapshot InitQuicksand sets frameon = -delay (delay = QUICKSAND_
+    // DURATION = 40 when called from Sandswirl). Harness has no caster
+    // -> use the no-delay path (frameon = 0).
+
+    log_info("[quicksand-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             qs->GetMapIndex(), origin.x, origin.y, origin.z, qs->texture_);
+    return qs;
+}
+
+void TQuicksandEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24Hz sim-tick gate.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kQuicksandSimTickMs))
+    {
+        sim_accum_ms_ -= double(kQuicksandSimTickMs);
+
+        // Snapshot effect_old.cpp:9194-9236 — Animate. Direct line-by-line
+        // port.
+        frameon_++;
+        ang_ += 0.06f;
+        if (frameon_ < 0)
+        {
+            cylscale_  += float(0.125 / kQuicksandSwitch);
+            cylheight_ += 0.025f;
+        }
+        if (frameon_ > 0 && frameon_ < kQuicksandDuration)
+        {
+            cylscale_  -= float(0.125 / kQuicksandSwitch);
+            cylheight_ -= 0.025f;
+        }
+        if (frameon_ < 0)
+            continue;   // snapshot: return; -- skip the rest this tick
+
+        if (frameon_ > 60)
+        {
+            scalesize_ -= 0.05f;
+        }
+        if (scalesize_ < 1.0f && frameon_ > 30)
+        {
+            scalesize_ += 0.05f;
+        }
+
+        if (frameon_ > kQuicksandDuration * 2)
+        {
+            zscalefactor_ -= 0.2f;
+            if (zscalefactor_ <= 0.0f)
+            {
+                // Snapshot calls KillThisEffect + clears NoCollision on
+                // each target. Harness: no targets to clean up.
+                alive_ = false;
+            }
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_quicksand_logged_first_submit = []{
+        log_info("[quicksand-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_quicksand_logged_first_submit;
+
+    // --- Render port (effect_old.cpp:9265-9428). SetBlendState -> Alpha
+    // (preserved AS WRITTEN). First-pass: only the spinning sand decal
+    // sub-object (GetObject(0)) is rendered, as a ground-aligned (WorldXY)
+    // billboard whose scale follows `scalesize` and whose UV rect is the
+    // base asset rect (snapshot's 4-frame UV-flip is a follow-up; the
+    // base texture is the natural fallback).
+    //
+    // The snapshot draws this sub-object only while frameon < QUICKSAND_
+    // DURATION * 2; preserved here.
+    if (frameon_ < kQuicksandDuration * 2)
+    {
+        const S3DPoint& base = IntPos(*this);
+        SBillboardDrawItem item = {};
+        // Snapshot scl.x = scl.y = scalesize. Multiply by base WU footprint.
+        const float scl = (scalesize_ > 0.05f) ? scalesize_ : 0.05f;
+        item.size_wu[0] = kQuicksandBaseSizeWu * scl;
+        item.size_wu[1] = kQuicksandBaseSizeWu * scl;
+        // Snapshot uses lverts.color which the I3D supplies; default to
+        // sand-tan with full alpha (Alpha blend respects this).
+        item.color_rgba[0] = 0.80f;
+        item.color_rgba[1] = 0.65f;
+        item.color_rgba[2] = 0.40f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = uv_rect_[0];
+        item.uv_rect[1] = uv_rect_[1];
+        item.uv_rect[2] = uv_rect_[2];
+        item.uv_rect[3] = uv_rect_[3];
+        item.key.texture     = texture_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);   // SetBlendState
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::WorldXY;   // ground decal
+        item.debug_mode      = debug_mode;
+        item.world_pos[0]    = float(base.x);
+        item.world_pos[1]    = float(base.y);
+        item.world_pos[2]    = float(base.z);
+        Renderer->SubmitFxBillboard(item);
+    }
+    // GetObject(1) cylinders and GetObject(2) dust mesh deferred -- see
+    // class-doc comment on TQuicksandEffect_Bespoke for follow-up.
+}
+
+// *************************************************************************
+// * Wave-3 W3-H — Boss-specific + LabyrinthEffect (deep-recon batch)      *
+// *                                                                       *
+// * Five retail-only effects with no snapshot source body. The XREF       *
+// * trail dead-ends at dispatcher prologues (LabyrinthEffect, JhagaAttack *
+// * at the spell handler table 005c54e0..005c5500) or has no XREF at all *
+// * (Nakrnoth, ceyes — registered via class.def only). `jtele` has a     *
+// * direct caller in TCharacter AI (cls_0x5a7b98 4cce1a) but the body of *
+// * the consuming animator is asset-only.                                *
+// *                                                                       *
+// * Each is shipped as a minimal placeholder per the W3-H brief: load    *
+// * the .I3D, resolve sub-object 0's texture+UV, and draw ONE Alpha     *
+// * billboard at the effect origin for a sensible default lifetime.      *
+// * Marked status=stubbed in the dispatch table; gives the --test=vfx   *
+// * harness a real row to A/B against game video so the user can drive  *
+// * kinematic tuning once footage is captured.                           *
+// *************************************************************************
+
+namespace {
+
+// Local copies of the SparkleLoadImagery / SparkleSubObjTextureSlot /
+// SparkleResolveSubObjUv helpers used by F03/X10/X11/X12/X01 etc. The
+// originals live in the anonymous namespace at src/effect.cpp:9210-9269
+// and aren't visible here. Same body — keep merge-clean per
+// localize-at-end W3-H rule.
+struct SW3HLoadedImagery
+{
+    TObjectImagery* base  = nullptr;
+    T3DImagery*     img3d = nullptr;
+};
+
+SW3HLoadedImagery W3HLoadImagery(const char* path, const char* tag)
+{
+    SW3HLoadedImagery out;
+    const int32_t img_id = TObjectImagery::FindImagery(path);
+    if (img_id < 0)
+    {
+        log_error("[%s] SpawnForTest: FindImagery('%s') failed", tag, path);
+        return out;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[%s] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  tag, img_id, path);
+        return out;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[%s] SpawnForTest: imagery for '%s' is not a T3DImagery",
+                  tag, path);
+        TObjectImagery::FreeImagery(base);
+        return out;
+    }
+    out.base  = base;
+    out.img3d = img3d;
+    return out;
+}
+
+int32_t W3HSubObjTextureSlot(T3DImagery* img3d, int32_t objnum)
+{
+    if (!img3d) return -1;
+    const int32_t nfaces = img3d->NumObjFaces(objnum);
+    if (nfaces <= 0) return -1;
+    std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+    int32_t texfaces[8 + 1] = {};
+    int32_t numtexfaces[8 + 1] = {};
+    img3d->GetObjFaces(objnum, face_buf.data(), texfaces, numtexfaces);
+    for (int32_t s = 1; s <= 8; ++s)
+        if (numtexfaces[s] > 0)
+            return s - 1;
+    return -1;
+}
+
+void W3HResolveSubObjUv(T3DImagery* img3d, int32_t objnum, float out[4])
+{
+    out[0] = 0.0f; out[1] = 0.0f; out[2] = 1.0f; out[3] = 1.0f;
+    if (!img3d) return;
+    const int32_t nverts = img3d->NumObjVerts(objnum);
+    if (nverts <= 0) return;
+    std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
+    img3d->GetObjVerts(objnum, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+    float minu = vbuf[0].tu, maxu = vbuf[0].tu;
+    float minv = vbuf[0].tv, maxv = vbuf[0].tv;
+    for (int32_t i = 1; i < nverts; ++i)
+    {
+        if (vbuf[i].tu < minu) minu = vbuf[i].tu;
+        if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
+        if (vbuf[i].tv < minv) minv = vbuf[i].tv;
+        if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
+    }
+    out[0] = minu;
+    out[1] = minv;
+    out[2] = maxu - minu;
+    out[3] = maxv - minv;
+}
+
+// Common placeholder draw — single Alpha billboard at the effect origin,
+// ScreenAligned, full white, full alpha. Each W3-H stub calls this from
+// its TickAndSubmit body after running the lifetime accumulator.
+void W3HSubmitPlaceholderBillboard(TRenderer* renderer,
+                                   const S3DPoint& base,
+                                   TTextureHandle texture,
+                                   const float uv_rect[4],
+                                   float size_wu,
+                                   EFxDebugMode debug_mode)
+{
+    if (!renderer || texture == kInvalidTexture) return;
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = size_wu;
+    item.size_wu[1] = size_wu;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect[0];
+    item.uv_rect[1] = uv_rect[1];
+    item.uv_rect[2] = uv_rect[2];
+    item.uv_rect[3] = uv_rect[3];
+    item.key.texture     = texture;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    renderer->SubmitFxBillboard(item);
+}
+
+constexpr const char* kLabyrinthBespokeImageryPath   = "misc\\Starfield.I3D";
+constexpr const char* kJhagaAttackBespokeImageryPath = "magic\\Jattack.i3d";
+constexpr const char* kJTeleBespokeImageryPath       = "magic\\jtele.i3d";
+constexpr const char* kNakrnothBespokeImageryPath    = "magic\\Nakrnoth.I3D";
+constexpr const char* kCEyesBespokeImageryPath       = "magic\\Ceyes.i3d";
+
+}  // namespace
+
+// ----- W3-H/01 TLabyrinthEffect_Bespoke (STUB) ----------------------------
+// SpawnForTest body shape is identical across the five W3-H entries: load
+// the .I3D, resolve sub-object 0's texture+UV, park on the effect's
+// `texture_` / `uv_rect_` members. Kept as five small inlined bodies (vs
+// one templated factory) because each binds to a per-class private
+// member and the per-effect log tag improves harness diagnostics.
+
+TLabyrinthEffect_Bespoke* TLabyrinthEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    SW3HLoadedImagery loaded = W3HLoadImagery(kLabyrinthBespokeImageryPath, "labyrinth");
+    if (!loaded.img3d) return nullptr;
+
+    auto* eff = new TLabyrinthEffect_Bespoke(loaded.base);
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[labyrinth] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d)", num_obj, num_tex);
+        delete eff;
+        return nullptr;
+    }
+
+    const int32_t tex_slot = W3HSubObjTextureSlot(loaded.img3d, 0);
+    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    loaded.img3d->GetTexture(slot, &tex);
+    eff->texture_ = tex.htexture;
+    W3HResolveSubObjUv(loaded.img3d, 0, eff->uv_rect_);
+    if (eff->texture_ == kInvalidTexture)
+    {
+        log_error("[labyrinth] SpawnForTest: sub-object 0 texture unresolved");
+        delete eff;
+        return nullptr;
+    }
+
+    log_info("[labyrinth] SpawnForTest_BESPOKE: '%s' map_index=%d origin=(%d,%d,%d) "
+             "texture=%u uv=[%.3f,%.3f %.3fx%.3f] (PLACEHOLDER — endgame starfield bg)",
+             kLabyrinthBespokeImageryPath, eff->GetMapIndex(),
+             origin.x, origin.y, origin.z,
+             eff->texture_,
+             eff->uv_rect_[0], eff->uv_rect_[1],
+             eff->uv_rect_[2], eff->uv_rect_[3]);
+    return eff;
+}
+
+void TLabyrinthEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer) return;
+    static const bool s_logged_first_submit = []{
+        log_info("[labyrinth-bespoke] first submit (TickAndSubmit running) — placeholder");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    elapsed_ms_ += TTime::DeltaTime() * 1000.0;
+    if (elapsed_ms_ >= kLabyrinthLifetimeMs)
+    {
+        alive_ = false;
+        return;
+    }
+    W3HSubmitPlaceholderBillboard(Renderer, IntPos(*this), texture_, uv_rect_,
+                                   kLabyrinthBaseSizeWu, debug_mode);
+}
+
+// ----- W3-H/02 TJhagaAttackEffect_Bespoke (STUB) --------------------------
+TJhagaAttackEffect_Bespoke* TJhagaAttackEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    SW3HLoadedImagery loaded = W3HLoadImagery(kJhagaAttackBespokeImageryPath, "jhagaattack");
+    if (!loaded.img3d) return nullptr;
+
+    auto* eff = new TJhagaAttackEffect_Bespoke(loaded.base);
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[jhagaattack] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d)", num_obj, num_tex);
+        delete eff;
+        return nullptr;
+    }
+
+    const int32_t tex_slot = W3HSubObjTextureSlot(loaded.img3d, 0);
+    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    loaded.img3d->GetTexture(slot, &tex);
+    eff->texture_ = tex.htexture;
+    W3HResolveSubObjUv(loaded.img3d, 0, eff->uv_rect_);
+    if (eff->texture_ == kInvalidTexture)
+    {
+        log_error("[jhagaattack] SpawnForTest: sub-object 0 texture unresolved");
+        delete eff;
+        return nullptr;
+    }
+
+    log_info("[jhagaattack] SpawnForTest_BESPOKE: '%s' map_index=%d origin=(%d,%d,%d) "
+             "texture=%u (PLACEHOLDER — Jhaga boss attack)",
+             kJhagaAttackBespokeImageryPath, eff->GetMapIndex(),
+             origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TJhagaAttackEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer) return;
+    static const bool s_logged_first_submit = []{
+        log_info("[jhagaattack-bespoke] first submit (TickAndSubmit running) — placeholder");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    elapsed_ms_ += TTime::DeltaTime() * 1000.0;
+    if (elapsed_ms_ >= kJhagaAttackLifetimeMs)
+    {
+        alive_ = false;
+        return;
+    }
+    W3HSubmitPlaceholderBillboard(Renderer, IntPos(*this), texture_, uv_rect_,
+                                   kJhagaAttackBaseSizeWu, debug_mode);
+}
+
+// ----- W3-H/03 TJTeleEffect_Bespoke (STUB) --------------------------------
+TJTeleEffect_Bespoke* TJTeleEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    SW3HLoadedImagery loaded = W3HLoadImagery(kJTeleBespokeImageryPath, "jtele");
+    if (!loaded.img3d) return nullptr;
+
+    auto* eff = new TJTeleEffect_Bespoke(loaded.base);
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[jtele] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d)", num_obj, num_tex);
+        delete eff;
+        return nullptr;
+    }
+
+    const int32_t tex_slot = W3HSubObjTextureSlot(loaded.img3d, 0);
+    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    loaded.img3d->GetTexture(slot, &tex);
+    eff->texture_ = tex.htexture;
+    W3HResolveSubObjUv(loaded.img3d, 0, eff->uv_rect_);
+    if (eff->texture_ == kInvalidTexture)
+    {
+        log_error("[jtele] SpawnForTest: sub-object 0 texture unresolved");
+        delete eff;
+        return nullptr;
+    }
+
+    log_info("[jtele] SpawnForTest_BESPOKE: '%s' map_index=%d origin=(%d,%d,%d) "
+             "texture=%u (PLACEHOLDER — Jhaga teleport-source; pairs with `jteled`)",
+             kJTeleBespokeImageryPath, eff->GetMapIndex(),
+             origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TJTeleEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer) return;
+    static const bool s_logged_first_submit = []{
+        log_info("[jtele-bespoke] first submit (TickAndSubmit running) — placeholder");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    elapsed_ms_ += TTime::DeltaTime() * 1000.0;
+    if (elapsed_ms_ >= kJTeleLifetimeMs)
+    {
+        alive_ = false;
+        return;
+    }
+    W3HSubmitPlaceholderBillboard(Renderer, IntPos(*this), texture_, uv_rect_,
+                                   kJTeleBaseSizeWu, debug_mode);
+}
+
+// ----- W3-H/04 TNakrnothEffect_Bespoke: impl supplied by W3-E above -----
+
+// ----- W3-H/05 TCEyesEffect_Bespoke (STUB) --------------------------------
+TCEyesEffect_Bespoke* TCEyesEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    SW3HLoadedImagery loaded = W3HLoadImagery(kCEyesBespokeImageryPath, "ceyes");
+    if (!loaded.img3d) return nullptr;
+
+    auto* eff = new TCEyesEffect_Bespoke(loaded.base);
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    const int32_t num_obj = loaded.img3d->NumObjects();
+    const int32_t num_tex = loaded.img3d->NumTextures();
+    if (num_obj < 1 || num_tex <= 0)
+    {
+        log_error("[ceyes] SpawnForTest: imagery underspec'd "
+                  "(objects=%d, textures=%d)", num_obj, num_tex);
+        delete eff;
+        return nullptr;
+    }
+
+    const int32_t tex_slot = W3HSubObjTextureSlot(loaded.img3d, 0);
+    const int32_t slot     = (tex_slot >= 0 && tex_slot < num_tex) ? tex_slot : 0;
+    S3DTex tex = {};
+    loaded.img3d->GetTexture(slot, &tex);
+    eff->texture_ = tex.htexture;
+    W3HResolveSubObjUv(loaded.img3d, 0, eff->uv_rect_);
+    if (eff->texture_ == kInvalidTexture)
+    {
+        log_error("[ceyes] SpawnForTest: sub-object 0 texture unresolved");
+        delete eff;
+        return nullptr;
+    }
+
+    log_info("[ceyes] SpawnForTest_BESPOKE: '%s' map_index=%d origin=(%d,%d,%d) "
+             "texture=%u (PLACEHOLDER — boss creature-eyes; 2nd eye flare deferred)",
+             kCEyesBespokeImageryPath, eff->GetMapIndex(),
+             origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TCEyesEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer) return;
+    static const bool s_logged_first_submit = []{
+        log_info("[ceyes-bespoke] first submit (TickAndSubmit running) — placeholder");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    elapsed_ms_ += TTime::DeltaTime() * 1000.0;
+    if (elapsed_ms_ >= kCEyesLifetimeMs)
+    {
+        alive_ = false;
+        return;
+    }
+    W3HSubmitPlaceholderBillboard(Renderer, IntPos(*this), texture_, uv_rect_,
+                                   kCEyesBaseSizeWu, debug_mode);
+}
+// --- end W3-H batch (LabyrinthEffect / JhagaAttack / jtele / Nakrnoth / ceyes)
+
+
+// *************************************************************************
+// * Wave-3 batch W3-G — Decorative ambient / late-polish (5 effects)       *
+// *                                                                       *
+// * Retail-only effects with NO snapshot source body AND NO Ghidra        *
+// * decomp XREF visible (s_<Name>_ strings absent from recon/). Per       *
+// * W3-G brief: ship minimal placeholders that load the I3D asset and    *
+// * draw the first sub-object as a ScreenAligned (or WorldXY where      *
+// * relevant) Alpha billboard with sensible default lifetime. Each        *
+// * effect ships as a harness row so the user can A/B against game video *
+// * and iterate when forensics arrive. Status: stubbed.                  *
+// *                                                                       *
+// * Asset paths preserved verbatim from /tmp/retail_effect_inventory.tsv *
+// * (mixed-case 'misc\\' prefix matches retail string table).            *
+// *                                                                       *
+// * Localized-at-end for clean merge with adjacent wave-3 batches.       *
+// *************************************************************************
+
+namespace {
+
+constexpr const char* kFairyImageryPath        = "misc\\Fairy.I3D";
+constexpr const char* kGlobeImageryPath        = "misc\\Globe.I3D";
+constexpr const char* kPunchAndJudyImageryPath = "misc\\PunchAndJudy.i3d";
+constexpr const char* kGoldImageryPath         = "misc\\Goldp.i3d";
+constexpr const char* kDustImageryPath         = "misc\\Dustcloud.i3d";
+
+constexpr int32_t kW3GSimTickMs = 1000 / 24;
+
+// Minimal local helper — resolves first sub-object texture + UV rect from
+// an I3D path. Returns true on success. Mirrors the SparkleLoadImagery +
+// SparkleSubObjTextureSlot + SparkleResolveSubObjUv triplet, condensed
+// for the W3-G placeholders. Owns no imagery (caller manages lifetime
+// via the TEffect's base imagery if needed; we pass nullptr base to keep
+// the stub self-contained).
+bool W3GResolveFirstSubObject(const char* path, const char* tag,
+                              TTextureHandle& out_tex, float out_uv[4])
+{
+    out_tex = kInvalidTexture;
+    out_uv[0] = 0.0f; out_uv[1] = 0.0f; out_uv[2] = 1.0f; out_uv[3] = 1.0f;
+    const int32_t img_id = TObjectImagery::FindImagery(path);
+    if (img_id < 0)
+    {
+        log_warn("[%s] FindImagery('%s') failed; placeholder will draw nothing",
+                 tag, path);
+        return false;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_warn("[%s] LoadImagery(id=%d '%s') failed", tag, img_id, path);
+        return false;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_warn("[%s] imagery for '%s' is not a T3DImagery", tag, path);
+        TObjectImagery::FreeImagery(base);
+        return false;
+    }
+    // Lazy-mesh-init poke — NumObjects() triggers texture slot population.
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj <= 0 || num_tex <= 0)
+    {
+        log_warn("[%s] '%s' underspec'd (objects=%d, textures=%d)",
+                 tag, path, num_obj, num_tex);
+        TObjectImagery::FreeImagery(base);
+        return false;
+    }
+
+    // Pick the first sub-object's texture slot via face-table scan
+    // (same algorithm as SparkleSubObjTextureSlot, inlined to keep W3-G
+    // self-contained).
+    int32_t slot = 0;
+    {
+        const int32_t nfaces = img3d->NumObjFaces(0);
+        if (nfaces > 0)
+        {
+            std::vector<S3DFace> face_buf(static_cast<size_t>(nfaces));
+            int32_t texfaces[8 + 1] = {};
+            int32_t numtexfaces[8 + 1] = {};
+            img3d->GetObjFaces(0, face_buf.data(), texfaces, numtexfaces);
+            for (int32_t s = 1; s <= 8; ++s)
+                if (numtexfaces[s] > 0) { slot = s - 1; break; }
+        }
+    }
+    if (slot >= num_tex) slot = 0;
+
+    S3DTex tex = {};
+    img3d->GetTexture(slot, &tex);
+    if (tex.htexture == kInvalidTexture)
+    {
+        log_warn("[%s] '%s' sub-object 0 texture slot=%d unresolved",
+                 tag, path, slot);
+        TObjectImagery::FreeImagery(base);
+        return false;
+    }
+
+    // UV envelope of sub-object 0.
+    const int32_t nverts = img3d->NumObjVerts(0);
+    if (nverts > 0)
+    {
+        std::vector<S3DVertex> vbuf(static_cast<size_t>(nverts), S3DVertex{});
+        img3d->GetObjVerts(0, vbuf.data(), 0, 0, ERender3DVertex::Vertex);
+        float minu = vbuf[0].tu, maxu = vbuf[0].tu;
+        float minv = vbuf[0].tv, maxv = vbuf[0].tv;
+        for (int32_t i = 1; i < nverts; ++i)
+        {
+            if (vbuf[i].tu < minu) minu = vbuf[i].tu;
+            if (vbuf[i].tu > maxu) maxu = vbuf[i].tu;
+            if (vbuf[i].tv < minv) minv = vbuf[i].tv;
+            if (vbuf[i].tv > maxv) maxv = vbuf[i].tv;
+        }
+        out_uv[0] = minu;
+        out_uv[1] = minv;
+        out_uv[2] = maxu - minu;
+        out_uv[3] = maxv - minv;
+    }
+
+    out_tex = tex.htexture;
+    log_info("[%s] resolved imagery='%s' tex=%u uv=(%.3f,%.3f,%.3f,%.3f)",
+             tag, path, out_tex, out_uv[0], out_uv[1], out_uv[2], out_uv[3]);
+    // Note: imagery is leaked here — placeholder convention; once the real
+    // animator is ported it should own the imagery via TEffect's ctor like
+    // TFlyEffect_Bespoke does (see effect.cpp:12126).
+    return true;
+}
+
+}   // namespace
+
+// ----- W3-G #1: TFairyEffect_Bespoke (stubbed) ---------------------------
+
+TFairyEffect_Bespoke* TFairyEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TFairyEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    W3GResolveFirstSubObject(kFairyImageryPath, "fairy",
+                             eff->texture_, eff->uv_rect_);
+    eff->phase_        = 0.0f;
+    eff->sim_accum_ms_ = 0.0;
+    log_info("[fairy] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u "
+             "(stubbed placeholder — no Ghidra evidence, awaiting forensics)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TFairyEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[fairy] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    // Small vertical bob — sensible default for an ambient fairy sprite
+    // until forensics confirm the actual motion (likely a parametric loop
+    // path; TPixieEffect's spawn-pattern is the leading guess).
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kW3GSimTickMs))
+    {
+        sim_accum_ms_ -= double(kW3GSimTickMs);
+        phase_ += 0.12f;   // ~2.9 rad/s at 24Hz — gentle hover
+    }
+    const float bob_z = 6.0f * std::sin(phase_);
+
+    const S3DPoint& base = IntPos(*this);
+    SBillboardDrawItem item = {};
+    item.size_wu[0]      = size_wu_;
+    item.size_wu[1]      = size_wu_;
+    // Warm gold-tinted fairy glow — sensible placeholder until palette
+    // confirmed against game video.
+    item.color_rgba[0]   = 1.0f;
+    item.color_rgba[1]   = 0.95f;
+    item.color_rgba[2]   = 0.7f;
+    item.color_rgba[3]   = 1.0f;
+    item.uv_rect[0]      = uv_rect_[0];
+    item.uv_rect[1]      = uv_rect_[1];
+    item.uv_rect[2]      = uv_rect_[2];
+    item.uv_rect[3]      = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z) + bob_z;
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- Globe: shipped static authored mesh -----------------------------
+// Native software capture: sw-quick-globe-20261005. The 100-frame STILL
+// track has one constant transform, no tags, and one texture frame.
+TAuthoredStaticMeshEffect::~TAuthoredStaticMeshEffect()
+{
+    if (Renderer)
+        for (const auto& part : parts_)
+            if (part.frame_meshes.empty()) {
+                if (part.mesh) Renderer->ReleaseMeshAssetRef(part.mesh);
+            } else {
+                for (MeshHandle frame_mesh:part.frame_meshes)
+                    if (frame_mesh) Renderer->ReleaseMeshAssetRef(frame_mesh);
+            }
+}
+
+// These immutable buffers are shared across preview owners. Include the exact
+// source asset, object, texture slot and texture frame; owner position/time do
+// not change vertex/index data. Keep this domain separate from map mesh keys.
+static uint64_t AuthoredStaticMeshKey(uint64_t asset, int32_t object, int32_t slot, int32_t frame)
+{
+    uint64_t hash = 1469598103934665603ull;
+    const uint64_t fields[] = {0x4155544853544154ull, asset, uint64_t(uint32_t(object)),
+                               uint64_t(uint32_t(slot)), uint64_t(uint32_t(frame))};
+    for (uint64_t value : fields)
+        for (int byte = 0; byte < 8; ++byte) {
+            hash ^= (value >> (byte * 8)) & 255u;
+            hash *= 1099511628211ull;
+        }
+    return hash ? hash : 1ull;
+}
+
+TAuthoredStaticMeshEffect* TAuthoredStaticMeshEffect::SpawnForTest_BESPOKE(const S3DPoint& origin,
+                                                                    const char* asset_override,bool animate_textures,bool scroll_textures)
+{
+    if (!Renderer) return nullptr;
+    const char* path = asset_override ? asset_override : kGlobeImageryPath;
+    SLoadedImagery loaded = SparkleLoadImagery(path, "authored-static");
+    if (!loaded.img3d) return nullptr;
+    auto eff = TObjectPtr<TAuthoredStaticMeshEffect>(new TAuthoredStaticMeshEffect(loaded.base));
+    auto* img = loaded.img3d;
+    eff->animate_textures_=animate_textures;
+    // Mesh queries load the imagery lazily; inspect tags only after loading.
+    const int32_t object_count = img->NumObjects();
+    int32_t scroll_tags = 0;
+    bool unknown_controller = false;
+    for (int32_t tag = 0; scroll_textures && tag < img->NumTags(); ++tag)
+    {
+        const char* name = img->GetTag(tag)->name;
+        if (name && !stricmp(name, "scrolltex")) ++scroll_tags;
+        else if (!name || (stricmp(name, "beg") && stricmp(name, "end") && stricmp(name, "play")))
+            unknown_controller = true;
+    }
+    // The loader also exposes passive state/audio metadata as tags.
+    const bool audited_scroll = scroll_textures && scroll_tags == 1 &&
+        !unknown_controller && img->HasScrollTex();
+    if (object_count <= 0 || (img->NumTags() != 0 && !audited_scroll) ||
+        (scroll_textures && !audited_scroll))
+    {
+        log_error("[authored-static] missing objects or unsupported controller tags: "
+                  "objects=%d tags=%d requested_scroll=%d scroll_tags=%d tracks=%d unknown=%d",
+                  img->NumObjects(), img->NumTags(), int(scroll_textures), scroll_tags,
+                  int(img->HasScrollTex()), int(unknown_controller));
+        return nullptr;
+    }
+    // Only audited static profiles use this factory. Preserve every subobject
+    // and texture slot instead of substituting the first face/texture.
+    size_t total_vertices = 0, total_triangles = 0;
+    if (audited_scroll) eff->scroll_imagery_ = img;
+    for (int32_t object = 0; object < img->NumObjects(); ++object)
+    {
+        if (img->IsHidden(object, 0)) continue;
+        for (int32_t slot = 0; slot <= img->NumTextures(); ++slot)
+        {
+            std::vector<SMeshVertex> vertices;
+            std::vector<uint16_t> indices;
+            if (!ExtractSubMeshTextureSlot(img, object, slot, vertices, indices) || indices.empty())
+                continue;
+            TTextureHandle texture = slot > 0 ? img->GetTextureHandle(slot - 1)
+                                              : Renderer->WhiteTextureHandle();
+            if (texture == kInvalidTexture) return nullptr;
+            SStaticPart part;
+            part.object_index = object;
+            if (slot > 0) {
+                S3DTex desc = {};
+                img->GetTexture(slot - 1, &desc);
+                part.retail_lighting = RetailMeshTextureLighting(desc.desc.pixelFormat);
+            }
+            if(animate_textures && slot>0) {
+                S3DTex desc{};img->GetTexture(slot-1,&desc);
+                if(desc.numframes>1) {
+                    if(!desc.framehtexs)return nullptr;
+                    for(int32_t frame=0;frame<desc.numframes;++frame) {
+                        const MeshHandle frame_mesh=Renderer->RegisterMeshAsset(
+                            AuthoredStaticMeshKey(img->AssetId(),object,slot,frame),vertices.data(),int32_t(vertices.size()),
+                            indices.data(),int32_t(indices.size()),desc.framehtexs[frame]);
+                        if(!frame_mesh) {
+                            for(MeshHandle retained:part.frame_meshes)Renderer->ReleaseMeshAssetRef(retained);
+                            return nullptr;
+                        }
+                        Renderer->AddMeshAssetRef(frame_mesh);
+                        part.frame_meshes.push_back(frame_mesh);
+                    }
+                    part.mesh=part.frame_meshes.front();
+                }
+            }
+            if(!part.mesh) {
+                part.mesh = Renderer->RegisterMeshAsset(
+                    AuthoredStaticMeshKey(img->AssetId(),object,slot,
+                        slot>0 ? img->GetTextureFrame(slot-1) : 0),vertices.data(),int32_t(vertices.size()),
+                    indices.data(),int32_t(indices.size()),texture);
+                if (!part.mesh) return nullptr;
+                Renderer->AddMeshAssetRef(part.mesh);
+            }
+            BuildStaticObjectMatrix(img, object, 0, 0, part.local_matrix);
+            eff->parts_.push_back(part);
+            total_vertices += vertices.size();
+            total_triangles += indices.size() / 3;
+        }
+    }
+    if (eff->parts_.empty()) return nullptr;
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    log_info("[authored-static] asset=%s parts=%zu vertices=%zu triangles=%zu origin=(%d,%d,%d)",
+             path, eff->parts_.size(), total_vertices, total_triangles, origin.x, origin.y, origin.z);
+    return eff.release();
+}
+
+void TAuthoredStaticMeshEffect::TickAndSubmitForTest_BESPOKE(EFxDebugMode /*debug_mode*/)
+{
+    // Fixed authored geometry can still have an animated texture. Preview
+    // advances the existing object animation frame from the actual header.
+    if(!animate_textures_)return;
+    constexpr double tick_seconds=1.0/24.0;
+    // The reviewer's four-pose bystanders use a slower inspection rate.
+    // Isolated retail comparisons retain the original 24 Hz clock.
+    const double rate=!stricmp(StartupTestMode,"vfx-review") ? StartupVfxReviewWatcherRate : 1.0;
+    texture_tick_seconds_+=TTime::DeltaTime()*rate;
+    while(texture_tick_seconds_+1e-9>=tick_seconds) {
+        texture_tick_seconds_-=tick_seconds;NextFrame();
+        if(getenv("REV_VFX_REVIEW_CLOCK_TRACE") && !stricmp(StartupTestMode,"vfx-review"))
+            log_info("[vfx-watcher-clock] object=%d time=%.9f render=%lld frame=%d rate=%.3f",
+                GetMapIndex(),TTime::Time(),(long long)TTime::FrameCount(),GetFrame(),rate);
+    }
+}
+
+// Explicit watcher comparison route only. Original loaded RenderObject draws
+// FVF112 with SRCALPHA/INVSRCALPHA, CULL_NONE and no depth writes.
+void TAuthoredStaticMeshEffect::SubmitNativeWorldMeshForTest_BESPOKE(EFxDebugMode /*debug_mode*/)
+{
+    if (!Renderer) return;
+    hmm_mat4 root;
+    const auto& position = IntPos(*this);
+    BuildRetailSoftwareOwner(root, position.x, position.y, position.z, uint8_t(IntFacing(*this)));
+    for (const auto& part : parts_)
+    {
+        SHelperMeshSubmit item = {};
+        item.mesh = part.mesh;
+        if (!part.frame_meshes.empty())
+        {
+            const int32_t frame = GetFrame();
+            if (frame < 0) continue;
+            item.mesh = part.frame_meshes[size_t(frame) % part.frame_meshes.size()];
+        }
+        item.retail_lighting = part.retail_lighting;
+        item.retail_software_projection = true;
+        item.retail_source_alpha = true;
+        for (int32_t r = 0; r < 4; ++r)
+            for (int32_t c = 0; c < 4; ++c)
+                for (int32_t k = 0; k < 4; ++k)
+                    item.world[r*4+c] += root.Elements[k][r] * part.local_matrix[k*4+c];
+        Renderer->SubmitHelperMesh(item);
+    }
+}
+
+void TAuthoredStaticMeshEffect::SubmitWorldMeshForTest_BESPOKE(EFxDebugMode /*debug_mode*/)
+{
+    if (!Renderer) return;
+    const hmm_mat4& root = Transform().Matrix();
+    for (const auto& part : parts_)
+    {
+        SMeshSubmit item = {};
+        item.mesh = part.mesh;
+        if(!part.frame_meshes.empty()) {
+            const int32_t frame=GetFrame();
+            if(frame<0)continue;
+            item.mesh=part.frame_meshes[size_t(frame)%part.frame_meshes.size()];
+        }
+        item.retail_lighting = part.retail_lighting;
+        if (scroll_imagery_)
+            scroll_imagery_->ScrollTexOffset(part.object_index, 0, GetFrame(),
+                                            TTime::LegacyFrameCount(), item.uv_offset);
+        // Root includes legacy Z scale; the static local pose includes parents.
+        for (int32_t r = 0; r < 4; ++r)
+            for (int32_t c = 0; c < 4; ++c)
+                for (int32_t k = 0; k < 4; ++k)
+                    item.world[r*4+c] += root.Elements[k][r] * part.local_matrix[k*4+c];
+        item.tint[0] = item.tint[1] = item.tint[2] = item.tint[3] = 1.0f;
+        item.obj_id = kObjFlagNoShadow;        // effects cast no sun shadow
+        Renderer->SubmitMesh(item);
+    }
+}
+
+// ----- W3-G #3: TPunchAndJudyEffect_Bespoke (stubbed) --------------------
+
+TPunchAndJudyEffect_Bespoke*
+TPunchAndJudyEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TPunchAndJudyEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    W3GResolveFirstSubObject(kPunchAndJudyImageryPath, "punchandjudy",
+                             eff->texture_, eff->uv_rect_);
+    eff->sim_accum_ms_ = 0.0;
+    log_info("[punchandjudy] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u "
+             "(stubbed placeholder — no Ghidra evidence, awaiting forensics)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TPunchAndJudyEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[punchandjudy] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    // Static — pure scripted playback effect. No per-tick math until
+    // forensics expose the animation loop. The 24Hz gate is preserved for
+    // when the loop arrives.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kW3GSimTickMs))
+        sim_accum_ms_ -= double(kW3GSimTickMs);
+
+    const S3DPoint& base = IntPos(*this);
+    SBillboardDrawItem item = {};
+    item.size_wu[0]      = size_wu_;
+    item.size_wu[1]      = size_wu_;
+    item.color_rgba[0]   = 1.0f;
+    item.color_rgba[1]   = 1.0f;
+    item.color_rgba[2]   = 1.0f;
+    item.color_rgba[3]   = 1.0f;
+    item.uv_rect[0]      = uv_rect_[0];
+    item.uv_rect[1]      = uv_rect_[1];
+    item.uv_rect[2]      = uv_rect_[2];
+    item.uv_rect[3]      = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    // Puppet-show stage reads as ground-anchored; WorldXY billboard until
+    // we can play the I3D animation tracks.
+    item.orientation     = EFxBillboardOrientation::WorldXY;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-G #4: TGoldEffect_Bespoke (stubbed) ----------------------------
+
+TGoldEffect_Bespoke* TGoldEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TGoldEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    W3GResolveFirstSubObject(kGoldImageryPath, "gold",
+                             eff->texture_, eff->uv_rect_);
+    eff->age_ms_       = 0.0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+    log_info("[gold] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u "
+             "(stubbed placeholder — likely TFlareAnimator variant, awaiting forensics)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TGoldEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[gold] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    // Short pulse-fade — pickup sparkle semantics.
+    age_ms_ += TTime::DeltaTime() * 1000.0;
+    if (age_ms_ >= double(kGoldLifetimeMs))
+    {
+        alive_ = false;
+        return;
+    }
+    const float t = float(age_ms_ / double(kGoldLifetimeMs));   // 0..1
+    // Pulse: rise to 1.0 by t=0.2, then linear fade to 0.
+    const float pulse = (t < 0.2f) ? (t / 0.2f) : (1.0f - (t - 0.2f) / 0.8f);
+    const float size  = size_wu_ * (0.6f + 0.6f * pulse);
+
+    const S3DPoint& base = IntPos(*this);
+    SBillboardDrawItem item = {};
+    item.size_wu[0]      = size;
+    item.size_wu[1]      = size;
+    // Bright gold tint.
+    item.color_rgba[0]   = 1.0f;
+    item.color_rgba[1]   = 0.85f;
+    item.color_rgba[2]   = 0.3f;
+    item.color_rgba[3]   = pulse;
+    item.uv_rect[0]      = uv_rect_[0];
+    item.uv_rect[1]      = uv_rect_[1];
+    item.uv_rect[2]      = uv_rect_[2];
+    item.uv_rect[3]      = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    // Pickup sparkles read as additive (flare-family behavior).
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-G #5: TDustEffect_Bespoke (stubbed) ----------------------------
+
+TDustEffect_Bespoke* TDustEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& /*origin*/)
+{
+    // Retail Dustcloud has four named emitters and the #cloud prototype,
+    // driven by its partsys tag. A fabricated 600ms ground billboard cannot
+    // represent the authored lifespan, motion, scale/color curves or jitter.
+    log_warn("[dust] unsupported authored partsys: Dustcloud requires posjitter/scljitter fields and exact-type controller binding; no substitute puff submitted");
+    return nullptr;
+}
+
+void TDustEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode /*debug_mode*/)
+{
+    // No guessed rendering while the authored controller is unsupported.
+}
+
+// =========================================================================
+// Wave-3 W3-F: Buff overlays (character-attached state effects)
+// =========================================================================
+//
+// Five retail-only effects, each shipped as a MINIMAL PLACEHOLDER
+// (status=stubbed). All five share the same structural body — load the
+// verbatim asset path, draw ONE ScreenAligned Alpha billboard at the
+// effect origin with a per-effect color tint, self-terminate after a
+// short lifetime so the harness can re-trigger via the SpellGround
+// preview cadence.
+//
+// No snapshot source body exists for any of these and no per-effect
+// Ghidra class identification was possible (see class-doc banner in
+// effect.h for the s_*_ string XREF tally). They are very likely
+// variants of a single TBuffEffect or TAuraEffect animator driven by
+// asset/color overrides — once the shared base is identified in Ghidra
+// the bodies below should collapse into thin adapters.
+//
+// Per-effect color tints come from the buff's visual family / spell
+// description text and are placeholders — when the user has video
+// footage they can iterate per-effect from here without touching shared
+// infra.
+
+namespace {
+
+constexpr int32_t kBuffSimTickMs       = 1000 / 24;   // 24 Hz cadence gate
+constexpr double  kBuffLifetimeMs      = 6000.0;      // ~6s placeholder lifetime
+constexpr float   kBuffBaseSizeWu      = 96.0f;       // billboard footprint
+
+// Shared spawn helper — load the asset via TryLoadMagicTexture, plant the
+// effect into the map, log first-spawn. Returns false on hard failure so
+// the per-effect SpawnForTest can clean up.
+struct SBuffBespokeInit
+{
+    TTextureHandle texture     = kInvalidTexture;
+    float          uv_rect[4]  = {0.0f, 0.0f, 1.0f, 1.0f};
+};
+
+SBuffBespokeInit BuffBespokeResolveAsset(const char* asset_path, const char* tag)
+{
+    SBuffBespokeInit out = {};
+    const char* candidates[1] = { asset_path };
+    out.texture = TryLoadMagicTexture(candidates, 1, out.uv_rect, tag);
+    return out;
+}
+
+}  // namespace
+
+// -------------------------------------------------------------------------
+// W3-F.1  Might  (magic\might.i3d)
+// -------------------------------------------------------------------------
+// Strength buff aura overlay. Color: warm gold (matches the "might =
+// physical-strength" archetype shared with Warriorborn / Ogrestrength).
+
+TBuffEffect_Bespoke__Might* TBuffEffect_Bespoke__Might::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TBuffEffect_Bespoke__Might(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    auto init = BuffBespokeResolveAsset("magic\\might.i3d", "buff-might");
+    eff->texture_ = init.texture;
+    for (int32_t i = 0; i < 4; ++i)
+        eff->uv_rect_[i] = init.uv_rect[i];
+
+    log_info("[buff-might] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TBuffEffect_Bespoke__Might::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kBuffSimTickMs))
+        {
+            sim_accum_ms_ -= double(kBuffSimTickMs);
+            age_ms_ += double(kBuffSimTickMs);
+            if (age_ms_ >= kBuffLifetimeMs)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged = []{
+        log_info("[buff-might] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged;
+
+    const S3DPoint& base = IntPos(*this);
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kBuffBaseSizeWu;
+    item.size_wu[1] = kBuffBaseSizeWu;
+    // Warm gold tint — placeholder for the Might buff visual family.
+    item.color_rgba[0] = 1.00f;
+    item.color_rgba[1] = 0.80f;
+    item.color_rgba[2] = 0.25f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// -------------------------------------------------------------------------
+// W3-F.2  Stoneskin  (magic\Stone.i3d)
+// -------------------------------------------------------------------------
+// Skin-hardening buff. Likely a texture overlay on the character mesh
+// (separate visual style from buff auras) — may eventually need a
+// TSkinOverlayEffect class. Placeholder: cool grey billboard.
+
+TBuffEffect_Bespoke__Stoneskin* TBuffEffect_Bespoke__Stoneskin::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TBuffEffect_Bespoke__Stoneskin(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    auto init = BuffBespokeResolveAsset("magic\\Stone.i3d", "buff-stoneskin");
+    eff->texture_ = init.texture;
+    for (int32_t i = 0; i < 4; ++i)
+        eff->uv_rect_[i] = init.uv_rect[i];
+
+    log_info("[buff-stoneskin] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TBuffEffect_Bespoke__Stoneskin::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kBuffSimTickMs))
+        {
+            sim_accum_ms_ -= double(kBuffSimTickMs);
+            age_ms_ += double(kBuffSimTickMs);
+            if (age_ms_ >= kBuffLifetimeMs)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged = []{
+        log_info("[buff-stoneskin] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged;
+
+    const S3DPoint& base = IntPos(*this);
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kBuffBaseSizeWu;
+    item.size_wu[1] = kBuffBaseSizeWu;
+    // Cool grey tint — placeholder for the Stoneskin buff visual family.
+    item.color_rgba[0] = 0.65f;
+    item.color_rgba[1] = 0.68f;
+    item.color_rgba[2] = 0.72f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// -------------------------------------------------------------------------
+// W3-F.3  Invisible  (Magic\Invisible.I3D)
+// -------------------------------------------------------------------------
+// Shimmer/transparency overlay. The s_invisible_ string has 11 XREFs but
+// most are AI/combat invis-check call sites — the visual effect spawn is
+// distinct from the OF_INVISIBLE flag.  Placeholder: low-alpha cyan
+// shimmer billboard (the "phasing out" archetype).
+
+TInvisibleEffect_Bespoke* TInvisibleEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TInvisibleEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    auto init = BuffBespokeResolveAsset("Magic\\Invisible.I3D", "buff-invisible");
+    eff->texture_ = init.texture;
+    for (int32_t i = 0; i < 4; ++i)
+        eff->uv_rect_[i] = init.uv_rect[i];
+
+    log_info("[buff-invisible] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TInvisibleEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kBuffSimTickMs))
+        {
+            sim_accum_ms_ -= double(kBuffSimTickMs);
+            age_ms_ += double(kBuffSimTickMs);
+            if (age_ms_ >= kBuffLifetimeMs)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged = []{
+        log_info("[buff-invisible] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged;
+
+    const S3DPoint& base = IntPos(*this);
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kBuffBaseSizeWu;
+    item.size_wu[1] = kBuffBaseSizeWu;
+    // Low-alpha cyan shimmer tint — placeholder for the Invisible
+    // phasing-out visual.
+    item.color_rgba[0] = 0.55f;
+    item.color_rgba[1] = 0.90f;
+    item.color_rgba[2] = 1.00f;
+    item.color_rgba[3] = 0.50f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// -------------------------------------------------------------------------
+// W3-F.4  charm  (magic\Charm.i3d)
+// -------------------------------------------------------------------------
+// Mental-control buff visual (hearts/sparkles per gameplay convention).
+// Pink/red aura archetype shared with the wider "mind-magic" family.
+
+TBuffEffect_Bespoke__charm* TBuffEffect_Bespoke__charm::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TBuffEffect_Bespoke__charm(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    auto init = BuffBespokeResolveAsset("magic\\Charm.i3d", "buff-charm");
+    eff->texture_ = init.texture;
+    for (int32_t i = 0; i < 4; ++i)
+        eff->uv_rect_[i] = init.uv_rect[i];
+
+    log_info("[buff-charm] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TBuffEffect_Bespoke__charm::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kBuffSimTickMs))
+        {
+            sim_accum_ms_ -= double(kBuffSimTickMs);
+            age_ms_ += double(kBuffSimTickMs);
+            if (age_ms_ >= kBuffLifetimeMs)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged = []{
+        log_info("[buff-charm] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged;
+
+    const S3DPoint& base = IntPos(*this);
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kBuffBaseSizeWu;
+    item.size_wu[1] = kBuffBaseSizeWu;
+    // Pink/red tint — placeholder for the charm buff visual family.
+    item.color_rgba[0] = 1.00f;
+    item.color_rgba[1] = 0.45f;
+    item.color_rgba[2] = 0.65f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// -------------------------------------------------------------------------
+// W3-F.5  speed  (magic\Speed.i3d)
+// -------------------------------------------------------------------------
+// Speed buff — likely a motion-trail effect (trails follow movement, not
+// a static aura). May eventually need a TMotionTrailEffect class. Group
+// with Quick (Magic\Quick.i3d) which uses the same archetype.
+// Placeholder: blue-streak billboard.
+
+TBuffEffect_Bespoke__speed* TBuffEffect_Bespoke__speed::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* eff = new TBuffEffect_Bespoke__speed(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    auto init = BuffBespokeResolveAsset("magic\\Speed.i3d", "buff-speed");
+    eff->texture_ = init.texture;
+    for (int32_t i = 0; i < 4; ++i)
+        eff->uv_rect_[i] = init.uv_rect[i];
+
+    log_info("[buff-speed] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) tex=%u",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TBuffEffect_Bespoke__speed::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    if (alive_)
+    {
+        sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+        while (sim_accum_ms_ >= double(kBuffSimTickMs))
+        {
+            sim_accum_ms_ -= double(kBuffSimTickMs);
+            age_ms_ += double(kBuffSimTickMs);
+            if (age_ms_ >= kBuffLifetimeMs)
+            {
+                alive_ = false;
+                break;
+            }
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_logged = []{
+        log_info("[buff-speed] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged;
+
+    const S3DPoint& base = IntPos(*this);
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kBuffBaseSizeWu;
+    item.size_wu[1] = kBuffBaseSizeWu;
+    // Blue streak tint — placeholder for the speed buff visual family.
+    item.color_rgba[0] = 0.35f;
+    item.color_rgba[1] = 0.65f;
+    item.color_rgba[2] = 1.00f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// =========================================================================
+// * wave-3 W3-E batch: spell-only effects (asset-only, no dedicated class). *
+// *                                                                       *
+// * Five retail-shipped spell visuals whose Class.Def registrations point *
+// * at named I3D assets but whose Ghidra-decompiled "classes" are spell- *
+// * init stubs (single-statement ctors). The actual animator logic lives *
+// * in shared parents (TStormAnimator / TShieldAnimator / TVortexAnimator)*
+// * that are EITHER already covered as separate bespoke entries OR       *
+// * blocked on upstream pipeline TODOs.                                   *
+// *                                                                       *
+// * Per batch protocol + feedback_no_standins: when the I3D candidate    *
+// * fails to resolve (the assets are retail-only and not in the local    *
+// * RevenantRepo data tree), we draw nothing and log_warn. No procedural *
+// * substitute for a real named effect.                                   *
+// *                                                                       *
+// * Each effect ships as a minimal placeholder: SpawnForTest tries to    *
+// * load the named .I3D via TryLoadMagicTexture (with RegisterImagery   *
+// * fallback for assets not auto-loaded by spell-init code), and        *
+// * TickAndSubmit draws a single ScreenAligned Alpha billboard for the  *
+// * configured lifetime. Sensible default footprints (96-144 wu) and a  *
+// * 4-5s lifetime give a row in the harness for A/B against retail      *
+// * game video, without fabricating motion the snapshot doesn't have.   *
+// * Status across all five = `stubbed`.                                  *
+// =========================================================================
+
+namespace {
+
+// W3-E shared helper: tries TryLoadMagicTexture first (Class.Def-registered
+// path) and falls back to RegisterImagery (resource-pack lookup) for assets
+// the spell-init code doesn't auto-load. Mirrors the TFogEffect_Bespoke
+// pattern at effect.cpp:11694-11725.
+TTextureHandle TryLoadSpellAssetW3E(const char* const* candidates,
+                                    int32_t num_candidates,
+                                    float out_uv_rect[4],
+                                    const char* tag)
+{
+    TTextureHandle tex = TryLoadMagicTexture(candidates, num_candidates,
+                                             out_uv_rect, tag);
+    if (tex != kInvalidTexture)
+        return tex;
+
+    // Fallback: RegisterImagery → LoadImagery for assets not in the spell-
+    // init code's auto-load set. This is the TFogEffect_Bespoke fallback.
+    for (int32_t i = 0; i < num_candidates; ++i)
+    {
+        int32_t img_id = TObjectImagery::RegisterImagery(const_cast<char*>(candidates[i]));
+        if (img_id < 0)
+            continue;
+        TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+        if (!base)
+            continue;
+        T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+        if (!img3d)
+        {
+            TObjectImagery::FreeImagery(base);
+            continue;
+        }
+        (void)img3d->NumObjects();   // lazy-mesh-init poke
+        if (img3d->NumTextures() <= 0)
+            continue;
+        S3DTex t = {};
+        img3d->GetTexture(0, &t);
+        if (t.htexture == kInvalidTexture)
+            continue;
+        out_uv_rect[0] = 0.0f;
+        out_uv_rect[1] = 0.0f;
+        out_uv_rect[2] = 1.0f;
+        out_uv_rect[3] = 1.0f;
+        log_info("[%s] resolved imagery='%s' via RegisterImagery tex=%u",
+                 tag, candidates[i], t.htexture);
+        return t.htexture;
+    }
+    return kInvalidTexture;
+}
+
+}   // namespace
+
+// ----- W3-E #1: TCataclysmEffect_Bespoke ---------------------------------
+
+TCataclysmEffect_Bespoke*
+TCataclysmEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Asset path verbatim from /tmp/retail_effect_inventory.tsv. Preserve
+    // both casings — the I3D loader is case-sensitive on POSIX overlay reads.
+    static const char* kCataclysmCandidates[] = {
+        "Magic\\Cataclysm.I3D",
+        "Magic\\cataclysm.i3d",
+        "magic\\Cataclysm.I3D",
+        "magic\\cataclysm.i3d",
+    };
+
+    auto* cat = new TCataclysmEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(cat, origin);
+    cat->SetMapIndex(MapPane.MakeIndex());
+    cat->ActivateComponents();
+
+    cat->texture_ = TryLoadSpellAssetW3E(
+        kCataclysmCandidates,
+        int32_t(sizeof(kCataclysmCandidates) / sizeof(*kCataclysmCandidates)),
+        cat->uv_rect_, "cataclysm");
+
+    if (cat->texture_ == kInvalidTexture)
+        log_warn("[cataclysm] SpawnForTest_BESPOKE: Magic\\Cataclysm.I3D not "
+                 "resolvable in local data tree; STUBBED row will draw nothing "
+                 "(asset is retail-only, no local copy)");
+
+    log_info("[cataclysm] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             cat->GetMapIndex(), origin.x, origin.y, origin.z, cat->texture_);
+    return cat;
+}
+
+void TCataclysmEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+    if (!alive_)
+        return;
+
+    age_ms_ += TTime::DeltaTime() * 1000.0;
+    if (age_ms_ >= double(kCataclysmLifeMs))
+    {
+        alive_ = false;
+        return;
+    }
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_cataclysm_logged_first_submit = []{
+        log_info("[cataclysm] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_cataclysm_logged_first_submit;
+
+    const S3DPoint& base = IntPos(*this);
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kCataclysmBaseSizeWu;
+    item.size_wu[1] = kCataclysmBaseSizeWu;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-E #2: TFunnelEffect_Bespoke -----------------------------------
+
+TFunnelEffect_Bespoke*
+TFunnelEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Inventory: "Funnel" "Magic\Funnel.I3D"
+    static const char* kFunnelCandidates[] = {
+        "Magic\\Funnel.I3D",
+        "Magic\\funnel.i3d",
+        "magic\\Funnel.I3D",
+        "magic\\funnel.i3d",
+    };
+
+    auto* fn = new TFunnelEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(fn, origin);
+    fn->SetMapIndex(MapPane.MakeIndex());
+    fn->ActivateComponents();
+
+    fn->texture_ = TryLoadSpellAssetW3E(
+        kFunnelCandidates,
+        int32_t(sizeof(kFunnelCandidates) / sizeof(*kFunnelCandidates)),
+        fn->uv_rect_, "funnel");
+
+    if (fn->texture_ == kInvalidTexture)
+        log_warn("[funnel] SpawnForTest_BESPOKE: Magic\\Funnel.I3D not "
+                 "resolvable in local data tree; STUBBED row will draw nothing "
+                 "(asset is retail-only, no local copy)");
+
+    log_info("[funnel] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             fn->GetMapIndex(), origin.x, origin.y, origin.z, fn->texture_);
+    return fn;
+}
+
+void TFunnelEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+    if (!alive_)
+        return;
+
+    age_ms_ += TTime::DeltaTime() * 1000.0;
+    if (age_ms_ >= double(kFunnelLifeMs))
+    {
+        alive_ = false;
+        return;
+    }
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_funnel_logged_first_submit = []{
+        log_info("[funnel] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_funnel_logged_first_submit;
+
+    const S3DPoint& base = IntPos(*this);
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kFunnelBaseSizeWu;
+    item.size_wu[1] = kFunnelBaseSizeWu;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-E #3: TMaelstromEffect_Bespoke --------------------------------
+
+TMaelstromEffect_Bespoke*
+TMaelstromEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Inventory: "maelstrom" "magic\maelstrom.i3d" (lowercase .i3d).
+    static const char* kMaelstromCandidates[] = {
+        "magic\\maelstrom.i3d",
+        "Magic\\maelstrom.i3d",
+        "Magic\\Maelstrom.I3D",
+        "magic\\Maelstrom.I3D",
+    };
+
+    auto* ms = new TMaelstromEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(ms, origin);
+    ms->SetMapIndex(MapPane.MakeIndex());
+    ms->ActivateComponents();
+
+    ms->texture_ = TryLoadSpellAssetW3E(
+        kMaelstromCandidates,
+        int32_t(sizeof(kMaelstromCandidates) / sizeof(*kMaelstromCandidates)),
+        ms->uv_rect_, "maelstrom");
+
+    if (ms->texture_ == kInvalidTexture)
+        log_warn("[maelstrom] SpawnForTest_BESPOKE: magic\\maelstrom.i3d not "
+                 "resolvable in local data tree; STUBBED row will draw nothing "
+                 "(asset is retail-only, no local copy)");
+
+    log_info("[maelstrom] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             ms->GetMapIndex(), origin.x, origin.y, origin.z, ms->texture_);
+    return ms;
+}
+
+void TMaelstromEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+    if (!alive_)
+        return;
+
+    age_ms_ += TTime::DeltaTime() * 1000.0;
+    if (age_ms_ >= double(kMaelstromLifeMs))
+    {
+        alive_ = false;
+        return;
+    }
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_maelstrom_logged_first_submit = []{
+        log_info("[maelstrom] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_maelstrom_logged_first_submit;
+
+    const S3DPoint& base = IntPos(*this);
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kMaelstromBaseSizeWu;
+    item.size_wu[1] = kMaelstromBaseSizeWu;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::WorldXY;   // ground-flat swirl
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-E #4: TMagicShieldEffect_Bespoke ------------------------------
+//
+// Variant of TShieldEffect_Bespoke (X09) — the spell-init class
+// cls_0x502420 sets up three named registrations (MagicShield / MagicShield2
+// / MagicShield3) and bridges through to TShieldAnimator with the
+// Mshield.I3D asset instead of the X09 Shield.I3D. First-pass: same Alpha
+// billboard, ScreenAligned with the snapshot's pos.z=40 lift and
+// SHIELD_SCALE=2.0 scaling. The 3-tier variant differentiation
+// (MagicShield/MagicShield2/MagicShield3) is deferred — a single ground-
+// truth row is enough to A/B against retail.
+
+TMagicShieldEffect_Bespoke*
+TMagicShieldEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Inventory: "magicshield" "Magic\Mshield.I3D".
+    static const char* kMagicShieldCandidates[] = {
+        "Magic\\Mshield.I3D",
+        "Magic\\mshield.i3d",
+        "magic\\Mshield.I3D",
+        "magic\\mshield.i3d",
+    };
+
+    auto* ms = new TMagicShieldEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(ms, origin);
+    ms->SetMapIndex(MapPane.MakeIndex());
+    ms->ActivateComponents();
+
+    ms->texture_ = TryLoadSpellAssetW3E(
+        kMagicShieldCandidates,
+        int32_t(sizeof(kMagicShieldCandidates) / sizeof(*kMagicShieldCandidates)),
+        ms->uv_rect_, "magicshield");
+
+    if (ms->texture_ == kInvalidTexture)
+        log_warn("[magicshield] SpawnForTest_BESPOKE: Magic\\Mshield.I3D not "
+                 "resolvable in local data tree; STUBBED row will draw nothing "
+                 "(asset is retail-only, no local copy)");
+
+    log_info("[magicshield] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             ms->GetMapIndex(), origin.x, origin.y, origin.z, ms->texture_);
+    return ms;
+}
+
+void TMagicShieldEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+    ++framenum_;
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_magicshield_logged_first_submit = []{
+        log_info("[magicshield] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_magicshield_logged_first_submit;
+
+    // Mirror TShieldEffect_Bespoke's Render port: single Alpha billboard at
+    // (0, 0, kMagicShieldLiftZ) above the effect's origin, scaled by
+    // SHIELD_SCALE=2.0, with a pale-blue magical tint.
+    const S3DPoint& base = IntPos(*this);
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kMagicShieldBaseSizeWu * kMagicShieldScale;
+    item.size_wu[1] = kMagicShieldBaseSizeWu * kMagicShieldScale;
+    item.color_rgba[0] = 0.6f;
+    item.color_rgba[1] = 0.85f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 0.8f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z) + kMagicShieldLiftZ;
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-E #5: TNakrnothEffect_Bespoke ---------------------------------
+
+TNakrnothEffect_Bespoke*
+TNakrnothEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Inventory: "Nakrnoth" "magic\Nakrnoth.I3D".
+    static const char* kNakrnothCandidates[] = {
+        "magic\\Nakrnoth.I3D",
+        "Magic\\Nakrnoth.I3D",
+        "magic\\nakrnoth.i3d",
+        "Magic\\nakrnoth.i3d",
+    };
+
+    auto* nk = new TNakrnothEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(nk, origin);
+    nk->SetMapIndex(MapPane.MakeIndex());
+    nk->ActivateComponents();
+
+    nk->texture_ = TryLoadSpellAssetW3E(
+        kNakrnothCandidates,
+        int32_t(sizeof(kNakrnothCandidates) / sizeof(*kNakrnothCandidates)),
+        nk->uv_rect_, "nakrnoth");
+
+    if (nk->texture_ == kInvalidTexture)
+        log_warn("[nakrnoth] SpawnForTest_BESPOKE: magic\\Nakrnoth.I3D not "
+                 "resolvable in local data tree; STUBBED row will draw nothing "
+                 "(asset is retail-only + boss-specific, no local copy)");
+
+    log_info("[nakrnoth] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u",
+             nk->GetMapIndex(), origin.x, origin.y, origin.z, nk->texture_);
+    return nk;
+}
+
+void TNakrnothEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+    if (!alive_)
+        return;
+
+    age_ms_ += TTime::DeltaTime() * 1000.0;
+    if (age_ms_ >= double(kNakrnothLifeMs))
+    {
+        alive_ = false;
+        return;
+    }
+
+    if (texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_nakrnoth_logged_first_submit = []{
+        log_info("[nakrnoth] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_nakrnoth_logged_first_submit;
+
+    const S3DPoint& base = IntPos(*this);
+    SBillboardDrawItem item = {};
+    item.size_wu[0] = kNakrnothBaseSizeWu;
+    item.size_wu[1] = kNakrnothBaseSizeWu;
+    item.color_rgba[0] = 1.0f;
+    item.color_rgba[1] = 1.0f;
+    item.color_rgba[2] = 1.0f;
+    item.color_rgba[3] = 1.0f;
+    item.uv_rect[0] = uv_rect_[0];
+    item.uv_rect[1] = uv_rect_[1];
+    item.uv_rect[2] = uv_rect_[2];
+    item.uv_rect[3] = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+
+// =========================================================================
+// Wave-3 W3-D Y-prefix boss-variant bespoke stubs
+// =========================================================================
+//
+// Five retail-only Y-prefix effects (Yhagoro / boss-variant assets).
+// Status = stubbed — no snapshot body, thin Ghidra evidence. Each loads
+// its I3D asset (path verbatim from /tmp/retail_effect_inventory.tsv) via
+// TryLoadMagicTexture and ticks down a default lifetime while drawing a
+// single ScreenAligned Alpha billboard. Body shape is the same minimal
+// scaffold across the five — kept verbose for individual tuning later
+// (user video A/B will drive kinematics).
+//
+// SHARED SCAFFOLD — duplicated per class so a future per-effect upgrade
+// can specialize one without untangling a template. Macro-free per
+// project style (feedback_code_style).
+
+namespace {
+
+// Submit one ScreenAligned Alpha billboard at world-pos for the W3-D
+// stubs. `alpha_fade01` is 0..1 (fades out toward end of lifetime).
+void W3DStubSubmitBillboard(const S3DPoint& base,
+                            TTextureHandle texture,
+                            const float uv_rect[4],
+                            float size_wu,
+                            float alpha_fade01,
+                            EFxDebugMode debug_mode)
+{
+    if (!Renderer || texture == kInvalidTexture)
+        return;
+    SBillboardDrawItem item   = {};
+    item.size_wu[0]           = size_wu;
+    item.size_wu[1]           = size_wu;
+    item.color_rgba[0]        = 1.0f;
+    item.color_rgba[1]        = 1.0f;
+    item.color_rgba[2]        = 1.0f;
+    item.color_rgba[3]        = alpha_fade01;
+    item.uv_rect[0]           = uv_rect[0];
+    item.uv_rect[1]           = uv_rect[1];
+    item.uv_rect[2]           = uv_rect[2];
+    item.uv_rect[3]           = uv_rect[3];
+    item.key.texture          = texture;
+    item.key.pipeline_id      = uint16_t(EFxPipeline::Billboard);
+    item.key.blend            = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode       = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode           = EFxLightMode::Unlit;
+    item.orientation          = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode           = debug_mode;
+    item.world_pos[0]         = float(base.x);
+    item.world_pos[1]         = float(base.y);
+    item.world_pos[2]         = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+}   // namespace
+
+// ----- YFireBall: verified shared moving frontend, green authored asset ----
+
+TFireBallEffect_Bespoke__YFireBall*
+TFireBallEffect_Bespoke__YFireBall::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    return static_cast<TFireBallEffect_Bespoke__YFireBall*>(SpawnForTestWithAsset(
+        origin,"Magic\\YFireBall.I3D",[](TObjectImagery* imagery)->TFireBallEffect* {
+            return new TFireBallEffect_Bespoke__YFireBall(imagery);
+        }));
+}
+
+void TFireBallEffect_Bespoke__YFireBall::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    TickAndSubmit(debug_mode);
+}
+
+// ----- YFireWind: own authored asset and null-spell original owner ---------
+TFireWindEffect_Bespoke__YFireWind*
+TFireWindEffect_Bespoke__YFireWind::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* image=LoadWaterImagery("Magic\\YFirewind.I3D","yfirewind");if(!image)return nullptr;
+    auto* effect=new TFireWindEffect_Bespoke__YFireWind(image);
+    if(!effect->InitializeVisual(origin)){delete effect;return nullptr;}
+    log_info("[yfirewind] own original400-slot null-spell leaf, source=%d,%d,%d",origin.x,origin.y,origin.z);
+    return effect;
+}
+
+// ----- YCataclysm ---------------------------------------------------------
+
+TCataclysmEffect_Bespoke__YCataclysm*
+TCataclysmEffect_Bespoke__YCataclysm::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kYCataclysmCandidates[] = {
+        "Magic\\YCataclysm.I3D",
+        "Magic\\ycataclysm.i3d",
+    };
+
+    auto* eff = new TCataclysmEffect_Bespoke__YCataclysm(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    eff->texture_ = TryLoadMagicTexture(
+        kYCataclysmCandidates,
+        int32_t(sizeof(kYCataclysmCandidates) / sizeof(*kYCataclysmCandidates)),
+        eff->uv_rect_, "ycataclysm");
+
+    eff->age_ms_       = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[ycataclysm-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u (spell-handler XREF only, stubbed)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TCataclysmEffect_Bespoke__YCataclysm::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStubSimTickMs))
+    {
+        sim_accum_ms_ -= double(kStubSimTickMs);
+        age_ms_ += kStubSimTickMs;
+        if (age_ms_ >= kStubLifetimeMs)
+            alive_ = false;
+    }
+    if (!alive_)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[ycataclysm-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    const float fade01 =
+        1.0f - float(age_ms_) / float(kStubLifetimeMs);
+    W3DStubSubmitBillboard(IntPos(*this), texture_, uv_rect_,
+                           kStubBaseSizeWu, fade01, debug_mode);
+}
+
+// ----- YManadrain ---------------------------------------------------------
+
+TManadrainEffect_Bespoke__YManadrain*
+TManadrainEffect_Bespoke__YManadrain::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    static const char* kYManadrainCandidates[] = {
+        "Magic\\YManadrain.I3D",
+        "Magic\\ymanadrain.i3d",
+    };
+
+    auto* eff = new TManadrainEffect_Bespoke__YManadrain(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    eff->texture_ = TryLoadMagicTexture(
+        kYManadrainCandidates,
+        int32_t(sizeof(kYManadrainCandidates) / sizeof(*kYManadrainCandidates)),
+        eff->uv_rect_, "ymanadrain");
+
+    eff->age_ms_       = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[ymanadrain-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u (spell-handler XREF only, stubbed)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TManadrainEffect_Bespoke__YManadrain::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStubSimTickMs))
+    {
+        sim_accum_ms_ -= double(kStubSimTickMs);
+        age_ms_ += kStubSimTickMs;
+        if (age_ms_ >= kStubLifetimeMs)
+            alive_ = false;
+    }
+    if (!alive_)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[ymanadrain-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    const float fade01 =
+        1.0f - float(age_ms_) / float(kStubLifetimeMs);
+    W3DStubSubmitBillboard(IntPos(*this), texture_, uv_rect_,
+                           kStubBaseSizeWu, fade01, debug_mode);
+}
+
+// ----- ymaelstrom ---------------------------------------------------------
+
+TMaelstromEffect_Bespoke__ymaelstrom*
+TMaelstromEffect_Bespoke__ymaelstrom::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Asset path verbatim from /tmp/retail_effect_inventory.tsv (lowercase
+    // 'magic\\' AND lowercase 'ymaelstrom.i3d' — preserved). Try a few
+    // case variants since the loader's path resolution is case-sensitive
+    // on macOS targets.
+    static const char* kYMaelstromCandidates[] = {
+        "magic\\ymaelstrom.i3d",
+        "Magic\\ymaelstrom.I3D",
+        "Magic\\Ymaelstrom.I3D",
+    };
+
+    auto* eff = new TMaelstromEffect_Bespoke__ymaelstrom(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    eff->texture_ = TryLoadMagicTexture(
+        kYMaelstromCandidates,
+        int32_t(sizeof(kYMaelstromCandidates) / sizeof(*kYMaelstromCandidates)),
+        eff->uv_rect_, "ymaelstrom");
+
+    eff->age_ms_       = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[ymaelstrom-bespoke] SpawnForTest_BESPOKE: map_index=%d origin=(%d,%d,%d) "
+             "tex=%u (asset-only registration, stubbed)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TMaelstromEffect_Bespoke__ymaelstrom::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kStubSimTickMs))
+    {
+        sim_accum_ms_ -= double(kStubSimTickMs);
+        age_ms_ += kStubSimTickMs;
+        if (age_ms_ >= kStubLifetimeMs)
+            alive_ = false;
+    }
+    if (!alive_)
+        return;
+
+    static const bool s_logged_first_submit = []{
+        log_info("[ymaelstrom-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_logged_first_submit;
+
+    const float fade01 =
+        1.0f - float(age_ms_) / float(kStubLifetimeMs);
+    W3DStubSubmitBillboard(IntPos(*this), texture_, uv_rect_,
+                           kStubBaseSizeWu, fade01, debug_mode);
+}
+
+// =========================================================================
+// * Wave-3 W3-A Dragon/Fire bespokes                                      *
+// *                                                                       *
+// * Five retail-only effects. Strategy by feasibility (see batch brief):  *
+// *   STUBBED placeholders: Blast, FireFlash, FireWind, FireCone          *
+// *   PORTED first-pass:    Faultfire                                     *
+// *                                                                       *
+// * The stubbed entries all share the same minimal pattern:               *
+// *   1. SpawnForTest: Find/Register/Load the I3D, dynamic_cast to        *
+// *      T3DImagery, GetTexture(0) for the first texture slot.            *
+// *   2. Tick: age in ms via TTime::DeltaTime, kill at kXxxLifetimeMs.    *
+// *   3. Submit: ONE Alpha ScreenAligned billboard at effect IntPos(*this) with   *
+// *      a sensible kXxxBaseSizeWu footprint.                             *
+// *                                                                       *
+// * Faulfire ports the real animator's th/scale-cosine pulse + UV scroll  *
+// * (collapsed to a single billboard rather than the snapshot's 2-pass    *
+// * mesh draw — see header class-doc).                                    *
+// =========================================================================
+
+namespace {
+
+// Asset paths preserved verbatim from /tmp/retail_effect_inventory.tsv.
+constexpr const char* kBlastBespokeImageryPath     = "Magic\\Blast.I3D";
+constexpr const char* kFireFlashBespokeImageryPath = "Magic\\Fireflash.I3D";
+constexpr const char* kFireWindBespokeImageryPath  = "Magic\\Firewind.I3D";
+constexpr const char* kFireConeBespokeImageryPath  = "Magic\\FireCone.I3D";
+constexpr const char* kFaultFireBespokeImageryPath = "Magic\\Faultfire.i3d";
+
+// Shared helper: load an I3D effect imagery and return its first mapped
+// texture handle (slot 0). Returns kInvalidTexture and logs on failure;
+// also returns the base TObjectImagery* via out-param so callers can
+// attach it to their effect instance.
+TTextureHandle Wave3a_LoadFirstTexture(const char*      asset_path,
+                                       const char*      log_tag,
+                                       TObjectImagery*& out_imagery)
+{
+    out_imagery = nullptr;
+    int32_t img_id = TObjectImagery::FindImagery(asset_path);
+    if (img_id < 0)
+        img_id = TObjectImagery::RegisterImagery(const_cast<char*>(asset_path));
+    if (img_id < 0)
+    {
+        log_error("[%s] SpawnForTest: FindImagery/RegisterImagery('%s') failed",
+                  log_tag, asset_path);
+        return kInvalidTexture;
+    }
+    TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+    if (!base)
+    {
+        log_error("[%s] SpawnForTest: LoadImagery(id=%d '%s') failed",
+                  log_tag, img_id, asset_path);
+        return kInvalidTexture;
+    }
+    T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+    if (!img3d)
+    {
+        log_error("[%s] SpawnForTest: imagery '%s' is not a T3DImagery",
+                  log_tag, asset_path);
+        TObjectImagery::FreeImagery(base);
+        return kInvalidTexture;
+    }
+    // Poke NumObjects to trigger lazy mesh load.
+    const int32_t num_obj = img3d->NumObjects();
+    const int32_t num_tex = img3d->NumTextures();
+    if (num_obj <= 0 || num_tex <= 0)
+    {
+        log_error("[%s] SpawnForTest: imagery '%s' empty (objects=%d, textures=%d)",
+                  log_tag, asset_path, num_obj, num_tex);
+        TObjectImagery::FreeImagery(base);
+        return kInvalidTexture;
+    }
+    S3DTex tex0 = {};
+    img3d->GetTexture(0, &tex0);
+    out_imagery = base;
+    log_info("[%s] SpawnForTest: '%s' tex0=%u w=%u h=%u numobj=%d numtex=%d",
+             log_tag, asset_path, tex0.htexture,
+             tex0.desc.width, tex0.desc.height, num_obj, num_tex);
+    return tex0.htexture;
+}
+
+// Shared helper: submit a single Alpha ScreenAligned billboard with the
+// given texture, size, and tint. Used by all four STUBBED entries.
+void Wave3a_SubmitBillboard(const S3DPoint& pos,
+                            TTextureHandle  texture,
+                            float           size_wu,
+                            EFxBillboardOrientation orient,
+                            EFxDebugMode    debug_mode,
+                            float           tint_r = 1.0f,
+                            float           tint_g = 1.0f,
+                            float           tint_b = 1.0f,
+                            float           tint_a = 1.0f,
+                            float           uv_x   = 0.0f,
+                            float           uv_y   = 0.0f,
+                            float           uv_w   = 1.0f,
+                            float           uv_h   = 1.0f)
+{
+    SBillboardDrawItem item = {};
+    item.world_pos[0]  = float(pos.x);
+    item.world_pos[1]  = float(pos.y);
+    item.world_pos[2]  = float(pos.z);
+    item.size_wu[0]    = size_wu;
+    item.size_wu[1]    = size_wu;
+    item.color_rgba[0] = tint_r;
+    item.color_rgba[1] = tint_g;
+    item.color_rgba[2] = tint_b;
+    item.color_rgba[3] = tint_a;
+    item.uv_rect[0]    = uv_x;
+    item.uv_rect[1]    = uv_y;
+    item.uv_rect[2]    = uv_w;
+    item.uv_rect[3]    = uv_h;
+    item.key.texture     = texture;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = orient;
+    item.debug_mode      = debug_mode;
+    Renderer->SubmitFxBillboard(item);
+}
+
+}  // namespace
+
+// -------------------------------------------------------------------------
+// TBlastEffect_Bespoke — STUBBED placeholder
+// -------------------------------------------------------------------------
+TBlastEffect_Bespoke* TBlastEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    TObjectImagery* base = nullptr;
+    TTextureHandle  tex  = Wave3a_LoadFirstTexture(kBlastBespokeImageryPath, "blast-bespoke", base);
+    if (!base)
+        return nullptr;
+
+    auto* eff = new TBlastEffect_Bespoke(base);
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    eff->texture_ = tex;
+    eff->age_ms_  = 0.0f;
+    eff->alive_   = true;
+    log_info("[blast-bespoke] STUBBED placeholder spawned at map_index=%d origin=(%d,%d,%d)"
+             " — awaiting Ghidra body or user video A/B",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z);
+    return eff;
+}
+
+void TBlastEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!alive_ || !Renderer || texture_ == kInvalidTexture)
+        return;
+
+    age_ms_ += float(TTime::DeltaTime() * 1000.0);
+    if (age_ms_ >= float(kBlastLifetimeMs))
+    {
+        alive_ = false;
+        return;
+    }
+
+    static const bool s_blast_first = []{
+        log_info("[blast-bespoke] first submit (placeholder draw)");
+        return true;
+    }();
+    (void)s_blast_first;
+
+    // Expand-then-fade over lifetime — gives the harness something visible
+    // to A/B against game video.
+    const float t      = age_ms_ / float(kBlastLifetimeMs);
+    const float scl    = 0.4f + 1.6f * t;                   // 0.4x → 2.0x
+    const float alpha  = 1.0f - t;                          // 1 → 0
+    Wave3a_SubmitBillboard(IntPos(*this), texture_, kBlastBaseSizeWu * scl,
+                           EFxBillboardOrientation::ScreenAligned, debug_mode,
+                           1.0f, 1.0f, 1.0f, alpha);
+}
+
+// -------------------------------------------------------------------------
+// FireFlash: literal source pool/state and both shipped authored subobjects.
+// FIRE_FLASH_AUTHORED.md records the material/projection acceptance limits.
+// -------------------------------------------------------------------------
+namespace {
+class TFireFlashReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    const char* ComponentName() const override { return "fireflash_reference"; }
+    void Submit(TRenderer&, const TObjectInstance&) const override
+    {
+        if (auto* effect = dynamic_cast<TFireFlashEffect_Bespoke*>(OwnerInstance()))
+            effect->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* effect = dynamic_cast<TFireFlashEffect_Bespoke*>(OwnerInstance()))
+            effect->Advance(TTime::DeltaTime());
+    }
+};
+static TObjectDef::SRegistrar g_fireflash_reference_builder("FireFlash", MakeWaterReferenceDef<TFireFlashEffect_Bespoke>);
+TWaterReferenceAnimatorBuilder<TFireFlashEffect_Bespoke> g_fireflash_reference_animator_builder("FireFlash");
+}
+
+TFireFlashEffect_Bespoke::~TFireFlashEffect_Bespoke()
+{
+    if (Renderer) for (const MeshHandle mesh : meshes_)
+        if (mesh) Renderer->ReleaseMeshAssetRef(mesh);
+}
+
+bool TFireFlashEffect_Bespoke::BindMeshes() const
+{
+    if (!Renderer || !initialized_) return false;
+    auto* imagery = GetImagery();
+    if (!imagery) return false;
+    for (int object = 0; object < 2; ++object) {
+        if (meshes_[object]) continue;
+        const uint64_t key = 0x4646524600000000ull ^ (uint64_t(uint32_t(imagery->ImageryId())) << 16)
+                             ^ uint64_t(object);
+        meshes_[object] = Renderer->RegisterMeshAsset(key, vertices_[object].data(),
+            int32_t(vertices_[object].size()), indices_[object].data(),
+            int32_t(indices_[object].size()), textures_[object]);
+        if (meshes_[object]) Renderer->AddMeshAssetRef(meshes_[object]);
+    }
+    return meshes_[0] && meshes_[1];
+}
+
+void TFireFlashEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if (initialized_ || GetMapIndex() < 0 || GetComponent<TFireFlashReferenceComponent>()) return;
+    if (attach_runtime_component && (ObjClass() != OBJCLASS_EFFECT || ObjId() != 0x37780ae2u)) return;
+    auto* img = dynamic_cast<T3DImagery*>(GetImagery());
+    if (!img || img->NumObjects() != 2 || img->NumTextures() != 2) return;
+    S3DTex tex = {};
+    for (int j = 0; j < 2; ++j) {
+        S3DObj object = {}; S3DMat material = {};
+        img->GetObject(j, &object);
+        if (object.material < 0 || object.material >= img->NumMaterials()) return;
+        img->GetMaterial(object.material, &material);
+        if (material.texture != j) return;
+        img->GetTexture(j, &tex);
+        if (tex.htexture == kInvalidTexture || tex.numframes != 1 ||
+            !ExtractSubMeshTextureSlot(img, j, j + 1, vertices_[j], indices_[j]) ||
+            vertices_[j].size() != 4 || indices_[j].size() != 6) return;
+        textures_[j] = tex.htexture;
+        materials_[j] = material;
+        diffuse_[j][0] = material.matdesc.diffuse.r;
+        diffuse_[j][1] = material.matdesc.diffuse.g;
+        diffuse_[j][2] = material.matdesc.diffuse.b;
+        diffuse_[j][3] = material.matdesc.diffuse.a;
+        emissive_[j][0] = material.matdesc.emissive.r;
+        emissive_[j][1] = material.matdesc.emissive.g;
+        emissive_[j][2] = material.matdesc.emissive.b;
+        emissive_[j][3] = material.matdesc.emissive.a;
+    }
+
+    // Original GetAngle aims at the spell target or invoker's facing;
+    // the current general TEffect::GetAngle is still a stub. Keep this
+    // calculation local rather than changing unrelated effects.
+    facing_ = 0.0f; target_.Clear();
+    if (spell) {
+        if (auto* invoker = dynamic_cast<TCharacter*>(spell->GetInvoker())) {
+            auto* aim = spell->GetTarget();
+            facing_ = float(!aim || aim == invoker ? IntFacing(invoker)
+                                                   : ConvertToFacing(IntPos(*this), IntPos(aim)));
+            target_ = invoker->Fighting();
+            // Source effect Initialize damages the fighting target. Its
+            // animator invokes Initialize again; avoid duplicate damage
+            // from component attachment/retries, without claiming caller parity.
+            if (attach_runtime_component && target_) spell->Damage(target_.Get());
+        }
+    }
+    // Value-clear the full pool before seeding, as the source memset does.
+    for (auto& p : particles_) p = {};
+    for (int i = 0; i < 75; ++i) {
+        auto& p = particles_[i];
+        // Native4e1a6a/87/a3: FILD × float5a39f0, one float store.
+        constexpr float native_angle_step = 0.01745329238474369f;
+        p.angle.X = float(static_cast<long double>(random(0, 359)) * native_angle_step);
+        p.angle.Y = float(static_cast<long double>(random(0, 359)) * native_angle_step);
+        p.angle.Z = float(static_cast<long double>(random(0, 359)) * native_angle_step);
+        p.angvel.X = p.angvel.Y = p.angvel.Z = 0.12f;
+        p.state = 2;
+    }
+    // goffset is calculated but never consumed in the source; its
+    // deterministic ConvertToVector call does not consume RNG.
+    gsphere_ = {0.0f, 0.0f, 30.0f};
+    gsize_ = 1.0f; rsize_ = 0.0f; mainscale_ = 0.0f;
+    frameon_ = 0; sim_accum_ms_ = 0.0;
+    initialized_ = true; alive_ = true; runtime_owned_ = attach_runtime_component;
+    SetCommandDone(false);
+    if (attach_runtime_component) {
+        auto c = std::make_unique<TFireFlashReferenceComponent>();
+        c->Configure(textures_[0], int32_t(tex.desc.width), int32_t(tex.desc.height),
+                     1, 1, 1, 1.0f, 1.0f, false, true);
+        AddComponent(std::move(c));
+        char sound[] = "FireFlash"; PLAY(sound);
+    }
+    const auto origin = IntPos(*this);
+    log_info("[fireflash-runtime] initialized id=%08x map_index=%d origin=(%d,%d,%d) runtime=%d particles=150 objects=2 facing=%.0f target=%d",
+             attach_runtime_component ? ObjId() : 0x37780ae2u, GetMapIndex(),
+             origin.x, origin.y, origin.z, int(attach_runtime_component), double(facing_), target_.MapIndex());
+}
+
+TFireFlashEffect_Bespoke* TFireFlashEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* img = LoadWaterImagery(kFireFlashBespokeImageryPath, "fireflash");
+    if (!img) return nullptr;
+    auto* effect = new TFireFlashEffect_Bespoke(img);
+    SetIntPos(effect, origin); effect->SetMapIndex(MapPane.MakeIndex());
+    effect->ActivateComponents(); effect->Initialize(false);
+    if (!effect->initialized_) { delete effect; return nullptr; }
+    return effect;
+}
+
+void TFireFlashEffect_Bespoke::SimulateTick()
+{
+    ++frameon_;
+    int newringparts = 0;
+    if (frameon_ >= 26 && frameon_ < 35) {
+        if (gsize_ < 20.0f) gsize_ += 2.0f;
+        else gsize_ = 20.0f;
+    } else if (frameon_ == 35) {
+        for (auto& p : particles_) if (p.state == 2) p.state = 0;
+        rsize_ = gsize_; newringparts = 150;
+    } else if (frameon_ > 35) {
+        rsize_ += 8.0f;
+        if (rsize_ >= 300.0f) for (auto& p : particles_) p.state = 0;
+    }
+    int newsmokey1s = 0;
+    if (frameon_ < 5) { newsmokey1s = 4; mainscale_ = 0.3f; }
+    else if (frameon_ < 15) { newsmokey1s = 7; mainscale_ = 0.3f; }
+    else if (frameon_ < 16) { newsmokey1s = 7; mainscale_ = 0.3f; }
+    else if (frameon_ < 25) { newsmokey1s = 2; mainscale_ = 0.3f; }
+    for (auto& p : particles_) {
+        if (p.state == 0) {
+            if (newsmokey1s) {
+                S3DPoint vector;
+                const int dist = random(0, 15);
+                const int angle = random(0, 255);
+                ConvertToVector(angle, dist, vector);
+                p.pos = {float(vector.x), float(vector.y), 1.0f};
+                p.life = 20 + 25 * (15 - random(0, dist)) / 15;
+                p.startfade = p.life * 20 / 100; p.stopfade = p.life;
+                p.vel.Z = 2.0f + float(random(0, 2));
+                p.state = 1; --newsmokey1s;
+            } else if (newringparts) {
+                S3DPoint vector;
+                const int dist = int(rsize_);
+                const int angle = random(0, 255);
+                ConvertToVector(angle, dist, vector);
+                p.pos = {gsphere_.X + float(vector.x), gsphere_.Y + float(vector.y), gsphere_.Z};
+                // Do not clamp dist to15: at tick35 it is19 and the
+                // source integer expression produces life14..45.
+                p.life = 20 + 25 * (15 - random(0, dist)) / 15;
+                p.startfade = p.life * 20 / 100; p.stopfade = p.life;
+                p.vel.Z = 2.0f + float(random(0, 2));
+                p.state = 1; --newringparts;
+            }
+        } else if (p.state == 1) {
+            p.pos.Z += p.vel.Z; --p.life;
+            if (p.life == 0) p.state = 0;
+        } else if (p.state == 2 || p.state == 3) {
+            p.pivot = gsphere_;
+            p.angle.X += p.angvel.X; p.angle.Y += p.angvel.Y; p.angle.Z += p.angvel.Z;
+            p.dist = p.state == 2 ? gsize_ : rsize_;
+            if (p.state == 2) p.scale = gsize_ * 0.01f;
+            hmm_mat4 matrix = {}; MtxClear(&matrix);
+            MtxRotateX(&matrix, p.angle.X); MtxRotateY(&matrix, p.angle.Y); MtxRotateZ(&matrix, p.angle.Z);
+            const hmm_vec3 vector = {0.0f, p.dist, 0.0f};
+            hmm_vec3 transformed = {}; MtxTransform(&matrix, &vector, &transformed);
+            p.pos = p.pivot + transformed;
+        }
+    }
+    SetCommandDone(false);
+    if (frameon_ >= 100) {
+        alive_ = false;
+        if (runtime_owned_) {
+            // Original TEffect::KillThisEffect also notifies its spell.
+            if (spell) spell->Kill();
+            KillThisEffect();
+        }
+    }
+}
+
+void TFireFlashEffect_Bespoke::Advance(double elapsed_seconds)
+{
+    if (!initialized_ || !alive_ || !std::isfinite(elapsed_seconds) || elapsed_seconds <= 0.0) return;
+    constexpr double tick_ms = 1000.0 / 24.0;
+    sim_accum_ms_ += elapsed_seconds * 1000.0;
+    while (alive_ && sim_accum_ms_ + 1e-9 >= tick_ms) {
+        sim_accum_ms_ -= tick_ms; SimulateTick();
+    }
+}
+
+void TFireFlashEffect_Bespoke::Submit(EFxDebugMode debug_mode)
+{
+    if (!Renderer || !initialized_ || !alive_ || debug_mode != EFxDebugMode::Normal || !BindMeshes()) return;
+    auto* target = target_.Get();
+    const auto& owner_world = Transform().Matrix();
+    const S3DPoint origin = target ? IntPos(target) : S3DPoint{0,0,0};
+    for (auto& p : particles_) {
+        int j;
+        if (p.state == 1) {
+            j = p.stopfade - p.life >= (p.stopfade - p.startfade) * 70 / 100 ? 0 : 1;
+            if (p.life > 0) {
+                if (p.stopfade - p.life >= p.startfade)
+                    // Native4e203b..55 keeps the product/division/addition
+                    // extended until its single float store.
+                    p.scale = float(static_cast<long double>(mainscale_) * p.life /
+                                    (p.stopfade - p.startfade) + 0.05000000074505806f);
+                else p.scale = mainscale_;
+            }
+        } else if (p.state == 2) {
+            if (frameon_ < 26) continue;
+            j = 1;
+        } else if (p.state == 3) j = 1;
+        else continue;
+        if (p.scale <= 0.0f) continue;
+        hmm_mat4 local = {}; MtxClear(&local);
+        MtxRotateX(&local, -float(M_2PI / 3.0));
+        MtxRotateZ(&local, -float(M_PI / 4.0));
+        MtxRotateZ(&local, -float((facing_ / 256.0f) * M_2PI));
+        const hmm_vec3 scale = {p.scale, p.scale, p.scale}; MtxScale(&local, &scale);
+        // The owner matrix already stretches raw mesh Z by1.5. Particle
+        // translation is legacy D3D Z, not raw mesh geometry: convert its
+        // offset to common world Z (x1.46) before that owner stretch. The
+        // ABSPOS branch instead retains the source's raw target Z and
+        // converts the resulting complete D3D position below.
+        const float local_z = target ? p.pos.Z + float(origin.z)
+                                     : REV_FIX_Z_VALUE(p.pos.Z) / WORLD3D_Z_SCALE;
+        const hmm_vec3 pos = {p.pos.X + float(origin.x), p.pos.Y + float(origin.y), local_z};
+        MtxTranslate(&local, &pos);
+        bool source_faces_visible = true;
+        for (size_t face = 0; face + 2 < indices_[j].size(); face += 3) {
+            hmm_vec3 face_points[3] = {};
+            for (int corner = 0; corner < 3; ++corner) {
+                const auto& v = vertices_[j][indices_[j][face + corner]];
+                const hmm_vec3 authored = {v.pos[0], v.pos[1], v.pos[2]};
+                hmm_vec3 point = {}, world = {};
+                MtxTransform(&local, &authored, &point);
+                // Source OBJ3D_ABSPOS bypasses the owner's entire matrix,
+                // including its face. Null-target particles remain local.
+                if (target) world = {point.X, point.Y, REV_FIX_Z_VALUE(point.Z)};
+                else MtxTransform(&owner_world, &point, &world);
+                face_points[corner] = world;
+            }
+            float sx[3], sy[3];
+            for (int k = 0; k < 3; ++k) {
+                const auto& v = face_points[k];
+                sx[k] = v.X - v.Y; sy[k] = 0.5f * (v.X + v.Y) - 0.867f * v.Z;
+            }
+            // Blue's Y-up cull precedes raster Y inversion; retain
+            // positive screen-down winding, as the other authored ports.
+            if ((sx[1]-sx[0])*(sy[2]-sy[0]) < (sx[2]-sx[0])*(sy[1]-sy[0])) {
+                source_faces_visible = false; break;
+            }
+        }
+        // Both authored triangles are checked: helper GPU meshes have no
+        // per-instance index range. Reject mixed-sign grazing cases as well;
+        // no projected negative source face may leak through an uncullable draw.
+        if (!source_faces_visible) continue;
+        hmm_mat4 mesh_world = {};
+        if (target) {
+            mesh_world = local;
+            const hmm_vec3 absolute_z = {1.0f, 1.0f, REV_FIX_Z_VALUE(1.0f)};
+            MtxScale(&mesh_world, &absolute_z); // The complete ABSPOS D3D Z.
+        } else MtxMultiply(&mesh_world, &local, &owner_world);
+        SHelperMeshSubmit submit = {};
+        submit.mesh = meshes_[j]; submit.additive_blend = true;
+        submit.retail_lighting = 1; // Audited RGB565 Blue SW normal-light modulation.
+        // Owner1.5Z / ABSPOS1.46Z above bridge geometry into common world.
+        // Native RenderObject/Illuminate uses the pre-bridge normal matrix.
+        submit.retail_normal_z_scale = target ? 1.0f / REV_FIX_Z_VALUE(1.0f)
+                                              : 1.0f / WORLD3D_Z_SCALE;
+        for (int row = 0; row < 4; ++row) for (int col = 0; col < 4; ++col)
+            submit.world[row * 4 + col] = mesh_world.Elements[col][row];
+        const auto& material = materials_[j].matdesc;
+        std::memcpy(submit.diffuse, &material.diffuse, 4 * sizeof(float));
+        std::memcpy(submit.ambient, &material.ambient, 4 * sizeof(float));
+        std::memcpy(submit.specular, &material.specular, 4 * sizeof(float));
+        std::memcpy(submit.emissive, &material.emissive, 4 * sizeof(float));
+        submit.power = material.power;
+        submit.sort_depth = mesh_world.Elements[3][2];
+        Renderer->SubmitHelperMesh(submit);
+    }
+}
+
+void TFireFlashEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime()); Submit(debug_mode);
+}
+
+// -------------------------------------------------------------------------
+// FireWind: original400-slot owner/animator leaf, two authored RGB565 quads.
+// -------------------------------------------------------------------------
+TFireWindEffect_Bespoke::~TFireWindEffect_Bespoke()
+{
+    if(Renderer)for(const auto& part:parts_)if(part.mesh)Renderer->ReleaseMeshAssetRef(part.mesh);
+}
+
+bool TFireWindEffect_Bespoke::BindMeshes()
+{
+    auto* image=dynamic_cast<T3DImagery*>(imagery);
+    if(!Renderer||!image||image->NumObjects()!=2||image->NumTextures()!=2)return false;
+    for(int i=0;i<2;++i) {
+        auto& part=parts_[i];if(part.mesh)continue;
+        const int slot=i==0?1:2;
+        std::vector<SMeshVertex> vertices;std::vector<uint16_t> indices;
+        if(!ExtractSubMeshTextureSlot(image,i,slot,vertices,indices)||vertices.size()!=4||indices.size()!=6)return false;
+        S3DObj object{};image->GetObject(i,&object);image->GetMaterial(object.material,&part.material);
+        S3DTex texture{};image->GetTexture(slot-1,&texture);
+        if(texture.htexture==kInvalidTexture||texture.numframes!=1||RetailMeshTextureLighting(texture.desc.pixelFormat)!=1)return false;
+        const uint64_t key=0x4657494e00000000ull^(uint64_t(uint32_t(image->ImageryId()))<<16)^uint64_t(i);
+        part.mesh=Renderer->RegisterMeshAsset(key,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()),texture.htexture);
+        if(!part.mesh)return false;Renderer->AddMeshAssetRef(part.mesh);
+    }
+    return true;
+}
+
+TFireWindEffect_Bespoke* TFireWindEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin,const char* asset_override)
+{
+    // YFireWind dispatches through its own factory, never an arbitrary asset
+    // override of this base registration.
+    if(asset_override)return nullptr;
+    auto* image=LoadWaterImagery(kFireWindBespokeImageryPath,"firewind");if(!image)return nullptr;
+    auto* effect=new TFireWindEffect_Bespoke(image);
+    if(!effect->InitializeVisual(origin)){delete effect;return nullptr;}
+    log_info("[firewind] original400-slot null-spell leaf, source=%d,%d,%d",origin.x,origin.y,origin.z);
+    return effect;
+}
+
+bool TFireWindEffect_Bespoke::InitializeVisual(const S3DPoint& origin)
+{
+    SetIntPos(*this, origin);SetMapIndex(MapPane.MakeIndex());ActivateComponents();
+    // Both controlled null-spell native initializers produce facing0. Natural
+    // invoker/target-derived facing and damage dispatch remain separate.
+    firewind_core::State::Initialize([](int lo,int hi){return random(lo,hi);});
+    return BindMeshes();
+}
+
+void TFireWindEffect_Bespoke::Simulate()
+{
+    if(!alive_)return;
+    firewind_core::State::Pulse([](int lo,int hi){return random(lo,hi);},[](int angle,int distance) {
+        S3DPoint p;ConvertToVector(angle,distance,p);return hmm_vec3{float(p.x),float(p.y),float(p.z)};
+    });
+    // Original owner Pulse4e2290 kills after140; animator Pulse never does.
+    alive_=firewind_core::State::frame<=140;
+}
+
+void TFireWindEffect_Bespoke::Pulse()
+{
+    Simulate();SetCommandDone(false);if(!alive_)KillThisEffect();TEffect::Pulse();
+}
+
+void TFireWindEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode)
+{
+    constexpr double step=1.0/24.0;sim_accum_+=TTime::DeltaTime();
+    while(alive_&&sim_accum_+1e-9>=step){sim_accum_-=step;Simulate();}
+}
+
+void TFireWindEffect_Bespoke::SubmitWorldMeshes_BESPOKE(EFxDebugMode)
+{
+    if(!alive_||!BindMeshes())return;
+    hmm_mat4 owner=Transform().Matrix();
+    if(native_domain_){const auto p=IntPos(*this);BuildRetailSoftwareOwner(owner,p.x,p.y,p.z,uint8_t(IntFacing(*this)));}
+    firewind_core::State::Render([&](int object,const hmm_mat4& local) {
+        const auto& part=parts_[object];hmm_mat4 world;MtxMultiply(&world,&local,&owner);
+        SHelperMeshSubmit submit{};submit.mesh=part.mesh;submit.additive_blend=true;submit.retail_lighting=1;
+        submit.retail_software_projection=native_domain_;submit.retail_normal_z_scale=native_domain_?1.0f:1.0f/WORLD3D_Z_SCALE;
+        for(int row=0;row<4;++row)for(int col=0;col<4;++col)submit.world[row*4+col]=world.Elements[col][row];
+        const auto& m=part.material.matdesc;std::memcpy(submit.diffuse,&m.diffuse,4*sizeof(float));
+        std::memcpy(submit.ambient,&m.ambient,4*sizeof(float));std::memcpy(submit.specular,&m.specular,4*sizeof(float));
+        std::memcpy(submit.emissive,&m.emissive,4*sizeof(float));submit.power=m.power;
+        submit.sort_depth=float(IntPos(*this).z);Renderer->SubmitHelperMesh(submit);
+    });
+}
+
+// -------------------------------------------------------------------------
+// FireCone: private literal TParticleSystem pools and authored two-object rendering.
+// Evidence/remaining gates: FIRE_CONE_AUTHORED.md. DragonFire is a separate animator.
+namespace {
+class TFireConeReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    const char* ComponentName() const override { return "firecone_reference"; }
+    void Submit(TRenderer&, const TObjectInstance& owner) const override
+    {
+        if (auto* effect = dynamic_cast<const TFireConeEffect_Bespoke*>(&owner))
+            effect->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* effect = dynamic_cast<TFireConeEffect_Bespoke*>(OwnerInstance()))
+            effect->Advance(TTime::DeltaTime());
+    }
+};
+static TObjectDef::SRegistrar g_firecone_reference_builder("FIRECONE", MakeWaterReferenceDef<TFireConeEffect_Bespoke>);
+TWaterReferenceAnimatorBuilder<TFireConeEffect_Bespoke> g_firecone_reference_animator_builder("FIRECONE");
+}
+
+void TFireConeEffect_Bespoke::Pool::Add(const Particle* particle)
+{
+    for (auto& slot : particles) {
+        if (slot.used) continue;
+        slot = *particle; slot.used = true; slot.life = 0;
+        return;
+    }
+}
+
+void TFireConeEffect_Bespoke::Pool::Animate()
+{
+    for (auto& particle : particles) {
+        if (!particle.used) continue;
+        if (particle.life >= particle.life_span) {
+            particle.used = false; continue;
+        }
+        ++particle.life;
+        particle.pos.X += particle.vel.X;
+        particle.pos.Y += particle.vel.Y;
+        particle.pos.Z += particle.vel.Z;
+        particle.vel.X *= particle.acc.X;
+        particle.vel.Y *= particle.acc.Y;
+        particle.vel.Z *= particle.acc.Z;
+    }
+}
+
+TFireConeEffect_Bespoke::~TFireConeEffect_Bespoke()
+{
+    if (Renderer) for (const MeshHandle mesh : meshes_)
+        if (mesh) Renderer->ReleaseMeshAssetRef(mesh);
+}
+
+bool TFireConeEffect_Bespoke::BindMeshes() const
+{
+    if (!Renderer || !initialized_) return false;
+    auto* imagery = GetImagery();
+    if (!imagery) return false;
+    for (int object = 0; object < 2; ++object) {
+        if (meshes_[object]) continue;
+        const uint64_t key = 0x4643524600000000ull ^ (uint64_t(uint32_t(imagery->ImageryId())) << 16)
+                             ^ uint64_t(object);
+        meshes_[object] = Renderer->RegisterMeshAsset(key, vertices_[object].data(),
+            int32_t(vertices_[object].size()), indices_[object].data(),
+            int32_t(indices_[object].size()), textures_[object]);
+        if (meshes_[object]) Renderer->AddMeshAssetRef(meshes_[object]);
+    }
+    return meshes_[0] && meshes_[1];
+}
+
+void TFireConeEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if (initialized_ || GetMapIndex() < 0 || GetComponent<TFireConeReferenceComponent>()) return;
+    if (attach_runtime_component && (ObjClass() != OBJCLASS_EFFECT || ObjId() != 0xab92cd01u)) return;
+    auto* img = dynamic_cast<T3DImagery*>(GetImagery());
+    if (!img || img->NumObjects() != 2 || img->NumTextures() != 2) return;
+    S3DTex tex = {};
+    for (int j = 0; j < 2; ++j) {
+        S3DObj object = {}; S3DMat material = {};
+        img->GetObject(j, &object);
+        if (object.material < 0 || object.material >= img->NumMaterials()) return;
+        img->GetMaterial(object.material, &material);
+        if (material.texture != j) return;
+        img->GetTexture(j, &tex);
+        if (tex.htexture == kInvalidTexture || tex.numframes != 1 ||
+            !ExtractSubMeshTextureSlot(img, j, j + 1, vertices_[j], indices_[j]) ||
+            vertices_[j].size() != 4 || indices_[j].size() != 6) return;
+        textures_[j] = tex.htexture; materials_[j] = material;
+        diffuse_[j][0] = material.matdesc.diffuse.r;
+        diffuse_[j][1] = material.matdesc.diffuse.g;
+        diffuse_[j][2] = material.matdesc.diffuse.b;
+        diffuse_[j][3] = material.matdesc.diffuse.a;
+    }
+    // Source animator Initialize changes the actual owner, not a render offset.
+    // No operation after this can fail/retry, so the idempotent guard prevents
+    // adding another100 when the normal animator is recreated.
+    const auto original_origin = IntPos(*this);
+    S3DPoint elevated = original_origin; elevated.z += 100;
+    SetPos(elevated);
+    facing_ = -((float(IntFacing(*this)) * 360.0f) / 256.0f) * float(TORADIAN);
+    for (Pool* pool : {&fire_, &smoke_, &burst_})
+        for (auto& particle : pool->particles) particle = {};
+    done_ = false; firsttime_ = true; frame_count_ = 0;
+    state_ = FLAME_STATE_START; sim_ticks_ = 0; sim_accum_ms_ = 0.0;
+    initialized_ = true; alive_ = true; runtime_owned_ = attach_runtime_component;
+    SetCommandDone(false);
+    if (attach_runtime_component) {
+        auto c = std::make_unique<TFireConeReferenceComponent>();
+        c->Configure(textures_[0], int32_t(tex.desc.width), int32_t(tex.desc.height),
+                     1, 1, 1, 1.0f, 1.0f, false, true);
+        AddComponent(std::move(c));
+    }
+    const auto origin = IntPos(*this);
+    log_info("[firecone-runtime] initialized id=%08x map_index=%d origin=(%d,%d,%d) original_z=%d runtime=%d fire=80 smoke=80 burst=100",
+             attach_runtime_component ? ObjId() : 0xab92cd01u, GetMapIndex(),
+             origin.x, origin.y, origin.z, original_origin.z, int(attach_runtime_component));
+}
+
+TFireConeEffect_Bespoke* TFireConeEffect_Bespoke::SpawnForTest_BESPOKE(
+    const S3DPoint& origin, const char* asset_override)
+{
+    if (asset_override) {
+        log_warn("[firecone] unsupported alternate animator asset '%s'; DragonFire association is not inferred", asset_override);
+        return nullptr;
+    }
+    auto* img = LoadWaterImagery(kFireConeBespokeImageryPath, "firecone");
+    if (!img) return nullptr;
+    auto* effect = new TFireConeEffect_Bespoke(img);
+    SetIntPos(effect, origin); effect->SetMapIndex(MapPane.MakeIndex());
+    effect->ActivateComponents(); effect->Initialize(false);
+    if (!effect->initialized_) { delete effect; return nullptr; }
+    return effect;
+}
+
+void TFireConeEffect_Bespoke::Pulse()
+{
+    TEffect::Pulse();
+    if (!initialized_ || !alive_ || !runtime_owned_ || !firsttime_ || !spell) return;
+    auto* invoker = dynamic_cast<TCharacter*>(spell->GetInvoker());
+    auto* flame = fire_.Get(0);
+    // The original reads slot0 before checking initialization/use. Avoid its
+    // undefined first-Pulse particle data; natural caller parity remains open.
+    if (!invoker || !flame || !flame->used) return;
+    const float angle = (6.283f * float(IntFacing(invoker))) / 256.0f;
+    const double cos_angle = std::cos(double(angle));
+    const double sin_angle = std::sin(double(angle));
+    S3DPoint point = IntPos(invoker);
+    point.x += int(flame->pos.X * cos_angle - flame->pos.Y * sin_angle);
+    point.y += int(flame->pos.X * sin_angle + flame->pos.Y * cos_angle);
+    point.z = int(flame->pos.Z); // Source does not add owner/invoker Z here.
+    for (TMapIterator i(nullptr, CHECK_NOINVENT, OBJSET_CHARACTER); i; i++) {
+        auto* character = dynamic_cast<TCharacter*>(i.Item());
+        if (!character || character == invoker || character->IsDead() ||
+            ::Distance(point, IntPos(character)) > 16 || !invoker->IsEnemy(character)) continue;
+        spell->Damage(character); character->Burn(); firsttime_ = false; break;
+    }
+}
+
+void TFireConeEffect_Bespoke::SimulateTick()
+{
+    ++sim_ticks_;
+
+    SetCommandDone(false);
+
+    Particle* flame;
+    Particle new_flame = {};
+    int i = 0;
+    int flame_count = 0;
+
+    smoke_.Animate();
+
+    for(i = 0; i < FLAME_COUNT; ++i)
+    {
+        flame = fire_.Get(i);
+        if(!flame->used)
+            continue;
+        if(flame->life >= flame->life_span)
+        {
+            new_flame.pos = flame->pos;
+            new_flame.temp = flame->temp;
+            new_flame.vel.X = 0.0f;
+            new_flame.vel.Y = 0.0f;
+            new_flame.vel.Z = flame->vel.Z;
+            new_flame.acc.X = 0.0f;
+            new_flame.acc.Y = 0.0f;
+            new_flame.acc.Z = flame->acc.Z;
+            new_flame.scl = flame->scl;
+            new_flame.rot = flame->rot;
+            new_flame.life_span = 15;
+            smoke_.Add(&new_flame);
+        }
+    }
+
+    fire_.Animate();
+    burst_.Animate();
+
+    if(state_ == FLAME_STATE_START)
+    {
+        if(frame_count_ >= 5)
+        {
+            state_ = FLAME_STATE_MID;
+            frame_count_ = 0;
+        }
+        else
+            ++frame_count_;
+        for(i = 0; i < FLAME_CREATE / 2 && !done_; ++i)
+        {
+
+            new_flame.pos.X = (float)random(-4, 4) + 20.0f;
+            new_flame.pos.Y = (float)random(-4, 4);
+            new_flame.pos.Z = (float)random(-4, 4) - 7.0f;
+
+            new_flame.rot.X = -90.0f;
+            new_flame.rot.Z = -45.0f;
+            new_flame.rot.Y = 0.0f;
+
+            float scale = (float)random(5, 25) * .01f;
+
+            new_flame.temp.X = scale;
+            new_flame.temp.Y = scale;
+            new_flame.temp.Z = scale;
+
+            new_flame.vel.X = (float)random(-100, 100) * .01f;
+            new_flame.vel.Y = (float)random(-100, 100) * .01f;
+            new_flame.vel.Z = (float)random(100, 400) * .01f;
+
+            new_flame.acc.X = (float)random(FLAME_MIN_H, FLAME_MAX_H) * .01f;
+            new_flame.acc.Y = (float)random(FLAME_MIN_H, FLAME_MAX_H) * .01f;
+            new_flame.acc.Z = (float)random(FLAME_MIN_V, FLAME_MAX_V) * .01f;
+
+            new_flame.life_span = random(3, 15);
+
+            new_flame.flicker = false;
+
+            fire_.Add(&new_flame);
+        }
+        for(i = 0; i < FLAME_CREATE / 2 && !done_; ++i)
+        {
+
+            new_flame.pos.X = (float)random(-4, 4) - 20.0f;
+            new_flame.pos.Y = (float)random(-4, 4);
+            new_flame.pos.Z = (float)random(-4, 4) - 7.0f;
+
+            new_flame.rot.X = -90.0f;
+            new_flame.rot.Z = -45.0f;
+            new_flame.rot.Y = 0.0f;
+
+            float scale = (float)random(5, 25) * .01f;
+
+            new_flame.temp.X = scale;
+            new_flame.temp.Y = scale;
+            new_flame.temp.Z = scale;
+
+            new_flame.vel.X = (float)random(-100, 100) * .01f;
+            new_flame.vel.Y = (float)random(-100, 100) * .01f;
+            new_flame.vel.Z = (float)random(0, 300) * .01f;
+
+            new_flame.acc.X = (float)random(FLAME_MIN_H, FLAME_MAX_H) * .01f;
+            new_flame.acc.Y = (float)random(FLAME_MIN_H, FLAME_MAX_H) * .01f;
+            new_flame.acc.Z = (float)random(FLAME_MIN_V, FLAME_MAX_V) * .01f;
+
+            new_flame.life_span = random(3, 15);
+
+            new_flame.flicker = false;
+
+            fire_.Add(&new_flame);
+        }
+    }
+    else if(state_ == FLAME_STATE_MID)
+    {
+        if(frame_count_ >= 8)
+        {
+            state_ = FLAME_STATE_BLAST;
+            frame_count_ = 0;
+
+            int r = random(10, 25);
+            for(i = 0; i < r; ++i)
+            {
+                new_flame.rot.X = -90.0f;
+                new_flame.rot.Z = -45.0f;
+                new_flame.rot.Y = 0.0f;
+
+                new_flame.vel.X = (float)random(-800, 800) * .01f;
+                new_flame.vel.Y = (float)random(-800, 800) * .01f;
+                new_flame.vel.Z = (float)random(-800, 800) * .01f;
+
+                new_flame.acc.X = (float)random(65, 95) * .01f;
+                new_flame.acc.Y = (float)random(65, 95) * .01f;
+                new_flame.acc.Z = (float)random(65, 95) * .01f;
+
+                int j = random(1, 3);
+                for(int x = 0; x < j; ++x)
+                {
+
+                    new_flame.pos.X = (float)random(-2, 2);
+                    new_flame.pos.Y = (float)random(-2, 2) - 30.0f;
+                    new_flame.pos.Z = (float)random(-2, 2) - 30.0f;
+
+                    float scale = (float)random(5, 25) * .01f;
+
+                    new_flame.scl.X = scale;
+                    new_flame.scl.Y = scale;
+                    new_flame.scl.Z = scale;
+
+                    new_flame.life_span = random(10, 25);
+                    new_flame.flicker = false;
+
+                    burst_.Add(&new_flame);
+                }
+            }
+        }
+        else
+            ++frame_count_;
+    }
+    else if(state_ == FLAME_STATE_BLAST)
+    {
+        if(frame_count_ >= FLAME_FRAME_COUNT)
+            done_ = true;
+        else
+            ++frame_count_;
+
+        for(i = 0; i < FLAME_CREATE && !done_; ++i)
+        {
+
+            new_flame.pos.X = (float)random(-4, 4);
+            new_flame.pos.Y = (float)random(-4, 4) - 30.0f;
+            new_flame.pos.Z = (float)random(-4, 4) - 30.0f;
+
+            new_flame.rot.X = -90.0f;
+            new_flame.rot.Z = -45.0f;
+            new_flame.rot.Y = 0.0f;
+
+            float scale = (float)random(5, 25) * .01f;
+
+            new_flame.temp.X = scale;
+            new_flame.temp.Y = scale;
+            new_flame.temp.Z = scale;
+
+            new_flame.vel.X = (float)random(-200, 200) * .01f;
+            new_flame.vel.Y = -(float)FLAME_SPEED * .01f;
+            new_flame.vel.Z = (float)random(0, 300) * .01f;
+
+            new_flame.acc.X = (float)random(FLAME_MIN_H, FLAME_MAX_H) * .01f;
+            new_flame.acc.Y = (float)random(FLAME_MIN_H, FLAME_MAX_H) * .01f;
+            new_flame.acc.Z = (float)random(FLAME_MIN_V, FLAME_MAX_V) * .01f;
+
+            new_flame.life_span = random(FLAME_MIN_LIFE, FLAME_MAX_LIFE);
+            if(i == 0)
+                new_flame.flicker = true;
+            else
+                new_flame.flicker = false;
+
+            fire_.Add(&new_flame);
+        }
+    }
+
+    for(i = 0; i < FLAME_COUNT; ++i)
+    {
+        flame = fire_.Get(i);
+        if(!flame->used)
+            continue;
+        ++flame_count;
+
+        if(state_ == FLAME_STATE_START)
+            flame->vel.Z += 1.5f;
+        else if(state_ == FLAME_STATE_MID)
+        {
+            flame->acc.X = 0.0f;
+            flame->acc.Y = 0.0f;
+            flame->acc.Z = 0.0f;
+            flame->vel.X = 0.0f;
+            flame->vel.Y = 0.0f;
+            flame->vel.Z = 0.0f;
+            // Retail keeps each approach expression in x87 until the position store.
+            long double diff;
+            if(flame->pos.X != 0.0f)
+            {
+                diff = (0.0L - static_cast<long double>(flame->pos.X)) * .25L;
+                flame->pos.X += diff;
+            }
+            if(flame->pos.Y != -30.0f)
+            {
+                diff = (-30.0L - static_cast<long double>(flame->pos.Y)) * .25L;
+                flame->pos.Y += diff;
+            }
+            if(flame->pos.Z != -30.0f)
+            {
+                diff = (-30.0L - static_cast<long double>(flame->pos.Z)) * .25L;
+                flame->pos.Z += diff;
+            }
+        }
+        else if((float)flame->life / (float)flame->life_span > .5f)
+            flame->vel.Z += 1.5f;
+
+        // Native duplicates its x87 scale expression before each final float store.
+        const long double equ = (125.0L - static_cast<long double>(flame->pos.Z)) *
+                                static_cast<long double>(.01f);
+        flame->scl.X = flame->temp.X * equ;
+        flame->scl.Y = flame->temp.Y * equ;
+        flame->scl.Z = flame->temp.Z * equ;
+
+    }
+
+    for(i = 0; i < FLAME_COUNT; ++i)
+    {
+        flame = smoke_.Get(i);
+        if(!flame->used)
+            continue;
+        ++flame_count;
+
+        flame->vel.Z += 3.0f;
+
+        long double equ = (125.0L - static_cast<long double>(flame->pos.Z)) *
+                          static_cast<long double>(.01f);
+        if(equ < 0.0f)
+            equ = 0.0f;
+
+        flame->scl.X = flame->temp.X * equ;
+        flame->scl.Y = flame->temp.Y * equ;
+        flame->scl.Z = flame->temp.Z * equ;
+    }
+
+    for(i = 0; i < FLAME_BURST; ++i)
+    {
+        flame = burst_.Get(i);
+        if(!flame->used)
+            continue;
+
+        ++flame_count;
+
+        flame->scl.X *= .95f;
+        flame->scl.Y *= .95f;
+        flame->scl.Z *= .95f;
+
+    }
+
+    if(!flame_count && done_)
+    {
+        alive_ = false;
+        if (runtime_owned_) {
+            if (spell) spell->Kill();
+            KillThisEffect();
+        }
+        log_info("[firecone-runtime] finished map_index=%d tick=%d", GetMapIndex(), sim_ticks_);
+    }
+
+}
+
+void TFireConeEffect_Bespoke::Advance(double elapsed_seconds)
+{
+    if (!initialized_ || !alive_ || !std::isfinite(elapsed_seconds) || elapsed_seconds <= 0.0) return;
+    constexpr double tick_ms = 1000.0 / 24.0;
+    sim_accum_ms_ += elapsed_seconds * 1000.0;
+    while (alive_ && sim_accum_ms_ + 1e-9 >= tick_ms) {
+        sim_accum_ms_ -= tick_ms; SimulateTick();
+    }
+}
+
+void TFireConeEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    // Only the isolated preview calls this adapter. Runtime owners retain
+    // their common-world transform and ordinary scene projector.
+    native_domain_ = enabled && !runtime_owned_;
+    if (native_domain_) {
+        const auto position = IntPos(*this);
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z,
+                                 uint8_t(IntFacing(*this)));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT particle=relative FireCone",
+             int(native_domain_));
+}
+
+void TFireConeEffect_Bespoke::SubmitPool(const Pool& pool, int object, EFxDebugMode debug_mode) const
+{
+    const auto& owner_world = native_domain_ ? native_owner_ : Transform().Matrix();
+    for (const auto& particle : pool.particles) {
+        if (!particle.used) continue;
+        // Source renders used particles even with zero/negative scale. Do not
+        // erase them early or clamp fire scale; smoke's clamp belongs in Animate.
+        hmm_mat4 local = {}; MtxClear(&local);
+        MtxRotateX(&local, float(particle.rot.X * TORADIAN));
+        MtxRotateY(&local, float(particle.rot.Y * TORADIAN));
+        MtxRotateZ(&local, float(particle.rot.Z * TORADIAN));
+        MtxRotateX(&local, -float(M_PI / 2.0));
+        MtxRotateZ(&local, -float(M_PI / 4.0));
+        MtxRotateZ(&local, facing_);
+        // fire.Render()/smoke.Render()/burst.Render() all use default
+        // flicker=false; the per-particle flicker flag does not enlarge this draw.
+        MtxScale(&local, &particle.scl);
+        // Retail 50c374..50c3bc only applies FIX_Z_VALUE when abs_pos is true.
+        // FireCone passes false: particle translation and authored vertices
+        // share the same local domain before RenderObject applies the owner.
+        MtxTranslate(&local, &particle.pos);
+        bool source_faces_visible = true;
+        for (size_t face = 0; face + 2 < indices_[object].size(); face += 3) {
+            hmm_vec3 face_points[3] = {};
+            for (int k = 0; k < 3; ++k) {
+                const auto& v = vertices_[object][indices_[object][face + k]];
+                const hmm_vec3 authored = {v.pos[0], v.pos[1], v.pos[2]};
+                hmm_vec3 point = {}, world = {};
+                MtxTransform(&local, &authored, &point); MtxTransform(&owner_world, &point, &world);
+                face_points[k] = world;
+            }
+            float sx[3], sy[3];
+            for (int k = 0; k < 3; ++k) {
+                const auto& v = face_points[k];
+                sx[k] = v.X - v.Y;
+                sy[k] = native_domain_
+                    ? 0.5050762891769409f * (v.X + v.Y) - 1.237179160118103f * v.Z
+                    : 0.5f * (v.X + v.Y) - 0.867f * v.Z;
+            }
+            if ((sx[1]-sx[0])*(sy[2]-sy[0]) < (sx[2]-sx[0])*(sy[1]-sy[0])) {
+                source_faces_visible = false; break;
+            }
+        }
+        if (!source_faces_visible) continue;
+        hmm_mat4 mesh_world = {}; MtxMultiply(&mesh_world, &local, &owner_world);
+        SHelperMeshSubmit submit = {};
+        submit.mesh = meshes_[object]; submit.additive_blend = true;
+        submit.retail_lighting = 1;
+        submit.retail_software_projection = native_domain_;
+        for (int row = 0; row < 4; ++row) for (int col = 0; col < 4; ++col)
+            submit.world[row * 4 + col] = mesh_world.Elements[col][row];
+        const auto& material = materials_[object].matdesc;
+        std::memcpy(submit.diffuse, &material.diffuse, 4 * sizeof(float));
+        std::memcpy(submit.ambient, &material.ambient, 4 * sizeof(float));
+        std::memcpy(submit.specular, &material.specular, 4 * sizeof(float));
+        std::memcpy(submit.emissive, &material.emissive, 4 * sizeof(float));
+        submit.power = material.power;
+        submit.sort_depth = mesh_world.Elements[3][2];
+        Renderer->SubmitHelperMesh(submit);
+    }
+}
+
+void TFireConeEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !initialized_ || !alive_ || debug_mode != EFxDebugMode::Normal || !BindMeshes()) return;
+    SubmitPool(fire_, 0, debug_mode);
+    SubmitPool(smoke_, 1, debug_mode);
+    SubmitPool(burst_, 0, debug_mode);
+}
+
+void TFireConeEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime()); Submit(debug_mode);
+}
+
+// -------------------------------------------------------------------------
+// Streamer: four shipped textured quads and snapshot spiral state.
+namespace {
+class TStreamerReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    const char* ComponentName() const override { return "streamer_reference"; }
+    void Submit(TRenderer&, const TObjectInstance& owner) const override
+    {
+        if (auto* effect=dynamic_cast<const TStreamerEffect_Bespoke*>(&owner))
+            effect->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* effect=dynamic_cast<TStreamerEffect_Bespoke*>(OwnerInstance()))
+            effect->Advance(TTime::DeltaTime());
+    }
+};
+static TObjectDef::SRegistrar g_streamer_reference_builder("Streamer", MakeWaterReferenceDef<TStreamerEffect_Bespoke>);
+TWaterReferenceAnimatorBuilder<TStreamerEffect_Bespoke> g_streamer_reference_animator_builder("Streamer");
+}
+
+TStreamerEffect_Bespoke::~TStreamerEffect_Bespoke()
+{
+    if (Renderer) for (const auto& part : authored_)
+        if (part.mesh) Renderer->ReleaseMeshAssetRef(part.mesh);
+}
+
+bool TStreamerEffect_Bespoke::BindMeshes() const
+{
+    if (!Renderer || !initialized_ || !GetImagery()) return false;
+    for (int object=0; object<kStreamerMaxStreams; ++object) {
+        const auto& part=authored_[object];
+        if (part.mesh) continue;
+        const uint64_t key=0x5354524d00000000ull ^ (uint64_t(uint32_t(GetImagery()->ImageryId()))<<16) ^ uint64_t(object);
+        part.mesh=Renderer->RegisterMeshAsset(key, part.vertices.data(), int32_t(part.vertices.size()),
+            part.indices.data(), int32_t(part.indices.size()), part.texture);
+        if (!part.mesh) return false;
+        Renderer->AddMeshAssetRef(part.mesh);
+    }
+    return true;
+}
+
+void TStreamerEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled && !runtime_owned_;
+    if (native_domain_) {
+        const auto position=IntPos(*this);
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z, uint8_t(IntFacing(*this)));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT TStreamerEffect_Bespoke", int(native_domain_));
+}
+
+void TStreamerEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if (initialized_ || GetMapIndex()<0 || GetComponent<TStreamerReferenceComponent>()) return;
+    if (attach_runtime_component && (ObjClass()!=OBJCLASS_EFFECT || ObjId()!=0x482dfe82u)) return;
+    auto* img=dynamic_cast<T3DImagery*>(GetImagery());
+    if (!img || img->NumObjects()!=4 || img->NumTextures()!=4) return;
+    for (int j=0;j<kStreamerMaxStreams;++j) {
+        S3DObj object={}; S3DMat material={}; S3DTex tex={};
+        img->GetObject(j,&object);
+        if (object.material<0 || object.material>=img->NumMaterials()) return;
+        img->GetMaterial(object.material,&material);
+        if (material.texture!=j) return;
+        img->GetTexture(material.texture,&tex);
+        auto& mesh=authored_[j];
+        if (tex.htexture==kInvalidTexture ||
+            !ExtractSubMeshTextureSlot(img,j,material.texture+1,mesh.vertices,mesh.indices) ||
+            mesh.vertices.size()!=4 || mesh.indices.size()!=6) return;
+        mesh.texture=tex.htexture;
+        scl_init_[j]=0.15f*float(j+1); dscl_[j]=scl_init_[j]/float(kStreamerMaxParticles);
+        h_[j]=0.0f; dh_[j]=0.02f/float(4-j); th_[j]=0.0f; dth_[j]=0.15f;
+        for (auto& particle:stream_[j]) particle={};
+    }
+    frameon_=0; sim_accum_ms_=0.0; alive_=true; initialized_=true;
+    runtime_owned_=attach_runtime_component;
+    if (attach_runtime_component) {
+        auto c=std::make_unique<TStreamerReferenceComponent>();
+        c->Configure(authored_[0].texture,64,64,1,1,1,1.0f,1.0f,false,true);
+        AddComponent(std::move(c));
+    }
+    const auto pos=IntPos(*this);
+    log_info("[streamer-runtime] initialized id=%08x map_index=%d origin=(%d,%d,%d) runtime=%d streams=4 vertices=16 triangles=8 textures=4",
+             attach_runtime_component?ObjId():0x482dfe82u,GetMapIndex(),pos.x,pos.y,pos.z,int(attach_runtime_component));
+}
+
+TStreamerEffect_Bespoke* TStreamerEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* img=LoadWaterImagery("Magic/Streamer.i3d","streamer");
+    if (!img) return nullptr;
+    auto* effect=new TStreamerEffect_Bespoke(img);
+    SetIntPos(effect, origin); effect->SetMapIndex(MapPane.MakeIndex());
+    effect->ActivateComponents(); effect->Initialize(false);
+    if (!effect->initialized_) { delete effect; return nullptr; }
+    return effect;
+}
+
+void TStreamerEffect_Bespoke::Advance(double elapsed_seconds)
+{
+    if (!initialized_ || !alive_ || !std::isfinite(elapsed_seconds) || elapsed_seconds<=0.0) return;
+    constexpr double tick_ms=1000.0/24.0;
+    sim_accum_ms_+=elapsed_seconds*1000.0;
+    while (sim_accum_ms_+1e-9>=tick_ms) {
+        sim_accum_ms_-=tick_ms; ++frameon_; SetCommandDone(false);
+        for (int j=0;j<kStreamerMaxStreams;++j)
+            for (int i=0;i<kStreamerSkip*(4-j);++i) InitStreamerSnap(j);
+        if (frameon_>kStreamerDuration) {
+            alive_=false;
+            if (runtime_owned_) KillThisEffect();
+            break;
+        }
+    }
+}
+
+void TStreamerEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !initialized_ || !alive_ || !BindMeshes()) return;
+    SQuadDrawItem item={}; item.corner_count=3; item.retail_texture=1;
+    item.key.blend=uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode=debug_mode;
+    const auto& world=native_domain_ ? native_owner_ : Transform().Matrix();
+    for (int j=0;j<kStreamerMaxStreams;++j) {
+        const auto& mesh=authored_[j]; item.key.texture=mesh.texture;
+        for (const auto& particle:stream_[j]) {
+            if (particle.count<=0 || particle.scl<=0.0f) continue;
+            hmm_mat4 local={}; MtxClear(&local);
+            const hmm_vec3 scale={particle.scl,particle.scl,particle.scl};
+            MtxScale(&local,&scale);
+            MtxRotateX(&local,-float(M_PI/2.0));
+            MtxRotateX(&local,-float(M_PI/6.0));
+            MtxRotateZ(&local,-float(M_PI/4.0));
+            // Original face conversion truncates integer degrees before radians.
+            MtxRotateZ(&local,-float((IntFacing(*this)*360)/256)*float(M_PI/180.0));
+            MtxTranslate(&local,&particle.pos);
+            if (debug_mode == EFxDebugMode::Normal) {
+                hmm_mat4 mesh_world={}; MtxMultiply(&mesh_world,&local,&world);
+                SHelperMeshSubmit submit={};
+                submit.mesh=mesh.mesh; submit.additive_blend=true;
+                submit.retail_lighting=1; submit.retail_positive_face_cull=true;
+                submit.retail_software_projection=native_domain_;
+                // Common world stretches geometry Z by 1.5; native normal
+                // transformation has no such owner-axis stretch.
+                submit.retail_normal_z_scale=native_domain_ ? 1.0f : 1.0f/WORLD3D_Z_SCALE;
+                for (int row=0;row<4;++row) for (int col=0;col<4;++col)
+                    submit.world[row*4+col]=mesh_world.Elements[col][row];
+                submit.sort_depth=mesh_world.Elements[3][2];
+                Renderer->SubmitHelperMesh(submit);
+                continue;
+            }
+            for (size_t face=0;face+2<mesh.indices.size();face+=3) {
+                for (int k=0;k<3;++k) {
+                    const auto& v=mesh.vertices[mesh.indices[face+k]];
+                    const hmm_vec3 authored={v.pos[0],v.pos[1],v.pos[2]};
+                    hmm_vec3 point={},p={};
+                    MtxTransform(&local,&authored,&point); MtxTransform(&world,&point,&p);
+                    item.world_pos[k][0]=p.X; item.world_pos[k][1]=p.Y; item.world_pos[k][2]=p.Z;
+                    item.uv[k][0]=v.uv[0]; item.uv[k][1]=v.uv[1];
+                }
+                // Source tests Y-up before rasterization negates Y.
+                float sx[3],sy[3];
+                for (int k=0;k<3;++k) {
+                    const auto* p=item.world_pos[k];sx[k]=p[0]-p[1];sy[k]=.5f*(p[0]+p[1])-.867f*p[2];
+                }
+                if ((sx[1]-sx[0])*(sy[2]-sy[0])<(sx[2]-sx[0])*(sy[1]-sy[0])) continue;
+                Renderer->SubmitFxQuad(item);
+            }
+        }
+    }
+}
+
+void TStreamerEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime()); Submit(debug_mode);
+}
+
+// FireSwarm: shipped object1/tube01, source scale/rotation and one-shot life.
+namespace {
+class TFireSwarmReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    const char* ComponentName() const override { return "fireswarm_reference"; }
+    void Submit(TRenderer&, const TObjectInstance& owner) const override
+    {
+        if (auto* effect=dynamic_cast<const TFireSwarmEffect_Bespoke*>(&owner))
+            effect->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* effect=dynamic_cast<TFireSwarmEffect_Bespoke*>(OwnerInstance()))
+            effect->Advance(TTime::DeltaTime());
+    }
+};
+static TObjectDef::SRegistrar g_fireswarm_reference_builder("FireSwarm", MakeWaterReferenceDef<TFireSwarmEffect_Bespoke>);
+TWaterReferenceAnimatorBuilder<TFireSwarmEffect_Bespoke> g_fireswarm_reference_animator_builder("FireSwarm");
+}
+
+void TFireSwarmEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if (initialized_ || GetMapIndex()<0 || GetComponent<TFireSwarmReferenceComponent>()) return;
+    if (attach_runtime_component && (ObjClass()!=OBJCLASS_EFFECT || ObjId()!=0x582c1e78u)) return;
+    auto* img=dynamic_cast<T3DImagery*>(GetImagery());
+    if (!img || img->NumObjects()!=2 || img->NumTextures()!=2) return;
+    S3DObj object={}; S3DMat material={}; S3DTex tex={};
+    img->GetObject(1,&object);
+    if (object.material<0 || object.material>=img->NumMaterials()) return;
+    img->GetMaterial(object.material,&material);
+    if (material.texture!=1) return;
+    img->GetTexture(material.texture,&tex);
+    if (tex.htexture==kInvalidTexture ||
+        !ExtractSubMeshTextureSlot(img,1,material.texture+1,vertices_,indices_) ||
+        vertices_.size()!=174 || indices_.size()!=576) return;
+    texture_=tex.htexture; frameon_=0; cylth_=0.0f;
+    cylhscl_=kFireSwarmBespokeHsclStep; cylvscl_=kFireSwarmBespokeVsclInit;
+    sim_accum_ms_=0.0; alive_=true; initialized_=true;
+    runtime_owned_=attach_runtime_component;
+    if (attach_runtime_component) {
+        auto c=std::make_unique<TFireSwarmReferenceComponent>();
+        c->Configure(texture_,int32_t(tex.desc.width),int32_t(tex.desc.height),
+                     1,1,1,1.0f,1.0f,false,true);
+        AddComponent(std::move(c));
+    }
+    const auto pos=IntPos(*this);
+    log_info("[fireswarm-runtime] initialized id=%08x map_index=%d origin=(%d,%d,%d) runtime=%d vertices=%zu triangles=%zu texture_slot=%d",
+             attach_runtime_component?ObjId():0x582c1e78u,GetMapIndex(),pos.x,pos.y,pos.z,
+             int(attach_runtime_component),vertices_.size(),indices_.size()/3,material.texture);
+}
+
+TFireSwarmEffect_Bespoke* TFireSwarmEffect_Bespoke::SpawnForTest_BESPOKE(
+    const S3DPoint& origin,const char* asset_override)
+{
+    // Different named effects must establish their own animator, not borrow
+    // FireSwarm's behavior by replacing its imagery with FireCone/Hfire.
+    if (asset_override) {
+        log_warn("[fireswarm] unsupported animator association for asset override '%s'; no substitute submitted",asset_override);
+        return nullptr;
+    }
+    auto* img=LoadWaterImagery(kFireSwarmBespokeImageryPath,"fireswarm");
+    if (!img) return nullptr;
+    auto* effect=new TFireSwarmEffect_Bespoke(img);
+    SetIntPos(effect, origin); effect->SetMapIndex(MapPane.MakeIndex());
+    effect->ActivateComponents(); effect->Initialize(false);
+    if (!effect->initialized_) { delete effect; return nullptr; }
+    return effect;
+}
+
+void TFireSwarmEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled && !runtime_owned_;
+    if (native_domain_) {
+        const auto position = IntPos(*this);
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z,
+                                 uint8_t(IntFacing(*this)));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT TFireSwarmEffect_Bespoke",
+             int(native_domain_));
+}
+
+void TFireSwarmEffect_Bespoke::Advance(double elapsed_seconds)
+{
+    if (!initialized_ || !alive_ || !std::isfinite(elapsed_seconds) || elapsed_seconds<=0.0) return;
+    sim_accum_ms_+=elapsed_seconds*1000.0;
+    while (sim_accum_ms_+1e-9>=kFireSwarmBespokeSimTickMs) {
+        sim_accum_ms_-=kFireSwarmBespokeSimTickMs;
+        ++frameon_;
+        cylth_+=kFireSwarmBespokeThStep;
+        if (cylth_>kFireSwarmBespoke2Pi) cylth_-=kFireSwarmBespoke2Pi;
+        cylhscl_+=kFireSwarmBespokeHsclStep;
+        cylvscl_-=kFireSwarmBespokeVsclStep;
+        SetCommandDone(false);
+        if (frameon_>kFireSwarmBespokeDuration) {
+            alive_=false;
+            // Normal map ticking reaps the owner; preview has a manual lifetime.
+            if (runtime_owned_) KillThisEffect();
+            break;
+        }
+    }
+}
+
+void TFireSwarmEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !initialized_ || !alive_) return;
+    hmm_mat4 local={}; MtxClear(&local);
+    const hmm_vec3 scale={cylhscl_,cylhscl_,cylvscl_};
+    MtxScale(&local,&scale); MtxRotateZ(&local,cylth_);
+    const auto& world=native_domain_ ? native_owner_ : Transform().Matrix();
+    const bool software_bounds = native_domain_ && Renderer->UsesRetailSoftwareMeshLighting();
+    hmm_mat4 native_world={};
+    if (software_bounds) MtxMultiply(&native_world,&local,&world);
+    SQuadDrawItem item={}; item.corner_count=3; item.retail_texture=1;
+    item.retail_argb4444=true;
+    item.retail_software_projection=native_domain_;
+    item.key.texture=texture_; item.key.blend=uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode=debug_mode;
+    for (size_t face=0;face+2<indices_.size();face+=3) {
+        if (software_bounds) {
+            hmm_vec3 authored[3];
+            for (int c=0;c<3;++c) {
+                const auto& v=vertices_[indices_[face+c]];
+                authored[c]={v.pos[0],v.pos[1],v.pos[2]};
+            }
+            // Actual ARGB branch56e006/36/5c/82 uses the same literal
+            // edge0->1/2 span guard. Ordinary geometry remains complete.
+            if (!RetailCometTriangleAllowed(authored,native_world)) continue;
+        }
+        for (int corner=0;corner<3;++corner) {
+            const auto& v=vertices_[indices_[face+corner]];
+            const hmm_vec3 authored={v.pos[0],v.pos[1],v.pos[2]};
+            hmm_vec3 point={},p={};
+            MtxTransform(&local,&authored,&point); MtxTransform(&world,&point,&p);
+            item.world_pos[corner][0]=p.X; item.world_pos[corner][1]=p.Y; item.world_pos[corner][2]=p.Z;
+            item.uv[corner][0]=v.uv[0]; item.uv[corner][1]=v.uv[1];
+        }
+        // Blue culls positive winding in Y-up transformed coordinates, then
+        // negates Y for rasterization. Screen-down winding therefore culls negative.
+        float sx[3],sy[3];
+        for (int k=0;k<3;++k) {
+            const auto* p=item.world_pos[k]; sx[k]=p[0]-p[1]; sy[k]=native_domain_ ? .5050762891769409f*(p[0]+p[1])-1.237179160118103f*p[2] : .5f*(p[0]+p[1])-.867f*p[2];
+        }
+        if ((sx[1]-sx[0])*(sy[2]-sy[0])<(sx[2]-sx[0])*(sy[1]-sy[0])) continue;
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
+void TFireSwarmEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime()); Submit(debug_mode);
+}
+
+// TFaultFireEffect_Bespoke — authored source two-pass vertical quad
+namespace {
+class TFaultFireReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    const char* ComponentName() const override { return "faultfire_reference"; }
+    void Submit(TRenderer&, const TObjectInstance& owner) const override
+    {
+        if (auto* effect = dynamic_cast<const TFaultFireEffect_Bespoke*>(&owner))
+            effect->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* effect = dynamic_cast<TFaultFireEffect_Bespoke*>(OwnerInstance()))
+            effect->Advance(TTime::DeltaTime());
+    }
+};
+static TObjectDef::SRegistrar g_faultfire_reference_builder("FaultFire", MakeWaterReferenceDef<TFaultFireEffect_Bespoke>);
+TWaterReferenceAnimatorBuilder<TFaultFireEffect_Bespoke> g_faultfire_reference_animator_builder("FaultFire");
+}
+
+void TFaultFireEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if (initialized_ || GetMapIndex() < 0 || GetComponent<TFaultFireReferenceComponent>()) return;
+    if (attach_runtime_component && (ObjClass() != OBJCLASS_EFFECT || ObjId() != 0x51753bceu)) return;
+    auto* img = dynamic_cast<T3DImagery*>(GetImagery());
+    if (!img || img->NumObjects()!=1 || img->NumTextures()!=1) return;
+    S3DTex tex = {};
+    img->GetTexture(0, &tex);
+    if (tex.htexture == kInvalidTexture ||
+        !ExtractSubMeshTextureSlot(img, 0, 1, vertices_, indices_) ||
+        vertices_.size()!=4 || indices_.size()!=6) return;
+    // SetupObjects preserves each authored V after a one-time -0.01 shift.
+    for (auto& v : vertices_) v.uv[1] -= 0.01f;
+    texture_=tex.htexture; th_=0.0f; u_offset_=0.0f; sim_accum_ms_=0.0;
+    initialized_=true; runtime_owned_=attach_runtime_component;
+    if (attach_runtime_component) {
+        auto c=std::make_unique<TFaultFireReferenceComponent>();
+        c->Configure(texture_, int32_t(tex.desc.width), int32_t(tex.desc.height),
+                     1, 1, 1, 1.0f, 1.0f, false, true);
+        AddComponent(std::move(c));
+    }
+    const auto pos=IntPos(*this);
+    log_info("[faultfire-runtime] initialized id=%08x map_index=%d origin=(%d,%d,%d) runtime=%d vertices=%zu triangles=%zu",
+             attach_runtime_component ? ObjId() : 0x51753bceu, GetMapIndex(), pos.x,pos.y,pos.z,
+             int(attach_runtime_component),vertices_.size(),indices_.size()/3);
+}
+
+TFaultFireEffect_Bespoke* TFaultFireEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* img=LoadWaterImagery(kFaultFireBespokeImageryPath,"faultfire");
+    if (!img) return nullptr;
+    auto* effect=new TFaultFireEffect_Bespoke(img);
+    SetIntPos(effect, origin);
+    effect->SetMapIndex(MapPane.MakeIndex());
+    effect->ActivateComponents();
+    effect->Initialize(false);
+    if (!effect->initialized_) { delete effect; return nullptr; }
+    return effect;
+}
+
+void TFaultFireEffect_Bespoke::SetNativeDomainForTest(bool enabled)
+{
+    native_domain_ = enabled && !runtime_owned_;
+    if (native_domain_) {
+        const auto position = IntPos(*this);
+        BuildRetailSoftwareOwner(native_owner_, position.x, position.y, position.z,
+                                 uint8_t(IntFacing(*this)));
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT TFaultFireEffect_Bespoke",
+             int(native_domain_));
+}
+
+void TFaultFireEffect_Bespoke::Advance(double elapsed_seconds)
+{
+    if (!initialized_ || !std::isfinite(elapsed_seconds) || elapsed_seconds<=0.0) return;
+    sim_accum_ms_ += elapsed_seconds*1000.0;
+    constexpr double tick_ms=1000.0/24.0;
+    while (sim_accum_ms_+1e-9>=tick_ms) {
+        sim_accum_ms_-=tick_ms;
+        // Native4f1626 keeps the sum in x87 across the comparison and
+        // wrap subtraction; round only the selected final theta to float.
+        const long double next=static_cast<long double>(th_)+0.10000000149011612f;
+        th_=float(next>static_cast<long double>(6.283185308)
+            ? next-static_cast<long double>(6.2831854820251465f) : next);
+        const float du=float(random(2,8))/100.0f;
+        u_offset_+=du; // diagnostic only; rendering reads mutable authored U.
+        // Native4f1690 adds separately to every stored vertex U. Adding an
+        // accumulated scalar at draw time changes rounding for initial U=1.
+        for(auto& vertex:vertices_)vertex.uv[0]+=du;
+        SetCommandDone(false);
+    }
+}
+
+void TFaultFireEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !initialized_) return;
+    hmm_mat4 local={};
+    MtxClear(&local);
+    const hmm_vec3 scale={0.25f,0.25f,1.0f};
+    const hmm_vec3 offset={0.0f,0.0f,32.0f};
+    MtxScale(&local,&scale);
+    MtxRotateZ(&local,float(M_PI/2.0));
+    MtxTranslate(&local,&offset);
+    const auto& world=native_domain_ ? native_owner_ : Transform().Matrix();
+    SQuadDrawItem item={};
+    item.corner_count=3;
+    item.retail_texture=1;
+    item.retail_argb4444=true;
+    item.retail_software_projection=native_domain_;
+    item.key.texture=texture_;
+    item.key.blend=uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode=debug_mode;
+    // Both passes retain identical geometry; the cosine scales V, not size.
+    for (int pass=0;pass<2;++pass) {
+        const float vscale=0.125f*(std::cos(th_+float(pass)*float(M_PI/2.0))+7.0f);
+        for (size_t face=0;face+2<indices_.size();face+=3) {
+            for (int corner=0;corner<3;++corner) {
+                const auto& v=vertices_[indices_[face+corner]];
+                const hmm_vec3 authored={v.pos[0],v.pos[1],v.pos[2]};
+                hmm_vec3 point={},p={};
+                MtxTransform(&local,&authored,&point);
+                MtxTransform(&world,&point,&p);
+                item.world_pos[corner][0]=p.X;
+                item.world_pos[corner][1]=p.Y;
+                item.world_pos[corner][2]=p.Z;
+                item.uv[corner][0]=v.uv[0];
+                item.uv[corner][1]=v.uv[1]*vscale;
+            }
+            Renderer->SubmitFxQuad(item);
+        }
+    }
+}
+
+void TFaultFireEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime());
+    Submit(debug_mode);
+}
+// --- end Wave-3 W3-A Dragon/Fire bespokes
+
+
+// =========================================================================
+// * Wave-3 W3-B — Arrow/projectile family bespoke ports                  *
+// *                                                                      *
+// * Five retail-only effects with NO snapshot source body. Ghidra        *
+// * evidence is THIN:                                                    *
+// *   - arroweffect / queenarrow share cls_0x5b0cfc (decompiled          *
+// *     ctor/dtor/vtbl thunks only — no Animate/Render body); class      *
+// *     attaches to 'rhand' bone of caster (string XREF inside fn        *
+// *     0x503740 at +0xc2 delta); ctor sets mbr_0x114 = 100.0f.          *
+// *   - Sparks has 6 string XREFs but no dedicated class decomp.         *
+// *   - combatflash is spawned via NewObjectByName(type=0x19) from       *
+// *     TCharacter cls_0x5a7b98 method 0x4c8500 at a hit-frame offset    *
+// *     above the character (+0x1e, +0x50, +0x1e). No animator class.   *
+// *   - StrikeEffect uses Misc\Dummy.i3d (placeholder asset) → marker/   *
+// *     audio-only effect, no visible body.                              *
+// *                                                                      *
+// * Each effect ships as a MINIMAL placeholder per protocol:             *
+// *   SpawnForTest loads the named I3D and resolves sub-object 0's       *
+// *   first texture; Tick draws one ScreenAligned Alpha billboard for    *
+// *   the placeholder lifetime, then KillThisEffect. queenarrow reuses   *
+// *   the TArrowEffect_Bespoke class with a red tint variant param.      *
+// *                                                                      *
+// * Status:                                                              *
+// *   arroweffect             stubbed  — Ghidra ctor+asset+bone hint     *
+// *   queenarrow              stubbed  — alias of arroweffect, red tint  *
+// *   Sparks                  stubbed  — asset only, no decomp body      *
+// *   combatflash             stubbed  — asset + spawn-site hint         *
+// *   StrikeEffect            stubbed  — Dummy.i3d marker; draws nothing *
+// =========================================================================
+
+namespace {
+
+// Lightweight shared loader for the W3-B placeholders: tries each candidate
+// path, returns the first texture handle that resolves. Mirrors
+// TryLoadMagicTexture (line 8514) but kept here next to its sole callers so
+// future refactors can collapse / specialize without disturbing M01/M02
+// magic loaders.
+TTextureHandle W3BTryLoadAssetTexture(const char* const* candidate_paths,
+                                      int32_t num_candidates,
+                                      float out_uv_rect[4],
+                                      const char* tag)
+{
+    for (int32_t i = 0; i < num_candidates; ++i)
+    {
+        const int32_t img_id = TObjectImagery::FindImagery(candidate_paths[i]);
+        if (img_id < 0)
+            continue;
+        TObjectImagery* base = TObjectImagery::LoadImagery(img_id);
+        if (!base)
+            continue;
+        T3DImagery* img3d = dynamic_cast<T3DImagery*>(base);
+        if (!img3d)
+        {
+            TObjectImagery::FreeImagery(base);
+            continue;
+        }
+        // Lazy-init poke: NumObjects() triggers texture-slot population.
+        (void)img3d->NumObjects();
+        const int32_t num_tex = img3d->NumTextures();
+        if (num_tex <= 0)
+            continue;
+        S3DTex tex = {};
+        img3d->GetTexture(0, &tex);
+        if (tex.htexture == kInvalidTexture)
+            continue;
+        out_uv_rect[0] = 0.0f;
+        out_uv_rect[1] = 0.0f;
+        out_uv_rect[2] = 1.0f;
+        out_uv_rect[3] = 1.0f;
+        log_info("[%s] resolved imagery='%s' tex=%u", tag,
+                 candidate_paths[i], tex.htexture);
+        return tex.htexture;
+    }
+    log_warn("[%s] no candidate imagery resolved (tried %d paths); will draw "
+             "nothing (W3-B placeholder)",
+             tag, num_candidates);
+    return kInvalidTexture;
+}
+
+}   // namespace
+
+// ----- W3-B-1 TArrowEffect_Bespoke (arroweffect + queenarrow share) ----
+
+TArrowEffect_Bespoke* TArrowEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Asset path verbatim from retail effect inventory (note lowercase 'misc').
+    static const char* kArrowCandidates[] = {
+        "misc\\Arroweffects.I3D",
+        "Misc\\Arroweffects.I3D",
+        "Misc\\arroweffects.i3d",
+    };
+
+    auto* eff = new TArrowEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    eff->texture_ = W3BTryLoadAssetTexture(
+        kArrowCandidates,
+        int32_t(sizeof(kArrowCandidates) / sizeof(*kArrowCandidates)),
+        eff->uv_rect_, "arroweffect");
+    eff->ticks_        = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[arroweffect-bespoke] SpawnForTest_BESPOKE: map_index=%d "
+             "origin=(%d,%d,%d) tex=%u (Ghidra cls_0x5b0cfc: ctor sets "
+             "mbr_0x114=100.0; 'rhand' bone attach — harness has no caster)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TArrowEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kSimTickMs))
+    {
+        sim_accum_ms_ -= double(kSimTickMs);
+        ticks_++;
+        if (ticks_ >= kLifeTicks)
+        {
+            alive_ = false;
+            break;
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_arrow_logged_first_submit = []{
+        log_info("[arroweffect-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_arrow_logged_first_submit;
+
+    // Placeholder: single ScreenAligned Alpha billboard. Real effect is the
+    // arrow trail/impact spark — needs missile-Pulse-driven motion which
+    // isn't available without a richer cls_0x5b0cfc decomp.
+    const S3DPoint& base = IntPos(*this);
+    const float t = float(ticks_) / float(kLifeTicks);
+    const float fade = 1.0f - t;   // simple linear fade-out
+
+    SBillboardDrawItem item = {};
+    item.size_wu[0]      = kBaseSizeWu;
+    item.size_wu[1]      = kBaseSizeWu;
+    item.color_rgba[0]   = tint_rgba_[0];
+    item.color_rgba[1]   = tint_rgba_[1];
+    item.color_rgba[2]   = tint_rgba_[2];
+    item.color_rgba[3]   = tint_rgba_[3] * fade;
+    item.uv_rect[0]      = uv_rect_[0];
+    item.uv_rect[1]      = uv_rect_[1];
+    item.uv_rect[2]      = uv_rect_[2];
+    item.uv_rect[3]      = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-B-3 TSparksEffect_Bespoke ---------------------------------------
+
+TSparksEffect_Bespoke::~TSparksEffect_Bespoke() = default;
+
+TSparksEffect_Bespoke* TSparksEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto burst = TObjectPtr<TSparkEffect>(TSparkEffect::SpawnForTest(origin));
+    if (!burst)
+        return nullptr;
+    auto* eff = new TSparksEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->burst_ = std::move(burst);
+    return eff;
+}
+
+void TSparksEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (burst_)
+        burst_->TickAndSubmitForTest(debug_mode);
+}
+
+#if 0 // Preserved former placeholder: invented tint, grow/fade, size and lifetime.
+TSparksEffect_Bespoke* TSparksEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Asset path verbatim from retail inventory: "Misc\Sparks.I3D".
+    static const char* kSparksCandidates[] = {
+        "Misc\\Sparks.I3D",
+        "misc\\Sparks.I3D",
+        "Misc\\sparks.i3d",
+    };
+
+    auto* eff = new TSparksEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    eff->texture_ = W3BTryLoadAssetTexture(
+        kSparksCandidates,
+        int32_t(sizeof(kSparksCandidates) / sizeof(*kSparksCandidates)),
+        eff->uv_rect_, "Sparks");
+    eff->ticks_        = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[sparks-bespoke] SpawnForTest_BESPOKE: map_index=%d "
+             "origin=(%d,%d,%d) tex=%u (no dedicated cls decomp; placeholder "
+             "single-billboard burst, awaits TStreamerEffect parameterization)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TSparksEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kSimTickMs))
+    {
+        sim_accum_ms_ -= double(kSimTickMs);
+        ticks_++;
+        if (ticks_ >= kLifeTicks)
+        {
+            alive_ = false;
+            break;
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_sparks_logged_first_submit = []{
+        log_info("[sparks-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_sparks_logged_first_submit;
+
+    const S3DPoint& base = IntPos(*this);
+    const float t    = float(ticks_) / float(kLifeTicks);
+    const float fade = 1.0f - t;
+
+    SBillboardDrawItem item = {};
+    item.size_wu[0]      = kBaseSizeWu * (0.6f + 0.4f * t);  // grow over life
+    item.size_wu[1]      = kBaseSizeWu * (0.6f + 0.4f * t);
+    item.color_rgba[0]   = 1.0f;
+    item.color_rgba[1]   = 0.85f;   // warm metallic spark tint
+    item.color_rgba[2]   = 0.45f;
+    item.color_rgba[3]   = fade;
+    item.uv_rect[0]      = uv_rect_[0];
+    item.uv_rect[1]      = uv_rect_[1];
+    item.uv_rect[2]      = uv_rect_[2];
+    item.uv_rect[3]      = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+#endif
+
+// ----- W3-B-4 TCombatFlashEffect_Bespoke ----------------------------------
+
+TCombatFlashEffect_Bespoke* TCombatFlashEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Asset path verbatim from retail inventory: "misc\Impact.i3d".
+    static const char* kCombatFlashCandidates[] = {
+        "misc\\Impact.i3d",
+        "Misc\\Impact.i3d",
+        "Misc\\impact.i3d",
+    };
+
+    auto* eff = new TCombatFlashEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+
+    eff->texture_ = W3BTryLoadAssetTexture(
+        kCombatFlashCandidates,
+        int32_t(sizeof(kCombatFlashCandidates) / sizeof(*kCombatFlashCandidates)),
+        eff->uv_rect_, "combatflash");
+    eff->ticks_        = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[combatflash-bespoke] SpawnForTest_BESPOKE: map_index=%d "
+             "origin=(%d,%d,%d) tex=%u (spawned via TCharacter NewObjectByName "
+             "type=0x19 at pos +(0x1e,0x50,0x1e); placeholder additive flash)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z, eff->texture_);
+    return eff;
+}
+
+void TCombatFlashEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kSimTickMs))
+    {
+        sim_accum_ms_ -= double(kSimTickMs);
+        ticks_++;
+        if (ticks_ >= kLifeTicks)
+        {
+            alive_ = false;
+            break;
+        }
+    }
+
+    if (!alive_ || texture_ == kInvalidTexture)
+        return;
+
+    static const bool s_combatflash_logged_first_submit = []{
+        log_info("[combatflash-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_combatflash_logged_first_submit;
+
+    // Quick bright flash that fades fast; brightest at t=0, gone by kLifeTicks.
+    const S3DPoint& base = IntPos(*this);
+    const float t    = float(ticks_) / float(kLifeTicks);
+    const float fade = (1.0f - t) * (1.0f - t);   // ease-out quadratic
+
+    SBillboardDrawItem item = {};
+    item.size_wu[0]      = kBaseSizeWu * (1.0f + 0.5f * t);  // mild expansion
+    item.size_wu[1]      = kBaseSizeWu * (1.0f + 0.5f * t);
+    item.color_rgba[0]   = 1.0f;
+    item.color_rgba[1]   = 1.0f;
+    item.color_rgba[2]   = 0.85f;   // slight warm bias on hit-flash
+    item.color_rgba[3]   = fade;
+    item.uv_rect[0]      = uv_rect_[0];
+    item.uv_rect[1]      = uv_rect_[1];
+    item.uv_rect[2]      = uv_rect_[2];
+    item.uv_rect[3]      = uv_rect_[3];
+    item.key.texture     = texture_;
+    item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+    item.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode      = EFxLightMode::Unlit;
+    item.orientation     = EFxBillboardOrientation::ScreenAligned;
+    item.debug_mode      = debug_mode;
+    item.world_pos[0]    = float(base.x);
+    item.world_pos[1]    = float(base.y);
+    item.world_pos[2]    = float(base.z);
+    Renderer->SubmitFxBillboard(item);
+}
+
+// ----- W3-B-5 TStrikeEffect_Bespoke (Dummy.i3d marker) --------------------
+
+TStrikeEffect_Bespoke* TStrikeEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    // Asset is Misc\Dummy.i3d — placeholder. We DON'T try to load it;
+    // there's no visible body and the harness should just register a
+    // life-counted no-draw effect so the cycle/IDs are present.
+    auto* eff = new TStrikeEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(eff, origin);
+    eff->SetMapIndex(MapPane.MakeIndex());
+    eff->ActivateComponents();
+    eff->ticks_        = 0;
+    eff->alive_        = true;
+    eff->sim_accum_ms_ = 0.0;
+
+    log_info("[strikeeffect-bespoke] SpawnForTest_BESPOKE: map_index=%d "
+             "origin=(%d,%d,%d) (Misc\\Dummy.i3d = no-imagery marker — draws "
+             "nothing; awaits audio/script binding)",
+             eff->GetMapIndex(), origin.x, origin.y, origin.z);
+    return eff;
+}
+
+void TStrikeEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    (void)debug_mode;
+    // Marker/audio-only — no draw. Just count down lifetime so the harness
+    // recycles the slot.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kSimTickMs))
+    {
+        sim_accum_ms_ -= double(kSimTickMs);
+        ticks_++;
+        if (ticks_ >= kLifeTicks)
+        {
+            alive_ = false;
+            break;
+        }
+    }
+}
+
+// *************************************************************************
+// * Wave 3 batch W3-C: Cave / environment ambient                         *
+// *                                                                       *
+// * Implementations for:                                                  *
+// *   - TGeyserEffect_Bespoke         (sgeyser / fgeyser)                 *
+// *   - TFlameAnimator_Bespoke__cfire (cfire — STUB)                       *
+// *   - TFogEffect_Bespoke__MistFog   (MistFog)                            *
+// *   - TRockStormEffect_Bespoke      (RockStorm)                          *
+// *                                                                       *
+// * Localized-at-end (append) for clean merge with adjacent wave-3 batches.*
+// *************************************************************************
+
+// =========================================================================
+// W03 sgeyser / fgeyser: retail general particle components not ported.
+// =========================================================================
+// Keep preview APIs for the registered harness entries. Do not manufacture
+// evidence with the old guessed periodic eruption, tint, or screen billboard.
+// No runtime builder is registered until the asset tag behavior is recovered.
+
+TGeyserEffect_Bespoke* TGeyserEffect_Bespoke::SpawnForTest_BESPOKE(
+    const S3DPoint& /*origin*/, EVariant variant)
+{
+    const char* type = variant == EVariant::Fire ? "fgeyser" : "sgeyser";
+    const char* asset = variant == EVariant::Fire
+        ? "Cave\\Cavfgeyser.i3d" : "Cave\\Cavsgeyser.i3d";
+    log_error("[geyser-reference] %s preview unavailable: retail %s requires "
+              "unsupported partsys asset tags%s; recover the retail tag "
+              "interpreter before enabling this comparison",
+              type, asset, variant == EVariant::Fire ? " and blendcont litadd" : "");
+    return nullptr;
+}
+
+void TGeyserEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode /*debug_mode*/)
+{
+    // Fail closed even if an external caller directly constructs this shell.
+    // There is no sourced simulation to advance or visual to submit yet.
+}
+
+// =========================================================================
+// W3-C cfire : TFlameAnimator_Bespoke__cfire (STUB)
+// =========================================================================
+//
+// The shipped Misc asset exists: four objects, two textures, and partsys
+// tags for cfire/csparks. This legacy preview lacks their controller binding;
+// keep it unavailable rather than substitute the unrelated Magic flame.
+
+TFlameAnimator_Bespoke__cfire*
+TFlameAnimator_Bespoke__cfire::SpawnForTest_BESPOKE(const S3DPoint& /*origin*/)
+{
+    log_warn("[cfire-bespoke/W3-C] preview unavailable: shipped Misc\\Cfire.i3d "
+             "requires authored cfire/csparks particle-controller binding. "
+             "The asset is present; a Flame animator is not its retail mapping.");
+    return nullptr;
+}
+
+void TFlameAnimator_Bespoke__cfire::TickAndSubmitForTest_BESPOKE(
+    EFxDebugMode /*debug_mode*/)
+{
+    // No-op (paired with the nullptr SpawnForTest above).
+}
+
+// =========================================================================
+// M06 MistFog : TFogEffect_Bespoke__MistFog
+// =========================================================================
+// Snapshot effect_old.cpp:11544-11646; exact retail Misc asset, no tint.
+namespace {
+class TMistFogReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    const char* ComponentName() const override { return "mistfog_reference"; }
+    void Submit(TRenderer&, const TObjectInstance& owner) const override
+    {
+        if (auto* fog = dynamic_cast<const TFogEffect_Bespoke__MistFog*>(&owner))
+            fog->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* fog = dynamic_cast<TFogEffect_Bespoke__MistFog*>(OwnerInstance()))
+            fog->Advance(TTime::DeltaTime());
+    }
+};
+static TObjectDef::SRegistrar g_mistfog_reference_builder("MistFog", MakeWaterReferenceDef<TFogEffect_Bespoke__MistFog>);
+TWaterReferenceAnimatorBuilder<TFogEffect_Bespoke__MistFog> g_mistfog_reference_animator_builder("MistFog");
+} // namespace
+
+TFogEffect_Bespoke__MistFog::~TFogEffect_Bespoke__MistFog()
+{
+    if (Renderer && software_mesh_) Renderer->ReleaseMeshAssetRef(software_mesh_);
+}
+
+bool TFogEffect_Bespoke__MistFog::SubmitSoftware(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !Renderer->UsesRetailSoftwareMeshLighting() ||
+        debug_mode != EFxDebugMode::Normal) return false;
+    if (!software_mesh_) {
+        if (!GetImagery() || authored_vertices_.size()!=4) return true;
+        SMeshVertex vertices[4] = {};
+        for (int i=0;i<4;++i) {
+            const auto& v=authored_vertices_[i];
+            std::memcpy(vertices[i].pos,&v.pos,3*sizeof(float));
+            std::memcpy(vertices[i].normal,&v.normal,3*sizeof(float));
+            vertices[i].uv[0]=v.tu; vertices[i].uv[1]=v.tv;
+        }
+        const uint16_t indices[]={0,1,3,3,2,0};
+        const uint64_t key=0x4d464f4700000000ull ^ uint32_t(GetImagery()->ImageryId());
+        software_mesh_=Renderer->RegisterMeshAsset(key,vertices,4,indices,6,texture_);
+        if (!software_mesh_) return true;
+        Renderer->AddMeshAssetRef(software_mesh_);
+    }
+    for (const auto& puff:smoke_) {
+        hmm_mat4 local={},world={}; MtxClear(&local);
+        const hmm_vec3 scale={puff.size,puff.size,puff.size};
+        const hmm_vec3 position={puff.x,puff.y,puff.z};
+        MtxScale(&local,&scale); MtxTranslate(&local,&position);
+        MtxMultiply(&world,&local,&Transform().Matrix());
+        SHelperMeshSubmit submit={};
+        submit.mesh=software_mesh_; submit.additive_blend=true;
+        submit.retail_lighting=1; submit.retail_positive_face_cull=true;
+        // Common-world Z stretch bridges geometry; original Illuminate's
+        // owner normal matrix has no corresponding axis stretch.
+        submit.retail_normal_z_scale=1.0f/WORLD3D_Z_SCALE;
+        for(int row=0;row<4;++row) for(int col=0;col<4;++col)
+            submit.world[row*4+col]=world.Elements[col][row];
+        submit.sort_depth=world.Elements[3][2];
+        Renderer->SubmitHelperMesh(submit);
+    }
+    return true;
+}
+
+void TFogEffect_Bespoke__MistFog::ResetBall_(int32_t b)
+{
+    // Keep exact draw order: random X, rand VX/VY/VZ, random life, rand size.
+    SMistPuff& s = smoke_[b];
+    s.x = float(random(-32, 32)) + centerx_;
+    s.y = centery_;
+    s.z = 0;
+    s.rot = 0;
+    // Retail 4f28a7..4f2932 multiplies a float reciprocal and keeps the
+    // x87 intermediate until the final float store. Preserve that rounding
+    // on hosts whose float expressions otherwise round at each operation.
+    // All six original draws share the MSVC CRT stream, including raw rand.
+    // Host libc rand/RAND_MAX would split that stream and change live resets.
+    const double inverse_rand_max = double(1.0f / 32767.0f);
+    s.vx = float(double(GameRand()) * inverse_rand_max * 0.5 - 0.25);
+    s.vy = float(double(GameRand()) * inverse_rand_max * 0.5 - 0.25);
+    s.vz = float(double(GameRand()) * inverse_rand_max * 0.5);
+    s.life = random(0, 200);
+    s.size = float(double(GameRand()) * inverse_rand_max * double(2.7f) + double(0.1f));
+}
+
+void TFogEffect_Bespoke__MistFog::Initialize(bool attach_runtime_component)
+{
+    if (initialized_ || GetComponent<TMistFogReferenceComponent>()) return;
+    // Loading/NewObject replaces a provisional identity with its final index.
+    // Wait for lazy animator attachment and a ready authored texture first.
+    if (GetMapIndex() < 0 || (attach_runtime_component &&
+        (ObjClass() != OBJCLASS_EFFECT || ObjId() != 0x180674bau))) return;
+    auto* imagery = dynamic_cast<T3DImagery*>(GetImagery());
+    if (!LoadWaterQuad(imagery, 0, authored_vertices_, texture_)) return;
+    S3DObj object = {};
+    imagery->GetObject(0, &object);
+    if (object.material < 0 || object.material >= imagery->NumMaterials()) return;
+    S3DMat material = {};
+    imagery->GetMaterial(object.material, &material);
+    if (material.texture < 0 || material.texture >= imagery->NumTextures()) return;
+    diffuse_[0] = material.matdesc.diffuse.r;
+    diffuse_[1] = material.matdesc.diffuse.g;
+    diffuse_[2] = material.matdesc.diffuse.b;
+    diffuse_[3] = material.matdesc.diffuse.a;
+    centerx_ = centery_ = 0.0f;
+    for (int32_t i = 0; i < kMistFogNumPuffs; ++i) ResetBall_(i);
+    ticks_ = 0;
+    initialized_ = true;
+    if (!attach_runtime_component) return;
+    auto component = std::make_unique<TMistFogReferenceComponent>();
+    S3DTex texture = {};
+    imagery->GetTexture(material.texture, &texture);
+    component->Configure(texture_, int32_t(texture.desc.width), int32_t(texture.desc.height),
+                         1, 1, 1, 1.0f, 1.0f, false, true);
+    AddComponent(std::move(component));
+    const auto origin = IntPos(*this);
+    log_info("[mistfog-runtime] attached id=%08x map_index=%d origin=(%d,%d,%d) puffs=%d diffuse=(%.3f,%.3f,%.3f,%.3f)",
+             ObjId(), GetMapIndex(), origin.x, origin.y, origin.z, kMistFogNumPuffs,
+             diffuse_[0], diffuse_[1], diffuse_[2], diffuse_[3]);
+}
+
+TFogEffect_Bespoke__MistFog* TFogEffect_Bespoke__MistFog::SpawnForTest_BESPOKE(
+    const S3DPoint& origin)
+{
+    auto* imagery = LoadWaterImagery("Misc\\Mistfog.i3d", "mistfog");
+    if (!imagery) return nullptr;
+    auto* fog = new TFogEffect_Bespoke__MistFog(imagery);
+    SetIntPos(fog, origin);
+    fog->SetMapIndex(MapPane.MakeIndex());
+    fog->ActivateComponents();
+    fog->Initialize(false); // preview alone owns its manual update/submit
+    if (!fog->initialized_) { delete fog; return nullptr; }
+    return fog;
+}
+
+void TFogEffect_Bespoke__MistFog::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer) return;
+    Advance(TTime::DeltaTime());
+    Submit(debug_mode);
+}
+
+void TFogEffect_Bespoke__MistFog::Advance(double elapsed_seconds)
+{
+    if (!initialized_) return;
+    sim_accum_ms_ += elapsed_seconds * 1000.0;
+    while (sim_accum_ms_ + 1e-9 >= kMistFogSimTickMs)
+    {
+        sim_accum_ms_ -= kMistFogSimTickMs;
+        SetCommandDone(false);
+        for (int32_t i = 0; i < kMistFogNumPuffs; ++i)
+        {
+            SMistPuff& s = smoke_[i];
+            s.vz += kMistFogSmokeGrav;
+            s.x += s.vx;
+            s.y += s.vy;
+            if (s.z > 0) s.z += s.vz;
+            else s.z -= 0.008f;
+            s.life++;
+            s.size += 0.02f;
+            if (s.life > 200)
+            {
+                s.size -= 0.2f;
+                if (s.size <= 0.01f) ResetBall_(i);
+            }
+        }
+        ++ticks_;
+    }
+}
+
+void TFogEffect_Bespoke__MistFog::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !initialized_ || texture_ == kInvalidTexture) return;
+    if (SubmitSoftware(debug_mode)) return;
+    SQuadDrawItem item = {};
+    item.key.texture = texture_;
+    // SetAddBlendState: DECALALPHA + ONE/ONE, depth test without writes.
+    // Exact Misc asset is RGB565/no alpha. Do not substitute Magic ARGB or
+    // conflate this with Mist's approximate software alpha-over diagnostic.
+    item.key.blend = uint8_t(EFxBlend::AdditiveStraight);
+    item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
+    item.light_mode = EFxLightMode::Unlit;
+    item.debug_mode = debug_mode;
+    for (int32_t channel = 0; channel < 4; ++channel) item.color_rgba[channel] = diffuse_[channel];
+    const hmm_mat4& world = Transform().Matrix();
+    for (int32_t i = 0; i < kMistFogNumPuffs; ++i)
+    {
+        const SMistPuff& s = smoke_[i];
+        // OBJ3D_SCL1 | OBJ3D_POS2: authored corner * size + local pos.
+        // No billboard-facing rotation, guessed footprint or render skip.
+        for (int32_t corner = 0; corner < 4; ++corner)
+        {
+            const S3DVertex& vertex = authored_vertices_[size_t(corner)];
+            const hmm_vec3 point = vertex.pos * s.size + hmm_vec3{s.x, s.y, s.z};
+            hmm_vec3 transformed = {};
+            MtxTransform(&world, &point, &transformed);
+            item.world_pos[corner][0] = transformed.X;
+            item.world_pos[corner][1] = transformed.Y;
+            item.world_pos[corner][2] = transformed.Z;
+            item.uv[corner][0] = vertex.tu;
+            item.uv[corner][1] = vertex.tv;
+        }
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
+// =========================================================================
+// W3-C RockStorm : TRockStormEffect_Bespoke
+// =========================================================================
+//
+// Faithful direct port of TRockStormAnimator (legacy/effect3.cpp:96-413).
+// First-pass: level=1 only (no spell-target lookup in the harness; level 2
+// requires a real character target with a current position).
+
+TRockStormEffect_Bespoke* TRockStormEffect_Bespoke::SpawnForTest_BESPOKE(
+    const S3DPoint& origin)
+{
+    // Asset Magic\Rocks.I3D — Class.Def:2088 references it but it's not
+    // present in legacy/Imagery/Magic. Try registering; fall back to
+    // procedural untextured render if load fails.
+    static const char* kRockCandidates[] = {
+        "Magic\\Rocks.I3D",
+        "Magic\\rocks.i3d",
+        "magic\\Rocks.I3D",
+    };
+
+    auto* rs = new TRockStormEffect_Bespoke(static_cast<TObjectImagery*>(nullptr));
+    SetIntPos(rs, origin);
+    rs->SetMapIndex(MapPane.MakeIndex());
+    rs->ActivateComponents();
+
+    rs->rock_tex_ = TryLoadMagicTexture(kRockCandidates,
+                                        int32_t(sizeof(kRockCandidates)
+                                               / sizeof(*kRockCandidates)),
+                                        rs->rock_uv_, "rockstorm");
+    // Glow shares the same I3D sub-object texture set; first slot stands
+    // in for both if multi-slot enumeration is unavailable here.
+    rs->glow_tex_ = rs->rock_tex_;
+    for (int32_t i = 0; i < 4; ++i)
+        rs->glow_uv_[i] = rs->rock_uv_[i];
+
+    // legacy/effect3.cpp:123-193 — Initialize. Level 1 path (RockStorm)
+    // since we have no spell variant lookup at harness time.
+    rs->level_ = 1;
+    rs->stage_ = kStageStage1;
+    rs->num_rocks_ = kRockStormMinRocks + random(0, kRockStormVarRocks);
+    rs->target_pos_ = origin;
+    rs->min_radius_ = 8.0f;   // base radius (snapshot derives from target->Radius() + 5)
+    for (int32_t i = 0; i < kRockStormMaxRocks; ++i)
+    {
+        rs->lin_vel_[i] = 0.25f;
+        rs->scl_fac_[i] = 1.0f + float(random(-5, 10)) / 10.0f;
+        rs->ang_[i]     = float(random(0, 359));
+        // level 1 only
+        rs->height_[i]      = -5.0f;
+        rs->dest_height_[i] = float(random(45, 55));
+        rs->radius_[i]      = float(random(50, 60));
+        rs->ang_vel_[i]     = 0.1f + float(random(0, 5)) / 50.0f;
+    }
+    // level 2 slot intentionally untouched (not used at level 1).
+    rs->scl_fac_[kRockStormMaxRocks] = 0.0f;
+    rs->lin_vel_[kRockStormMaxRocks] = 0.0f;
+    rs->height_[kRockStormMaxRocks]  = 0.0f;
+    rs->frameon_ = 0;
+
+    log_info("[rockstorm-bespoke] SpawnForTest_BESPOKE: map_index=%d "
+             "origin=(%d,%d,%d) tex=%u num_rocks=%d level=%d",
+             rs->GetMapIndex(), origin.x, origin.y, origin.z,
+             rs->rock_tex_, rs->num_rocks_, rs->level_);
+    return rs;
+}
+
+void TRockStormEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    if (!Renderer)
+        return;
+
+    // 24Hz sim tick.
+    sim_accum_ms_ += TTime::DeltaTime() * 1000.0;
+    while (sim_accum_ms_ >= double(kRockStormSimTickMs))
+    {
+        sim_accum_ms_ -= double(kRockStormSimTickMs);
+        if (!alive_)
+            break;
+        ++frameon_;
+
+        // legacy/effect3.cpp:195-296 — Animate. Direct port of level 1
+        // state machine. (Level 2 / DAMAGE→spell->Damage(target) require
+        // a target which we don't have in the harness; we still cycle
+        // DAMAGE→STAGE2→DONE for full state coverage.)
+        switch (stage_)
+        {
+            case kStageStart:
+                // level 1 starts at STAGE1; START is a level-2-only ramp.
+                stage_ = kStageStage1;
+                break;
+
+            case kStageStage1:
+            {
+                int32_t i;
+                for (i = 0; i < num_rocks_; ++i)
+                {
+                    ang_[i] += ang_vel_[i];
+                    if (height_[i] < dest_height_[i])
+                    {
+                        height_[i] += lin_vel_[i];
+                        lin_vel_[i] += 0.1f;
+                    }
+                    else
+                    {
+                        radius_[i] -= 0.93f;
+                        ang_vel_[i] += 0.001f;
+                    }
+                }
+                int32_t still_outside = 0;
+                for (i = 0; i < num_rocks_; ++i)
+                {
+                    if (radius_[i] > min_radius_)
+                    {
+                        ++still_outside;
+                        break;
+                    }
+                }
+                if (still_outside == 0)
+                    stage_ = kStageDamage;
+                break;
+            }
+
+            case kStageDamage:
+                // Snapshot calls spell->Damage(target) here. No spell in
+                // harness — just transition.
+                stage_ = kStageStage2;
+                for (int32_t i = 0; i < num_rocks_; ++i)
+                    lin_vel_[i] = 4.0f;
+                break;
+
+            case kStageStage2:
+            {
+                for (int32_t i = 0; i < num_rocks_; ++i)
+                {
+                    if (scl_fac_[i] > 0.001f)
+                        scl_fac_[i] -= 0.05f;
+                    height_[i] += lin_vel_[i];
+                    lin_vel_[i] -= 0.5f;
+                    radius_[i] += 1.0f;
+                }
+                int32_t still_above = 0;
+                for (int32_t i = 0; i < num_rocks_; ++i)
+                {
+                    if (height_[i] > -5.0f)
+                    {
+                        ++still_above;
+                        break;
+                    }
+                }
+                if (still_above == 0)
+                    stage_ = kStageDone;
+                break;
+            }
+
+            case kStageDone:
+                alive_ = false;
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    static const bool s_rockstorm_logged_first_submit = []{
+        log_info("[rockstorm-bespoke] first submit (TickAndSubmit running)");
+        return true;
+    }();
+    (void)s_rockstorm_logged_first_submit;
+
+    if (!alive_)
+        return;
+    if (rock_tex_ == kInvalidTexture)
+        return;   // first-pass: no procedural fallback for rocks; skip draw
+
+    // legacy/effect3.cpp:299-398 — Render port (level 1 path). Each rock
+    // submitted as a ScreenAligned Alpha billboard at the orbital pos;
+    // during STAGE1 also a paired AdditiveStraight glow.
+    const S3DPoint& base = IntPos(*this);
+    const bool draw_glow = (stage_ == kStageStage1);
+
+    for (int32_t i = 0; i < num_rocks_; ++i)
+    {
+        const float rx = radius_[i] * cosf(ang_[i]);
+        const float ry = radius_[i] * sinf(ang_[i]);
+        const float wx = float(target_pos_.x) + rx;
+        const float wy = float(target_pos_.y) + ry;
+        const float wz = float(base.z) + height_[i];
+
+        // ---- Glow (paired, additive, drawn first per snapshot ---------
+        if (draw_glow && glow_tex_ != kInvalidTexture)
+        {
+            // Snapshot glow scl: x = z = scl_fac[i] * 1.7, y depends on
+            // height: <10 -> 7.0 + pos.z=5; else -> scl_fac*1.7.
+            float gx_scl = scl_fac_[i] * 1.7f;
+            float gy_scl;
+            float gz_off;
+            if (height_[i] < 10.0f)
+            {
+                gy_scl = 7.0f;
+                gz_off = 5.0f;
+            }
+            else
+            {
+                gy_scl = scl_fac_[i] * 1.7f;
+                gz_off = 0.0f;
+            }
+            SBillboardDrawItem g = {};
+            g.size_wu[0] = kRockStormGlowSizeWu * gx_scl;
+            g.size_wu[1] = kRockStormGlowSizeWu * gy_scl;
+            g.color_rgba[0] = 0.95f;
+            g.color_rgba[1] = 0.70f;
+            g.color_rgba[2] = 0.35f;
+            g.color_rgba[3] = 1.0f;
+            g.uv_rect[0] = glow_uv_[0];
+            g.uv_rect[1] = glow_uv_[1];
+            g.uv_rect[2] = glow_uv_[2];
+            g.uv_rect[3] = glow_uv_[3];
+            g.key.texture     = glow_tex_;
+            g.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+            g.key.blend       = uint8_t(EFxBlend::AdditiveStraight);
+            g.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+            g.light_mode      = EFxLightMode::Unlit;
+            g.orientation     = EFxBillboardOrientation::ScreenAligned;
+            g.debug_mode      = debug_mode;
+            g.world_pos[0]    = wx;
+            g.world_pos[1]    = wy;
+            g.world_pos[2]    = wz - height_[i] + gz_off;   // glow z pin
+            Renderer->SubmitFxBillboard(g);
+        }
+
+        // ---- Rock (alpha) --------------------------------------------
+        SBillboardDrawItem item = {};
+        const float scl = (scl_fac_[i] > 0.05f) ? scl_fac_[i] : 0.05f;
+        item.size_wu[0] = kRockStormBaseSizeWu * scl;
+        item.size_wu[1] = kRockStormBaseSizeWu * scl;
+        item.color_rgba[0] = 0.65f;
+        item.color_rgba[1] = 0.55f;
+        item.color_rgba[2] = 0.45f;
+        item.color_rgba[3] = 1.0f;
+        item.uv_rect[0] = rock_uv_[0];
+        item.uv_rect[1] = rock_uv_[1];
+        item.uv_rect[2] = rock_uv_[2];
+        item.uv_rect[3] = rock_uv_[3];
+        item.key.texture     = rock_tex_;
+        item.key.pipeline_id = uint16_t(EFxPipeline::Billboard);
+        item.key.blend       = uint8_t(EFxBlend::Alpha);   // SetBlendState
+        item.key.depth_mode  = uint8_t(EFxDepthMode::TestNoWrite);
+        item.light_mode      = EFxLightMode::Unlit;
+        item.orientation     = EFxBillboardOrientation::ScreenAligned;
+        item.debug_mode      = debug_mode;
+        item.world_pos[0]    = wx;
+        item.world_pos[1]    = wy;
+        item.world_pos[2]    = wz;
+        Renderer->SubmitFxBillboard(item);
+    }
+}
+
+// SetVortex: shipped object 0, persistent bob and cached absolute position.
+// Evidence: SETVORTEX_AUTHORED.md; source effect.cpp:5160–5224;
+// retail Render 0x4e6920 corroborates object0 / flags0x400048 / scale0.5.
+namespace {
+class TSetVortexReferenceComponent final : public TFlipbookBillboardComponent
+{
+  public:
+    const char* ComponentName() const override { return "setvortex_reference"; }
+    void Submit(TRenderer&, const TObjectInstance& owner) const override
+    {
+        if (auto* effect = dynamic_cast<const TSetVortexEffect_Bespoke*>(&owner))
+            effect->Submit(DebugMode());
+    }
+  protected:
+    void OnUpdate() override
+    {
+        if (auto* effect = dynamic_cast<TSetVortexEffect_Bespoke*>(OwnerInstance()))
+            effect->Advance(TTime::DeltaTime());
+    }
+};
+static TObjectDef::SRegistrar g_setvortex_reference_builder("SetVortex", MakeWaterReferenceDef<TSetVortexEffect_Bespoke>);
+TWaterReferenceAnimatorBuilder<TSetVortexEffect_Bespoke> g_setvortex_reference_animator_builder("SetVortex");
+}
+
+void TSetVortexEffect_Bespoke::Initialize(bool attach_runtime_component)
+{
+    if (initialized_ || GetMapIndex() < 0 || GetComponent<TSetVortexReferenceComponent>()) return;
+    if (attach_runtime_component && (ObjClass() != OBJCLASS_EFFECT || ObjId() != 0xad92bc15u)) return;
+    auto* img = dynamic_cast<T3DImagery*>(GetImagery());
+    if (!img || img->NumObjects() != 1 || img->NumTextures() != 1) return;
+    S3DObj object = {}; S3DMat material = {}; S3DTex tex = {};
+    img->GetObject(0, &object);
+    if (object.material < 0 || object.material >= img->NumMaterials()) return;
+    img->GetMaterial(object.material, &material);
+    if (material.texture != 0) return;
+    img->GetTexture(material.texture, &tex);
+    const auto& format = tex.desc.pixelFormat;
+    if (tex.desc.width != 32 || tex.desc.height != 32 || format.dwRGBBitCount != 16 ||
+        format.dwRBitMask != 0xf00 || format.dwGBitMask != 0xf0 ||
+        format.dwBBitMask != 0xf || format.dwRGBAlphaBitMask != 0xf000) return;
+    if (tex.htexture == kInvalidTexture || tex.numframes != 1 ||
+        !ExtractSubMeshTextureSlot(img, 0, material.texture + 1, vertices_, indices_) ||
+        vertices_.size() != 12 || indices_.size() != 36) return;
+    texture_ = tex.htexture;
+    diffuse_[0] = material.matdesc.diffuse.r;
+    diffuse_[1] = material.matdesc.diffuse.g;
+    diffuse_[2] = material.matdesc.diffuse.b;
+    diffuse_[3] = material.matdesc.diffuse.a;
+
+    // These are animator-owned absolute coordinates, NOT an owner offset.
+    const auto origin = IntPos(*this);
+    cached_d3d_position_ = {float(origin.x), float(origin.y), RetailSoftwareOwnerZ(origin.z + 30)};
+    current_height_ = 30.0f; direction_ = 1; sim_accum_ms_ = 0.0;
+    SetCommandDone(false);
+    initialized_ = true;
+    if (attach_runtime_component) {
+        auto component = std::make_unique<TSetVortexReferenceComponent>();
+        component->Configure(texture_, int32_t(tex.desc.width), int32_t(tex.desc.height),
+                             1, 1, 1, 1.0f, 1.0f, false, true);
+        AddComponent(std::move(component));
+
+        // Snapshot/retail effect Initialize has a separate optional spell
+        // caller: mark the invoker's teleport destination and replace its old
+        // SetVortex. Editor-created null-spell markers have no such side effect.
+        if (spell) {
+            if (auto* invoker = dynamic_cast<TCharacter*>(spell->GetInvoker())) {
+                invoker->SetTeleportPosition(IntPos(invoker));
+                invoker->SetTeleportLevel(MapPane.GetMapLevel());
+                char name[] = "SetVortex";
+                auto* old = dynamic_cast<TEffect*>(MapPane.FindObject(name, 1));
+                if (old == this) old = dynamic_cast<TEffect*>(MapPane.FindObject(name, 2));
+                if (old && old != this) old->KillThisEffect();
+            }
+        }
+    }
+    log_info("[native-domain] enabled=%d camera_z=0 exact SetVortex cached absolute position", int(StartupVfxNativeDomain));
+    log_info("[setvortex-runtime] initialized id=%08x map_index=%d origin=(%d,%d,%d) runtime=%d vertices=%zu triangles=%zu cached_d3d_z=%.6f",
+             attach_runtime_component ? ObjId() : 0xad92bc15u, GetMapIndex(),
+             origin.x, origin.y, origin.z, int(attach_runtime_component),
+             vertices_.size(), indices_.size() / 3, cached_d3d_position_.Z);
+}
+
+TSetVortexEffect_Bespoke* TSetVortexEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)
+{
+    auto* img = LoadWaterImagery("Magic\\Setvortex.I3D", "setvortex");
+    if (!img) return nullptr;
+    auto* effect = new TSetVortexEffect_Bespoke(img);
+    SetIntPos(effect, origin); effect->SetMapIndex(MapPane.MakeIndex());
+    effect->ActivateComponents(); effect->Initialize(false);
+    if (!effect->initialized_) { delete effect; return nullptr; }
+    return effect;
+}
+
+void TSetVortexEffect_Bespoke::Advance(double elapsed_seconds)
+{
+    if (!initialized_ || !std::isfinite(elapsed_seconds) || elapsed_seconds <= 0.0) return;
+    constexpr double tick_ms = 1000.0 / 24.0;
+    sim_accum_ms_ += elapsed_seconds * 1000.0;
+    while (sim_accum_ms_ + 1e-9 >= tick_ms) {
+        sim_accum_ms_ -= tick_ms;
+        if (direction_ == 1) {
+            cached_d3d_position_.Z += 0.4f;
+            current_height_ += 0.4f;
+            if (current_height_ > 40.0f) direction_ = -1;
+        } else {
+            cached_d3d_position_.Z -= 0.4f;
+            current_height_ -= 0.4f;
+            if (current_height_ < 20.0f) direction_ = 1;
+        }
+        SetCommandDone(false);
+    }
+}
+
+void TSetVortexEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
+{
+    if (!Renderer || !initialized_) return;
+    SQuadDrawItem item = {};
+    item.corner_count = 3; item.retail_texture = 3;
+    item.retail_software_projection = StartupVfxNativeDomain;
+    item.key.texture = texture_;
+    item.key.blend = uint8_t(EFxBlend::Alpha);
+    item.key.depth_mode = uint8_t(EFxDepthMode::TestNoWrite);
+    item.debug_mode = debug_mode;
+    // The existing FX path cannot establish normal/material illumination
+    // parity. Keep authored diffuse, with this gate explicit in the forensic doc.
+    for (int channel = 0; channel < 4; ++channel) item.color_rgba[channel] = diffuse_[channel];
+    const float cached_world_z = StartupVfxNativeDomain ? cached_d3d_position_.Z : REV_FIX_Z_VALUE(cached_d3d_position_.Z);
+    const float local_z_scale = StartupVfxNativeDomain ? 1.0f : WORLD3D_Z_SCALE;
+    for (size_t face = 0; face + 2 < indices_.size(); face += 3) {
+        for (int corner = 0; corner < 3; ++corner) {
+            const auto& v = vertices_[indices_[face + corner]];
+            item.world_pos[corner][0] = cached_d3d_position_.X + v.pos[0] * 0.5f;
+            item.world_pos[corner][1] = cached_d3d_position_.Y + v.pos[1] * 0.5f;
+            item.world_pos[corner][2] = cached_world_z + v.pos[2] * 0.5f * local_z_scale;
+            item.uv[corner][0] = v.uv[0]; item.uv[corner][1] = v.uv[1];
+        }
+        // Original 4e6920 selects Scene mode2: CULL_NONE. Both authored
+        // coincident opposite-facing quads contribute in source order.
+        Renderer->SubmitFxQuad(item);
+    }
+}
+
+void TSetVortexEffect_Bespoke::TickAndSubmitForTest_BESPOKE(EFxDebugMode debug_mode)
+{
+    Advance(TTime::DeltaTime()); Submit(debug_mode);
+}

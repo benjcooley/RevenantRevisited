@@ -33,7 +33,7 @@ POSE=r'''
 
 def run(output):
     output.mkdir(parents=True,exist_ok=False)
-    source=(ROOT/'src/3dimage.cpp').read_text()
+    source=(ROOT/'src/game/imagery/3dimage.cpp').read_text()
     a=source.index('obj.anikeys[d] = new SAniKey[GetAniLength(d)];')
     branch=source[a:source.index('\n            }',a)]
     driver=DRIVER.replace('int main(int argc',COPY.replace('COPY_BRANCH',branch)+'\nint main(int argc')

@@ -21,7 +21,7 @@ GROUND
 };
 '''
 def run(trace,out):
- out.mkdir(parents=True,exist_ok=True);s=(ROOT/'src/effects/funneloriginal.cpp').read_text();advance=function(s,'void Advance(');ground=function(s,'    int Ground(');driver=PRE.replace('GROUND',ground)+advance+r'''
+ out.mkdir(parents=True,exist_ok=True);s=(ROOT/'src/game/effects/legacy/funneloriginal.cpp').read_text();advance=function(s,'void Advance(');ground=function(s,'    int Ground(');driver=PRE.replace('GROUND',ground)+advance+r'''
 int main(){State s;for(int i=0;i<149;++i){Advance(&s,1.0/24.0);auto&o=*s.owner;printf("%d %d %d %d %d %d %d %d\n",i,o.state,o.frame,s.counter,o.pos.x,o.pos.y,o.pos.z,int(bool(o.flags&OF_KILL)));}}
 '''
  p=out/'owner.cpp';p.write_text(driver);exe=out/'owner';q=subprocess.run(['clang++','-std=c++17','-O1','-fsanitize=address,undefined',str(p),'-o',str(exe)],capture_output=True,text=True);(out/'compile.log').write_text(q.stderr)

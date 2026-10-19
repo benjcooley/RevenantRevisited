@@ -1,0 +1,75 @@
+// Fire -- the ambient fire patch (F03): a scatter of ground-flat flame
+// quads, each cycling the Misc\Fire.I3D frame strip on its own phase.
+// Retail TFireEffect / TFireAnimator (snapshot walkcode/effect.cpp:886-991;
+// forensics docs/vfx/INVENTORY.md row F03); comparison baseline is the
+// harness entry TFireEffect in src/effect.cpp.
+//
+// Retail parameters, all per tick at 24 Hz:
+//   count       NUMFIRES = 15 quads (the snapshot loop bound of 10 is the
+//               pre-release WIP bug noted in INVENTORY F03 s7(a))
+//   position    random(0,100) - 50 on x and y, z = 0: a +/-50 wu ground patch
+//   phase       frame counter starts at random(0,20) - 22 = -22..-2 and
+//               advances one per tick; the quad is not drawn while < 0, so
+//               frame 0 shows after 2..22 ticks -- here a spawn delay of
+//               1..21 ticks ahead of the first tick, which takes -1 to 0
+//   cycle       frames 0..30 are drawn (the counter reaches 30, is drawn
+//               once, and re-rolls on the tick after); re-roll = new xy +
+//               new phase, in place
+//   sprite      Misc\Fire.I3D quad, bbox +/-2.5 local, obj->scl = 16:
+//               80 x 80 wu; texture slot 0 is a 33-frame strip of 64x64
+//               frames and `frame` is retail's obj->textureframe pick
+//   transform   rot.x = -pi/2 tips the quad onto the ground (world_xy),
+//               rot.z = -pi/4 is a 45 degree in-plane spin; rot.y = pi flips
+//               the quad's u, which the symmetric flame does not show
+//   blend       SetBlendState() = DECAL: alpha, texture colour only, unlit
+//
+// Position z: retail pins the quads at z = 0; the 4 wu lift below is the
+// harness baseline's (kFireQuadLiftWu) so the decal does not z-fight the
+// test ground plane, not a retail value.
+particles
+{
+    effect Fire
+    {
+        inactive_ttl_pulses = 12
+
+        bucket flames
+        {
+            imagery_path = "Misc\\Fire.I3D"
+            texture_slot = 0
+            // The strip is a frame array on the texture (framehtexs[]),
+            // not a grid on one sheet: one 64x64 texture per frame.
+            atlas_cols = 1
+            atlas_rows = 1
+            atlas_frames = 33
+            width = 80
+            height = 80
+            blend_mode = "alpha"
+            light_mode = "unlit"
+            depth_mode = "test_no_write"
+            orientation = "world_xy"
+
+            spawn_count = 15
+            spawn_delay_min = 1
+            spawn_delay_max = 21
+            tick_hz = 24
+            default_life = 0
+
+            // rot lane 0 is the in-plane spin the renderer reads for a
+            // world_xy quad (retail obj->rot.z = -pi/4).
+            spawn_expr = "
+                pos = emit_pos + vec3(rand(-50, 50), rand(-50, 50), 4);
+                scale = vec3(80, 80, 1);
+                rot.x = -0.7853982;
+                frame = -1;
+                color = vec4(1, 1, 1, 1);
+            "
+
+            tick_expr = "
+                frame = frame + 1;
+            "
+
+            // Drawn through frame 30; the counter at 31 re-rolls the quad.
+            kill_expr = "step(31, frame)"
+        }
+    }
+}

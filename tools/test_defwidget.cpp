@@ -3,7 +3,7 @@
 // *   test_defwidget.cpp - which DEF widgets take a click (src/defpane.h)  *
 // *************************************************************************
 
-#include "../src/defpane.h"
+#include "../src/game/ui/defpane.h"
 
 #include <gtest/gtest.h>
 

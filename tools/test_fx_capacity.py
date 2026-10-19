@@ -6,7 +6,7 @@ This checks CPU packing and its upload gate, not GPU output.
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
-source=(root/'src/renderer.cpp').read_text()
+source=(root/'src/engine/render/renderer.cpp').read_text()
 start=source.index('        std::vector<float> scratch;',source.index('    // ---- Strips',source.index('void TRenderer::DrainFxQueue()')))
 end=source.index('        if (!scratch.empty() && int32_t(scratch.size() / kFxStripVertexFloats) <= kMaxFxStripVerts)',start)
 packing=source[start:end]

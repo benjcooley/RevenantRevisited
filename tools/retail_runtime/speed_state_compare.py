@@ -70,7 +70,7 @@ def compare(preflight, output):
     binary = output/'state_driver'
     command = ['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined',
         '-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),str(source),
-        str(ROOT/'src/authoredpartsys.cpp'),str(ROOT/'src/partsysdefinition.cpp'),'-o',str(binary)]
+        str(ROOT/'src/engine/fx/authoredpartsys.cpp'),str(ROOT/'src/engine/fx/partsysdefinition.cpp'),'-o',str(binary)]
     built = subprocess.run(command,capture_output=True,text=True)
     (output/'compile.log').write_text(built.stdout+built.stderr)
     if built.returncode:
@@ -110,7 +110,7 @@ def compare(preflight, output):
         native_capacity=native['capacity'],quality=native.get('quality',0),error_count=len(errors),errors=errors[:100],
         maximum_absolute_error=max_error,ignored_never_born_defaults=ignored,
         native_full_parser_initialize=True,original_emitter_decode_matrix=True,
-        production_sources={p:sha(ROOT/p)for p in('src/authoredpartsys.cpp','src/partsysdefinition.cpp','src/authoredpartsys.h')},
+        production_sources={p:sha(ROOT/p)for p in('src/engine/fx/authoredpartsys.cpp','src/engine/fx/partsysdefinition.cpp','src/engine/fx/authoredpartsys.h')},
         generated_source_sha256=sha(source),binary_sha256=sha(binary),probe_sha256=sha(__file__),
         sanitizers='ASan/UBSan',source_edits=False,new_rendered_ab_cases=0,accepted=False,
         scope='Whole native parser/Initialize/Pulse+live RenderSample against actual compiled production parser/State; '

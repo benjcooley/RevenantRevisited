@@ -1,0 +1,241 @@
+// *************************************************************************
+// *                         Cinematix Revenant                            *
+// *                    Copyright (C) 1998 Cinematix                       *
+// *                complexobj.h - TComplexObject module                   *
+// *************************************************************************
+
+#ifndef _COMPLEXOBJ_H
+#define _COMPLEXOBJ_H
+
+#ifndef _REVENANT_H
+#include "game/app/revenant.h"
+#endif
+
+#ifndef _OBJECT_H
+#include "game/object/object.h"
+#endif
+
+// Command states, as retail's resolvers, TryCommand and ForceCommand return
+// them and UpdateAction reads them (0x004c3260, 0x004db1d0). The 1998 set
+// (pending 0, executing 1, completed 2) is gone: retail's 2 is executing.
+constexpr int32_t COM_DONE = 0;         // Done, or no opinion: UpdateAction decides
+constexpr int32_t COM_EXECUTING = 2;    // Being executed, or waiting its turn
+constexpr int32_t COM_IMPOSSIBLE = 3;   // Can't get to this state from here
+
+// Animate action (the default)
+typedef enum {
+    ACTION_NONE,
+    ACTION_ANIMATE,
+    ACTION_MOVE,
+    ACTION_COMBAT,
+    ACTION_COMBATMOVE,
+    ACTION_COMBATLEAP,
+    ACTION_COLLAPSE,
+    ACTION_ATTACK,
+    ACTION_BLOCK,
+    ACTION_DODGE,
+    ACTION_MISS,
+    ACTION_INVOKE,
+    ACTION_IMPACT,
+    ACTION_STUN,
+    ACTION_KNOCKDOWN,
+    ACTION_FLYBACK,
+    ACTION_SAY,
+    ACTION_PIVOT,
+    ACTION_PULL,
+    ACTION_DEAD,
+    ACTION_PULP,
+    ACTION_BURN,
+    ACTION_FLAIL,
+    ACTION_SLEEP,
+    ACTION_LEAP,
+    ACTION_BOW,
+    ACTION_BOWMOVE,
+    ACTION_BOWAIM,
+    ACTION_BOWSHOOT,
+} ACTION;
+
+// Note: Please define derived class actions in increments of 100 for each 
+// derived class (i.e. CHARACTER 100-199, PLAYER 200-299
+
+// Action block - data about a desired or executing object action (state)
+_CLASSDEF(TActionBlock)
+class TActionBlock
+{
+    // !!!!***** WARNING *****!!!! DO NOT PUT VIRTUAL FUNCTIONS IN THIS OBJECT!!!
+    // !!!! --- THIS MEANS YOU!!  !!!!
+
+  public:
+    TActionBlock() { ClearBlock(); }
+    TActionBlock(const char *n, ACTION a = ACTION_ANIMATE);               // Animation/action
+    TActionBlock(const char *n, const char *str, ACTION a = ACTION_ANIMATE);    // Animation+string/action
+    TActionBlock(TActionBlock &ab, const char *str = nullptr, ACTION = ACTION_NONE); // Copies another action block
+    
+    ~TActionBlock() { if (destroyedSeam) destroyedSeam(this); if (data) free(data); }
+    using DestroyedSeam = void (*)(const TActionBlock* ab);
+    static inline DestroyedSeam destroyedSeam = nullptr;
+      // Retail A/B fixtures only: told as a block goes (a case's dumps name
+      // the blocks it began with by address, which a new block may reuse)
+
+    bool Is(const char *s) const;           // Multipurpose match (?=any one char, *=0 or more chars, #=any num, [xx]=any one char in braces)
+    bool Is(ACTION a) const { return action == a; } // Is an action
+    bool IsRight(const char *state) const;  // Is left step for movement
+    bool IsLeft(const char *state) const;   // Is right step for movement
+    bool IsStep(const char *state) const;   // Is step for movement
+    bool IsOneOf(const char *state) const;  // true if state is one of the master state (i.e. "attack1" is one of "attack")
+    bool IsPartOf(const char *prefix, const char *state = nullptr) const; // true if state has the given prefix and state name, (doesn't care about suffix)
+    void SwapRoot(const char *root, const char *newroot);  // Swaps the root part of the name with a new root
+
+    int32_t StateNum() const;             // Returns number of state (i.e. 1 for "attack1")
+    void ClearBlock();                    // Clears the action block
+
+    ACTION action;                        // Action id (what we're doing)
+    char name[RESNAMELEN];                // Name of state
+    int32_t frame;                        // Frame number to start on when command begins
+    int32_t wait;                         // Delay for current command
+    int32_t angle, moveangle, turnrate;   // Angle of movement and turn rate
+    S3DPoint target;                      // Target location for movement
+    TObjectInstance* obj;                 // Target object for action
+    PSCharAttackData attack;              // Attack info (if is attack/impact/death/stun/knockdown action)
+    PSCharAttackImpact impact;            // Impact info (if is attack/impact/death/stun/knockdown action)
+    int32_t damage;                       // Damage attack will do (if hits)
+    int32_t tohit = 0;                    // Attack's to-hit, fixed when chosen (retail +0x54, DoAttack 0x004d2120)
+    int32_t roll = 0;                     // Attack's 1..100 roll, fixed when chosen (retail +0x58)
+    void *data;                           // Data field (such as text for say)
+    union
+    {
+      uint32_t flags;
+      struct
+      {
+        uint32_t firsttime : 1;     // If this is the first time through
+        uint32_t transition : 1;    // If currently transitioning to this state
+        uint32_t forced : 1;        // Set without its transition animation (retail 0x4, ForceCommand)
+        uint32_t priority : 1;      // Action can't be changed by calling SetDesired() until played
+        uint32_t interrupt : 1;     // Interrupts current doing animation unless doing has priority
+        uint32_t nowaitdone : 1;    // Allows desired to interrupt this action
+        uint32_t dontforce : 1;     // Don't force the animation if transition doesn't exist
+        uint32_t stop : 1;          // Abort this action
+        uint32_t waitpivot : 1;     // For movenent actions, wait until pivot done before moving
+        uint32_t noroot : 1;        // Don't use this as a root state (even if playing a root animation)
+        uint32_t loop : 1;          // Loop this command
+        uint32_t walkto : 1;        // A Goto's walk: its arrival picks up the Goto's item (retail +0x60 bit 0x1000)
+      };
+    };
+};
+
+// Helper functions to make it easy to make state names
+const char *StName(const char *name, int32_t num);
+char *StName(const char *name, const char *str);
+
+// TComplexObject adds the state transition code to TObjectInstance.
+// It is not intended for use as a seperate object class any more than
+// TObjectInstance, but rather as a parent class in order to give certain
+// object classes advanced state functionality.
+
+_CLASSDEF(TComplexObject)
+class TComplexObject : public TObjectInstance
+{
+    friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
+    friend class TLegacySerialize;
+  public:
+    void ClearComplexObj();
+
+    TComplexObject(TObjectImagery* newim) : TObjectInstance(newim) { ClearComplexObj(); }
+    TComplexObject(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) { ClearComplexObj(); }
+
+    virtual void Pulse();
+      // Main pulse (done before frame is drawn)
+
+    bool IsInRoot() { return (doing == root); }
+    bool IsIdleInRoot() const { return doing && doing == root && desired == root && !doing->transition; }
+        // REVSYNC: the speech wait (0x00492d70 type 8) -- back in the root state, nothing
+        // else desired, not transitioning
+        // Returns whether the object is in their root state or not
+
+    void Try(const char *state);
+        // REVSYNC: 0x004111a0 -- wants the given state (an ANIMATE block facing
+        // the facing); a refused one is dropped
+    int32_t Force(const char *state);
+        // REVSYNC: 0x00429990 -- forces the given state, unless the doing block
+        // holds priority over a desired one (COM_EXECUTING then)
+    // this is a hack               ---v
+    bool IsDoing(const char *state) const { return doing ? doing->Is(state) : false; }
+        // Returns true if currently doing the given state
+    bool IsDesired(const char *state) const { return desired ? desired->Is(state) : false; }
+        // Returns true if the desired state matches the given state
+    bool IsRoot(const char *state) const { return root ? root->Is(state) : false; }
+        // Returns true if the desired state matches the given state
+    // this is a hack               ---v
+    bool IsDoing(ACTION action) const { return doing ? doing->action == action : false; }
+        // Returns true if currently doing the given state
+    bool IsDesired(ACTION action) const { return desired ? desired->action == action : false; }
+        // Returns true if the desired state matches the given state
+    bool IsRoot(ACTION action) const { return root ? root->action == action : false; }
+        // Returns true if the desired state matches the given state
+    virtual bool HasActionAni(const char *name, const char *from = nullptr)
+       { if (!*name) return false; 
+           else if (FindState(name) >= 0) return true; 
+           else return FindTransitionState(from?from:root->name, name) >= 0; }
+        // Returns true if the object supports the given action with either a state
+        // which matches the action, or a transition to that action from the
+        // 'from' state or the root state if 'from' is nullptr.  If this function returns
+        // true, the action is garanteed to have an animation to play.
+    const char* GetState() { return (const char*) doing->name; }
+        // return the state name that the object is doing
+    const TActionBlock* RootBlock() const { return root; }
+    const TActionBlock* DoingBlock() const { return doing; }
+    const TActionBlock* DesiredBlock() const { return desired; }
+        // Read-only views of the three action blocks (traces, debug panes)
+    int32_t DoingSince() const { return doingsince; }
+        // The game frame (TPlayScreen::GameFrame) the doing block started in
+    virtual void Notify(int32_t notify, void *ptr);
+        // Notify Action (check root,desired, and doing for deleted target obj)
+
+
+
+  protected:
+    virtual void UpdateAction(int32_t bits = 0);
+      // Called by pulse() to update the current action block
+    static constexpr uint32_t kCommandNoIncidentals = 0x1;
+      // TryCommand/ForceCommand flag (retail's third argument): use each state's
+      // 100% variant, never a random "NN:" one (an incidental animation)
+    virtual int32_t TryCommand(PTActionBlock ab, int32_t bits = 0, uint32_t flags = 0);
+      // Main command function - attempt to go to desired state
+    virtual int32_t ForceCommand(PTActionBlock ab, int32_t bits = 0, uint32_t flags = 0);
+      // Called in some special cases to force a new state - be careful with this one
+    virtual PTActionBlock GetRoot() { return root; }
+      // Gets the current root action block
+    virtual void SetRoot(PTActionBlock ab);
+      // Set root to ab and and update pointers
+    virtual PTActionBlock GetDoing() { return doing; }
+      // Gets the current doing action block
+    virtual void SetDoing(PTActionBlock ab);
+      // Set doing to ab and update pointers
+    virtual PTActionBlock GetDesired() { return desired; }
+      // Gets the current desired action block
+    virtual bool SetDesired(PTActionBlock ab, uint32_t flags = 0);
+        // False when refused (a block still waits while doing has priority);
+        // the caller then still owns `ab`
+      // Set desired pointer and update pointers
+    void DropUnheld(PTActionBlock ab)
+        { if (ab && ab != root && ab != doing && ab != desired) delete ab; }
+      // Frees a block that isn't the root, doing or desired one: what a
+      // refused SetDesired or ForceCommand leaves with its caller
+    virtual bool IsFinalState() { return false; }
+      // Returns whether character is in their last days
+
+    // Resolve functions - redefine in derived classes for new or different functionality
+    virtual int32_t ResolveAction(int32_t bits = 0);
+      // Calls various resolve functions (very object-specific)
+
+    virtual const char *DefaultRootState() { return "still"; }
+      // Returns the default root state for this object - redefine as necessary
+
+    // Pointers for the state changes
+    PTActionBlock doing;        // Pointer to what they are currently doing
+    PTActionBlock desired;      // Pointer to what they *want* to be doing
+    PTActionBlock root;         // Root state (return here by default)
+    int32_t doingsince = 0;     // GameFrame() when doing became the block it is
+};
+
+#endif

@@ -1,4 +1,4 @@
-"""Retail TWeaponSwipe vs src/weaponswipe.cpp, with negative controls.
+"""Retail TWeaponSwipe vs src/game/effects/weaponswipe.cpp, with negative controls.
 
 Run with the retail venv:
     $PY tools/retail_runtime/test_weapon_swipe.py
@@ -10,7 +10,7 @@ import unittest
 import weapon_swipe_probe as probe
 
 EXE = probe.ROOT / 'recon/retail_asm/baseline/Revenant.rebuilt.exe'
-SOURCE = probe.ROOT / 'src/weaponswipe.cpp'
+SOURCE = probe.ROOT / 'src/game/effects/weaponswipe.cpp'
 
 
 def mutated(directory: Path, old: str, new: str) -> Path:
