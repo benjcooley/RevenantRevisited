@@ -20,7 +20,7 @@ class TContainer : public TObjectInstance
 {
   public:
     TContainer(TObjectImagery* newim) : TObjectInstance(newim) { }
-    TContainer(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { }
+    TContainer(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) { }
 
     bool Use(TObjectInstance* user, int32_t with = -1) override;
         // REVSYNC: 0x004dc180 (INVCONTAINER's too); in the user's inventory,
@@ -71,14 +71,14 @@ class TContainer : public TObjectInstance
     int32_t regencursor = 0;    // retail +0xe0: the item a Regen container hands out next
 };
 
-DEFINE_BUILDER("CONTAINER", TContainer)
+DEFINE_OBJECT_DEF("CONTAINER", TContainer)
 
 // A rack of vials: a container whose contents are never saved.
 class TVialRack : public TContainer
 {
   public:
     TVialRack(TObjectImagery* newim) : TContainer(newim) {}
-    TVialRack(SObjectDef* def, TObjectImagery* newim) : TContainer(def, newim) {}
+    TVialRack(SObjectState* def, TObjectImagery* newim) : TContainer(def, newim) {}
 
     bool Use(TObjectInstance* user, int32_t with = -1) override;
     int32_t CursorType(TObjectInstance* inst = nullptr) override;

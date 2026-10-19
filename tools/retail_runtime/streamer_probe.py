@@ -69,8 +69,8 @@ struct TRenderer{std::vector<SQuadDrawItem>draws;std::vector<SMeshVertex>vertice
  if((sx[1]-sx[0])*(sy[2]-sy[0])<(sx[2]-sx[0])*(sy[1]-sy[0]))continue;draws.push_back(d);}}
 };
 TRenderer renderer;TRenderer*Renderer=&renderer;
-struct TObjectImagery{};struct SObjectDef{};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
-struct TEffect{World world;int kill_count=0;TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual~TEffect()=default;
+struct TObjectImagery{};struct SObjectState{};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
+struct TEffect{World world;int kill_count=0;TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};virtual~TEffect()=default;
  virtual void OffScreen(){};void KillThisEffect(){++kill_count;}void SetCommandDone(bool){};int GetFace()const{return 0;}
  const World&Transform()const{return world;}};
 '''

@@ -10,7 +10,7 @@
 #include "game/world/mappane.h"
 #include "game/object/player.h"
 
-REGISTER_BUILDER(TArmor)
+REGISTER_OBJECT_DEF(TArmor)
 
 TObjectClass ArmorClass("ARMOR", OBJCLASS_ARMOR, 0);
 

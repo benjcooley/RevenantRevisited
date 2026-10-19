@@ -26,7 +26,7 @@ class TInvContainer : public TContainer
 {
   public:
     TInvContainer(TObjectImagery* newim) : TContainer(newim) {}
-    TInvContainer(SObjectDef* def, TObjectImagery* newim) : TContainer(def, newim) {}
+    TInvContainer(SObjectState* def, TObjectImagery* newim) : TContainer(def, newim) {}
 };
 
-DEFINE_BUILDER("INVCONTAINER", TInvContainer)
+DEFINE_OBJECT_DEF("INVCONTAINER", TInvContainer)

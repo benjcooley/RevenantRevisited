@@ -12,5 +12,5 @@
 #include "game/object/potion.h"
 #include "game/object/object.h"
 
-REGISTER_BUILDER(TPotion)
+REGISTER_OBJECT_DEF(TPotion)
 TObjectClass PotionClass("POTION", OBJCLASS_POTION, 0, &FoodClass);  // retail: based on FOOD

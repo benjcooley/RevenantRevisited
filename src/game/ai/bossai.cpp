@@ -44,7 +44,7 @@ bool NameIs(const char* name, const char* wanted)
 // REVSYNC: 0x004c9af0 -- an effect of `type` at `pos`, on the pane's level.
 void MakeEffect(const char* type, const S3DPoint& pos)
 {
-    SObjectDef def{};
+    SObjectState def{};
     def.objtype = static_cast<short>(TObjectClass::GetClass(OBJCLASS_EFFECT)->FindObjType(type));
     if (def.objtype < 0)
         return;
@@ -618,7 +618,7 @@ void TCharacter::SolifugeBrood(SSolifugeState& s)
             continue;
         const char* type = slot == 0 ? (random(0, 1) ? "Arakna" : "Recluse")
                                      : (random(0, 1) ? "Araknid" : "Artikulid");
-        SObjectDef def{};
+        SObjectState def{};
         int32_t index = 0;
         TObjectInstance* made = nullptr;
         def.objtype = static_cast<short>(TObjectClass::GetClass(OBJCLASS_CHARACTER)->FindObjType(type));

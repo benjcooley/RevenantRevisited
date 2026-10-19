@@ -33,7 +33,7 @@ State* Spawn(const S3DPoint& origin)
     const int32_t type = effect_class ? effect_class->FindObjType(kBloodTypeId) : -1;
     if (type < 0) return nullptr;
     auto context = std::make_unique<State>();
-    SObjectDef definition = {};
+    SObjectState definition = {};
     definition.objclass = OBJCLASS_EFFECT;
     definition.objtype = short(type);
     definition.pos = origin;

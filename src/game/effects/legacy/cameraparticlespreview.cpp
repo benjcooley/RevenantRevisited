@@ -30,7 +30,7 @@ State* Spawn(const S3DPoint& origin,uint32_t type_id)
     auto state=std::make_unique<State>();
     auto* cl=TObjectClass::GetClass(OBJCLASS_EFFECT);
     const int type=cl?cl->FindObjType(type_id):-1;if(type<0)return nullptr;
-    SObjectDef definition={};definition.objclass=OBJCLASS_EFFECT;definition.objtype=short(type);definition.pos=origin;
+    SObjectState definition={};definition.objclass=OBJCLASS_EFFECT;definition.objtype=short(type);definition.pos=origin;
     state->owner.reset(cl->NewObject(&definition));auto* owner=state->owner.get();
     if(!owner || owner->ObjId()!=type_id || owner->GetState()!=0 || !dynamic_cast<TEffect*>(owner))return nullptr;
     state->identity=owner;owner->OnScreen();

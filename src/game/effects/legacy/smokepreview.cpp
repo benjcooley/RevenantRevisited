@@ -13,7 +13,7 @@
 namespace smoke_preview {
 struct State {TObjectPtr<TObjectInstance>owner;retail_smoke::State core;MeshHandle mesh=0;double accumulator=0;int64_t rendered=-1;~State(){if(Renderer&&mesh)Renderer->ReleaseMeshAssetRef(mesh);}};
 State* Spawn(const S3DPoint&origin){
- if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);int type=cl?cl->FindObjType(0x224a5cccu):-1;if(type<0)return nullptr;SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));auto*im=s->owner?dynamic_cast<T3DImagery*>(s->owner->GetImagery()):nullptr;
+ if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);int type=cl?cl->FindObjType(0x224a5cccu):-1;if(type<0)return nullptr;SObjectState d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));auto*im=s->owner?dynamic_cast<T3DImagery*>(s->owner->GetImagery()):nullptr;
  if(!im||s->owner->ObjId()!=0x224a5cccu||im->NumStates()!=3||!smoke_legacy::Matches(im->GetResFilename(),static_cast<SOld3DImageryBody*>(im->GetBody()),im->GetResSize(),im->NumStates(),im->GetAniLength(0),im->GetAniLength(1),im->GetAniLength(2),im->GetAniFlags(0)))return nullptr;s->owner->OnScreen();
  std::vector<SMeshVertex>v;std::vector<uint16_t>indices;if(!ExtractSubMeshTextureSlot(im,0,1,v,indices)||v.size()!=4||indices.size()!=6||im->GetTextureHandle(0)==kInvalidTexture)return nullptr;
  s->mesh=Renderer->RegisterMeshAsset(0x534d4f4b45000000ull,v.data(),4,indices.data(),6,im->GetTextureHandle(0));if(!s->mesh)return nullptr;Renderer->AddMeshAssetRef(s->mesh);

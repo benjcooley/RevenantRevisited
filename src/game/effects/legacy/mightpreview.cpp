@@ -12,7 +12,7 @@ struct State{TObjectPtr<TObjectInstance>owner;TSafeRef<>identity;double accumula
 State*Spawn(const S3DPoint&origin){
  if(!Renderer)return nullptr;auto c=std::make_unique<State>();auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);
  const int type=cl?cl->FindObjType(0x5be39ae0u):-1;if(type<0)return nullptr;
- SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;c->owner.reset(cl->NewObject(&d));
+ SObjectState d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;c->owner.reset(cl->NewObject(&d));
  auto*owner=c->owner.get();if(!owner || owner->ObjId()!=0x5be39ae0u || owner->GetMapIndex()<=0 || !dynamic_cast<TEffect*>(owner))return nullptr;
  c->identity=owner;owner->OnScreen();auto*im=dynamic_cast<T3DImagery*>(owner->GetImagery());auto*a=dynamic_cast<T3DAnimator*>(owner->GetAnimator());
  if(!im || !a || !im->HasRetailMightPartSysProfile() || a->PartSysUnsupported() || a->PartSysControllerCount()!=1)return nullptr;

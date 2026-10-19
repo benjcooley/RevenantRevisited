@@ -40,7 +40,7 @@ class TWeapon : public TObjectInstance
     friend class TLegacySerialize;
   public:
     TWeapon(TObjectImagery* newim) : TObjectInstance(newim) { ClearWeapon(); }
-    TWeapon(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { ClearWeapon(); }
+    TWeapon(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) { ClearWeapon(); }
 
     _NODEFAULTCONS(TWeapon);
 
@@ -65,4 +65,4 @@ class TWeapon : public TObjectInstance
     int32_t poison;             // how much posion is currently on the blade
 };
 
-DEFINE_BUILDER("WEAPON", TWeapon)
+DEFINE_OBJECT_DEF("WEAPON", TWeapon)

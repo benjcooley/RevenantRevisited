@@ -425,11 +425,11 @@ class TMapPane : public TPane
   // Add/Remove objects
     int32_t MakeIndex();
       // Makes a unique id map index for an object
-    int32_t NewObject(SObjectDef* def, int32_t imagery = -1);
+    int32_t NewObject(SObjectState* def, int32_t imagery = -1);
       // REVSYNC: TMapPane::NewObject @ 0x00450e40 -- a new object from `def`
       // with that registered imagery (-1: its type's), put in the map; its
       // map index, or -1
-    using NewObjectSeam = int32_t (*)(SObjectDef* def, int32_t imagery);
+    using NewObjectSeam = int32_t (*)(SObjectState* def, int32_t imagery);
     static inline NewObjectSeam newObjectSeam = nullptr;
       // Retail A/B fixtures only: when set, it answers NewObject: the def
       // recorded, the id it gives returned

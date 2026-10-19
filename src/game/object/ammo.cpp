@@ -25,7 +25,7 @@
 
 extern TObjectClass EffectClass;
 
-REGISTER_BUILDER(TAmmo)
+REGISTER_OBJECT_DEF(TAmmo)
 TObjectClass AmmoClass("AMMO", OBJCLASS_AMMO, 0);
 
 // Hard coded class stats (retail's, 0x004bf120..0x004bf2a0)
@@ -346,7 +346,7 @@ void TAmmo::IceAround()
         if (!c || stricmp(c->GetTypeName(), "Solifuge") != 0 || c == Player || c->Health() <= 0 ||
             c->InteractiveLocked() || strstr(c->DoingName(), "skywalk"))
             continue;
-        SObjectDef def{};
+        SObjectState def{};
         def.objclass = OBJCLASS_EFFECT;
         def.objtype = EffectClass.FindObjType("Iced");
         def.level = MapPane.GetMapLevel();

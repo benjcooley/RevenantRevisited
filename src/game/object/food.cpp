@@ -21,7 +21,7 @@
 
 #include <vector>
 
-REGISTER_BUILDER(TFood)
+REGISTER_OBJECT_DEF(TFood)
 
 TObjectClass FoodClass("FOOD", OBJCLASS_FOOD, 0);
 

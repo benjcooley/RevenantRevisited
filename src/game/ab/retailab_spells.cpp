@@ -364,7 +364,7 @@ void BuildInventory(TObjectInstance* owner, const JsonValue& items)
         const bool plain = spec.GetKind() == JsonValue::Kind::String;
         const std::string name = plain ? spec.Str() : spec["name"].Str();
         const std::string type = (!plain && spec.Has("type")) ? spec["type"].Str() : name;
-        SObjectDef def{};
+        SObjectState def{};
         def.objclass = (short)(plain ? 0 : spec["class"].Int(0));
         TObjectClass* cl = TObjectClass::GetClass(def.objclass);
         if (!cl)
@@ -860,7 +860,7 @@ void StatRecord(const std::string& who, const char* stat, int32_t value)
 class TCaseArrow : public TAmmo
 {
   public:
-    TCaseArrow(SObjectDef* def, TObjectImagery* im, const JsonValue& spec)
+    TCaseArrow(SObjectState* def, TObjectImagery* im, const JsonValue& spec)
         : TAmmo(def, im), who(spec.Has("name") ? spec["name"].Str() : "arrow"),
           magictype((int32_t)spec["magictype"].Int()), damagemod((int32_t)spec["damagemod"].Int())
     {
@@ -890,7 +890,7 @@ class TCaseArrow : public TAmmo
 class TCaseItem : public TObjectInstance
 {
   public:
-    TCaseItem(SObjectDef* def, TObjectImagery* im, const JsonValue& spec) : TObjectInstance(def, im)
+    TCaseItem(SObjectState* def, TObjectImagery* im, const JsonValue& spec) : TObjectInstance(def, im)
     {
         who = spec["name"].Str();
         for (const auto& [k, v] : spec.Members())
@@ -917,9 +917,9 @@ class TCaseItem : public TObjectInstance
     std::map<std::string, int32_t> answers;
 };
 
-SObjectDef ItemDef(int32_t objclass, const std::string& type)
+SObjectState ItemDef(int32_t objclass, const std::string& type)
 {
-    SObjectDef def{};
+    SObjectState def{};
     def.objclass = (short)objclass;
     TObjectClass* cl = TObjectClass::GetClass(objclass);
     if (!cl)
@@ -976,10 +976,10 @@ std::string ImageryName(const char* path)
 }
 
 // NewObject's record: the def and the imagery asked for (-1, or its file).
-void WriteNewObject(const SObjectDef* def, int32_t imagery)
+void WriteNewObject(const SObjectState* def, int32_t imagery)
 {
     TObjectClass* cl = TObjectClass::GetClass(def->objclass);
-    SObjectInfo* info = cl ? cl->GetObjType(def->objtype) : nullptr;
+    TObjectDef* info = cl ? cl->GetObjType(def->objtype) : nullptr;
     JsonOut j;
     j.Begin('{').FieldString("seam", "NewObject").Field("class", def->objclass).Key("type");
     if (info)
@@ -1002,7 +1002,7 @@ void WriteNewObject(const SObjectDef* def, int32_t imagery)
     Seam(j.str());
 }
 
-int32_t CaseNewObject(SObjectDef* def, int32_t imagery)
+int32_t CaseNewObject(SObjectState* def, int32_t imagery)
 {
     WriteNewObject(def, imagery);
     return (int32_t)(*g_arrowCase)["newobject"].Int(-1);
@@ -1144,7 +1144,7 @@ std::string MissileArrow(const Case& c, std::string& error)
             if (spec.Has("bow"))
             {
                 const JsonValue& b = spec["bow"];
-                SObjectDef def = ItemDef(OBJCLASS_RANGEDWEAPON, b.Has("type") ? b["type"].Str() : b["name"].Str());
+                SObjectState def = ItemDef(OBJCLASS_RANGEDWEAPON, b.Has("type") ? b["type"].Str() : b["name"].Str());
                 auto* bow = new TCaseItem(&def, new TFixtureImagery(TFixtureImagery::Register({}), b["name"].Str(), {},
                                                                     false), b);
                 bow->SetName(const_cast<char*>(b["name"].Str().c_str()));
@@ -1159,7 +1159,7 @@ std::string MissileArrow(const Case& c, std::string& error)
 
         // The arrow.
         const JsonValue& a = cs["arrow"];
-        SObjectDef def = ItemDef(OBJCLASS_AMMO, a.Has("type") ? a["type"].Str() : "Arrow");
+        SObjectState def = ItemDef(OBJCLASS_AMMO, a.Has("type") ? a["type"].Str() : "Arrow");
         def.flags = (uint32_t)a["flags"].Int(OF_WEIGHTLESS);
         def.level = (uint16_t)a["level"].Int(0);
         const JsonValue& p = a["pos"];
@@ -1289,7 +1289,7 @@ void BuildAmmo(TCharacter* chr, const JsonValue& items)
     int32_t slot = 0;
     for (const JsonValue& spec : items.Items())
     {
-        SObjectDef def = ItemDef(OBJCLASS_AMMO, spec["name"].Str());
+        SObjectState def = ItemDef(OBJCLASS_AMMO, spec["name"].Str());
         auto* ammo = new TAmmo(&def, new TFixtureImagery(TFixtureImagery::Register({}), spec["name"].Str(), {}, false));
         ammo->SetName(const_cast<char*>(spec["name"].Str().c_str()));
         ammo->SetObjStat(ammo->FindObjStat("Amount"), (int32_t)spec["amount"].Int(1));
@@ -1327,7 +1327,7 @@ std::string MissileBow(const Case& c, std::string& error)
         if (cs.Has("arrow"))
         {
             const JsonValue& a = cs["arrow"];
-            SObjectDef def = ItemDef(OBJCLASS_AMMO, a.Has("type") ? a["type"].Str() : "Arrow");
+            SObjectState def = ItemDef(OBJCLASS_AMMO, a.Has("type") ? a["type"].Str() : "Arrow");
             def.flags = OF_WEIGHTLESS;
             arrow = TObjectPtr<TCaseArrow>(new TCaseArrow(&def, new TFixtureImagery(TFixtureImagery::Register({}), "arrow", {},
                                                                            false), a));
@@ -1509,7 +1509,7 @@ std::string MissileFireball(const Case& c, std::string& error)
 
         // The fireball, Initialize run by its constructor.
         const JsonValue& f = cs["fireball"];
-        SObjectDef def = ItemDef(OBJCLASS_EFFECT, "FireBall");
+        SObjectState def = ItemDef(OBJCLASS_EFFECT, "FireBall");
         def.flags = OF_IMMOBILE | OF_PULSE;
         def.level = (uint16_t)f["level"].Int(0);
         if (f.Has("pos"))
@@ -1567,7 +1567,7 @@ template <class Base>
 class TCaseEffect : public Base
 {
   public:
-    TCaseEffect(SObjectDef* def, TObjectImagery* imagery, std::string name)
+    TCaseEffect(SObjectState* def, TObjectImagery* imagery, std::string name)
         : Base(def, imagery), who(std::move(name)) {}
 
     int32_t SetPos(const S3DPoint& p, int32_t newlevel = -1, bool override = false) override
@@ -1606,7 +1606,7 @@ class SLifeCase
 
     // The n-th effect (from 1): "fx<n>", id 100 + n - 1.
     template <class Effect>
-    Effect* Make(SObjectDef* def)
+    Effect* Make(SObjectState* def)
     {
         const int32_t n = ++made;
         const std::string name = "fx" + std::to_string(n);
@@ -1653,7 +1653,7 @@ SLifeCase* g_life = nullptr;
 
 // NewObject as the spells call it: the def recorded; the case's `fail`
 // (1-based) makes none, else a fresh effect.
-int32_t LifeNewObject(SObjectDef* def, int32_t imagery)
+int32_t LifeNewObject(SObjectState* def, int32_t imagery)
 {
     WriteNewObject(def, imagery);
     if (g_life->Fails())
@@ -1972,7 +1972,7 @@ std::string SpellLife(const Case& c, std::string& error)
         {
             // The effect, as the case sets it up; with "spell", that spell's.
             const JsonValue& f = call == "effect-iced" ? cs["iced"] : cs["effect"];
-            SObjectDef def = ItemDef(OBJCLASS_EFFECT, f.Has("type") ? f["type"].Str() : "StrikeEffect");
+            SObjectState def = ItemDef(OBJCLASS_EFFECT, f.Has("type") ? f["type"].Str() : "StrikeEffect");
             def.flags = (uint32_t)f["flags"].Int(0);
             def.level = (uint16_t)f["level"].Int(0);
             const JsonValue& p = f["pos"];

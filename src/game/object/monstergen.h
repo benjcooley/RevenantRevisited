@@ -48,7 +48,7 @@ class TMonsterGen : public THelper
     // REVSYNC: Build @ 0x005176a0 -- a generator is an editor object that
     // never moves and always pulses (flags 0x8101).
     TMonsterGen(TObjectImagery* newim) : THelper(newim) { flags |= kGenFlags; }
-    TMonsterGen(SObjectDef* def, TObjectImagery* newim) : THelper(def, newim) { flags |= kGenFlags; }
+    TMonsterGen(SObjectState* def, TObjectImagery* newim) : THelper(def, newim) { flags |= kGenFlags; }
 
     static constexpr int32_t kMaxTypes = 5;     // slots (+0xd8..+0xe8)
 
@@ -89,4 +89,4 @@ class TMonsterGen : public THelper
     bool    offscreen   = true;                             // +0xf0, OnScreen/OffScreen
 };
 
-DEFINE_BUILDER("MonsterGen", TMonsterGen)
+DEFINE_OBJECT_DEF("MonsterGen", TMonsterGen)

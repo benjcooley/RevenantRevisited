@@ -38,7 +38,7 @@ static State* Spawn(const S3DPoint& source,const S3DPoint& target,bool queen){
     auto c=std::make_unique<State>();c->source=source;c->target=target;c->facing=ConvertToFacing(source,target);c->queen=queen;
     c->attached.position={source.x,source.y,source.z};S3DPoint v{};ConvertToVector(c->facing,20*65536,v);c->attached.velocity_fixed={v.x,v.y,v.z};
     auto* cls=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cls?cls->FindObjType(queen?0xad92bd1eu:0xad92bd1fu):-1;if(type<0)return nullptr;
-    SObjectDef def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;c->owner.reset(cls->NewObject(&def));auto* o=c->owner.get();
+    SObjectState def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;c->owner.reset(cls->NewObject(&def));auto* o=c->owner.get();
     if(!o || o->ObjId()!=(queen?0xad92bd1eu:0xad92bd1fu))return nullptr;SetIntPos(o, source);o->Face(0);o->OnScreen();auto* im=dynamic_cast<T3DImagery*>(o->GetImagery());
     if(!im || !Validate(*im)){log_warn("[arrow-original] exact profile rejected");return nullptr;}
     for(int i=0;i<7;++i){auto& p=c->parts[i];if(!ExtractSubMeshTextureSlot(im,i,0,p.vertices,p.indices))return nullptr;

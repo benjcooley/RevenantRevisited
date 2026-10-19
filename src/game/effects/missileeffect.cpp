@@ -144,8 +144,8 @@ void TMissileEffect::OffScreen()
 // * TPhotonEffect *
 // *****************
 
-DEFINE_BUILDER("Photon", TPhotonEffect)
-REGISTER_BUILDER(TPhotonEffect)
+DEFINE_OBJECT_DEF("Photon", TPhotonEffect)
+REGISTER_OBJECT_DEF(TPhotonEffect)
 
 void TPhotonEffect::Initialize()
 {
@@ -476,8 +476,8 @@ void TPhotonAnimator::RefreshZBuffer()
 
 extern TObjectClass EffectClass;
 
-DEFINE_BUILDER("FireBall", TFireBallEffect)
-REGISTER_BUILDER(TFireBallEffect)
+DEFINE_OBJECT_DEF("FireBall", TFireBallEffect)
+REGISTER_OBJECT_DEF(TFireBallEffect)
 
 void TFireBallEffect::Initialize()
 {
@@ -1155,8 +1155,8 @@ void TFireBallAnimator::RefreshZBuffer()
 // * TFireColumnEffect *
 // *********************
 
-DEFINE_BUILDER("FIRECOLUMN", TFireColumnEffect)
-REGISTER_BUILDER(TFireColumnEffect)
+DEFINE_OBJECT_DEF("FIRECOLUMN", TFireColumnEffect)
+REGISTER_OBJECT_DEF(TFireColumnEffect)
 
 void TFireColumnEffect::Initialize()
 {
@@ -1451,8 +1451,8 @@ bool TFireColumnAnimator::Render()
 // * TFlameDiscEffect *
 // ********************
 
-DEFINE_BUILDER("FLAMEDISC", TFlameDiscEffect)
-REGISTER_BUILDER(TFlameDiscEffect)
+DEFINE_OBJECT_DEF("FLAMEDISC", TFlameDiscEffect)
+REGISTER_OBJECT_DEF(TFlameDiscEffect)
 
 void TFlameDiscEffect::Initialize()
 {

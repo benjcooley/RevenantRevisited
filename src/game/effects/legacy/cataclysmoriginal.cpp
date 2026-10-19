@@ -41,7 +41,7 @@ static bool ValidateCataclysm(T3DImagery& image) {
 }
 State* Spawn(const S3DPoint& source,bool yellow_variant) {
     if(!Renderer)return nullptr;auto c=std::make_unique<State>();c->yellow_variant=yellow_variant;const uint32_t id=yellow_variant?0xad92fc13u:0xad92bc19u;auto* cls=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cls?cls->FindObjType(id):-1;if(type<0)return nullptr;
-    SObjectDef def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;c->owner.reset(cls->NewObject(&def));
+    SObjectState def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;c->owner.reset(cls->NewObject(&def));
     auto* owner=c->owner.get();if(!owner || owner->ObjId()!=id)return nullptr;
     SetIntPos(owner, source);owner->Face(0);owner->OnScreen();auto* image=dynamic_cast<T3DImagery*>(owner->GetImagery());
     if(!image || !ValidateCataclysm(*image)){log_warn("[cataclysm-original] exact profile rejected");return nullptr;}

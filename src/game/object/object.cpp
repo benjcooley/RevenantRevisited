@@ -103,8 +103,6 @@ TObjectClass* TObjectClass::classes[MAXOBJECTCLASSES];
 // true if classes need be be resaved
 bool TObjectClass::classesdirty = false;
 
-int32_t TObjectBuilder::numobjtypes = 0;
-TObjectBuilder* TObjectBuilder::builders[MAXOBJECTTYPES];
 
 
 // Tables for ConvertToFacing, Move, and other angle/distance related functions
@@ -317,38 +315,6 @@ int32_t AngleDiff(int32_t angle1, int32_t angle2)
     return diff;
 }
 
-// ******************
-// * TObjectBuilder *
-// ******************
-
-TObjectBuilder::TObjectBuilder(const char *name)
-{
-    if (numobjtypes < MAXOBJECTTYPES)
-        builders[numobjtypes++] = this;
-    else
-        log_warn("[object] object builder registry full (%d), dropping builder '%s'",
-                 MAXOBJECTTYPES, name ? name : "?");
-
-    objtypename = _strdup(name);
-}
-
-TObjectBuilder* TObjectBuilder::GetBuilder(int32_t objtype)
-{
-    if (objtype < numobjtypes)
-        return builders[objtype];
-
-    return nullptr;
-}
-
-TObjectBuilder* TObjectBuilder::GetBuilder(const char *name)
-{
-    for (int32_t i = 0; i < numobjtypes; i++)
-        if (stricmp(name, builders[i]->objtypename) == 0)
-            return builders[i];
-
-    return nullptr;
-}
-
 // **********************
 // * TInventoryIterator *
 // **********************
@@ -496,7 +462,7 @@ TObjectInstance::TObjectInstance(TObjectImagery* img)
     // (effects that don't need a TObjectImagery — e.g. TStripEffect S01,
     // which renders the SR pipeline against the renderer's white texture).
     // The in-game spawn path always supplies a non-null imagery via the
-    // SObjectDef-based ctor.
+    // SObjectState-based ctor.
     if (imagery && imagery->NeedsAnimator(this))
         flags |= OF_ANIMATE;
 
@@ -504,41 +470,28 @@ TObjectInstance::TObjectInstance(TObjectImagery* img)
         flags |= OF_PULSE;
 }
 
-TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
+TObjectInstance::TObjectInstance(SObjectState* def, TObjectImagery* img)
 {
     AdoptNode();
     ClearObject();
 
-    // The spawn record's initial state; the record itself is not kept.
+  // The archetype, then the state through it; the object keeps the state
+  // it was spawned in (Reset).
     objclass = def->objclass;
     objtype  = def->objtype;
-    flags    = def->flags;
-    state    = def->state;
-    Node()->SetLevel(def->level);
-    vel      = def->vel;
-    accum    = def->accum;
-    group    = def->group;
-    SetIntPos(*this, def->pos);
-    SetIntRotateX(*this, def->rotatex);
-    SetIntRotateY(*this, def->rotatey);
-    SetIntFacing(*this, def->rotatez);
-    if (flags & OF_LIGHT)
-        EnsureLight();
+    cl = TObjectClass::GetClass(objclass);
+    if (!cl)
+        FatalError("Bad object class!"); // This should never happen!!
+    inf = cl->GetObjType(objtype);
+    if (!inf)
+        FatalError("Bad object type in class", cl->ClassName());
+    initial_state_ = std::make_unique<SObjectState>(*def);
+    inf->Apply(*def, *this);
 
   // Set imagery
     imagery = img;
     AttachVisual();
 
-  // REVSYNC: TObjectInstance::TObjectInstance(SObjectDef*, ...) @ 0x0046e1f0.
-  // Every object asks to be notified; the flags each class starts with are
-  // part of what a sector or save file records (SAVE_GAME.md §11.2).
-    flags |= OF_NOTIFY;
-
-  // Set Object info pointer
-    cl = TObjectClass::GetClass(objclass);
-    if (!cl)
-        FatalError("Bad object class!"); // This should never happen!!
-    inf = cl->GetObjType(objtype);
     name = inf->name;
 
   // Setup stat array
@@ -549,6 +502,22 @@ TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
             ResetObjStat(c);
     }
 
+    flags |= ClassFlags();
+
+  // An object LoadObject is building gets its script when Load finishes.
+    if (!(flags & OF_LOADING) && CanHaveScript())
+        InitScript(ScriptManager.ObjectScript(this));
+}
+
+// REVSYNC: TObjectInstance::TObjectInstance(SObjectState*, ...) @ 0x0046e1f0.
+// The OF_* bits every object of the class starts with on top of its
+// state's: every object asks to be notified (part of what a sector or save
+// file records, SAVE_GAME.md §11.2); inventory classes and effects animate
+// and pulse; characters start virgin; animated imagery animates; everything
+// but a tile pulses.
+uint32_t TObjectInstance::ClassFlags() const
+{
+    uint32_t derived = OF_NOTIFY;
     switch (objclass)
     {
     case OBJCLASS_ITEM:      case OBJCLASS_WEAPON:  case OBJCLASS_ARMOR:
@@ -556,26 +525,40 @@ TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
     case OBJCLASS_TOOL:      case OBJCLASS_MONEY:   case OBJCLASS_KEY:
     case OBJCLASS_INVCONTAINER: case OBJCLASS_POTION: case OBJCLASS_AMMO:
     case OBJCLASS_SCROLL:    case OBJCLASS_RANGEDWEAPON: case OBJCLASS_MAPSCROLL:
-        flags |= OF_INVENTORY | OF_ANIMATE | OF_PULSE;
+        derived |= OF_INVENTORY | OF_ANIMATE | OF_PULSE;
         break;
     case OBJCLASS_EFFECT:
-        flags |= OF_ANIMATE | OF_PULSE;
+        derived |= OF_ANIMATE | OF_PULSE;
         break;
     default:
         break;
     }
     if (objclass == OBJCLASS_CHARACTER || objclass == OBJCLASS_PLAYER)
-        flags |= OF_VIRGIN;
-
-    if (imagery->NeedsAnimator(this))
-        flags |= OF_ANIMATE | OF_PULSE;
-
+        derived |= OF_VIRGIN;
+    if (imagery && imagery->NeedsAnimator(this))
+        derived |= OF_ANIMATE | OF_PULSE;
     if (objclass != OBJCLASS_TILE)
-        flags |= OF_PULSE;
+        derived |= OF_PULSE;
+    return derived;
+}
 
-  // An object LoadObject is building gets its script when Load finishes.
-    if (!(flags & OF_LOADING) && CanHaveScript())
-        InitScript(ScriptManager.ObjectScript(this));
+void TObjectInstance::Reset()
+{
+    if (!inf || !initial_state_)
+        return;
+    // Through ResetFlags, so the map pane's lists and the light follow the
+    // flag change on a live object.
+    const uint32_t oldflags = flags;
+    inf->Apply(*initial_state_, *this);
+    const uint32_t newflags = flags | ClassFlags();
+    flags = oldflags;
+    ResetFlags(newflags);
+}
+
+void TObjectInstance::CaptureState(SObjectState& state) const
+{
+    if (inf)
+        inf->Capture(*this, state);
 }
 
 void TObjectInstance::SetMapIndex(int32_t newindex)
@@ -1162,7 +1145,7 @@ namespace {
 // added is deleted (retail kept it, unowned).
 bool AddNewToInventory(TObjectInstance* owner, TObjectClass* cl, int32_t ot, int32_t number, int32_t slot)
 {
-    SObjectDef def = {};
+    SObjectState def = {};
     def.objclass = cl->ClassId();
     def.objtype = ot;
 
@@ -1527,8 +1510,8 @@ bool TObjectInstance::Use(TObjectInstance* user, int32_t with)
         SetFlags(OF_KILL);
         inst->SetFlags(OF_KILL);
 
-        SObjectDef def;
-        memset(&def, 0, sizeof(SObjectDef));
+        SObjectState def;
+        memset(&def, 0, sizeof(SObjectState));
 
         def.objclass = ObjClass();
         def.objtype = ObjType() > inst->ObjType() ? (ObjType() + 1) : (inst->ObjType() + 1);
@@ -2455,29 +2438,48 @@ TObjectClass::~TObjectClass()
 
 void TObjectClass::Clear()
 {
-    for (int32_t c = 0; c < objinfo.NumItems(); c++)  // Remove all object types
+    for (int32_t c = 0; c < NumTypes(); c++)  // Remove all object types
         RemoveType(c);
 
     statdefs.Clear();
     objstatdefs.Clear();
-    objinfo.Clear();
+    objinfo.clear();
 }
 
 int32_t TObjectClass::AddType(char *name, char *imgfilename, uint32_t uniqueid)
 {
-    TObjectBuilder* objbuilder = TObjectBuilder::GetBuilder(name);
-    if (objbuilder == nullptr)
-        objbuilder = TObjectBuilder::GetBuilder(ClassName());
+    // The def class registered under the type name, else the class name
+    std::unique_ptr<TObjectDef> def = TObjectDef::Make(name);
+    if (!def)
+        def = TObjectDef::Make(ClassName());
+    if (!def)
+    {
+        log_error("[object] no object def class for type '%s' in class %s", name, ClassName());
+        return -1;
+    }
     if (uniqueid == 0)
         uniqueid = GenerateUniqueID();
-    else
-        uniqueid = uniqueid;
     int32_t imageryid = TObjectImagery::RegisterImagery(imgfilename);
     if (imageryid < 0)
         return -1;
 
-    SObjectInfo* inf = new SObjectInfo(name, objbuilder, imageryid, uniqueid);
-    int32_t objtype = objinfo.AddPtr(inf);
+    def->name      = _strdup(name);
+    def->imageryid = imageryid;
+    def->uniqueid  = uniqueid;
+    TObjectDef* inf = def.get();
+
+    // The first free slot, else the end (type indices are stable)
+    int32_t objtype = -1;
+    for (int32_t i = 0; i < NumTypes(); i++)
+        if (!objinfo[i]) { objtype = i; break; }
+    if (objtype < 0)
+    {
+        objtype = NumTypes();
+        objinfo.emplace_back();
+    }
+    objinfo[objtype] = std::move(def);
+    inf->DefaultState().objclass = short(ClassId());
+    inf->DefaultState().objtype  = short(objtype);
 
     inf->stats.SetNumItems(statdefs.NumStats());
     for (int32_t i = 0; i < statdefs.NumStats(); i++)
@@ -2494,19 +2496,19 @@ int32_t TObjectClass::AddType(char *name, char *imgfilename, uint32_t uniqueid)
 
 bool TObjectClass::RemoveType(int32_t objtype)
 {
-    if ((objtype < 0) || (objtype >= objinfo.NumItems()))
+    if ((objtype < 0) || (objtype >= NumTypes()) || !objinfo[objtype])
         return false;
 
-    TObjectImagery::FreeImageryEntry(objinfo[objtype].imageryid);
+    TObjectImagery::FreeImageryEntry(objinfo[objtype]->imageryid);
 
-    objinfo.Remove(objtype);
+    objinfo[objtype].reset();
 
     classesdirty = true;
 
     return true;
 }
 
-TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef, int32_t imageryid)
+TObjectInstance* TObjectClass::NewObject(SObjectState* objectdef, int32_t imageryid)
 {
     if (objectdef->pos.x < 0)
         objectdef->pos.x = 0;
@@ -2515,13 +2517,13 @@ TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef, int32_t imageryi
     if (objectdef->pos.z < 0)
         objectdef->pos.z = 0;
 
-    if ((uint32_t)((int32_t)((short)objectdef->objtype)) >= (uint32_t)objinfo.NumItems())
+    if ((uint32_t)((int32_t)((short)objectdef->objtype)) >= (uint32_t)NumTypes())
         return nullptr;
 
-    if (!objinfo[objectdef->objtype].objbuilder)
+    if (!objinfo[objectdef->objtype])
         return nullptr;
 
-    SObjectInfo& info = objinfo[objectdef->objtype];
+    TObjectDef& info = *objinfo[objectdef->objtype];
     TObjectImagery* imagery = nullptr;
     if (imageryid < 0)
         imagery = info.imagery = TObjectImagery::LoadImagery(info.imageryid);
@@ -2530,7 +2532,7 @@ TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef, int32_t imageryi
     if (!imagery)
         return nullptr;
 
-    TObjectInstance* inst = info.objbuilder->Build(objectdef, imagery);
+    TObjectInstance* inst = info.Create(*objectdef, imagery);
 
     if (objectdef->objclass == OBJCLASS_TILE || objectdef->objclass == OBJCLASS_EXIT)
         inst->SetFlags(OF_IMMOBILE);
@@ -2559,20 +2561,21 @@ int32_t TObjectClass::FindObjType(const char *objtypename, bool partial) const
         _RPT0(_CRT_ERROR, "Memory Error");
     }
 #endif
-    for (TConstVirtualIterator<SObjectInfo> i(&objinfo); i; i++)
+    for (int32_t i = 0; i < NumTypes(); i++)
     {
-        if (!i.Used())
+        const TObjectDef* def = objinfo[i].get();
+        if (!def)
             continue;
 
         if (partial)
         {
-            if (abbrevcmp(objtypename, i.Item()->name) > 0)
-                return i.ItemNum();
+            if (abbrevcmp(objtypename, def->name) > 0)
+                return i;
         }
         else
         {
-            if (!stricmp(i.Item()->name, objtypename))
-                return i.ItemNum();
+            if (!stricmp(def->name, objtypename))
+                return i;
         }
     }
 
@@ -2581,14 +2584,9 @@ int32_t TObjectClass::FindObjType(const char *objtypename, bool partial) const
 
 int32_t TObjectClass::FindObjType(uint32_t uniqueid) const
 {
-    for (TConstVirtualIterator<SObjectInfo> i(&objinfo); i; i++)
-    {
-        if (!i.Used())
-            continue;
-
-        if (i.Item()->uniqueid == uniqueid)
-            return i.ItemNum();
-    }
+    for (int32_t i = 0; i < NumTypes(); i++)
+        if (objinfo[i] && objinfo[i]->uniqueid == uniqueid)
+            return i;
 
     return -1;
 }
@@ -2610,13 +2608,13 @@ int32_t TObjectClass::AddStat(SStatisticDef &newstatdef, int32_t newid)
     if (statid < 0)
         return -1;
 
-    for (int32_t c = 0; c < objinfo.NumItems(); c++)
+    for (int32_t c = 0; c < NumTypes(); c++)
     {
-        if (!objinfo.Used(c))
+        if (!objinfo[c])
             continue;
         
-        objinfo[c].stats.New();
-        objinfo[c].stats.Set(statid, newstatdef.def);
+        objinfo[c]->stats.New();
+        objinfo[c]->stats.Set(statid, newstatdef.def);
     }
 
     classesdirty = true;
@@ -2631,12 +2629,12 @@ void TObjectClass::DeleteStat(int32_t statid)
 
     statdefs.DeleteStat(statid);
 
-    for (int32_t c = 0; c < objinfo.NumItems(); c++)
+    for (int32_t c = 0; c < NumTypes(); c++)
     {
-        if (!objinfo.Used(c))
+        if (!objinfo[c])
             continue;
         
-        objinfo[c].stats.Collapse(statid);
+        objinfo[c]->stats.Collapse(statid);
     }
 
     classesdirty = true;
@@ -2666,14 +2664,9 @@ bool TObjectClass::ParseNewStat(TToken &t, bool reload)
 
 int32_t TObjectClass::FindStatVal(int32_t statid, int32_t searchvalue) const
 {
-    for (TConstVirtualIterator<SObjectInfo> i(&objinfo); i; i++)
-    {
-        if (!i.Used())
-            continue;
-
-        if (i.Item()->stats[statid] == searchvalue)
-            return i.ItemNum();
-    }
+    for (int32_t i = 0; i < NumTypes(); i++)
+        if (objinfo[i] && objinfo[i]->stats[statid] == searchvalue)
+            return i;
 
     return -1;
 }
@@ -2689,12 +2682,12 @@ int32_t TObjectClass::FindRandStatVal(int32_t statid, int32_t searchvalue, int32
     if (heightflux)
         *heightflux = 0;
 
-    for (TConstVirtualIterator<SObjectInfo> i(&objinfo); i; i++)
+    for (int32_t i = 0; i < NumTypes(); i++)
     {
-        if (!i.Used())
+        if (!objinfo[i])
             continue;
 
-        uint32_t value = i.Item()->stats[statid];
+        uint32_t value = objinfo[i]->stats[statid];
 
         // build a mask based on the wildcards in the stat value
         mask = 0;
@@ -2725,10 +2718,10 @@ int32_t TObjectClass::FindRandStatVal(int32_t statid, int32_t searchvalue, int32
             if (value == (searchvalue & mask))
             {
                 if (thisone == closest)
-                    foundlist[numfound++] = i.ItemNum();
+                    foundlist[numfound++] = i;
                 else
                 {
-                    foundlist[0] = i.ItemNum();
+                    foundlist[0] = i;
                     numfound = 1;
                 }
 
@@ -2762,10 +2755,10 @@ int32_t TObjectClass::FindRandStatVal(int32_t statid, int32_t searchvalue, int32
                         if (v == (searchvalue & mask))
                         {
                             if (thisone == closest)
-                                foundlist[numfound++] = i.ItemNum();
+                                foundlist[numfound++] = i;
                             else
                             {
-                                foundlist[0] = i.ItemNum();
+                                foundlist[0] = i;
                                 numfound = 1;
                             }
 
@@ -2799,13 +2792,13 @@ int32_t TObjectClass::AddObjStat(SStatisticDef &newstatdef, int32_t newid)
     if (statid < 0)
         return -1;
 
-    for (int32_t c = 0; c < objinfo.NumItems(); c++)
+    for (int32_t c = 0; c < NumTypes(); c++)
     {
-        if (!objinfo.Used(c))
+        if (!objinfo[c])
             continue;
         
-        objinfo[c].objstats.New();
-        objinfo[c].objstats.Set(statid, newstatdef.def);
+        objinfo[c]->objstats.New();
+        objinfo[c]->objstats.Set(statid, newstatdef.def);
     }
 
     if (MapPane.IsOpen()) // Reset id's only if map is currently active
@@ -2829,12 +2822,12 @@ void TObjectClass::DeleteObjStat(int32_t statid)
 
     objstatdefs.DeleteStat(statid);
 
-    for (int32_t c = 0; c < objinfo.NumItems(); c++)
+    for (int32_t c = 0; c < NumTypes(); c++)
     {
-        if (!objinfo.Used(c))
+        if (!objinfo[c])
             continue;
         
-        objinfo[c].objstats.Collapse(statid);
+        objinfo[c]->objstats.Collapse(statid);
     }
 
     if (MapPane.IsOpen()) // Reset id's only if map is currently active
@@ -3072,17 +3065,17 @@ bool TObjectClass::WriteClass(FILE *fp)
     }
 
     // types
-    if (objinfo.NumItems() > 0)
+    if (NumTypes() > 0)
     {
         fprintf(fp, "\n\tTYPES\n\tBEGIN\n");
 
-        int32_t objtype = 0;
-        for (TVirtualIterator<SObjectInfo> o(&objinfo); o; o++, objtype++)
+        for (int32_t objtype = 0; objtype < NumTypes(); objtype++)
         {
-            if (!o.Item() || !o.Used())
+            const TObjectDef* o = objinfo[objtype].get();
+            if (!o)
                 continue;
 
-            SImageryEntry* ie = TObjectImagery::GetImageryEntry(o.Item()->imageryid);
+            SImageryEntry* ie = TObjectImagery::GetImageryEntry(o->imageryid);
             if (!ie)
                 continue;
 
@@ -3091,11 +3084,11 @@ bool TObjectClass::WriteClass(FILE *fp)
             if (strncmp(filename, "IMAGERY", 7) == 0)
             {
                 int32_t id = atoi(filename + 8);
-                fprintf(fp, "\t\t\"%s\" %03d 0x%08x", o.Item()->name, id, o.Item()->uniqueid);
+                fprintf(fp, "\t\t\"%s\" %03d 0x%08x", o->name, id, o->uniqueid);
             }
             else
-                fprintf(fp, "\t\t\"%s\" \"%s\" 0x%08x", o.Item()->name,
-                    filename, o.Item()->uniqueid);
+                fprintf(fp, "\t\t\"%s\" \"%s\" 0x%08x", o->name,
+                    filename, o->uniqueid);
 
             if (statdefs.NumStats() > 0)
             {
@@ -3109,7 +3102,7 @@ bool TObjectClass::WriteClass(FILE *fp)
                     if (!firsttime)
                         fprintf(fp, ",");
 
-                    fprintf(fp, "%d", (int32_t)objinfo[objtype].stats[c]);
+                    fprintf(fp, "%d", (int32_t)objinfo[objtype]->stats[c]);
                     firsttime = false;
                 }
                 fprintf(fp, "}");
@@ -3121,7 +3114,7 @@ bool TObjectClass::WriteClass(FILE *fp)
                     if (!firsttime)
                         fprintf(fp, ",");
 
-                    fprintf(fp, "%d", (int32_t)objinfo[objtype].objstats[c]);
+                    fprintf(fp, "%d", (int32_t)objinfo[objtype]->objstats[c]);
                     firsttime = false;
                 }
                 fprintf(fp, "}");
@@ -3344,8 +3337,8 @@ bool TObjectClass::ParseClass(TToken &t, bool reload)
                         
                         if (!reload)
                         {
-                            cl->objinfo[objtype].stats.New();
-                            cl->objinfo[objtype].stats[statid] = value;
+                            cl->objinfo[objtype]->stats.New();
+                            cl->objinfo[objtype]->stats[statid] = value;
                         }
 
                         statid++;
@@ -3382,8 +3375,8 @@ bool TObjectClass::ParseClass(TToken &t, bool reload)
                         
                         if (!reload)
                         {
-                            cl->objinfo[objtype].objstats.New();
-                            cl->objinfo[objtype].objstats[statid] = value;
+                            cl->objinfo[objtype]->objstats.New();
+                            cl->objinfo[objtype]->objstats[statid] = value;
                         }
 
                         statid++;

@@ -13,8 +13,8 @@
 #include <memory>
 #include <vector>
 // Restore the shipped exact owner factory; rendering remains explicitly controlled.
-DEFINE_BUILDER("Halo", THaloEffect)
-REGISTER_BUILDER(THaloEffect)
+DEFINE_OBJECT_DEF("Halo", THaloEffect)
+REGISTER_OBJECT_DEF(THaloEffect)
 namespace halo_preview {
 // Both source raster inputs are independently proven for this exact asset.
 // Keep the four-policy diagnostic explicit; ordinary defaults select both.
@@ -40,7 +40,7 @@ State* Spawn(const S3DPoint& origin,int totalframes,float step) {
     auto s=std::make_unique<State>(totalframes,step);
     auto* cl=TObjectClass::GetClass(OBJCLASS_EFFECT);
     const int type=cl?cl->FindObjType(0xdedbdbedu):-1;if(type<0){log_warn("[halo] missing exact type dedbdbed");return nullptr;}
-    SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;
+    SObjectState d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;
     s->owner.reset(cl->NewObject(&d));
     auto* image=s->owner?dynamic_cast<T3DImagery*>(s->owner->GetImagery()):nullptr;
     if(image)log_info("[halo-profile] id=%08x path=%s size=%u hash=%016llx states=%d frames=%d flags=%x",s->owner->ObjId(),image->GetResFilename(),unsigned(image->GetResSize()),(unsigned long long)halo_profile::Hash(image->GetBody(),image->GetResSize()),image->NumStates(),image->GetAniLength(0),image->GetAniFlags(0));

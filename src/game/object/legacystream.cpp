@@ -224,7 +224,7 @@ TObjectInstance* TLegacyDeserialize::ReadObject(TInputStream& is, int32_t versio
     // ****** Create the object ******
 
     // Retail builds it LOADING: the constructor leaves the script to the read.
-    SObjectDef def;
+    SObjectState def;
     def.objclass = objclass;
     def.objtype  = objtype;
     def.flags    = OF_LOADING;

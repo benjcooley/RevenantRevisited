@@ -58,6 +58,11 @@ TYPE_MAP = {
     "int32_t":     ("Int",    "i",   "{m} = v.i;",                                   "out = SPropValue::Int({m});"),
     "int":         ("Int",    "i",   "{m} = v.i;",                                   "out = SPropValue::Int({m});"),
     "uint32_t":    ("Int",    "i",   "{m} = uint32_t(v.i);",                         "out = SPropValue::Int(int32_t({m}));"),
+    "short":       ("Int",    "i",   "{m} = short(v.i);",                            "out = SPropValue::Int({m});"),
+    "int16_t":     ("Int",    "i",   "{m} = int16_t(v.i);",                          "out = SPropValue::Int({m});"),
+    "uint16_t":    ("Int",    "i",   "{m} = uint16_t(v.i);",                         "out = SPropValue::Int({m});"),
+    "int8_t":      ("Int",    "i",   "{m} = int8_t(v.i);",                           "out = SPropValue::Int({m});"),
+    "uint8_t":     ("Int",    "i",   "{m} = uint8_t(v.i);",                          "out = SPropValue::Int({m});"),
     "float":       ("Float",  "f",   "{m} = v.f;",                                   "out = SPropValue::Float({m});"),
     "std::string": ("String", "str", "{m}.assign(v.str.data(), v.str.size());",       "out = SPropValue::String({m});"),
     "hmm_vec3":    ("Vec3",   "v3",  "{m} = hmm_vec3{{{{v.v3[0], v.v3[1], v.v3[2]}}}};", "out = SPropValue::Vec3({m}.X, {m}.Y, {m}.Z);"),
@@ -78,6 +83,7 @@ RE_PROP_FN  = re.compile(r"^\s*(PROP_FN|PROP_FN_NOSAVE|PROP_FN_HIDDEN)\((.*)\)\s
 RE_HOOK  = re.compile(r"\bvoid\s+PropChanged\s*\(")
 RE_POSTLOAD = re.compile(r"\bvoid\s+PostLoad\s*\(\s*\)")
 RE_DEFNAME = re.compile(r"^\s*(DEF_BLOCK|DEF_COMPONENT)\(\s*\"([^\"]+)\"\s*\)")
+RE_IDS = re.compile(r"^\s*REFL_IDS\(\s*(\d+)\s*,\s*(\d+)\s*\)")
 
 
 def snake(name: str) -> str:
@@ -111,6 +117,7 @@ class Klass:
         self.ids = set()
         self.def_name = ""
         self.def_kind = ""      # "node" | "component"
+        self.id_range = None    # (lo, hi) from REFL_IDS: the ids this class may use
 
 
 def fail(path, line_no, msg):
@@ -262,6 +269,15 @@ def parse(path: Path):
                 cur.has_hook = True
             if RE_POSTLOAD.search(code):
                 cur.has_postload = True
+            m_ids = RE_IDS.match(code)
+            if m_ids:
+                if cur.id_range:
+                    fail(path, i + 1, f"{cur.name} declares REFL_IDS twice")
+                cur.id_range = (int(m_ids.group(1)), int(m_ids.group(2)))
+                if cur.id_range[0] < 1 or cur.id_range[1] > 0x3FFF or cur.id_range[0] > cur.id_range[1]:
+                    fail(path, i + 1, f"REFL_IDS range {cur.id_range} must lie within 1..16383")
+                i += 1
+                continue
             m_def = RE_DEFNAME.match(code)
             if m_def:
                 if cur.def_name:
@@ -316,7 +332,31 @@ def parse(path: Path):
         while stack and depth <= stack[-1][1]:
             stack.pop()
         i += 1
+    check_id_ranges(classes, path)
     return classes, enums
+
+
+def check_id_ranges(classes, path):
+    """Ids are wire tags shared along an inheritance chain (a derived table is
+    the base's props then its own), so a class declaring REFL_IDS(lo, hi) keeps
+    every id inside its range, and no two classes in a chain within this header
+    use the same id. A base in another header is checked at registration."""
+    by_name = {k.name: k for k in classes}
+    for k in classes:
+        if k.id_range:
+            lo, hi = k.id_range
+            for m in k.members:
+                if m.id < lo or m.id > hi:
+                    fail(path, m.line_no, f"PROP id {m.id} outside {k.name}'s REFL_IDS({lo}, {hi})")
+        seen = {}
+        base = by_name.get(k.base)
+        while base:
+            for m in base.members:
+                seen[m.id] = base.name
+            base = by_name.get(base.base)
+        for m in k.members:
+            if m.id in seen:
+                fail(path, m.line_no, f"PROP id {m.id} in {k.name} is already used by its base {seen[m.id]}")
 
 
 def default_expr(m, ptype, path):

@@ -301,7 +301,7 @@ bool UpdateFloor(const S3DPoint& camera) {
     for(int y=(cy-960)/96*96;y<=cy+960;y+=96)
     for(int x=(cx-960)/96*96;x<=cx+960;x+=96) {
         if(present.count({x,y})) continue;
-        SObjectDef def{}; def.objclass=TileClass.ClassId(); def.objtype=ground_type;
+        SObjectState def{}; def.objclass=TileClass.ClassId(); def.objtype=ground_type;
         def.level=kLevel; def.pos={x,y,kFloor};
         TObjectPtr<TObjectInstance> tile(TileClass.NewObject(&def));
         TSector* sector=map->SectorAt(def.pos);
@@ -333,7 +333,7 @@ void Spawn(Entry& e, size_t index) {
             e.status="Exact TwnBrazier TILE/imagery mapping unavailable";
             return;
         }
-        SObjectDef def{}; def.objclass=OBJCLASS_TILE; def.objtype=e.type;
+        SObjectState def{}; def.objclass=OBJCLASS_TILE; def.objtype=e.type;
         def.level=kLevel; def.pos=e.station;
         e.map_index=MapPane.NewObject(&def);
         auto* object=Resolve(e);
@@ -524,7 +524,7 @@ void Spawn(Entry& e, size_t index) {
             e.name.c_str(),e.cycles,source.x,source.y,source.z,target.x,target.y,target.z);
         return;
     }
-    SObjectDef def{}; def.objclass=EffectClass.ClassId(); def.objtype=e.type;
+    SObjectState def{}; def.objclass=EffectClass.ClassId(); def.objtype=e.type;
     def.level=kLevel; def.pos=source;
     e.map_index=MapPane.NewObject(&def);
     auto* object=Resolve(e);

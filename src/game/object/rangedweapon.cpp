@@ -6,7 +6,7 @@
 
 #include "game/object/rangedweapon.h"
 
-REGISTER_BUILDER(TRangedWeapon)
+REGISTER_OBJECT_DEF(TRangedWeapon)
 TObjectClass RangedWeaponClass("RANGEDWEAPON", OBJCLASS_RANGEDWEAPON, 0);
 
 // Hard coded class stats

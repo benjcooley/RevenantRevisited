@@ -58,13 +58,13 @@ protected:
 public:
     int32_t stage;
     TRockStormEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TRockStormEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TRockStormEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
 };
 
-DEFINE_BUILDER("RockStorm", TRockStormEffect)
-REGISTER_BUILDER(TRockStormEffect)
+DEFINE_OBJECT_DEF("RockStorm", TRockStormEffect)
+REGISTER_OBJECT_DEF(TRockStormEffect)
 
 
 void TRockStormEffect::Initialize()

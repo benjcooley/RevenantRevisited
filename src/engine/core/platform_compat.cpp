@@ -10,6 +10,8 @@
 #include <cctype>
 #include <cstring>
 
+#if !defined(_WIN32)
+
 int32_t stricmp(const char* s1, const char* s2)
 {
   assert(s1 != NULL);
@@ -48,6 +50,8 @@ int32_t strnicmp(const char* s1, const char* s2, size_t n)
     }
     return 0;
 }
+
+#endif // !_WIN32
 
 void BEGIN_CRITICAL() {}
 void END_CRITICAL() {}

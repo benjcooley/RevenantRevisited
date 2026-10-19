@@ -480,7 +480,7 @@ static void EquipStarterLoadout(TPlayer *p)
             continue;
         }
 
-        SObjectDef def;
+        SObjectState def;
         memset(&def, 0, sizeof(def));
         def.objclass = cl->ClassId();
         def.objtype  = ot;
@@ -540,7 +540,7 @@ bool TPlayScreen::SpawnDefaultPlayer(int32_t level, int32_t sx, int32_t sy)
     // stuck on / against the fountain geometry. Picked empirically --
     // TODO: replace with a real start-of-game position once save-load
     // / a NewGame data path is wired up.
-    SObjectDef def;
+    SObjectState def;
     memset(&def, 0, sizeof(def));
     def.objclass = OBJCLASS_PLAYER;
     def.objtype  = locke_type;

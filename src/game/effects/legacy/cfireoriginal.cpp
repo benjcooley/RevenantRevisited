@@ -42,7 +42,7 @@ State* Spawn(const S3DPoint& source)
 {
  if(!Renderer)return nullptr;auto c=std::make_unique<State>();
  auto* cls=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cls?cls->FindObjType(0xad92bd27u):-1;if(type<0)return nullptr;
- SObjectDef def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;c->owner.reset(cls->NewObject(&def));auto* o=c->owner.get();
+ SObjectState def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;c->owner.reset(cls->NewObject(&def));auto* o=c->owner.get();
  if(!o || o->ObjId()!=0xad92bd27u || !dynamic_cast<TEffect*>(o))return nullptr;
  SetIntPos(o, source);o->Face(0);o->OnScreen();auto* image=dynamic_cast<T3DImagery*>(o->GetImagery());
  if(!image || !dynamic_cast<T3DAnimator*>(o->GetAnimator()) || !ValidateCFire(*image))return nullptr;

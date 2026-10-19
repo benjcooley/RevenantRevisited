@@ -207,7 +207,7 @@ class HudScene:
         (TObjectInstance::AddToInventory 0x0046f940): the type's record in the
         name-sorted table of every class's types (count `0x00659d30`, table
         `0x00659d40`; record: name pointer, type at +0x20, class at +0x22), an
-        SObjectDef of that class and type, and the class's NewObject
+        SObjectState of that class and type, and the class's NewObject
         `0x00474bb0`(def, -1, 1)."""
         for index in range(self.vm.u32(G_TYPE_COUNT)):
             record = self.vm.u32(self.vm.u32(G_TYPE_TABLE) + 4 * index)

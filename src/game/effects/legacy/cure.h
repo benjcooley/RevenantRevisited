@@ -43,7 +43,7 @@ class TCureEffect_Bespoke final : public TEffect
 {
 public:
     explicit TCureEffect_Bespoke(TObjectImagery* imagery);
-    TCureEffect_Bespoke(SObjectDef* definition, TObjectImagery* imagery);
+    TCureEffect_Bespoke(SObjectState* definition, TObjectImagery* imagery);
     ~TCureEffect_Bespoke() override;
     void Initialize(bool attach = true);
     static TCureEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);

@@ -10,7 +10,7 @@
 #include "game/object/container.h"
 #include "game/world/mappane.h"
 
-REGISTER_BUILDER(TTool)
+REGISTER_OBJECT_DEF(TTool)
 TObjectClass ToolClass("TOOL", OBJCLASS_TOOL, 0);
 
 // Hard coded class stats

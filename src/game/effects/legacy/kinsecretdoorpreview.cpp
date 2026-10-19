@@ -26,7 +26,7 @@ State* Spawn(const S3DPoint& origin)
     TObjectClass* cls=TObjectClass::GetClass(OBJCLASS_EFFECT);
     const int type=cls?cls->FindObjType(0xad92bd23u):-1;
     if(type<0) return nullptr;
-    SObjectDef definition={};definition.objclass=OBJCLASS_EFFECT;definition.objtype=short(type);definition.pos=origin;
+    SObjectState definition={};definition.objclass=OBJCLASS_EFFECT;definition.objtype=short(type);definition.pos=origin;
     context->owner.reset(cls->NewObject(&definition));
     auto* owner=context->owner.get();
     auto* imagery=owner?dynamic_cast<T3DImagery*>(owner->GetImagery()):nullptr;

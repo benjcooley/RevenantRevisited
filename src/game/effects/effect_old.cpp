@@ -47,28 +47,29 @@
 
 TObjectClass EffectClass("EFFECT", OBJCLASS_EFFECT, 0);
 
-class TGenericEffectBuilder : public TObjectBuilder
+class TGenericEffectDef final : public TStateObjectDef<SObjectState>
 {
   public:
-    TGenericEffectBuilder(const char* name) : TObjectBuilder(name) {}
-    TObjectInstance* Build(TObjectImagery* img) override { return new TEffect(img); }
-    TObjectInstance* Build(SObjectDef* def, TObjectImagery* img) override { return new TEffect(def, img); }
+    TObjectInstance* Create(SObjectState& state, TObjectImagery* img) const override { return new TEffect(&state, img); }
+    TObjectInstance* Create(TObjectImagery* img) const override { return new TEffect(img); }
 };
 
-static TGenericEffectBuilder g_effect_builder("EFFECT");
-static TGenericEffectBuilder g_effect_builder_lower("effect");
-static TGenericEffectBuilder g_effect_stillwater_builder("StillWater");
-static TGenericEffectBuilder g_effect_flowwater_builder("FlowWater");
-static TGenericEffectBuilder g_effect_bendwater1_builder("BendWater1");
-static TGenericEffectBuilder g_effect_bendwater2_builder("BendWater2");
-static TGenericEffectBuilder g_effect_sewerwater_builder("SewerWater");
-static TGenericEffectBuilder g_effect_wave_builder("Wave");
-static TGenericEffectBuilder g_effect_waves_builder("WaveS");
-static TGenericEffectBuilder g_effect_wavem_builder("WaveM");
-static TGenericEffectBuilder g_effect_mistfog_builder("MistFog");
-static TGenericEffectBuilder g_effect_pixie_builder("Pixie");
-static TGenericEffectBuilder g_effect_speaker_builder("speaker");
-static TGenericEffectBuilder g_effect_speaker_caps_builder("Speaker");
+static std::unique_ptr<TObjectDef> MakeGenericEffectDef() { return std::make_unique<TGenericEffectDef>(); }
+
+static TObjectDef::SRegistrar g_effect_builder("EFFECT", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_builder_lower("effect", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_stillwater_builder("StillWater", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_flowwater_builder("FlowWater", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_bendwater1_builder("BendWater1", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_bendwater2_builder("BendWater2", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_sewerwater_builder("SewerWater", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_wave_builder("Wave", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_waves_builder("WaveS", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_wavem_builder("WaveM", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_mistfog_builder("MistFog", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_pixie_builder("Pixie", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_speaker_builder("speaker", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_speaker_caps_builder("Speaker", MakeGenericEffectDef);
 
 void TEffect::Pulse()
 {
@@ -411,8 +412,8 @@ extern TObjectClass TileClass;
 // * TEffect *
 // ***********
 
-DEFINE_BUILDER("effect", TEffect)
-REGISTER_BUILDER(TEffect)
+DEFINE_OBJECT_DEF("effect", TEffect)
+REGISTER_OBJECT_DEF(TEffect)
 
 void TEffect::Pulse()
 {
@@ -457,8 +458,8 @@ int32_t TEffect::GetAngle()
 // * THealEffect *
 // ***************
 
-DEFINE_BUILDER("Heal", THealEffect)
-REGISTER_BUILDER(THealEffect)
+DEFINE_OBJECT_DEF("Heal", THealEffect)
+REGISTER_OBJECT_DEF(THealEffect)
 
 void THealEffect::Initialize()
 {
@@ -970,14 +971,14 @@ class TCreateFoodEffect : public TEffect
 {
   public:
     TCreateFoodEffect(TObjectImagery* newim) : TEffect(newim) { }
-    TCreateFoodEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TCreateFoodEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
 
     virtual void Initialize();
     virtual void Pulse();
 };
 
-DEFINE_BUILDER("CreateFood", TCreateFoodEffect)
-REGISTER_BUILDER(TCreateFoodEffect)
+DEFINE_OBJECT_DEF("CreateFood", TCreateFoodEffect)
+REGISTER_OBJECT_DEF(TCreateFoodEffect)
 
 void TCreateFoodEffect::Initialize()
 {
@@ -997,8 +998,8 @@ void TCreateFoodEffect::Pulse()
             // Get the number of various food types (i.e. watermelon, cheese, beer)
             int32_t num = cl->NumTypes();
 
-            SObjectDef def;
-            memset(&def, 0, sizeof(SObjectDef));
+            SObjectState def;
+            memset(&def, 0, sizeof(SObjectState));
             def.objclass = OBJCLASS_FOOD;
             def.objtype = random(0, num - 1);
             def.level = MapPane.GetMapLevel();
@@ -1414,14 +1415,14 @@ class TCureEffect : public TEffect
     bool first_time;
   public:
     TCureEffect(TObjectImagery* newim) : TEffect(newim) { Initialize();}
-    TCureEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize();}
+    TCureEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize();}
 
     virtual void Initialize();
     virtual void Pulse();
 };
 
-DEFINE_BUILDER("Cure", TCureEffect)
-REGISTER_BUILDER(TCureEffect)
+DEFINE_OBJECT_DEF("Cure", TCureEffect)
+REGISTER_OBJECT_DEF(TCureEffect)
 
 void TCureEffect::Initialize()
 {
@@ -1968,14 +1969,14 @@ class TFireFlashEffect : public TEffect
 {
   public:
     TFireFlashEffect(TObjectImagery* newim) : TEffect(newim) {  }
-    TFireFlashEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {  }
+    TFireFlashEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {  }
 
     virtual void Initialize();
     virtual void Pulse();
 };
 
-DEFINE_BUILDER("FireFlash", TFireFlashEffect)
-REGISTER_BUILDER(TFireFlashEffect)
+DEFINE_OBJECT_DEF("FireFlash", TFireFlashEffect)
+REGISTER_OBJECT_DEF(TFireFlashEffect)
 
 void TFireFlashEffect::Initialize()
 {
@@ -2496,14 +2497,14 @@ class TFireWindEffect : public TEffect
     int32_t life;
   public:
     TFireWindEffect(TObjectImagery* newim) : TEffect(newim) { }
-    TFireWindEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TFireWindEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
 
     virtual void Initialize();
     virtual void Pulse();
 };
 
-DEFINE_BUILDER("FireWind", TFireWindEffect)
-REGISTER_BUILDER(TFireWindEffect)
+DEFINE_OBJECT_DEF("FireWind", TFireWindEffect)
+REGISTER_OBJECT_DEF(TFireWindEffect)
 
 void TFireWindEffect::Initialize()
 {
@@ -3200,8 +3201,8 @@ void TFireWindAnimator::RefreshZBuffer()
 #define BURN_DEC        .97f
 #define BURN_FRAME      50
 
-DEFINE_BUILDER("BURN", TBurnEffect)
-REGISTER_BUILDER(TBurnEffect)
+DEFINE_OBJECT_DEF("BURN", TBurnEffect)
+REGISTER_OBJECT_DEF(TBurnEffect)
 
 void TBurnEffect::Set(PTCharacter ch)
 {
@@ -3465,8 +3466,8 @@ void TBurnAnimator::RefreshZBuffer()
 // * Aura of the Character *
 // *************************
 
-DEFINE_BUILDER("Aura", TAuraEffect)
-REGISTER_BUILDER(TAuraEffect)
+DEFINE_OBJECT_DEF("Aura", TAuraEffect)
+REGISTER_OBJECT_DEF(TAuraEffect)
 
 void TAuraEffect::Initialize()
 {
@@ -3948,13 +3949,13 @@ public:
     int32_t first_time;
 
     TReviveEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TReviveEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TReviveEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
 };
 
-DEFINE_BUILDER("Ribbon", TReviveEffect)
-REGISTER_BUILDER(TReviveEffect)
+DEFINE_OBJECT_DEF("Ribbon", TReviveEffect)
+REGISTER_OBJECT_DEF(TReviveEffect)
 
 
 void TReviveEffect::Initialize()
@@ -4384,8 +4385,8 @@ bool TShieldAnimator::Render()
 // * Flame Animator *
 // ******************
 
-DEFINE_BUILDER("FLAME", TFlameEffect)
-REGISTER_BUILDER(TFlameEffect)
+DEFINE_OBJECT_DEF("FLAME", TFlameEffect)
+REGISTER_OBJECT_DEF(TFlameEffect)
 
 void TFlameEffect::InitializeVisualComponent(TObjectImagery* imagery)
 {
@@ -5283,13 +5284,13 @@ class TSetVortexEffect : public TEffect
 protected:
 public:
     TSetVortexEffect(TObjectImagery* newim) : TEffect(newim) { }
-    TSetVortexEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TSetVortexEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
     void Initialize();
     void Pulse();
 };
 
-DEFINE_BUILDER("SetVortex", TSetVortexEffect)
-REGISTER_BUILDER(TSetVortexEffect)
+DEFINE_OBJECT_DEF("SetVortex", TSetVortexEffect)
+REGISTER_OBJECT_DEF(TSetVortexEffect)
 
 
 void TSetVortexEffect::Initialize()
@@ -5451,14 +5452,14 @@ public:
     bool has_moved;
     S3DPoint new_position;
     TTeleporterEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TTeleporterEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TTeleporterEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
     void OffScreen(){}
 };
 
-DEFINE_BUILDER("Teleporter", TTeleporterEffect)
-REGISTER_BUILDER(TTeleporterEffect)
+DEFINE_OBJECT_DEF("Teleporter", TTeleporterEffect)
+REGISTER_OBJECT_DEF(TTeleporterEffect)
 
 _CLASSDEF(TTeleporterAnimator)
 class TTeleporterAnimator : public T3DAnimator
@@ -6339,8 +6340,8 @@ void TSmokeEffectAnimator::RefreshZBuffer()
 // ****************
 // * Meteor Storm *
 // ****************
-DEFINE_BUILDER("MeteorStorm", TMeteorStormEffect)
-REGISTER_BUILDER(TMeteorStormEffect)
+DEFINE_OBJECT_DEF("MeteorStorm", TMeteorStormEffect)
+REGISTER_OBJECT_DEF(TMeteorStormEffect)
 
 void TMeteorStormEffect::Initialize()
 {
@@ -6497,8 +6498,8 @@ void TMeteorStormAnimator::RefreshZBuffer()
 
 // FLIES, FLIES, FLIES!
 
-DEFINE_BUILDER("Flies", TFlyEffect)
-REGISTER_BUILDER(TFlyEffect)
+DEFINE_OBJECT_DEF("Flies", TFlyEffect)
+REGISTER_OBJECT_DEF(TFlyEffect)
 
 void TFlyEffect::Initialize()
 {
@@ -6899,10 +6900,10 @@ void TPulpAnimator::Animate(bool draw)
 
             if (body_part->pos.z < charpos.z + 20)
             {
-                SObjectDef def;
+                SObjectState def;
                 S3DPoint pos;
 
-                memset(&def, 0, sizeof(SObjectDef));
+                memset(&def, 0, sizeof(SObjectState));
                 def.level = MapPane.GetMapLevel();
                 pos.z = height + 1;
                 pos.x = (int32_t)body_part->pos.x + 5;
@@ -7032,8 +7033,8 @@ void TPulpAnimator::RefreshZBuffer()
 // * TPulpEffect Object *
 // **********************
 
-DEFINE_BUILDER("PULP", TPulpEffect)
-REGISTER_BUILDER(TPulpEffect)
+DEFINE_OBJECT_DEF("PULP", TPulpEffect)
+REGISTER_OBJECT_DEF(TPulpEffect)
 
 void TPulpEffect::Set(S3DPoint vel, PTCharacter ch, int32_t num_body_part, int32_t num_blood, int32_t num_splat)
 {
@@ -7189,7 +7190,7 @@ class TFireConeEffect : public TEffect
   public:
     bool firsttime;
     TFireConeEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TFireConeEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TFireConeEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TFireConeEffect() {}
 
     virtual void Initialize();          // init
@@ -7241,8 +7242,8 @@ class TFireConeAnimator : public T3DAnimator
 // * TFireConeEffect Object *
 // **************************
 
-DEFINE_BUILDER("FIRECONE", TFireConeEffect)
-REGISTER_BUILDER(TFireConeEffect)
+DEFINE_OBJECT_DEF("FIRECONE", TFireConeEffect)
+REGISTER_OBJECT_DEF(TFireConeEffect)
 
 // initialize the fire cone effect
 void TFireConeEffect::Initialize()
@@ -7736,7 +7737,7 @@ class TDragonFireEffect : public TEffect
 {
   public:
     TDragonFireEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TDragonFireEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TDragonFireEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TDragonFireEffect() {}
 
     virtual void Initialize();          // init
@@ -7768,8 +7769,8 @@ class TDragonFireAnimator : public T3DAnimator
 // * TFireConeEffect Object *
 // **************************
 
-DEFINE_BUILDER("DragonFire", TDragonFireEffect)
-REGISTER_BUILDER(TDragonFireEffect)
+DEFINE_OBJECT_DEF("DragonFire", TDragonFireEffect)
+REGISTER_OBJECT_DEF(TDragonFireEffect)
 
 // initialize the fire cone effect
 void TDragonFireEffect::Initialize()
@@ -7970,8 +7971,8 @@ void TDragonFireAnimator::RefreshZBuffer()
 #define SW_ROTSPEED         0.5
 #define SW_SCALESPEED       0.2
 
-DEFINE_BUILDER("IceBolt", TIceBoltEffect)
-REGISTER_BUILDER(TIceBoltEffect)
+DEFINE_OBJECT_DEF("IceBolt", TIceBoltEffect)
+REGISTER_OBJECT_DEF(TIceBoltEffect)
 
 void TIceBoltEffect::Initialize()
 {
@@ -8040,8 +8041,8 @@ void TIceBoltAnimator::Initialize()
     int32_t subspell = ((PTEffect)inst)->GetSubSpell();
     /*if (subspell > 2)
     {
-        SObjectDef def;
-        memset(&def, 0, sizeof(SObjectDef));
+        SObjectState def;
+        memset(&def, 0, sizeof(SObjectState));
         def.objclass = OBJCLASS_EFFECT;
 
         def.objtype = EffectClass.FindObjType("snow");
@@ -8418,8 +8419,8 @@ void TIceBoltAnimator::Animate(bool draw)
             if (instan && instan != caster && !((PTCharacter)instan)->IsDead()/* && !(instan->GetFlags() & OF_ICED)*/)
             {
                 // create the iced effect
-                SObjectDef def;
-                memset(&def, 0, sizeof(SObjectDef));
+                SObjectState def;
+                memset(&def, 0, sizeof(SObjectState));
                 def.objclass = OBJCLASS_EFFECT;
                 def.level = MapPane.GetMapLevel();
                 S3DPoint putpos;
@@ -8709,8 +8710,8 @@ void TIceBoltAnimator::RefreshZBuffer()
 #define ICED_DURATION       (24 * ICED_LENGTH)
 #define ICED_CHUNK_GRAVITY  0.25
 
-DEFINE_BUILDER("Iced", TIcedEffect)
-REGISTER_BUILDER(TIcedEffect)
+DEFINE_OBJECT_DEF("Iced", TIcedEffect)
+REGISTER_OBJECT_DEF(TIcedEffect)
 
 void TIcedEffect::Initialize()
 {
@@ -8987,8 +8988,8 @@ void TIcedAnimator::RefreshZBuffer()
 
 
 
-DEFINE_BUILDER("Quicksand", TQuicksandEffect)
-REGISTER_BUILDER(TQuicksandEffect)
+DEFINE_OBJECT_DEF("Quicksand", TQuicksandEffect)
+REGISTER_OBJECT_DEF(TQuicksandEffect)
 
 void TQuicksandEffect::Initialize()
 {
@@ -9434,8 +9435,8 @@ void TQuicksandAnimator::RefreshZBuffer()
 // * Sandswirl Effect *
 // ********************
 
-DEFINE_BUILDER("Sandswirl", TSandswirlEffect)
-REGISTER_BUILDER(TSandswirlEffect)
+DEFINE_OBJECT_DEF("Sandswirl", TSandswirlEffect)
+REGISTER_OBJECT_DEF(TSandswirlEffect)
 
 void TSandswirlEffect::Initialize()
 {
@@ -9468,8 +9469,8 @@ void TSandswirlAnimator::Initialize()
     frameon = 0;
     angle = ((PTEffect)inst)->GetAngle();
 
-    SObjectDef def;
-    memset(&def, 0, sizeof(SObjectDef));
+    SObjectState def;
+    memset(&def, 0, sizeof(SObjectState));
     def.objclass = OBJCLASS_EFFECT;
 
     def.objtype = EffectClass.FindObjType("sand");
@@ -9579,8 +9580,8 @@ void TSandswirlAnimator::Animate(bool draw)
             if (instan && instan != caster && !((PTCharacter)instan)->IsDead()/* && !(instan->GetFlags() & OF_ICED)*/)
             {
                 // create the quicksand effect
-                SObjectDef def;
-                memset(&def, 0, sizeof(SObjectDef));
+                SObjectState def;
+                memset(&def, 0, sizeof(SObjectState));
                 def.objclass = OBJCLASS_EFFECT;
                 def.level = MapPane.GetMapLevel();
                 S3DPoint putpos;
@@ -9696,8 +9697,8 @@ void TSandswirlAnimator::RefreshZBuffer()
 #define TORNADO_MAXFLAMES           (TORNADO_MAXICECHUNKS / 2)
 
 
-DEFINE_BUILDER("Tornado", TTornadoEffect)
-REGISTER_BUILDER(TTornadoEffect)
+DEFINE_OBJECT_DEF("Tornado", TTornadoEffect)
+REGISTER_OBJECT_DEF(TTornadoEffect)
 
 void TTornadoEffect::Initialize()
 {
@@ -10210,8 +10211,8 @@ void TTornadoAnimator::RefreshZBuffer()
 // * Streamer Effect *
 // ******************
 
-DEFINE_BUILDER("Streamer", TStreamerEffect)
-REGISTER_BUILDER(TStreamerEffect)
+DEFINE_OBJECT_DEF("Streamer", TStreamerEffect)
+REGISTER_OBJECT_DEF(TStreamerEffect)
 
 void TStreamerEffect::Initialize()
 {
@@ -10439,8 +10440,8 @@ void TStreamerAnimator::RefreshZBuffer()
 // * FireSwarm Effect *
 // ******************
 
-DEFINE_BUILDER("FireSwarm", TFireSwarmEffect)
-REGISTER_BUILDER(TFireSwarmEffect)
+DEFINE_OBJECT_DEF("FireSwarm", TFireSwarmEffect)
+REGISTER_OBJECT_DEF(TFireSwarmEffect)
 
 void TFireSwarmEffect::Initialize()
 {
@@ -10554,8 +10555,8 @@ void TFireSwarmAnimator::RefreshZBuffer()
 // * Halo Effect *
 // ******************
 
-DEFINE_BUILDER("Halo", THaloEffect)
-REGISTER_BUILDER(THaloEffect)
+DEFINE_OBJECT_DEF("Halo", THaloEffect)
+REGISTER_OBJECT_DEF(THaloEffect)
 
 void THaloEffect::Initialize()
 {
@@ -10672,8 +10673,8 @@ void THaloAnimator::RefreshZBuffer()
 // * Ripple Effect *
 // *****************
 
-DEFINE_BUILDER("Ripple", TRippleEffect)
-REGISTER_BUILDER(TRippleEffect)
+DEFINE_OBJECT_DEF("Ripple", TRippleEffect)
+REGISTER_OBJECT_DEF(TRippleEffect)
 
 void TRippleEffect::Initialize()
 {
@@ -10723,8 +10724,8 @@ void TRippleAnimator::Initialize()
 
 void TRippleAnimator::AddNewRipple(int32_t x, int32_t y, int32_t z, int32_t len)
 {
-    SObjectDef def;
-    memset(&def, 0, sizeof(SObjectDef));
+    SObjectState def;
+    memset(&def, 0, sizeof(SObjectState));
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = -1;
     def.level = MapPane.GetMapLevel();
@@ -10937,8 +10938,8 @@ void TRippleAnimator::RefreshZBuffer()
 // * Drip Effect *
 // ***************
 
-DEFINE_BUILDER("Drip", TDripEffect)
-REGISTER_BUILDER(TDripEffect)
+DEFINE_OBJECT_DEF("Drip", TDripEffect)
+REGISTER_OBJECT_DEF(TDripEffect)
 
 void TDripEffect::Initialize()
 {
@@ -10995,8 +10996,8 @@ void TDripAnimator::Initialize()
 
 void TDripAnimator::AddNewRipple(int32_t x, int32_t y, int32_t z, int32_t len)
 {
-    SObjectDef def;
-    memset(&def, 0, sizeof(SObjectDef));
+    SObjectState def;
+    memset(&def, 0, sizeof(SObjectState));
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = -1;
     def.level = MapPane.GetMapLevel();
@@ -11113,8 +11114,8 @@ void TDripAnimator::RefreshZBuffer()
 // * FaultFire Effect *
 // ******************
 
-DEFINE_BUILDER("FaultFire", TFaultFireEffect)
-REGISTER_BUILDER(TFaultFireEffect)
+DEFINE_OBJECT_DEF("FaultFire", TFaultFireEffect)
+REGISTER_OBJECT_DEF(TFaultFireEffect)
 
 void TFaultFireEffect::Initialize()
 {
@@ -11229,8 +11230,8 @@ void TFaultFireAnimator::RefreshZBuffer()
 // * Blood *
 // *********
 
-DEFINE_BUILDER("Blood", TBloodEffect)
-REGISTER_BUILDER(TBloodEffect)
+DEFINE_OBJECT_DEF("Blood", TBloodEffect)
+REGISTER_OBJECT_DEF(TBloodEffect)
 
 void TBloodEffect::Initialize()
 {
@@ -11332,8 +11333,8 @@ void TBloodAnimator::RefreshZBuffer()
 // * Mist Effect *
 // ***************
 
-DEFINE_BUILDER("Mist", TMistEffect)
-REGISTER_BUILDER(TMistEffect)
+DEFINE_OBJECT_DEF("Mist", TMistEffect)
+REGISTER_OBJECT_DEF(TMistEffect)
 
 void TMistEffect::Initialize()
 {
@@ -11390,8 +11391,8 @@ void TMistAnimator::Initialize()
 
 void TMistAnimator::AddNewRipple(int32_t x, int32_t y, int32_t z, int32_t len)
 {
-    SObjectDef def;
-    memset(&def, 0, sizeof(SObjectDef));
+    SObjectState def;
+    memset(&def, 0, sizeof(SObjectState));
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = -1;
     def.level = MapPane.GetMapLevel();
@@ -11655,8 +11656,8 @@ void TMistFogAnimator::RefreshZBuffer()
 // * WaterFall Effect *
 // ***************
 
-DEFINE_BUILDER("WaterFall", TWaterFallEffect)
-REGISTER_BUILDER(TWaterFallEffect)
+DEFINE_OBJECT_DEF("WaterFall", TWaterFallEffect)
+REGISTER_OBJECT_DEF(TWaterFallEffect)
 
 void TWaterFallEffect::Initialize()
 {
@@ -11865,8 +11866,8 @@ void TWaterFallAnimator::RefreshZBuffer()
 // * Water Effect *
 // ***************
 
-DEFINE_BUILDER("Water", TWaterEffect)
-REGISTER_BUILDER(TWaterEffect)
+DEFINE_OBJECT_DEF("Water", TWaterEffect)
+REGISTER_OBJECT_DEF(TWaterEffect)
 
 void TWaterEffect::Initialize()
 {
@@ -12068,8 +12069,8 @@ void TWaterAnimator::RefreshZBuffer()
 // * Pixie Effect *
 // ***************
 
-DEFINE_BUILDER("Pixie", TPixieEffect)
-REGISTER_BUILDER(TPixieEffect)
+DEFINE_OBJECT_DEF("Pixie", TPixieEffect)
+REGISTER_OBJECT_DEF(TPixieEffect)
 
 void TPixieEffect::Initialize()
 {
@@ -12271,7 +12272,7 @@ class TFizzleEffect : public TEffect
 {
   public:
     TFizzleEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TFizzleEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TFizzleEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TFizzleEffect() {}
 
     virtual void Initialize();          // init
@@ -12315,8 +12316,8 @@ class TFizzleAnimator : public T3DAnimator
 // * Fizzle Effect Code *
 // **********************
 
-DEFINE_BUILDER("Fizzle", TFizzleEffect)
-REGISTER_BUILDER(TFizzleEffect)
+DEFINE_OBJECT_DEF("Fizzle", TFizzleEffect)
+REGISTER_OBJECT_DEF(TFizzleEffect)
 
 void TFizzleEffect::Initialize()
 {
@@ -12831,8 +12832,8 @@ void TQuicksandAnimator::RefreshZBuffer()
 /*  Ye Old Vortex
 
 // VORTEX is a teleport spell of sorts
-DEFINE_BUILDER("Vortex", TVortexEffect)
-REGISTER_BUILDER(TVortexEffect)
+DEFINE_OBJECT_DEF("Vortex", TVortexEffect)
+REGISTER_OBJECT_DEF(TVortexEffect)
 
 void TVortexEffect::Initialize()
 {
@@ -13615,8 +13616,8 @@ void TVortexAnimator::RefreshZBuffer()
 // ***********************************
 
 
-DEFINE_BUILDER("Speaker", TAmbSoundEffect)
-REGISTER_BUILDER(TAmbSoundEffect)
+DEFINE_OBJECT_DEF("Speaker", TAmbSoundEffect)
+REGISTER_OBJECT_DEF(TAmbSoundEffect)
 
 void TAmbSoundEffect::Initialize()
 {

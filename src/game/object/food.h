@@ -20,7 +20,7 @@ class TFood : public TObjectInstance
 {
   public:
     TFood(TObjectImagery* newim) : TObjectInstance(newim) {}
-    TFood(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
+    TFood(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
         // Munch munch munch
@@ -43,7 +43,7 @@ class TFood : public TObjectInstance
     STATFUNC(Fill)
 };
 
-DEFINE_BUILDER("FOOD", TFood)
+DEFINE_OBJECT_DEF("FOOD", TFood)
 
 extern TObjectClass FoodClass;
 

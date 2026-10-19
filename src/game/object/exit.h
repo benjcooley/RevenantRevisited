@@ -46,7 +46,7 @@ class TExit : public TContainer
   public:
     // REVSYNC: Build @ 0x0050e360 -- exits never move and always pulse.
     TExit(TObjectImagery* newim) : TContainer(newim) { flags |= OF_IMMOBILE | OF_PULSE; }
-    TExit(SObjectDef* def, TObjectImagery* newim) : TContainer(def, newim) { flags |= OF_IMMOBILE | OF_PULSE; }
+    TExit(SObjectState* def, TObjectImagery* newim) : TContainer(def, newim) { flags |= OF_IMMOBILE | OF_PULSE; }
 
   // The exit list (exit.def), read and written as a session starts and ends.
     // REVSYNC: 0x0050c880 -- read the active module's exit.def, else the shared one.
@@ -140,7 +140,7 @@ class TExit : public TContainer
     int32_t  wait      = 0;     // +0xe8, TLever's delay counter
 };
 
-DEFINE_BUILDER("EXIT", TExit)
+DEFINE_OBJECT_DEF("EXIT", TExit)
 
 enum
 {
@@ -161,7 +161,7 @@ class TLever : public TExit
 {
   public:
     TLever(TObjectImagery* newim) : TExit(newim) {}
-    TLever(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) {}
+    TLever(SObjectState* def, TObjectImagery* newim) : TExit(def, newim) {}
 
     // REVSYNC: 0x0050dc20 -- TExit::Use, and always handled.
     bool Use(TObjectInstance* user, int32_t with = -1) override;
@@ -174,4 +174,4 @@ class TLever : public TExit
     int32_t  usedir = 3;    // +0x104, 0 = NE, SE, SW, NW
 };
 
-DEFINE_BUILDER("LEVER", TLever)
+DEFINE_OBJECT_DEF("LEVER", TLever)

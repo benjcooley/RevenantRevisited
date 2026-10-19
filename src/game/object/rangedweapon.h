@@ -15,7 +15,7 @@ class TRangedWeapon : public TObjectInstance
 {
   public:
     TRangedWeapon(TObjectImagery* newim) : TObjectInstance(newim) {}
-    TRangedWeapon(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
+    TRangedWeapon(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 
     // Ranged weapon stats
     STATFUNC(EqSlot)
@@ -23,5 +23,5 @@ class TRangedWeapon : public TObjectInstance
 
 };
 
-DEFINE_BUILDER("RANGEDWEAPON", TRangedWeapon)
+DEFINE_OBJECT_DEF("RANGEDWEAPON", TRangedWeapon)
 

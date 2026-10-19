@@ -23,18 +23,18 @@ static State* Spawn(const S3DPoint& origin,bool isolated){
  auto* data=SpellList.GetSpellDataByName("Meteor Storm");auto* var=SpellList.GetVariantDataByName("Meteor Storm");const auto* c=var?var->controldata:nullptr;
  if(!data || !var || std::strcmp(var->effect,"StrikeEffect") || !c || std::strcmp(c->name,"Strike") || c->hits!=4 || c->radius!=265 || c->duration!=93 || c->wait!=48 || c->pattern!=SPAT_RANDOM || c->duration2 || c->follow || c->attachset || c->hittarget || c->oncaster || c->repeatdamage || c->multipletargets)return nullptr;
  auto s=std::make_unique<State>();auto* chars=TObjectClass::GetClass(OBJCLASS_CHARACTER);int actor_type=chars?chars->FindObjType("Acolyte"):-1;if(actor_type<0)return nullptr;
- auto actor=[&](S3DPoint pos){SObjectDef def={};def.objclass=OBJCLASS_CHARACTER;def.objtype=short(actor_type);def.pos=pos;return TObjectPtr<TCharacter>(dynamic_cast<TCharacter*>(chars->NewObject(&def)));};
+ auto actor=[&](S3DPoint pos){SObjectState def={};def.objclass=OBJCLASS_CHARACTER;def.objtype=short(actor_type);def.pos=pos;return TObjectPtr<TCharacter>(dynamic_cast<TCharacter*>(chars->NewObject(&def)));};
  s->caster=actor(origin);s->target=actor({origin.x+96,origin.y,origin.z});if(!s->caster || !s->target || !s->caster->BeginFighting(s->target.get()))return nullptr;
  TObjectInstance* target=s->target.get();S3DPoint offset={};s->spell=std::make_unique<TStrikeSpell>(s->caster.get(),&target,1,&offset,data,var,nullptr);
  auto* effects=TObjectClass::GetClass(OBJCLASS_EFFECT);int type=effects?effects->FindObjType(0xad92bd32u):-1;auto* info=type>=0?effects->GetObjType(type):nullptr;
- s->resource=TObjectImagery::LoadImagery(c->imagery);auto* image=dynamic_cast<T3DImagery*>(s->resource);if(!info || !info->objbuilder || !image)return nullptr;
+ s->resource=TObjectImagery::LoadImagery(c->imagery);auto* image=dynamic_cast<T3DImagery*>(s->resource);if(!info || !image)return nullptr;
  const auto& snap=FrameSnap::GetConfig();if(isolated && snap.seed_set)SeedRandom(snap.seed);s->initial_draws=RandomDraws();
  s->core.Initialize({origin.x,origin.y,origin.z},[](int lo,int hi){return random(lo,hi);},[](){const uint32_t seed=uint32_t(GameRand());SeedRandom(seed);(void)GameRand();},[](int angle,int radius){S3DPoint p;ConvertToVector(angle,radius,p);return strike_meteor::Point{p.x,p.y,p.z};});
- for(int i=0;i<4;++i){const auto&p=s->core.owners[i].position;SObjectDef def={};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos={p.x,p.y,p.z};
+ for(int i=0;i<4;++i){const auto&p=s->core.owners[i].position;SObjectState def={};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos={p.x,p.y,p.z};
   // Same original class builder with the actual spell's imagery override;
   // default Dummy association and all other class factories remain unchanged.
   auto* owner_image=TObjectImagery::LoadImagery(c->imagery);if(!owner_image)return nullptr;
-  s->owners[i].reset(info->objbuilder->Build(&def,owner_image));if(!s->owners[i]){TObjectImagery::FreeImagery(owner_image);return nullptr;}auto* o=s->owners[i].get();auto* e=dynamic_cast<TEffect*>(o);if(!e || o->ObjId()!=0xad92bd32u)return nullptr;
+  s->owners[i].reset(info->Create(def,owner_image));if(!s->owners[i]){TObjectImagery::FreeImagery(owner_image);return nullptr;}auto* o=s->owners[i].get();auto* e=dynamic_cast<TEffect*>(o);if(!e || o->ObjId()!=0xad92bd32u)return nullptr;
   e->SetSpell(s->spell.get());SetIntPos(o, def.pos);o->Face(0);o->OnScreen();auto* a=dynamic_cast<T3DAnimator*>(o->GetAnimator());if(!a || !image->HasRetailCometProfile() || a->PartSysUnsupported() || a->PartSysControllerCount()!=3)return nullptr;
   a->SetCometGround([](int,int,int){return 0;});
  }

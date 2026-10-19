@@ -14,12 +14,12 @@ class TLightSource : public TObjectInstance
 {
   public:
     TLightSource(TObjectImagery* newim) : TObjectInstance(newim) {}
-    TLightSource(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
+    TLightSource(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 
     // Lightsource stats
     STATFUNC(EqSlot)
     STATFUNC(Value)
 };
 
-DEFINE_BUILDER("LIGHTSOURCE", TLightSource)
+DEFINE_OBJECT_DEF("LIGHTSOURCE", TLightSource)
 

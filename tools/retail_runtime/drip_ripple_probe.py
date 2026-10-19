@@ -96,12 +96,12 @@ enum class EFxBlend:uint8_t{Alpha};enum class EFxDepthMode:uint8_t{TestNoWrite};
 struct SQuadDrawItem{bool retail_software_projection=false,retail_argb4444=false;float world_pos[4][3]{},uv[4][2]{};struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};TRenderer renderer;TRenderer*Renderer=&renderer;
 struct Journal{int tick,id;};std::vector<Journal>births,deaths;int now=0;
-struct TObjectImagery{virtual~TObjectImagery()=default;static void FreeImagery(TObjectImagery*){throw std::runtime_error("Unexpected asset rejection");}};struct SObjectDef{};
+struct TObjectImagery{virtual~TObjectImagery()=default;static void FreeImagery(TObjectImagery*){throw std::runtime_error("Unexpected asset rejection");}};struct SObjectState{};
 struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
 struct TObjectInstance{int GetFace()const{return 0;}World world;S3DPoint pos{};int mapindex=0;virtual~TObjectInstance(){if(mapindex)deaths.push_back({now,mapindex});}
  const S3DPoint&Pos()const{return pos;}const World&Transform()const{return world;}void ForcePos(S3DPoint p){pos=p;MtxClear(&world.m);hmm_vec3 v={float(p.x),float(p.y),float(p.z)};MtxTranslate(&world.m,&v);}
  void SetMapIndex(int n){mapindex=n;births.push_back({now,n});}int GetMapIndex()const{return mapindex;}void ActivateComponents(){}};
-struct TEffect:TObjectInstance{TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual void Pulse(){};virtual void Load(RTInputStream,int32_t,int32_t){};virtual void Save(RTOutputStream){}};
+struct TEffect:TObjectInstance{TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};virtual void Pulse(){};virtual void Load(RTInputStream,int32_t,int32_t){};virtual void Save(RTOutputStream){}};
 struct TMapPane{int next=0;int MakeIndex(){return ++next;}}MapPane;
 void log_info(const char*,...){};void log_error(const char*,...){throw std::runtime_error("Asset binding failed");}
 extern "C" int rand(void){throw std::runtime_error("Unexpected raw RNG: native short no-splash physics requires none");}

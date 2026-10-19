@@ -40,7 +40,7 @@
 
 #define GRIDSNAPSIZE    48
 
-REGISTER_BUILDER(TCharacter)
+REGISTER_OBJECT_DEF(TCharacter)
 TObjectClass CharacterClass("CHARACTER", OBJCLASS_CHARACTER, 0);
 
 extern TObjectClass EffectClass;
@@ -230,7 +230,7 @@ int32_t Recovery(int32_t elapsed, int32_t value, int32_t rate)
 // its feet, sprayed toward `hangle` (its SetParams, slot 0x200).
 void SprayBlood(const S3DPoint& feet, int32_t height, int32_t hangle, int32_t vangle, int32_t hspread)
 {
-    SObjectDef def{};
+    SObjectState def{};
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = EffectClass.FindObjType("blood");
     def.level = MapPane.GetMapLevel();
@@ -2783,7 +2783,7 @@ int32_t TCharacter::ResolveBowShoot(TActionBlock* ab, int32_t bits)
             SetIntFacing(*this, ab->angle & 255);
             SetMoveAngle(ab->angle);
 
-            SObjectDef def{};
+            SObjectState def{};
             def.objclass = OBJCLASS_AMMO;
             def.objtype = AmmoClass.FindObjType(ammo->GetName());
             def.flags = OF_WEIGHTLESS;
@@ -2917,7 +2917,7 @@ void TCharacter::EffectCombatFlash()
         return;
     }
     extern TObjectClass EffectClass;
-    SObjectDef def{};
+    SObjectState def{};
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = EffectClass.FindObjType("combatflash");
     def.level = MapPane.GetMapLevel();
@@ -2943,8 +2943,8 @@ void TCharacter::EffectBurst(const char *name, int32_t height)
 
     extern TObjectClass EffectClass;
 
-    SObjectDef def;
-    memset(&def, 0, sizeof(SObjectDef));
+    SObjectState def;
+    memset(&def, 0, sizeof(SObjectState));
 
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = EffectClass.FindObjType(name);
@@ -5610,8 +5610,8 @@ bool TCharacter::Pulp(S3DPoint vel, int32_t piece_count, int32_t blood_count)
     SetDesired(ab);
     Disable();
 
-    SObjectDef def;
-    memset(&def, 0, sizeof(SObjectDef));
+    SObjectState def;
+    memset(&def, 0, sizeof(SObjectState));
     def.objclass = OBJCLASS_EFFECT;
     def.level = MapPane.GetMapLevel();
     def.pos = IntPos(*this);
@@ -5643,8 +5643,8 @@ bool TCharacter::Burn()
     burnticks = 50;
     if (!burning)
     {
-        SObjectDef def;
-        memset(&def, 0, sizeof(SObjectDef));
+        SObjectState def;
+        memset(&def, 0, sizeof(SObjectState));
         def.objclass = OBJCLASS_EFFECT;
         def.level = MapPane.GetMapLevel();
         def.pos = IntPos(*this);
@@ -6363,8 +6363,8 @@ bool TCharacter::Flail()
 /*
     if (!burning)
     {
-        SObjectDef def;
-        memset(&def, 0, sizeof(SObjectDef));
+        SObjectState def;
+        memset(&def, 0, sizeof(SObjectState));
         def.objclass = OBJCLASS_EFFECT;
         def.level = MapPane.GetMapLevel();
         def.pos = IntPos(*this);

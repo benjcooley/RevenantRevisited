@@ -259,6 +259,6 @@ class TBloodAnimatorBuilder final : public T3DAnimatorBuilder
 
 // REVSYNC: the "Blood" effect builder 0x004f1870 (TBloodEffect, 0x19c bytes,
 // vtable 0x005acb0c) and animator builder 0x004f18b0 (vtable 0x005acd14).
-DEFINE_BUILDER("Blood", TBloodEffect)
-REGISTER_BUILDER(TBloodEffect)
+DEFINE_OBJECT_DEF("Blood", TBloodEffect)
+REGISTER_OBJECT_DEF(TBloodEffect)
 static TBloodAnimatorBuilder g_blood_animator_builder;

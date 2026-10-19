@@ -699,12 +699,12 @@ void TCharAnimator::InitUtilityImagery()
 {
     extern TObjectClass EffectClass;
 
-    SObjectDef def;
-    memset(&def, 0, sizeof(SObjectDef));
+    SObjectState def;
+    memset(&def, 0, sizeof(SObjectState));
 
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = EffectClass.FindObjType("CharUtility");
-    SObjectInfo* info = EffectClass.GetObjType(def.objtype);
+    TObjectDef* info = EffectClass.GetObjType(def.objtype);
     if (info)
         utilityimagery = (T3DImagery*)TObjectImagery::LoadImagery(info->imageryid);
 }

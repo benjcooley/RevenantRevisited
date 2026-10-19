@@ -33,7 +33,7 @@ static State* Spawn(const S3DPoint& origin,bool isolated_seed){
  if(!data || !variant || std::strcmp(variant->name,"YManaDrain") || variant->mindamage!=160 || variant->maxdamage!=260)return nullptr;
  auto s=std::make_unique<State>();s->display=origin;s->minimum=variant->mindamage;s->maximum=variant->maxdamage;
  auto* effects=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=effects?effects->FindObjType(0xae92bc14u):-1;if(type<0)return nullptr;
- SObjectDef def={};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos={3185,3185,16};s->owner.reset(effects->NewObject(&def));if(!s->owner || s->owner->ObjId()!=0xae92bc14u)return nullptr;
+ SObjectState def={};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos={3185,3185,16};s->owner.reset(effects->NewObject(&def));if(!s->owner || s->owner->ObjId()!=0xae92bc14u)return nullptr;
  auto* img=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!img || img->NumObjects()!=4 || img->NumStates()!=1 || img->GetAniLength(0)!=100 || img->NumTextures()!=4 || img->NumMaterials()!=4 || img->NumTags()!=0)return nullptr;
  const char* names[]={"cone01","rectangle01","rectangle02","cone02"};for(int i=0;i<4;++i)if(std::strcmp(img->GetObjectName(i),names[i]) || img->GetObjectParent(i,0)!=-1)return nullptr;
  for(int i=0;i<2;++i){const int object=i+2;S3DTex tex={};img->GetTexture(object,&tex);const auto& p=tex.desc.pixelFormat;
@@ -42,7 +42,7 @@ static State* Spawn(const S3DPoint& origin,bool isolated_seed){
   s->meshes[i]=Renderer->RegisterMeshAsset(0x594d414e41440000ull+i,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()),img->GetTextureHandle(object));if(!s->meshes[i])return nullptr;Renderer->AddMeshAssetRef(s->meshes[i]);
  }
  auto* characters=TObjectClass::GetClass(OBJCLASS_CHARACTER);const int actor_type=characters?characters->FindObjType("Acolyte"):-1;if(actor_type<0)return nullptr;
- auto make=[&](S3DPoint p){SObjectDef d={};d.objclass=OBJCLASS_CHARACTER;d.objtype=short(actor_type);d.pos=p;return TObjectPtr<TCharacter>(dynamic_cast<TCharacter*>(characters->NewObject(&d)));};
+ auto make=[&](S3DPoint p){SObjectState d={};d.objclass=OBJCLASS_CHARACTER;d.objtype=short(actor_type);d.pos=p;return TObjectPtr<TCharacter>(dynamic_cast<TCharacter*>(characters->NewObject(&d)));};
  s->caster=make({3185,3185,16});s->target=make({3281,3185,16});if(!s->caster || !s->target || !s->caster->BeginFighting(s->target.get()) || s->caster->Fighting()!=s->target.get())return nullptr;
  TObjectInstance* target=s->target.get();S3DPoint offset={0,0,0};s->spell=std::make_unique<TSpell>(s->caster.get(),&target,1,&offset,data,variant);if(auto* effect=dynamic_cast<TEffect*>(s->owner.get()))effect->SetSpell(s->spell.get());else return nullptr;
  const auto& snap=FrameSnap::GetConfig();if(isolated_seed && snap.seed_set)SeedRandom(snap.seed);s->initial_draws=RandomDraws();

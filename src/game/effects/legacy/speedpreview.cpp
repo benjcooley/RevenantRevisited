@@ -39,7 +39,7 @@ State* Spawn(const S3DPoint& origin, bool quicksilver)
     const uint32_t id = quicksilver ? 0xad92bd35u : 0xad92bd36u;
     const int32_t type = effect_class ? effect_class->FindObjType(id) : -1;
     if (type < 0) return nullptr;
-    SObjectDef definition = {};
+    SObjectState definition = {};
     definition.objclass = OBJCLASS_EFFECT;
     definition.objtype = short(type);
     definition.pos = origin;

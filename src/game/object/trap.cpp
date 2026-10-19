@@ -9,7 +9,7 @@
 #include "game/world/mappane.h"
 #include "game/audio/sound.h"
 
-REGISTER_BUILDER(TTrap)
+REGISTER_OBJECT_DEF(TTrap)
 
 TObjectClass TrapClass("TRAP", OBJCLASS_TRAP, 0);
 
@@ -22,7 +22,7 @@ class TArrowWall : public TTrap
 {
   public:
     TArrowWall(TObjectImagery* newim) : TTrap(newim) { Init(); }
-    TArrowWall(SObjectDef* def, TObjectImagery* newim) : TTrap(def, newim) { Init(); }
+    TArrowWall(SObjectState* def, TObjectImagery* newim) : TTrap(def, newim) { Init(); }
 
     void Init();
 
@@ -37,19 +37,19 @@ class TArrowWall : public TTrap
     int32_t wallfacing;             // which way to fire arrows
 };
 
-DEFINE_BUILDER("ArrowWallS", TArrowWall)
-REGISTER_BUILDER(TArrowWall)
+DEFINE_OBJECT_DEF("ArrowWallS", TArrowWall)
+REGISTER_OBJECT_DEF(TArrowWall)
 
 _CLASSDEF(TArrowWall2)
 class TArrowWall2 : public TArrowWall
 {
   public:
     TArrowWall2(TObjectImagery* newim) : TArrowWall(newim) { }
-    TArrowWall2(SObjectDef* def, TObjectImagery* newim) : TArrowWall(def, newim) { }
+    TArrowWall2(SObjectState* def, TObjectImagery* newim) : TArrowWall(def, newim) { }
 };
 
-DEFINE_BUILDER("ArrowWallE", TArrowWall2)
-REGISTER_BUILDER(TArrowWall2)
+DEFINE_OBJECT_DEF("ArrowWallE", TArrowWall2)
+REGISTER_OBJECT_DEF(TArrowWall2)
 
 
 void TArrowWall::Init()
@@ -98,8 +98,8 @@ void TArrowWall::Pulse()
                 lastshot = frame;
 
                 // generate a new arrow and fire it
-                SObjectDef def;
-                memset(&def, 0, sizeof(SObjectDef));
+                SObjectState def;
+                memset(&def, 0, sizeof(SObjectState));
                 def.objclass = OBJCLASS_AMMO;
                 def.objtype = AmmoClass.FindObjType("Arrow3D");
                 def.flags = OF_WEIGHTLESS;

@@ -44,9 +44,9 @@ def build_port(output,asset,inputs,ticks,params):
 enum class EFxBlend:uint8_t{Alpha};enum class EFxDepthMode:uint8_t{TestNoWrite};enum class EFxDebugMode:uint8_t{Normal,FullTexture};enum class EFxLightMode:uint8_t{Unlit};
 struct SQuadDrawItem{bool retail_software_projection=false,retail_argb4444=false;float world_pos[4][3]{},uv[4][2]{};struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};TRenderer renderer;TRenderer*Renderer=&renderer;
-struct TObjectImagery{};struct SObjectDef{};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
+struct TObjectImagery{};struct SObjectState{};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
 struct TObjectInstance{int GetFace()const{return 0;}World world;S3DPoint pos{};virtual~TObjectInstance()=default;const S3DPoint&Pos()const{return pos;}const World&Transform()const{return world;}};
-struct TEffect:TObjectInstance{TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual void Pulse(){};virtual void Load(RTInputStream,int32_t,int32_t){};virtual void Save(RTOutputStream){}};
+struct TEffect:TObjectInstance{TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};virtual void Pulse(){};virtual void Load(RTInputStream,int32_t,int32_t){};virtual void Save(RTOutputStream){}};
 void log_info(const char*,...){};
 std::ifstream rng;int rng_count=0,current_raw=-1;bool raw_consumed=false;
 extern "C" int rand(void){if(current_raw<0||raw_consumed)throw std::runtime_error("Production requested a raw RNG draw absent in retail");raw_consumed=true;return current_raw;}

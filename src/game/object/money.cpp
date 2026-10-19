@@ -11,7 +11,7 @@
 #include "game/world/mappane.h"
 #include "engine/core/logging.h"
 
-REGISTER_BUILDER(TMoney)
+REGISTER_OBJECT_DEF(TMoney)
 TObjectClass MoneyClass("MONEY", OBJCLASS_MONEY, 0);
 
 // Hard coded class stats

@@ -14,12 +14,12 @@ class TKey : public TObjectInstance
 {
   public:
     TKey(TObjectImagery* newim) : TObjectInstance(newim) {}
-    TKey(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
+    TKey(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 
     // Key stats
     STATFUNC(Value)
     OBJSTATFUNC(KeyId)
 };
 
-DEFINE_BUILDER("KEY", TKey)
+DEFINE_OBJECT_DEF("KEY", TKey)
 

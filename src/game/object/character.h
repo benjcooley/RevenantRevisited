@@ -85,7 +85,7 @@ class TCharacter : public TComplexObject
     void ClearChar();       // Clear out working vars of char
 
     TCharacter(TObjectImagery* newim) : TComplexObject(newim) { ClearChar(); }
-    TCharacter(SObjectDef* def, TObjectImagery* newim) : TComplexObject(def, newim) { ClearChar(); }
+    TCharacter(SObjectState* def, TObjectImagery* newim) : TComplexObject(def, newim) { ClearChar(); }
 
     int32_t Distance(const TObjectInstance* inst) const override;
       // REVSYNC: TCharacter::Distance @ 0x004d61b0 -- edge to edge: the
@@ -1048,6 +1048,6 @@ protected:
     int32_t buttonrepeat = 0;
 };
 
-DEFINE_BUILDER("Character", TCharacter)
+DEFINE_OBJECT_DEF("Character", TCharacter)
 
 #endif

@@ -461,7 +461,7 @@ bool DumpTilesToPath(const char* out_path_cstr)
 
     for (int32_t objtype = 0; objtype < TileClass.NumTypes(); ++objtype)
     {
-        SObjectInfo* info = TileClass.GetObjType(objtype);
+        TObjectDef* info = TileClass.GetObjType(objtype);
         if (!info || !info->name)
             continue;
 
@@ -643,7 +643,7 @@ bool DumpIconsToPath(const char* out_path_cstr)
 
         for (int32_t objtype = 0; objtype < cls->NumTypes(); ++objtype)
         {
-            SObjectInfo* info = cls->GetObjType(objtype);
+            TObjectDef* info = cls->GetObjType(objtype);
             if (!info || !info->name)
                 continue;
 
@@ -1157,7 +1157,7 @@ bool RebuildCharPreviewForRosterIndex(int32_t roster_idx)
     TObjectClass* cl = TObjectClass::GetClass(objclass);
     if (!cl) return false;
 
-    SObjectDef def = {};
+    SObjectState def = {};
     def.objclass = short(objclass);
     def.objtype = short(objtype);
     def.state = 0;
@@ -1680,7 +1680,7 @@ void AddI3DCharacterChoices(TObjectClass& cl, int32_t objclass)
 {
     for (int32_t objtype = 0; objtype < cl.NumTypes(); ++objtype)
     {
-        SObjectInfo* info = cl.GetObjType(objtype);
+        TObjectDef* info = cl.GetObjType(objtype);
         if (!info)
             continue;
 

@@ -7,7 +7,7 @@
 #include "game/app/revenant.h"
 #include "game/object/tile.h"
 
-REGISTER_BUILDER(TTile)
+REGISTER_OBJECT_DEF(TTile)
 
 TObjectClass TileClass("TILE", OBJCLASS_TILE, 0);
 

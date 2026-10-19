@@ -10,7 +10,7 @@ namespace sandswirl_runtime {
 class Effect final : public TEffect {
 public:
     Effect(TObjectImagery*);
-    Effect(SObjectDef*,TObjectImagery*);
+    Effect(SObjectState*,TObjectImagery*);
     ~Effect() override;
     void Pulse() override;
     bool UseQualifiedSparks(int32_t initialized_seekz);

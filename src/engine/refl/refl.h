@@ -90,6 +90,12 @@ class TComponent;
 // DEF_BLOCK for nodes. Annotations on the class.
 #define DEF_BLOCK(name)
 #define DEF_COMPONENT(name)
+// The ids this class may use, so a base can grow without colliding with
+// a derived class: ids are wire tags shared along the chain (a derived
+// table is the base's props then its own). The generator fails the build
+// on an id outside the range or one a base already uses. Annotation on
+// the class.
+#define REFL_IDS(lo, hi)
 // Lets the generated thunks reach private annotated members. Not needed
 // under real reflection (access_context::unchecked), so it folds away.
 #if defined(__cpp_annotations)

@@ -102,7 +102,7 @@ TObjectInstance* NewObjectNamed(const std::string& type)
         if (TObjectClass* cl = TObjectClass::GetClass(c))
             if (const int32_t objtype = cl->FindObjType(type.c_str()); objtype >= 0)
             {
-                SObjectDef def{};
+                SObjectState def{};
                 def.objclass = (short)cl->ClassId();
                 def.objtype = (short)objtype;
                 if (TObjectInstance* inst = cl->NewObject(&def))

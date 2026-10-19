@@ -24,7 +24,7 @@ struct State {
 };
 State* Spawn(const S3DPoint& origin){
  if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto* cl=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cl?cl->FindObjType(0xad92bc1cu):-1;if(type<0)return nullptr;
- SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));if(!s->owner || s->owner->ObjId()!=0xad92bc1cu)return nullptr;s->owner->OnScreen();
+ SObjectState d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));if(!s->owner || s->owner->ObjId()!=0xad92bc1cu)return nullptr;s->owner->OnScreen();
  auto* img=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!img || img->NumObjects()!=3 || img->NumStates()!=1 || img->GetAniLength(0)!=100 || img->NumTextures()!=2 || img->NumMaterials()!=3 || img->NumTags()!=0)return nullptr;
  for(int i=0;i<3;++i){const char* name=i==0?"rectangle0":i==1?"rectangle1":"ngon01";if(std::strcmp(img->GetObjectName(i),name) || img->GetObjectParent(i,0)!=-1)return nullptr;
   std::vector<SMeshVertex> verts;std::vector<uint16_t> indices;if(!ExtractSubMeshTextureSlot(img,i,i<2?i+1:0,verts,indices) || verts.size()!=size_t(i<2?4:3) || indices.size()!=size_t(i<2?6:3))return nullptr;

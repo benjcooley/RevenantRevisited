@@ -104,11 +104,11 @@ VfxReviewSpawnInfo DescribeVfxReviewSpawn(uint32_t type_id)
         return info;
     }
     const auto* entry = effect_class->GetObjType(info.object_type);
-    if (!entry || entry->uniqueid != type_id || !entry->objbuilder || entry->imageryid < 0) {
+    if (!entry || entry->uniqueid != type_id || entry->imageryid < 0) {
         info.description = "EFFECT factory or imagery mapping unavailable";
         return info;
     }
-    info.builder_name = entry->objbuilder->GetTypeName();
+    info.builder_name = entry->DefName();
     if (!ReviewKnownNullSpellBuilder(info.builder_name)) {
         info.description = "Unknown map constructor; label only";
         return info;

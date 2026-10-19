@@ -19,7 +19,7 @@ class TScroll final : public TObjectInstance
     friend class TLegacySerialize;
   public:
     TScroll(TObjectImagery* newim) : TObjectInstance(newim) { text = nullptr; }
-    TScroll(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { text = nullptr; }
+    TScroll(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) { text = nullptr; }
 
     _NODEFAULTCONS(TScroll);
 
@@ -38,7 +38,7 @@ class TScroll final : public TObjectInstance
     char *text;             // Text written on the scroll
 };
 
-DEFINE_BUILDER("SCROLL", TScroll)
+DEFINE_OBJECT_DEF("SCROLL", TScroll)
 
 // ***************
 // * TScrollPane *

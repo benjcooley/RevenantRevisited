@@ -39,7 +39,7 @@ void TopUp(const TObjectClass& cl)
 {
     for (int32_t i = 0; i < cl.NumTypes(); ++i)
     {
-        const SObjectInfo* type = cl.GetObjType(i);
+        const TObjectDef* type = cl.GetObjType(i);
         if (!type || !type->name)
             continue;
         if (TObjectInstance* item = Player->FindObjInventory(type->name))
@@ -66,7 +66,7 @@ void GiveAllMagic()
 
     for (int32_t i = 0; i < TalismanClass.NumTypes(); ++i)
     {
-        const SObjectInfo* type = TalismanClass.GetObjType(i);
+        const TObjectDef* type = TalismanClass.GetObjType(i);
         if (!type || !type->name)
             continue;
         TObjectInstance* talisman = Player->FindObjInventory(type->name);

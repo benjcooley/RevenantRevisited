@@ -38,8 +38,8 @@ def build_port(output,asset,inputs,ticks):
 enum class EFxBlend:uint8_t{Alpha,AdditiveStraight};enum class EFxDepthMode:uint8_t{TestNoWrite};enum class EFxDebugMode:uint8_t{Normal};enum class EFxLightMode:uint8_t{Unlit};
 struct SQuadDrawItem{bool retail_argb4444=false;float world_pos[4][3]{},uv[4][2]{};struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};TRenderer renderer;TRenderer*Renderer=&renderer;
-struct TObjectImagery{};struct SObjectDef{};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
-struct TEffect{World world;TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual~TEffect()=default;int GetFace()const{return 0;}const World&Transform()const{return world;}};
+struct TObjectImagery{};struct SObjectState{};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
+struct TEffect{World world;TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};virtual~TEffect()=default;int GetFace()const{return 0;}const World&Transform()const{return world;}};
 std::ifstream rng;int rng_count=0;int random(int low,int high){int a,b,v;if(!(rng>>a>>b>>v)||a!=low||b!=high)throw std::runtime_error("Mist native/port RNG order mismatch");++rng_count;return v;}
 '''
     records=struct.unpack_from('<32f',asset,0xfc)

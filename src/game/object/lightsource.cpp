@@ -7,7 +7,7 @@
 #include "game/app/revenant.h"
 #include "game/object/lightsource.h"
 
-REGISTER_BUILDER(TLightSource)
+REGISTER_OBJECT_DEF(TLightSource)
 TObjectClass LightSourceClass("LIGHTSOURCE", OBJCLASS_LIGHTSOURCE, 0);
 
 // Hard coded class stats

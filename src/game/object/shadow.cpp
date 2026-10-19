@@ -7,7 +7,7 @@
 #include "game/app/revenant.h"
 #include "game/object/shadow.h"
 
-REGISTER_BUILDER(TShadow)
+REGISTER_OBJECT_DEF(TShadow)
 
 TObjectClass ShadowClass("SHADOW", OBJCLASS_SHADOW, 0);
 

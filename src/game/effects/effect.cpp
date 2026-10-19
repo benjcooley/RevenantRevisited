@@ -1063,28 +1063,29 @@ bool TParticleEffectComponent::HasParticles() const
 
 TObjectClass EffectClass("EFFECT", OBJCLASS_EFFECT, 0);
 
-class TGenericEffectBuilder : public TObjectBuilder
+class TGenericEffectDef final : public TStateObjectDef<SObjectState>
 {
   public:
-    TGenericEffectBuilder(const char* name) : TObjectBuilder(name) {}
-    TObjectInstance* Build(TObjectImagery* img) override { return new TEffect(img); }
-    TObjectInstance* Build(SObjectDef* def, TObjectImagery* img) override { return new TEffect(def, img); }
+    TObjectInstance* Create(SObjectState& state, TObjectImagery* img) const override { return new TEffect(&state, img); }
+    TObjectInstance* Create(TObjectImagery* img) const override { return new TEffect(img); }
 };
 
-static TGenericEffectBuilder g_effect_builder("EFFECT");
-static TGenericEffectBuilder g_effect_builder_lower("effect");
-static TGenericEffectBuilder g_effect_stillwater_builder("StillWater");
-static TGenericEffectBuilder g_effect_flowwater_builder("FlowWater");
-static TGenericEffectBuilder g_effect_bendwater1_builder("BendWater1");
-static TGenericEffectBuilder g_effect_bendwater2_builder("BendWater2");
-static TGenericEffectBuilder g_effect_sewerwater_builder("SewerWater");
-static TGenericEffectBuilder g_effect_wave_builder("Wave");
-static TGenericEffectBuilder g_effect_waves_builder("WaveS");
-static TGenericEffectBuilder g_effect_wavem_builder("WaveM");
+static std::unique_ptr<TObjectDef> MakeGenericEffectDef() { return std::make_unique<TGenericEffectDef>(); }
+
+static TObjectDef::SRegistrar g_effect_builder("EFFECT", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_builder_lower("effect", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_stillwater_builder("StillWater", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_flowwater_builder("FlowWater", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_bendwater1_builder("BendWater1", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_bendwater2_builder("BendWater2", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_sewerwater_builder("SewerWater", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_wave_builder("Wave", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_waves_builder("WaveS", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_wavem_builder("WaveM", MakeGenericEffectDef);
 // Pixie uses the authored exact-type builder below; a generic registration
 // here would win the first-match lookup and suppress its owner component.
-static TGenericEffectBuilder g_effect_speaker_builder("speaker");
-static TGenericEffectBuilder g_effect_speaker_caps_builder("Speaker");
+static TObjectDef::SRegistrar g_effect_speaker_builder("speaker", MakeGenericEffectDef);
+static TObjectDef::SRegistrar g_effect_speaker_caps_builder("Speaker", MakeGenericEffectDef);
 
 // REVSYNC-DIVERGENCE: retail turns the point with the object's facing in its
 // own float math (TEffect::Pulse 0x004dea44..0x004deb92; the Strike def's
@@ -1324,8 +1325,8 @@ void TEffect::SetVisibleWhen(const char* name)
 // REVSYNC: the "Iced" builder @ 0x004ec860 (Build 0x004f7dc0: 0x18c bytes,
 // vtable 0x005ab25c, no target and no ticks; its Init 0x004ec880, slot
 // 0x1fc, clears both again).
-DEFINE_BUILDER("Iced", TIcedEffect)
-REGISTER_BUILDER(TIcedEffect)
+DEFINE_OBJECT_DEF("Iced", TIcedEffect)
+REGISTER_OBJECT_DEF(TIcedEffect)
 
 void TIcedEffect::Set(TObjectInstance* victim)
 {
@@ -1510,8 +1511,8 @@ class TFlameQuadComponent final : public TFlipbookBillboardComponent
     bool retail_argb4444_ = false;
 };
 
-DEFINE_BUILDER("FLAME", TFlameEffect)
-REGISTER_BUILDER(TFlameEffect)
+DEFINE_OBJECT_DEF("FLAME", TFlameEffect)
+REGISTER_OBJECT_DEF(TFlameEffect)
 
 void TFlameEffect::InitializeVisualComponent(TObjectImagery* imagery)
 {
@@ -1611,7 +1612,7 @@ class TFlameAnimatorComponentBuilder : public T3DAnimatorBuilder
 static TFlameAnimatorComponentBuilder g_flame_animator_component_builder;
 
 // Standalone spawn path used by the --test=vfx harness. The in-game spawn
-// route is `MapPane::NewObject(SObjectDef*)`, which threads the instance
+// route is `MapPane::NewObject(SObjectState*)`, which threads the instance
 // into a loaded sector via the object-class registry; that's overkill (and
 // requires a live area / sector) for previewing a single effect. Here we
 // take the imagery-only ctor, attach the visual components by hand, and
@@ -1646,7 +1647,7 @@ TFlameEffect* TFlameEffect::SpawnForTest(const S3DPoint& origin)
         return nullptr;
     }
 
-    // Use the imagery-only ctor; we don't have (or want) an SObjectDef /
+    // Use the imagery-only ctor; we don't have (or want) an SObjectState /
     // OBJCLASS_EFFECT registry entry for a preview-only instance. Note
     // that this leaves `objclass == -1`; the destructor's component +
     // imagery cleanup runs regardless (see TObjectInstance::~TObjectInstance).
@@ -3915,25 +3916,27 @@ class TWaterReferenceComponent final : public TFlipbookBillboardComponent
 };
 
 template <typename Effect>
-class TWaterReferenceBuilder final : public TObjectBuilder
+class TWaterReferenceDef final : public TStateObjectDef<SObjectState>
 {
   public:
-    explicit TWaterReferenceBuilder(const char* name) : TObjectBuilder(name) {}
-    TObjectInstance* Build(TObjectImagery* img) override
+    TObjectInstance* Create(TObjectImagery* img) const override
     {
         return new Effect(img);
     }
-    TObjectInstance* Build(SObjectDef* def, TObjectImagery* img) override
+    TObjectInstance* Create(SObjectState& state, TObjectImagery* img) const override
     {
         // NewObject assigns a temporary map index before Load replaces it
         // with the serialized index. Registering component updates here
         // would capture that temporary identity and silently go stale.
         // AttachAnimatorComponents initializes after the complete load.
-        return new Effect(def, img);
+        return new Effect(&state, img);
     }
 };
-static TWaterReferenceBuilder<TRippleEffect> g_ripple_reference_builder("Ripple");
-static TWaterReferenceBuilder<TDripEffect> g_drip_reference_builder("Drip");
+
+template <typename Effect>
+static std::unique_ptr<TObjectDef> MakeWaterReferenceDef() { return std::make_unique<TWaterReferenceDef<Effect>>(); }
+static TObjectDef::SRegistrar g_ripple_reference_builder("Ripple", MakeWaterReferenceDef<TRippleEffect>);
+static TObjectDef::SRegistrar g_drip_reference_builder("Drip", MakeWaterReferenceDef<TDripEffect>);
 
 // Map render resolves imagery lazily. Revisit attachment there if a builder
 // ran before its texture assets were ready; Initialize is idempotent.
@@ -4907,7 +4910,7 @@ void THaloEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
 //   §1 retail src: method bodies live only in
 //      `legacy/walkcode/effect.cpp:201-218` (Pulse + builder) and
 //      `legacy/walkcode/effect.cpp:886-991` (animator). Modern src/effect.cpp
-//      has no `DEFINE_BUILDER("fire", ...)` and no
+//      has no `DEFINE_OBJECT_DEF("fire", ...)` and no
 //      `REGISTER_3DANIMATOR("Fire", ...)` — vestigial declarations only.
 //   §2 distinct from F01 TFlameEffect: YES. F01 = single torch flipbook +
 //      sparks (1 mesh + particle emitter). F03 = multi-quad scatter patch
@@ -5782,7 +5785,7 @@ void TTeleporterEffect::Initialize()
     // Pre-release effect_old.cpp:5503-5506: sets my_state = TELE_STATE_INIT.
     // Our default member initializer already sets phase_=Init, so this
     // is effectively a no-op. Kept as a vtable hook for in-game spawn
-    // (TEffect ctor chain calls Initialize via the SObjectDef path).
+    // (TEffect ctor chain calls Initialize via the SObjectState path).
     phase_ = ETeleporterPhase::Init;
     life_ = 0;
 }
@@ -6210,7 +6213,7 @@ TSparkEffect* TSparkEffect::SpawnPreview(const S3DPoint& origin, bool editor_def
     // --- Single color per burst (objflags = 1 << (ObjId() & 3)).
     // The original selects exactly one of the 4 photon sub-objects for the
     // WHOLE burst, keyed off the attacker's object id. A sector-less
-    // harness effect has no valid SObjectInfo (ObjId() would null-deref),
+    // harness effect has no valid TObjectDef (ObjId() would null-deref),
     // so for the standalone rig we rotate a static counter — each fresh
     // burst picks the NEXT photon variant, giving the same per-burst (not
     // per-particle) single-color behavior with cycling variety. The four
@@ -6243,7 +6246,7 @@ TSparkEffect* TSparkEffect::SpawnPreview(const S3DPoint& origin, bool editor_def
     // In the game, objflags = 1 << (ObjId() & 3) keys the cell off the
     // attacker's object id, so different attackers/hits land on different
     // cells and the combat sparks alternate stars/blobs across hits. A
-    // sector-less harness effect has no valid SObjectInfo (ObjId() would
+    // sector-less harness effect has no valid TObjectDef (ObjId() would
     // null-deref), so we rotate a static counter: each successive burst
     // advances the cell 0->1->2->3->wrap, reproducing that in-game shape
     // variety (one clean single-cell burst at a time, consecutive bursts
@@ -6724,8 +6727,8 @@ bool TFireBallEffect::SetProjectileEndpoints(const S3DPoint& source,const S3DPoi
     return true;
 }
 
-DEFINE_BUILDER("FireBall", TFireBallEffect)
-REGISTER_BUILDER(TFireBallEffect)
+DEFINE_OBJECT_DEF("FireBall", TFireBallEffect)
+REGISTER_OBJECT_DEF(TFireBallEffect)
 
 void TFireBallEffect::FillAtlasUv(int32_t frame_idx, float out_uv[4]) const
 {
@@ -8293,7 +8296,7 @@ class TMistReferenceComponent final : public TFlipbookBillboardComponent
             mist->Advance(TTime::DeltaTime());
     }
 };
-TWaterReferenceBuilder<TMistEffect_Bespoke> g_mist_reference_builder("Mist");
+static TObjectDef::SRegistrar g_mist_reference_builder("Mist", MakeWaterReferenceDef<TMistEffect_Bespoke>);
 TWaterReferenceAnimatorBuilder<TMistEffect_Bespoke> g_mist_reference_animator_builder("Mist");
 } // namespace
 
@@ -8824,7 +8827,7 @@ class TSymGlowReferenceComponent final : public TFlipbookBillboardComponent
             effect->Advance(TTime::DeltaTime());
     }
 };
-TWaterReferenceBuilder<TSymGlowEffect_Bespoke> g_symglow_reference_builder("SymGlow");
+static TObjectDef::SRegistrar g_symglow_reference_builder("SymGlow", MakeWaterReferenceDef<TSymGlowEffect_Bespoke>);
 TWaterReferenceAnimatorBuilder<TSymGlowEffect_Bespoke> g_symglow_reference_animator_builder("SymGlow");
 }
 
@@ -9080,8 +9083,8 @@ void TPhotonEffect_Bespoke::Submit(EFxDebugMode debug_mode)
     }
 }
 
-DEFINE_BUILDER("Photon",TPhotonEffect_Bespoke)
-REGISTER_BUILDER(TPhotonEffect_Bespoke)
+DEFINE_OBJECT_DEF("Photon",TPhotonEffect_Bespoke)
+REGISTER_OBJECT_DEF(TPhotonEffect_Bespoke)
 
 // ----- M08 TPixieEffect_Bespoke -------------------------------------------
 
@@ -9102,7 +9105,7 @@ class TPixieReferenceComponent final : public TFlipbookBillboardComponent
             effect->Advance(TTime::DeltaTime());
     }
 };
-TWaterReferenceBuilder<TPixieEffect_Bespoke> g_pixie_reference_builder("Pixie");
+static TObjectDef::SRegistrar g_pixie_reference_builder("Pixie", MakeWaterReferenceDef<TPixieEffect_Bespoke>);
 TWaterReferenceAnimatorBuilder<TPixieEffect_Bespoke> g_pixie_reference_animator_builder("Pixie");
 }
 
@@ -10751,7 +10754,7 @@ class TLiteralWaterfallAnimatorBuilder final : public T3DAnimatorBuilder
         if (auto* effect = dynamic_cast<TWaterFallEffect_Bespoke*>(owner)) effect->Initialize();
     }
 };
-TWaterReferenceBuilder<TWaterFallEffect_Bespoke> g_literal_waterfall_builder("Waterfall");
+static TObjectDef::SRegistrar g_literal_waterfall_builder("Waterfall", MakeWaterReferenceDef<TWaterFallEffect_Bespoke>);
 TLiteralWaterfallAnimatorBuilder g_literal_waterfall_animator_builder;
 } // namespace
 
@@ -10987,7 +10990,7 @@ class TLiteralWaterAnimatorBuilder final : public T3DAnimatorBuilder
         if (auto* effect = dynamic_cast<TWaterEffect_Bespoke*>(owner)) effect->Initialize();
     }
 };
-TWaterReferenceBuilder<TWaterEffect_Bespoke> g_literal_water_builder("Water");
+static TObjectDef::SRegistrar g_literal_water_builder("Water", MakeWaterReferenceDef<TWaterEffect_Bespoke>);
 TLiteralWaterAnimatorBuilder g_literal_water_animator_builder;
 } // namespace
 
@@ -11612,7 +11615,7 @@ constexpr const char* kFlyBespokeImageryPath = "Misc\\Flies.I3D";
 // SetBlendState() (Alpha) with cull=NONE — billboards already no-cull.
 
 namespace {
-TWaterReferenceBuilder<TFlyEffect_Bespoke> g_flies_reference_builder("Flies");
+static TObjectDef::SRegistrar g_flies_reference_builder("Flies", MakeWaterReferenceDef<TFlyEffect_Bespoke>);
 TWaterReferenceAnimatorBuilder<TFlyEffect_Bespoke> g_flies_reference_animator_builder("Flies");
 }
 
@@ -15978,7 +15981,7 @@ class TFireFlashReferenceComponent final : public TFlipbookBillboardComponent
             effect->Advance(TTime::DeltaTime());
     }
 };
-TWaterReferenceBuilder<TFireFlashEffect_Bespoke> g_fireflash_reference_builder("FireFlash");
+static TObjectDef::SRegistrar g_fireflash_reference_builder("FireFlash", MakeWaterReferenceDef<TFireFlashEffect_Bespoke>);
 TWaterReferenceAnimatorBuilder<TFireFlashEffect_Bespoke> g_fireflash_reference_animator_builder("FireFlash");
 }
 
@@ -16377,7 +16380,7 @@ class TFireConeReferenceComponent final : public TFlipbookBillboardComponent
             effect->Advance(TTime::DeltaTime());
     }
 };
-TWaterReferenceBuilder<TFireConeEffect_Bespoke> g_firecone_reference_builder("FIRECONE");
+static TObjectDef::SRegistrar g_firecone_reference_builder("FIRECONE", MakeWaterReferenceDef<TFireConeEffect_Bespoke>);
 TWaterReferenceAnimatorBuilder<TFireConeEffect_Bespoke> g_firecone_reference_animator_builder("FIRECONE");
 }
 
@@ -16926,7 +16929,7 @@ class TStreamerReferenceComponent final : public TFlipbookBillboardComponent
             effect->Advance(TTime::DeltaTime());
     }
 };
-TWaterReferenceBuilder<TStreamerEffect_Bespoke> g_streamer_reference_builder("Streamer");
+static TObjectDef::SRegistrar g_streamer_reference_builder("Streamer", MakeWaterReferenceDef<TStreamerEffect_Bespoke>);
 TWaterReferenceAnimatorBuilder<TStreamerEffect_Bespoke> g_streamer_reference_animator_builder("Streamer");
 }
 
@@ -17103,7 +17106,7 @@ class TFireSwarmReferenceComponent final : public TFlipbookBillboardComponent
             effect->Advance(TTime::DeltaTime());
     }
 };
-TWaterReferenceBuilder<TFireSwarmEffect_Bespoke> g_fireswarm_reference_builder("FireSwarm");
+static TObjectDef::SRegistrar g_fireswarm_reference_builder("FireSwarm", MakeWaterReferenceDef<TFireSwarmEffect_Bespoke>);
 TWaterReferenceAnimatorBuilder<TFireSwarmEffect_Bespoke> g_fireswarm_reference_animator_builder("FireSwarm");
 }
 
@@ -17258,7 +17261,7 @@ class TFaultFireReferenceComponent final : public TFlipbookBillboardComponent
             effect->Advance(TTime::DeltaTime());
     }
 };
-TWaterReferenceBuilder<TFaultFireEffect_Bespoke> g_faultfire_reference_builder("FaultFire");
+static TObjectDef::SRegistrar g_faultfire_reference_builder("FaultFire", MakeWaterReferenceDef<TFaultFireEffect_Bespoke>);
 TWaterReferenceAnimatorBuilder<TFaultFireEffect_Bespoke> g_faultfire_reference_animator_builder("FaultFire");
 }
 
@@ -17868,7 +17871,7 @@ class TMistFogReferenceComponent final : public TFlipbookBillboardComponent
             fog->Advance(TTime::DeltaTime());
     }
 };
-TWaterReferenceBuilder<TFogEffect_Bespoke__MistFog> g_mistfog_reference_builder("MistFog");
+static TObjectDef::SRegistrar g_mistfog_reference_builder("MistFog", MakeWaterReferenceDef<TFogEffect_Bespoke__MistFog>);
 TWaterReferenceAnimatorBuilder<TFogEffect_Bespoke__MistFog> g_mistfog_reference_animator_builder("MistFog");
 } // namespace
 
@@ -18335,7 +18338,7 @@ class TSetVortexReferenceComponent final : public TFlipbookBillboardComponent
             effect->Advance(TTime::DeltaTime());
     }
 };
-TWaterReferenceBuilder<TSetVortexEffect_Bespoke> g_setvortex_reference_builder("SetVortex");
+static TObjectDef::SRegistrar g_setvortex_reference_builder("SetVortex", MakeWaterReferenceDef<TSetVortexEffect_Bespoke>);
 TWaterReferenceAnimatorBuilder<TSetVortexEffect_Bespoke> g_setvortex_reference_animator_builder("SetVortex");
 }
 

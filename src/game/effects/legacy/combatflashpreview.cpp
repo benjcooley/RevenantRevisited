@@ -52,7 +52,7 @@ State* Spawn(const S3DPoint& origin, int start, bool show_particles, bool show_b
     TObjectClass* effect_class = TObjectClass::GetClass(OBJCLASS_EFFECT);
     const int32_t type = effect_class ? effect_class->FindObjType(profile::type_id) : -1;
     if (type < 0) return nullptr;
-    SObjectDef definition = {};
+    SObjectState definition = {};
     definition.objclass = OBJCLASS_EFFECT;
     definition.objtype = short(type);
     definition.pos = origin;

@@ -528,7 +528,7 @@ void TSpell::SetByTalismans(char* talismans)
     variant = SpellList.GetVariantDataByTalismans(talismans);
 }
 
-TEffect* TSpell::NewEffect(SObjectDef& def, int32_t imagery)
+TEffect* TSpell::NewEffect(SObjectState& def, int32_t imagery)
 {
     TObjectInstance* made = MapPane.GetInstance(MapPane.NewObject(&def, imagery));
     lasteffect = made;
@@ -561,7 +561,7 @@ bool TSpell::Timer()
         wait = -1;
         if (TObjectInstance* caster = invoker_ref.Get())
         {
-            SObjectDef def{};
+            SObjectState def{};
             def.objclass = OBJCLASS_EFFECT;
             def.level = (uint16_t)MapPane.GetMapLevel();
             def.pos = IntPos(caster) + SourceOffset();
@@ -810,10 +810,10 @@ void TStrikeSpell::Pulse()
     }
 }
 
-SObjectDef TStrikeSpell::EffectDef(TObjectInstance* target) const
+SObjectState TStrikeSpell::EffectDef(TObjectInstance* target) const
 {
     const SSpellControlData& control = *variant->controldata;
-    SObjectDef def{};
+    SObjectState def{};
     def.objclass = OBJCLASS_EFFECT;
     def.level = (uint16_t)MapPane.GetMapLevel();
     def.pos = IntPos(target);
@@ -833,7 +833,7 @@ SObjectDef TStrikeSpell::EffectDef(TObjectInstance* target) const
     return def;
 }
 
-TEffect* TStrikeSpell::NewStrikeEffect(SObjectDef& def, TObjectInstance* anchor, int32_t angle, int32_t dist, bool orbit)
+TEffect* TStrikeSpell::NewStrikeEffect(SObjectState& def, TObjectInstance* anchor, int32_t angle, int32_t dist, bool orbit)
 {
     const SSpellControlData& control = *variant->controldata;
     TEffect* fx = NewEffect(def, control.imagery);
@@ -893,7 +893,7 @@ bool TStrikeSpell::Timer()
     if (!anchor)
         return true;
 
-    SObjectDef def = EffectDef(anchor);
+    SObjectState def = EffectDef(anchor);
     striketarget = caster ? FightingTarget(caster) : anchor;
     SetTarget(0, striketarget.Get());
     PlayControlSound(control, def.pos);
@@ -939,7 +939,7 @@ bool TStrikeSpell::Timer()
             for (TCharacter* c : CharactersAround(-1, center, radius))
                 if (c != caster && c->Health() > 0)
                 {
-                    SObjectDef at = EffectDef(c);
+                    SObjectState at = EffectDef(c);
                     if (TEffect* fx = NewStrikeEffect(at, anchor, 0, 0, false))
                         Time(fx);
                 }

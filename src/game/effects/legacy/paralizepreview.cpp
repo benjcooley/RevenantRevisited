@@ -39,7 +39,7 @@ State* Spawn(const S3DPoint& origin)
 {
  if(!Renderer)return nullptr;
  auto s=std::make_unique<State>();auto* cl=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cl?cl->FindObjType(0xad92bc14u):-1;if(type<0)return nullptr;
- SObjectDef def={};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=origin;s->owner.reset(cl->NewObject(&def));
+ SObjectState def={};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=origin;s->owner.reset(cl->NewObject(&def));
  if(!s->owner || s->owner->ObjId()!=0xad92bc14u)return nullptr;
  auto* img=dynamic_cast<T3DImagery*>(s->owner->GetImagery());
  if(!img || img->NumStates()!=1 || img->GetAniLength(0)!=10 || img->GetAniFlags(0)!=0x2001 || img->NumObjects()!=6 || img->NumTextures()!=6 || img->NumMaterials()!=6 || img->NumTags()!=0)return nullptr;
@@ -59,7 +59,7 @@ static State* SpawnWithTarget(const S3DPoint& origin,bool isolated_seed)
  const uint64_t setup_draws=RandomDraws();
  auto s=std::unique_ptr<State>(Spawn(origin));if(!s)return nullptr;
  auto* cl=TObjectClass::GetClass(OBJCLASS_CHARACTER);const int type=cl?cl->FindObjType(config.actor_type):-1;if(type<0)return nullptr;
- auto make=[&](S3DPoint p){SObjectDef def={};def.objclass=OBJCLASS_CHARACTER;def.objtype=short(type);def.pos=p;return TObjectPtr<TCharacter>(dynamic_cast<TCharacter*>(cl->NewObject(&def)));};
+ auto make=[&](S3DPoint p){SObjectState def={};def.objclass=OBJCLASS_CHARACTER;def.objtype=short(type);def.pos=p;return TObjectPtr<TCharacter>(dynamic_cast<TCharacter*>(cl->NewObject(&def)));};
  s->invoker=make({config.source_x,config.source_y,config.source_z});s->target=make({config.source_x+config.target_dx,config.source_y+config.target_dy,config.source_z+config.target_dz});
  if(s->target)s->target_initial_flags=s->target->Flags();
  if(!s->invoker || !s->target || s->target->Radius()!=config.expected_radius || !s->invoker->BeginFighting(s->target.get()) || s->invoker->Fighting()!=s->target.get())return nullptr;

@@ -65,9 +65,9 @@ struct SQuadDrawItem {float world_pos[4][3]{};float uv[4][2]{};float color_rgba[
  bool retail_argb4444{},retail_software_projection{};float retail_camera_z{};};
 struct TRenderer {std::vector<SQuadDrawItem> draws;void SubmitFxQuad(const SQuadDrawItem& i){draws.push_back(i);}};
 TRenderer renderer;TRenderer* Renderer=&renderer;
-struct TObjectImagery {};struct SObjectDef {};
+struct TObjectImagery {};struct SObjectState {};
 struct TransformStub {hmm_mat4 matrix;TransformStub(){MtxClear(&matrix);}const hmm_mat4& Matrix()const{return matrix;}};
-struct TEffect {TransformStub transform;const TransformStub& Transform()const{return transform;}S3DPoint position{};TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};
+struct TEffect {TransformStub transform;const TransformStub& Transform()const{return transform;}S3DPoint position{};TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};
  virtual ~TEffect()=default;const S3DPoint& Pos()const{return position;}};
 struct TTime {static double dt;static double DeltaTime(){return dt;}};double TTime::dt=0;
 std::ifstream random_inputs;int random_count=0;

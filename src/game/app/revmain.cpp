@@ -3302,7 +3302,7 @@ static void UnusedWinMainAnchor_()
 
     ::hInstance = hInstance;
 
-    int32_t size = sizeof(SObjectInfo);
+    int32_t size = sizeof(TObjectDef);
 
 #ifdef _DEBUG
     if (!_CrtCheckMemory())

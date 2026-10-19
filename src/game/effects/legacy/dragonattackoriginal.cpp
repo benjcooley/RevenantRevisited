@@ -30,7 +30,7 @@ State* Spawn(const S3DPoint& source)
     auto c=std::make_unique<State>();if(!c->simulation.Initialize(source.x,source.y,source.z,14,14,source.x+280,source.y,0))return nullptr;
     auto* cls=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cls?cls->FindObjType(0xba09feadu):-1;
     if(type<0)return nullptr;
-    SObjectDef def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;
+    SObjectState def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;
     c->owner.reset(cls->NewObject(&def));auto* owner=c->owner.get();
     if(!owner || owner->ObjId()!=0xba09feadu || !dynamic_cast<TEffect*>(owner))return nullptr;
     // Controlled coordinates can lie outside loaded map sectors. Establish

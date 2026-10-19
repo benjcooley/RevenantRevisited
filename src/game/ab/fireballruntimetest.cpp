@@ -26,7 +26,7 @@ bool RunFireballRuntimeTest(TMapRenderer& renderer)
         log_error("[fireball-runtime] requires an actual nonzero walk-height floor; got%d",height);
         return false;
     }
-    SObjectDef definition;
+    SObjectState definition;
     definition.objclass=EffectClass.ClassId();definition.objtype=EffectClass.FindObjType(0x63fd382au);
     definition.level=StartupSceneCamera[0];definition.pos={center.x,center.y,height+128};
     if(definition.objtype<0)return false;

@@ -24,7 +24,7 @@
 #include <algorithm>
 #include <iterator>
 
-REGISTER_BUILDER(TMonsterGen)
+REGISTER_OBJECT_DEF(TMonsterGen)
 
 namespace {
 
@@ -254,7 +254,7 @@ void TMonsterGen::Spawn(int32_t index)
     }
 
     // Retail put the monster on the map pane's level, not the generator's.
-    SObjectDef def{};
+    SObjectState def{};
     def.objclass = OBJCLASS_CHARACTER;
     def.objtype  = short(objtype);
     def.level    = uint16_t(MapPane.GetMapLevel());

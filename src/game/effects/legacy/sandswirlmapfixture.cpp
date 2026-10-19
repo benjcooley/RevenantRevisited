@@ -32,7 +32,7 @@ struct MapFixture {
  }
 };
 static TObjectInstance* NewMapObject(int cls,int type,const S3DPoint&p){
- if(type<0)return nullptr;SObjectDef d{};d.objclass=short(cls);d.objtype=short(type);d.pos=p;d.level=MapFixture::level;
+ if(type<0)return nullptr;SObjectState d{};d.objclass=short(cls);d.objtype=short(type);d.pos=p;d.level=MapFixture::level;
  const int id=MapPane.NewObject(&d);return id<0?nullptr:MapPane.GetInstance(id);
 }
 static void Hex(const void*p,size_t n,char*out){const char*d="0123456789abcdef";const auto*b=static_cast<const uint8_t*>(p);for(size_t i=0;i<n;++i){out[2*i]=d[b[i]>>4];out[2*i+1]=d[b[i]&15];}out[2*n]=0;}

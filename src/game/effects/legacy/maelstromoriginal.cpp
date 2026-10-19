@@ -56,7 +56,7 @@ State* Spawn(const S3DPoint& source,bool y_variant)
     const uint32_t type_id=y_variant?0xae5eeb26u:0xaeaeeb26u;
     auto* cls=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cls?cls->FindObjType(type_id):-1;
     if(type<0)return nullptr;
-    SObjectDef def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;
+    SObjectState def{};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=source;
     c->owner.reset(cls->NewObject(&def));auto* owner=c->owner.get();
     if(!owner || owner->ObjId()!=type_id || !dynamic_cast<TEffect*>(owner))return nullptr;
     // Controlled coordinates can lie outside loaded map sectors. Establish

@@ -284,10 +284,11 @@ and does the work in code.
   instance, regenerate what is derived (visual, light from the type,
   animator, prefab stamps).
 
-**`SObjectDef`, the record.** The struct Revenant already has, kept, with
-serialization support: PROP annotations, and derived per class with the
+**`SObjectState`, instance state.** Retail's `SObjectDef`, kept and
+renamed for what it is (state, not a definition), with serialization
+support: PROP annotations, and derived per class with the
 fields that class's retail stream already lists (`SCharacterDef :
-SObjectDef` holds what `TLegacyDeserialize::ReadCharacter` reads;
+SObjectState` holds what `TLegacyDeserialize::ReadCharacter` reads;
 `SPlayerDef`, `SContainerDef`, `SExitDef`, ... likewise; a light's values
 sit on the base as they do in the retail stream). The base keeps what it
 holds today (class, type, flags, state, level, position, velocity,
@@ -298,7 +299,7 @@ own def, omit what is equal). No live object is ever walked by
 reflection.
 
 Ids are wire tags, append-only, never renumbered, and the tree carves
-ranges so a base can grow: `SObjectDef` 1-99, each first-level class its
+ranges so a base can grow: `SObjectState` 1-99, each first-level class its
 own hundred, second-level classes (`SPlayerDef`) a hundred of their own.
 `gen.py` learns base structs (a derived table is the base's props then its
 own) and fails the build on a duplicate id in a chain or an id outside
@@ -307,9 +308,9 @@ every added field a file version (0, 1, 4, 15 in legacystream.h); a tag
 reads at its default when absent and skips when unknown, in both
 directions.
 
-**The instance keeps its def.** Retail did this by deriving the instance
-from `SObjectDef`; we hold it as a member: the record the object was
-loaded or spawned from. `Reset()` re-applies it (revert-to-loaded in the
+**The instance keeps its initial state.** Retail did this by deriving
+the instance from the record; we hold it as a member
+(`InitialState()`): the record the object was loaded or spawned in. `Reset()` re-applies it (revert-to-loaded in the
 editor, a generator's respawn in place, a script putting a chest back).
 One record per instance, the cost retail paid.
 
@@ -318,21 +319,23 @@ type, owned by `TObjectClass`, grown out of `SObjectInfo` and
 `TObjectBuilder`. Uid is retail's type unique id (`ObjId()`), already
 stable. It carries the type-level data instances read through
 `Archetype()` (imagery asset ref, type stats, flags defaults, prices, sound
-sets), the type's own default def, and three virtuals a class overrides
-when it needs to (`TCharacterDef : TObjectDef`, ...; most use the base),
+sets), the type's default state (`DefaultState()`: each def class holds
+its own class's record, `TStateObjectDef<SCharacterState>`, and hands it
+up), and three virtuals a class overrides when it needs to
+(`TCharacterDef`, ...; most use the base),
 hand-written, engineer-controlled, like a prefab but in code:
 
-- `Create(const SObjectDef&) -> TObjectInstance*`: the factory. A root
+- `Create(const SObjectState&) -> TObjectInstance*`: the factory. A root
   node with the object instance of the right C++ class and every component
   the type carries (the visual from the imagery, the light when the type
   has one, the animator, stats, inventory container); stores the def on
-  the instance; `Apply`. Replaces `TObjectBuilder::Build`, the `SObjectDef`
-  constructors and `NewObject`; a spawn site fills a def exactly as it
-  does today, so the 137 fill sites need no change.
-- `Apply(const SObjectDef&, TObjectInstance&)`: the record's values onto
+  the instance; `Apply`. Replaces `TObjectBuilder::Build`; a spawn site
+  fills a record exactly as it does today, so the 137 fill sites need no
+  change.
+- `Apply(const SObjectState&, TObjectInstance&)`: the record's values onto
   the node and its components (the light's colour onto the light
   component, the character's onto the character).
-- `Capture(const TObjectInstance&, SObjectDef&)`: the reverse, from the
+- `Capture(const TObjectInstance&, SObjectState&)`: the reverse, from the
   node and components into a record, for save. What a class serializes is
   what its def struct declares, a decision the class makes that a reader
   can follow.
@@ -373,14 +376,16 @@ components, then its child nodes, each as today.
 
 **Migration.** One class at a time: its derived def struct is declared
 from the fields its legacy read lists, its builder macro becomes a def
-class, its `SObjectDef` constructor becomes `Create` + `Apply`, its legacy
+class, its record constructor becomes `Create` + `Apply`, its legacy
 read / write retarget onto the struct, its `inf->` reads move to
 `Archetype()`. Template construction must not touch the world: the
 constructors' "not in a map" path is audited first (script init, sound,
-map registration all happen on AddObject already). First inch: the base
-(`SObjectDef` annotated with ranges, `TObjectDef` with the three virtuals
-for the base class, the retained def and `Reset()`, `NewObject` ->
-`Create`), gated by the sector dump.
+map registration all happen on AddObject already). First inch (landed
+2026-10-18): `SObjectState` annotated with its id range, `TObjectDef`
+grown out of `SObjectInfo` and `TObjectBuilder` with `Create` / `Apply` /
+`Capture` for the base record, `DEFINE_OBJECT_DEF` / `REGISTER_OBJECT_DEF`
+in place of the builder macros, the type table as the archetype registry,
+the retained initial state and `Reset()`; gated by the sector dump.
 
 ## 5. Out of scope here
 
@@ -392,7 +397,7 @@ for the base class, the retained def and `Reset()`, `NewObject` ->
 
 - 2026-10-18 Archetype vs prefab vs record: the archetype is Revenant's
   object type, grown into `TObjectDef`: `Create` / `Apply` / `Capture`
-  between the live node and the `SObjectDef` record Revenant already has,
+  between the live node and the `SObjectState` record Revenant already has,
   derived per class with the retail stream's field sets, hand-written.
   Reflection serializes the record, never the live object; the legacy
   codec moves the same records; the instance keeps its def (`Reset()`).

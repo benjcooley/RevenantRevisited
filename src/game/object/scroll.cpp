@@ -12,7 +12,7 @@
 #include "engine/assets/fonttable.h"
 #include "game/ui/playscreen.h"
 
-REGISTER_BUILDER(TScroll)
+REGISTER_OBJECT_DEF(TScroll)
 TObjectClass ScrollClass("SCROLL", OBJCLASS_SCROLL, 0);
 
 // Hard coded class stats

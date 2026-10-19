@@ -37,7 +37,7 @@ class TMissileEffect : public TEffect
 
   public:
     TMissileEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TMissileEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TMissileEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
 
     virtual void Initialize();
 
@@ -69,7 +69,7 @@ class TPhotonEffect : public TMissileEffect
 
 	public:
 	TPhotonEffect(TObjectImagery* newim) : TMissileEffect(newim) { Initialize(); }
-	TPhotonEffect(SObjectDef* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
+	TPhotonEffect(SObjectState* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
 	virtual ~TPhotonEffect() { SoundPlayer.Unmount(LIGHTNING_SOUND); }
 
     virtual void Initialize();
@@ -128,7 +128,7 @@ class TFireBallEffect : public TMissileEffect
 	bool fireball_done;
   public:
     TFireBallEffect(TObjectImagery* newim) : TMissileEffect(newim) { Initialize(); }
-    TFireBallEffect(SObjectDef* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
+    TFireBallEffect(SObjectState* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
 	virtual ~TFireBallEffect() {}
 
     virtual void Initialize();
@@ -246,7 +246,7 @@ class TFireColumnEffect : public TMissileEffect
 
 	public:
 	TFireColumnEffect(TObjectImagery* newim) : TMissileEffect(newim) { Initialize(); }
-	TFireColumnEffect(SObjectDef* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
+	TFireColumnEffect(SObjectState* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
 	virtual ~TFireColumnEffect() { /*SoundPlayer.Unmount(LIGHTNING_SOUND);*/ }
 
     virtual void Initialize();
@@ -305,7 +305,7 @@ class TFlameDiscEffect : public TMissileEffect
 
 	public:
 	TFlameDiscEffect(TObjectImagery* newim) : TMissileEffect(newim) { Initialize(); }
-	TFlameDiscEffect(SObjectDef* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
+	TFlameDiscEffect(SObjectState* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
 	virtual ~TFlameDiscEffect() { SoundPlayer.Unmount(LIGHTNING_SOUND); }
 
     virtual void Initialize();

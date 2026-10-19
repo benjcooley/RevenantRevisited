@@ -100,7 +100,7 @@ void Wield(const TFixtureWorld& world, const JsonValue& cs)
         if (!player)
             throw std::runtime_error(spec["name"].Str() + ": only a player wields");
         const std::string name = spec["wielding"]["name"].Str();
-        SObjectDef def{};
+        SObjectState def{};
         def.objclass = OBJCLASS_WEAPON;
         def.objtype = (short)TObjectClass::GetClass(OBJCLASS_WEAPON)->FindObjType(name.c_str());
         if (def.objtype < 0)

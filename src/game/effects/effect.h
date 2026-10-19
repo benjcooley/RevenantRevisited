@@ -63,7 +63,7 @@ class TEffect : public TObjectInstance
 {
   public:
     TEffect(TObjectImagery* newim) : TObjectInstance(newim) { flags |= OF_IMMOBILE | OF_PULSE; spell = nullptr; subspell = 0; angle = 0; }
-    TEffect(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { flags |= OF_IMMOBILE | OF_PULSE; spell = nullptr; subspell = 0; angle = 0; }
+    TEffect(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) { flags |= OF_IMMOBILE | OF_PULSE; spell = nullptr; subspell = 0; angle = 0; }
 
     void Pulse() override;
 
@@ -347,7 +347,7 @@ class TFireEffect : public TEffect
 {
   public:
     TFireEffect(TObjectImagery* newim) : TEffect(newim) {}
-    TFireEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TFireEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
 
     virtual void Pulse();
 
@@ -465,7 +465,7 @@ class TSparkEffect : public TEffect
 {
   public:
     TSparkEffect(TObjectImagery* newim) : TEffect(newim) {}
-    TSparkEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TSparkEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
 
     // Spawn a standalone single-burst TSparkEffect for the --test=vfx
     // harness. Loads the real Misc\Sparks.I3D imagery (NO procedural
@@ -522,7 +522,7 @@ class TFlameEffect : public TEffect
     TFlameEffect(TObjectImagery* newim) : TEffect(newim) { InitializeVisualComponent(newim); }
     // Streamed objects receive their final map index in Load(). Attach through
     // the imagery builder afterward so the update reference uses that index.
-    TFlameEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TFlameEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
 
     static void AttachVisualComponent(TObjectInstance* inst, TObjectImagery* imagery);
 
@@ -555,7 +555,7 @@ class TIceEffect : public TEffect
 {
   public:
     TIceEffect(TObjectImagery* newim) : TEffect(newim) { flags |= OF_MOVING; }
-    TIceEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim)
+    TIceEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim)
         { SetIntPos(*this, IntPos(*this) + S3DPoint(-ICEDIST, ICEDIST, ICEDIST)); flags |= OF_MOVING; }
 
     virtual void Pulse();
@@ -574,7 +574,7 @@ class TIceEffect : public TEffect
 //*  public:
 //* TLightningEffect(TObjectImagery* newim) : TEffect(newim)
 //*     { flags |= OF_MOVING; firsttime = true; SoundPlayer.Mount(LIGHTNING_SOUND); }
-//* TLightningEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim)
+//* TLightningEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim)
 //*     { flags |= OF_MOVING; firsttime = true; SoundPlayer.Mount(LIGHTNING_SOUND); }
 //* virtual ~TLightningEffect() { SoundPlayer.Unmount(LIGHTNING_SOUND); }
 //*
@@ -598,7 +598,7 @@ class THealEffect : public TEffect
     int32_t level;
 
     THealEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    THealEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    THealEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
 
     virtual void Initialize();
     virtual void Pulse();
@@ -617,7 +617,7 @@ class THealEffect : public TEffect
 //*
 //*  public:
 //*    TLightning2Effect(TObjectImagery* newim) : TEffect(newim) { }
-//*    TLightning2Effect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+//*    TLightning2Effect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
 //*
 //* virtual void Pulse();
 //*};
@@ -1151,7 +1151,7 @@ class TMeteorStormEffect : public TEffect
 {
   public:
     TMeteorStormEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TMeteorStormEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TMeteorStormEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TMeteorStormEffect() {}
 
     virtual void Initialize();          // init
@@ -1188,7 +1188,7 @@ class TVortexEffect : public TEffect
 {
   public:
     TVortexEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TVortexEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TVortexEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TVortexEffect() {}
 
     virtual void Initialize();          // init
@@ -1279,7 +1279,7 @@ class TFlyEffect : public TEffect
 {
   public:
     TFlyEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TFlyEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TFlyEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TFlyEffect() {}
 
     virtual void Initialize();          // init
@@ -1409,7 +1409,7 @@ class TPulpEffect : public TEffect
   public:
     // functions
     TPulpEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TPulpEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TPulpEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TPulpEffect() { if (blood_splat) delete [] blood_splat; if (body_part) delete [] body_part; if (blood) delete [] blood; }
 
     virtual void Initialize();          // init
@@ -1460,7 +1460,7 @@ private:
     int32_t frame;
 public:
     TBurnEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TBurnEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TBurnEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
 
     virtual void Initialize();
     virtual void Pulse();
@@ -1509,7 +1509,7 @@ private:
     bool first_time;
 public:
     TAuraEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TAuraEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TAuraEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
 
     virtual void Initialize();
     virtual void Pulse();
@@ -1551,7 +1551,7 @@ class TIceBoltEffect : public TEffect
   private:
   public:
     TIceBoltEffect(TObjectImagery* newim) : TEffect(newim) { }
-    TIceBoltEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TIceBoltEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TIceBoltEffect() {}
 
     virtual void Initialize();
@@ -1642,7 +1642,7 @@ class TIcedEffect : public TEffect
 {
   public:
     TIcedEffect(TObjectImagery* newim) : TEffect(newim) {}
-    TIcedEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TIcedEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
 
     void Set(TObjectInstance* victim);
       // REVSYNC: 0x004ec930 -- freeze `victim`: paralysed and iced,
@@ -1712,7 +1712,7 @@ class TQuicksandEffect : public TEffect
     bool first_time;
   public:
     TQuicksandEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TQuicksandEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TQuicksandEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TQuicksandEffect() {}
 
     virtual void Initialize();
@@ -1774,7 +1774,7 @@ class TSandswirlEffect : public TEffect
   private:
   public:
     TSandswirlEffect(TObjectImagery* newim) : TEffect(newim) { }
-    TSandswirlEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TSandswirlEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TSandswirlEffect() {}
 
     virtual void Initialize();
@@ -1823,7 +1823,7 @@ class TTornadoEffect : public TEffect
   private:
   public:
     TTornadoEffect(TObjectImagery* newim) : TEffect(newim) { }
-    TTornadoEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TTornadoEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TTornadoEffect() {}
 
     virtual void Initialize();
@@ -1898,7 +1898,7 @@ class TStreamerEffect : public TEffect
     bool first_time;
   public:
     TStreamerEffect(TObjectImagery* newim) : TEffect(newim) { Initialize();}
-    TStreamerEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize();}
+    TStreamerEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize();}
     virtual ~TStreamerEffect() {}
 
     virtual void Initialize();
@@ -1960,7 +1960,7 @@ class TFireSwarmEffect : public TEffect
   private:
   public:
     TFireSwarmEffect(TObjectImagery* newim) : TEffect(newim) { }
-    TFireSwarmEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TFireSwarmEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TFireSwarmEffect() {}
 
     virtual void Initialize();
@@ -2008,7 +2008,7 @@ class THaloEffect : public TEffect
       int32_t totframes = 0;
   public:
     THaloEffect(TObjectImagery* newim) : TEffect(newim) { }
-    THaloEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    THaloEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~THaloEffect() {}
 
     virtual void Initialize();
@@ -2121,7 +2121,7 @@ class TTeleporterEffect : public TEffect
 {
   public:
     TTeleporterEffect(TObjectImagery* newim) : TEffect(newim) { }
-    TTeleporterEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TTeleporterEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
     // M09b: destructor releases the per-instance entry in the mesh-
     // binding side table (defined in effect.cpp). Not =default so the
     // header doesn't drag in the imagery API.
@@ -2240,7 +2240,7 @@ class TRippleEffect : public TEffect
 {
   public:
     TRippleEffect(TObjectImagery* newim) : TEffect(newim) {}
-    TRippleEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TRippleEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TRippleEffect() override = default;
     void Initialize();
     void Pulse() override;
@@ -2335,7 +2335,7 @@ class TDripEffect : public TEffect
     friend class TLegacySerialize;
   public:
     TDripEffect(TObjectImagery* newim) : TEffect(newim) {}
-    TDripEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TDripEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TDripEffect() override;
     void Initialize();
     void Pulse() override;
@@ -2409,7 +2409,7 @@ class TFaultFireEffect : public TEffect
   private:
   public:
     TFaultFireEffect(TObjectImagery* newim) : TEffect(newim) { }
-    TFaultFireEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TFaultFireEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TFaultFireEffect() {}
 
     virtual void Initialize();
@@ -2524,7 +2524,7 @@ class TBloodEffect : public TEffect
 
   public:
     TBloodEffect(TObjectImagery* newim) : TEffect(newim) {  }
-    TBloodEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TBloodEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
     ~TBloodEffect() override;
 
     void OffScreen() override { KillThisEffect(); }
@@ -2604,7 +2604,7 @@ class TBloodEffect_Bespoke : public TEffect
 {
   public:
     TBloodEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TBloodEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TBloodEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TBloodEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -2650,7 +2650,7 @@ class TFlameEffect_Bespoke : public TEffect
 {
   public:
     TFlameEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TFlameEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TFlameEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TFlameEffect_Bespoke() override = default;
 
     // Load the selected Flame imagery and attach the shared authored-quad
@@ -2691,7 +2691,7 @@ class TFireEffect_Bespoke : public TEffect
 {
   public:
     TFireEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TFireEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TFireEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TFireEffect_Bespoke() override = default;
 
     [[nodiscard]] static TFireEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
@@ -2722,7 +2722,7 @@ class TFireSwarmEffect_Bespoke : public TEffect
 {
   public:
     TFireSwarmEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TFireSwarmEffect_Bespoke(SObjectDef* def,TObjectImagery* newim) : TEffect(def,newim) {}
+    TFireSwarmEffect_Bespoke(SObjectState* def,TObjectImagery* newim) : TEffect(def,newim) {}
     ~TFireSwarmEffect_Bespoke() override = default;
     void OffScreen() override { KillThisEffect(); }
     [[nodiscard]] static TFireSwarmEffect_Bespoke* SpawnForTest_BESPOKE(
@@ -2806,7 +2806,7 @@ class TBurnEffect_Bespoke : public TEffect
 {
   public:
     TBurnEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TBurnEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TBurnEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TBurnEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -2892,7 +2892,7 @@ class TLightningAnimator_Bespoke : public TEffect
 {
   public:
     TLightningAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TLightningAnimator_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TLightningAnimator_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TLightningAnimator_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -2979,7 +2979,7 @@ class TShockAnimator_Bespoke : public TEffect
 {
   public:
     TShockAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TShockAnimator_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TShockAnimator_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TShockAnimator_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -3032,7 +3032,7 @@ class TStreamerEffect_Bespoke : public TEffect
 {
   public:
     TStreamerEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TStreamerEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TStreamerEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TStreamerEffect_Bespoke() override;
 
     void OffScreen() override { KillThisEffect(); }
@@ -3107,7 +3107,7 @@ class TRibbonAnimator_Bespoke : public TEffect
 {
   public:
     TRibbonAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TRibbonAnimator_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TRibbonAnimator_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TRibbonAnimator_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -3198,7 +3198,7 @@ class TMissileEffect_Bespoke : public TEffect
 {
   public:
     TMissileEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TMissileEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TMissileEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     ~TMissileEffect_Bespoke() override = default;
 
     // missileeffect.cpp:137-141 — MissileEffects stay on-screen until the
@@ -3396,7 +3396,7 @@ class TFizzleEffect : public TEffect
 {
   public:
     TFizzleEffect(TObjectImagery* newim) : TEffect(newim) {}
-    TFizzleEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TFizzleEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TFizzleEffect() override = default;
 
     // Spawn a standalone single-burst TFizzleEffect for the --test=vfx
@@ -3602,7 +3602,7 @@ class TFireBallEffect : public TEffect
 {
   public:
     TFireBallEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TFireBallEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TFireBallEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     ~TFireBallEffect() override = default;
 
     void OffScreen() override { /* MissileEffect-family stays simulating until EXPLODE done */ }
@@ -3745,7 +3745,7 @@ class TMistEffect : public TEffect
 
   public:
     TMistEffect(TObjectImagery* newim) : TEffect(newim) {  }
-    TMistEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TMistEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
     ~TMistEffect() override;
 
     void OffScreen() override { KillThisEffect(); }
@@ -3817,7 +3817,7 @@ class TWaterFallEffect : public TEffect
     
   public:
     TWaterFallEffect(TObjectImagery* newim) : TEffect(newim) {  }
-    TWaterFallEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TWaterFallEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TWaterFallEffect() {}
 
     virtual void Initialize();
@@ -3878,7 +3878,7 @@ class TWaterEffect : public TEffect
     
   public:
     TWaterEffect(TObjectImagery* newim) : TEffect(newim) {  }
-    TWaterEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TWaterEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TWaterEffect() {}
 
     virtual void Initialize();
@@ -3927,7 +3927,7 @@ class TWaterFallEffect_Bespoke : public TEffect
 {
   public:
     TWaterFallEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TWaterFallEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TWaterFallEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TWaterFallEffect_Bespoke() override;
     // Persistent environmental owner: normal offscreen cleanup never kills it.
     void OffScreen() override { TObjectInstance::OffScreen(); }
@@ -3974,7 +3974,7 @@ class TWaterEffect_Bespoke : public TEffect
 {
   public:
     TWaterEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TWaterEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TWaterEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TWaterEffect_Bespoke() override;
 
     void OffScreen() override
@@ -4028,7 +4028,7 @@ class TPixieEffect : public TEffect
     
   public:
     TPixieEffect(TObjectImagery* newim) : TEffect(newim) {  }
-    TPixieEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TPixieEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
     virtual ~TPixieEffect() {}
 
     virtual void Initialize();
@@ -4081,7 +4081,7 @@ class TAmbSoundEffect : public TEffect
 
   public:
     TAmbSoundEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TAmbSoundEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TAmbSoundEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TAmbSoundEffect() { if (id > 0) SoundPlayer.Unmount(id); }
 
     virtual void Initialize();
@@ -4141,7 +4141,7 @@ class TIceEffect_Bespoke : public TEffect
 {
   public:
     TIceEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TIceEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TIceEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TIceEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -4162,7 +4162,7 @@ class TIceBoltEffect_Bespoke : public TEffect, private icebolt_core::State
 {
   public:
     TIceBoltEffect_Bespoke(TObjectImagery* image):TEffect(image){}
-    TIceBoltEffect_Bespoke(SObjectDef* def,TObjectImagery* image):TEffect(def,image){}
+    TIceBoltEffect_Bespoke(SObjectState* def,TObjectImagery* image):TEffect(def,image){}
     ~TIceBoltEffect_Bespoke() override;
     void OffScreen() override {}
     void Pulse() override;
@@ -4220,7 +4220,7 @@ class TIcedEffect_Bespoke : public TEffect
 {
   public:
     TIcedEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TIcedEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TIcedEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TIcedEffect_Bespoke() override;
 
     void OffScreen() override { KillThisEffect(); }
@@ -4291,7 +4291,7 @@ class TAuraEffect_Bespoke : public TEffect
 {
   public:
     TAuraEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TAuraEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TAuraEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TAuraEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -4347,7 +4347,7 @@ class THealEffect_Bespoke : public TEffect
 {
   public:
     THealEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    THealEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    THealEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~THealEffect_Bespoke() override;
 
     void OffScreen() override { KillThisEffect(); }
@@ -4399,7 +4399,7 @@ class TMistEffect_Bespoke : public TEffect
 {
   public:
     TMistEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TMistEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TMistEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TMistEffect_Bespoke() override = default;
 
     // Environmental map instances use the normal owner/animator lifecycle.
@@ -4456,7 +4456,7 @@ class TShieldEffect_Bespoke : public TEffect
 {
   public:
     TShieldEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TShieldEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TShieldEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TShieldEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -4539,7 +4539,7 @@ class TFlareEffect_Bespoke : public TEffect
 {
   public:
     TFlareEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TFlareEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TFlareEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TFlareEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -4591,7 +4591,7 @@ class TSymGlowEffect_Bespoke : public TEffect
 {
   public:
     TSymGlowEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TSymGlowEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TSymGlowEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TSymGlowEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -4623,7 +4623,7 @@ class TPhotonEffect_Bespoke : public TEffect
 {
   public:
     TPhotonEffect_Bespoke(TObjectImagery* image) : TEffect(image) { Initialize(); }
-    TPhotonEffect_Bespoke(SObjectDef* definition,TObjectImagery* image) : TEffect(definition,image) { Initialize(); }
+    TPhotonEffect_Bespoke(SObjectState* definition,TObjectImagery* image) : TEffect(definition,image) { Initialize(); }
     void OffScreen() override { }
     void Pulse() override;
     uint32_t Move() override { return GetMoveBits(); }
@@ -4654,7 +4654,7 @@ class TPhotonEffect_Bespoke : public TEffect
 // ----- M08 TPixieEffect (Bespoke) ------------------------------------------
 //
 // "Pixie" — small swarm of 25 twinkling particles (fairy dust) attached to
-// the effect origin. DEFINE_BUILDER("Pixie", TPixieEffect) (effect_old.cpp:
+// the effect origin. DEFINE_OBJECT_DEF("Pixie", TPixieEffect) (effect_old.cpp:
 // 12082), REGISTER_3DANIMATOR("Pixie", TPixieAnimator) (:12099). The
 // animator (effect_old.cpp:12109-12277) seeds 25 per-particle slots with
 // random pos in [-32, 32]^3 and random vel/25; each tick the particles
@@ -4695,7 +4695,7 @@ class TPixieEffect_Bespoke : public TEffect
 {
   public:
     TPixieEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TPixieEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TPixieEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TPixieEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -4761,7 +4761,7 @@ class TFountainAnimator_Bespoke : public TEffect
 {
   public:
     TFountainAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TFountainAnimator_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TFountainAnimator_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TFountainAnimator_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -4829,7 +4829,7 @@ class TFlyEffect_Bespoke : public TEffect
 {
   public:
     TFlyEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TFlyEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TFlyEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TFlyEffect_Bespoke() override = default;
 
     void OffScreen() override { if(runtime_owned_)TObjectInstance::OffScreen();else KillThisEffect(); }
@@ -4874,7 +4874,7 @@ class TPulpEffect_Bespoke : public TEffect
 {
   public:
     TPulpEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TPulpEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TPulpEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TPulpEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -4979,7 +4979,7 @@ class TStormAnimator_Bespoke : public TEffect
 {
   public:
     TStormAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TStormAnimator_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TStormAnimator_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TStormAnimator_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5059,7 +5059,7 @@ class TWindStripAnimator_Bespoke : public TEffect
 {
   public:
     TWindStripAnimator_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TWindStripAnimator_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TWindStripAnimator_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TWindStripAnimator_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5162,7 +5162,7 @@ class TMeteorStormEffect_Bespoke : public TEffect
 {
   public:
     TMeteorStormEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TMeteorStormEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TMeteorStormEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TMeteorStormEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5226,7 +5226,7 @@ class TTornadoEffect_Bespoke : public TEffect
 {
   public:
     TTornadoEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TTornadoEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TTornadoEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TTornadoEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5242,7 +5242,7 @@ class TVortexEffect_Bespoke : public TEffect
 {
   public:
     TVortexEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TVortexEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TVortexEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TVortexEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5270,7 +5270,7 @@ class TFogEffect_Bespoke : public TEffect
 {
   public:
     TFogEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TFogEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TFogEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     void OffScreen() override { KillThisEffect(); }
     static TFogEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
     void SetNativeDomainForTest(bool enabled);
@@ -5309,7 +5309,7 @@ class TSandswirlEffect_Bespoke : public TEffect
 {
   public:
     TSandswirlEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TSandswirlEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TSandswirlEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TSandswirlEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5387,7 +5387,7 @@ class TQuicksandEffect_Bespoke : public TEffect
 {
   public:
     TQuicksandEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TQuicksandEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TQuicksandEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TQuicksandEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5453,7 +5453,7 @@ class TLabyrinthEffect_Bespoke : public TEffect
 {
   public:
     TLabyrinthEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TLabyrinthEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TLabyrinthEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TLabyrinthEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5484,7 +5484,7 @@ class TJhagaAttackEffect_Bespoke : public TEffect
 {
   public:
     TJhagaAttackEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TJhagaAttackEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TJhagaAttackEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TJhagaAttackEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5518,7 +5518,7 @@ class TJTeleEffect_Bespoke : public TEffect
 {
   public:
     TJTeleEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TJTeleEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TJTeleEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TJTeleEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5550,7 +5550,7 @@ class TCEyesEffect_Bespoke : public TEffect
 {
   public:
     TCEyesEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TCEyesEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TCEyesEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TCEyesEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5598,7 +5598,7 @@ class TFairyEffect_Bespoke : public TEffect
 {
   public:
     TFairyEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TFairyEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TFairyEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TFairyEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5624,7 +5624,7 @@ class TAuthoredStaticMeshEffect : public TEffect
 {
   public:
     TAuthoredStaticMeshEffect(TObjectImagery* newim) : TEffect(newim) {}
-    TAuthoredStaticMeshEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TAuthoredStaticMeshEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TAuthoredStaticMeshEffect() override;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5663,7 +5663,7 @@ class TPunchAndJudyEffect_Bespoke : public TEffect
 {
   public:
     TPunchAndJudyEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TPunchAndJudyEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TPunchAndJudyEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TPunchAndJudyEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5690,7 +5690,7 @@ class TGoldEffect_Bespoke : public TEffect
 {
   public:
     TGoldEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TGoldEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TGoldEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TGoldEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5719,7 +5719,7 @@ class TDustEffect_Bespoke : public TEffect
 {
   public:
     TDustEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TDustEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TDustEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TDustEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5783,7 +5783,7 @@ class TBuffEffect_Bespoke__Might : public TEffect
 {
   public:
     TBuffEffect_Bespoke__Might(TObjectImagery* newim) : TEffect(newim) {}
-    TBuffEffect_Bespoke__Might(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TBuffEffect_Bespoke__Might(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TBuffEffect_Bespoke__Might() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5806,7 +5806,7 @@ class TBuffEffect_Bespoke__Stoneskin : public TEffect
 {
   public:
     TBuffEffect_Bespoke__Stoneskin(TObjectImagery* newim) : TEffect(newim) {}
-    TBuffEffect_Bespoke__Stoneskin(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TBuffEffect_Bespoke__Stoneskin(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TBuffEffect_Bespoke__Stoneskin() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5829,7 +5829,7 @@ class TInvisibleEffect_Bespoke : public TEffect
 {
   public:
     TInvisibleEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TInvisibleEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TInvisibleEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TInvisibleEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5852,7 +5852,7 @@ class TBuffEffect_Bespoke__charm : public TEffect
 {
   public:
     TBuffEffect_Bespoke__charm(TObjectImagery* newim) : TEffect(newim) {}
-    TBuffEffect_Bespoke__charm(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TBuffEffect_Bespoke__charm(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TBuffEffect_Bespoke__charm() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5875,7 +5875,7 @@ class TBuffEffect_Bespoke__speed : public TEffect
 {
   public:
     TBuffEffect_Bespoke__speed(TObjectImagery* newim) : TEffect(newim) {}
-    TBuffEffect_Bespoke__speed(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TBuffEffect_Bespoke__speed(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TBuffEffect_Bespoke__speed() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5934,7 +5934,7 @@ class TCataclysmEffect_Bespoke : public TEffect
 {
   public:
     TCataclysmEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TCataclysmEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TCataclysmEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TCataclysmEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5964,7 +5964,7 @@ class TFunnelEffect_Bespoke : public TEffect
 {
   public:
     TFunnelEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TFunnelEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TFunnelEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TFunnelEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -5994,7 +5994,7 @@ class TMaelstromEffect_Bespoke : public TEffect
 {
   public:
     TMaelstromEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TMaelstromEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TMaelstromEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TMaelstromEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -6028,7 +6028,7 @@ class TMagicShieldEffect_Bespoke : public TEffect
 {
   public:
     TMagicShieldEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TMagicShieldEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TMagicShieldEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TMagicShieldEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -6061,7 +6061,7 @@ class TNakrnothEffect_Bespoke : public TEffect
 {
   public:
     TNakrnothEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TNakrnothEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TNakrnothEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TNakrnothEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -6119,7 +6119,7 @@ class TFireBallEffect_Bespoke__YFireBall : public TFireBallEffect
   public:
     TFireBallEffect_Bespoke__YFireBall(TObjectImagery* newim) : TFireBallEffect(newim)
         { SetPreviewLightColor(180.0f/255.0f,1.0f,80.0f/255.0f); SetYFireBallRingPalette(); }
-    TFireBallEffect_Bespoke__YFireBall(SObjectDef* def,TObjectImagery* newim) : TFireBallEffect(def,newim)
+    TFireBallEffect_Bespoke__YFireBall(SObjectState* def,TObjectImagery* newim) : TFireBallEffect(def,newim)
         { SetPreviewLightColor(180.0f/255.0f,1.0f,80.0f/255.0f); SetYFireBallRingPalette(); }
     ~TFireBallEffect_Bespoke__YFireBall() override = default;
     [[nodiscard]] static TFireBallEffect_Bespoke__YFireBall* SpawnForTest_BESPOKE(const S3DPoint& origin);
@@ -6135,7 +6135,7 @@ class TCataclysmEffect_Bespoke__YCataclysm : public TEffect
 {
   public:
     TCataclysmEffect_Bespoke__YCataclysm(TObjectImagery* newim) : TEffect(newim) {}
-    TCataclysmEffect_Bespoke__YCataclysm(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TCataclysmEffect_Bespoke__YCataclysm(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TCataclysmEffect_Bespoke__YCataclysm() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -6165,7 +6165,7 @@ class TManadrainEffect_Bespoke__YManadrain : public TEffect
 {
   public:
     TManadrainEffect_Bespoke__YManadrain(TObjectImagery* newim) : TEffect(newim) {}
-    TManadrainEffect_Bespoke__YManadrain(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TManadrainEffect_Bespoke__YManadrain(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TManadrainEffect_Bespoke__YManadrain() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -6195,7 +6195,7 @@ class TMaelstromEffect_Bespoke__ymaelstrom : public TEffect
 {
   public:
     TMaelstromEffect_Bespoke__ymaelstrom(TObjectImagery* newim) : TEffect(newim) {}
-    TMaelstromEffect_Bespoke__ymaelstrom(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TMaelstromEffect_Bespoke__ymaelstrom(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TMaelstromEffect_Bespoke__ymaelstrom() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -6247,7 +6247,7 @@ class TBlastEffect_Bespoke : public TEffect
 {
   public:
     TBlastEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TBlastEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TBlastEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TBlastEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -6271,7 +6271,7 @@ class TFireFlashEffect_Bespoke : public TEffect
 {
   public:
     TFireFlashEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TFireFlashEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TFireFlashEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TFireFlashEffect_Bespoke() override;
 
     [[nodiscard]] static TFireFlashEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
@@ -6314,7 +6314,7 @@ class TFireWindEffect_Bespoke : public TEffect, private firewind_core::State
 {
   public:
     TFireWindEffect_Bespoke(TObjectImagery* image):TEffect(image){}
-    TFireWindEffect_Bespoke(SObjectDef* def,TObjectImagery* image):TEffect(def,image){}
+    TFireWindEffect_Bespoke(SObjectState* def,TObjectImagery* image):TEffect(def,image){}
     ~TFireWindEffect_Bespoke() override;
     void OffScreen() override {}
     void Pulse() override;
@@ -6349,7 +6349,7 @@ class TFireConeEffect_Bespoke : public TEffect
 {
   public:
     TFireConeEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TFireConeEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TFireConeEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TFireConeEffect_Bespoke() override;
 
     // A shared asset does not establish DragonFire's distinct animator.
@@ -6407,7 +6407,7 @@ class TFaultFireEffect_Bespoke : public TEffect
 {
   public:
     TFaultFireEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TFaultFireEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TFaultFireEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TFaultFireEffect_Bespoke() override = default;
     void OffScreen() override { KillThisEffect(); }
     [[nodiscard]] static TFaultFireEffect_Bespoke* SpawnForTest_BESPOKE(const S3DPoint& origin);
@@ -6454,7 +6454,7 @@ class TArrowEffect_Bespoke : public TEffect
 {
   public:
     TArrowEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TArrowEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TArrowEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TArrowEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -6491,7 +6491,7 @@ class TSparksEffect_Bespoke : public TEffect
 {
   public:
     TSparksEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TSparksEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TSparksEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TSparksEffect_Bespoke() override;
 
     void OffScreen() override { KillThisEffect(); }
@@ -6515,7 +6515,7 @@ class TCombatFlashEffect_Bespoke : public TEffect
 {
   public:
     TCombatFlashEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TCombatFlashEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TCombatFlashEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TCombatFlashEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -6547,7 +6547,7 @@ class TStrikeEffect_Bespoke : public TEffect
 {
   public:
     TStrikeEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TStrikeEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TStrikeEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TStrikeEffect_Bespoke() override = default;
 
     void OffScreen() override { KillThisEffect(); }
@@ -6651,7 +6651,7 @@ class TGeyserEffect_Bespoke : public TEffect
     enum class EVariant : uint8_t { Steam = 0, Fire = 1 };
 
     TGeyserEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TGeyserEffect_Bespoke(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) {}
+    TGeyserEffect_Bespoke(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}
     ~TGeyserEffect_Bespoke() override = default;
 
     [[nodiscard]] static TGeyserEffect_Bespoke* SpawnForTest_BESPOKE(
@@ -6671,7 +6671,7 @@ class TFlameAnimator_Bespoke__cfire : public TEffect
 {
   public:
     TFlameAnimator_Bespoke__cfire(TObjectImagery* newim) : TEffect(newim) {}
-    TFlameAnimator_Bespoke__cfire(SObjectDef* def, TObjectImagery* newim)
+    TFlameAnimator_Bespoke__cfire(SObjectState* def, TObjectImagery* newim)
         : TEffect(def, newim) {}
     ~TFlameAnimator_Bespoke__cfire() override = default;
 
@@ -6692,7 +6692,7 @@ class TFogEffect_Bespoke__MistFog : public TEffect
 {
   public:
     TFogEffect_Bespoke__MistFog(TObjectImagery* newim) : TEffect(newim) {}
-    TFogEffect_Bespoke__MistFog(SObjectDef* def, TObjectImagery* newim)
+    TFogEffect_Bespoke__MistFog(SObjectState* def, TObjectImagery* newim)
         : TEffect(def, newim) {}
     ~TFogEffect_Bespoke__MistFog() override;
 
@@ -6755,7 +6755,7 @@ class TRockStormEffect_Bespoke : public TEffect
 {
   public:
     TRockStormEffect_Bespoke(TObjectImagery* newim) : TEffect(newim) {}
-    TRockStormEffect_Bespoke(SObjectDef* def, TObjectImagery* newim)
+    TRockStormEffect_Bespoke(SObjectState* def, TObjectImagery* newim)
         : TEffect(def, newim) {}
     ~TRockStormEffect_Bespoke() override = default;
 
@@ -6814,7 +6814,7 @@ class TSetVortexEffect_Bespoke : public TEffect
 {
   public:
     TSetVortexEffect_Bespoke(TObjectImagery* img) : TEffect(img) {}
-    TSetVortexEffect_Bespoke(SObjectDef* def, TObjectImagery* img) : TEffect(def, img) {}
+    TSetVortexEffect_Bespoke(SObjectState* def, TObjectImagery* img) : TEffect(def, img) {}
     ~TSetVortexEffect_Bespoke() override = default;
 
     void OffScreen() override {} // Persistent marker; only explicit deletion kills it.

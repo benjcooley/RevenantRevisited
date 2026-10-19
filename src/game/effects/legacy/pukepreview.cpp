@@ -35,7 +35,7 @@ static void ConfigureRaster(SHelperMeshSubmit& draw,const State* s){
 static void Trace(State* s){if(!s->diagnostic)return;log_info("[puke-state] tick=%d alive=%d life=%d scale=%.9g rng=%llu policy=%d",s->ticks,int(s->core.alive),s->core.life,s->core.scale,(unsigned long long)RandomDraws(),s->raster_policy);for(int i=0;i<25;++i){const auto&p=s->core.position[i];const auto&v=s->core.velocity[i];log_info("[puke-slot] tick=%d slot=%d start=%d p=%.9g,%.9g,%.9g v=%.9g,%.9g,%.9g",s->ticks,i,s->core.starts[i],p[0],p[1],p[2],v[0],v[1],v[2]);}}
 State* Spawn(const S3DPoint& origin){
  if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto* cl=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cl?cl->FindObjType(0xad92bc11u):-1;if(type<0)return nullptr;
- SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));if(!s->owner || s->owner->ObjId()!=0xad92bc11u)return nullptr;s->owner->OnScreen();
+ SObjectState d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));if(!s->owner || s->owner->ObjId()!=0xad92bc11u)return nullptr;s->owner->OnScreen();
  auto* img=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!img || img->NumObjects()!=3 || img->NumStates()!=1 || img->GetAniLength(0)!=100 || img->NumTextures()!=3 || img->NumMaterials()!=3 || img->NumTags()!=0)return nullptr;
  for(int i=0;i<3;++i){const char* name=i==0?"box01":i==1?"box02":"box03";if(std::strcmp(img->GetObjectName(i),name) || img->GetObjectParent(i,0)!=-1)return nullptr;
   S3DTex texture={};img->GetTexture(i,&texture);const auto& pf=texture.desc.pixelFormat;

@@ -17,6 +17,7 @@ enum class ETestBlend : uint8_t
 
 struct STestMesh
 {
+    REFL_IDS(1, 19)
     PROP(1)                  bool        visible   = true;
     PROP(2)                  SRgba       diffuse   = {1, 1, 1, 1};
     PROP_NOSAVE(3, "UV scroll rate") float   uv_scroll = 0.0f;
@@ -40,6 +41,7 @@ struct STestEmpty
 // Inheritance: a derived annotated class sees its base's properties.
 struct STestDerived : public STestMesh
 {
+    REFL_IDS(20, 29)
     PROP(20) float extra = 2.5f;
 };
 

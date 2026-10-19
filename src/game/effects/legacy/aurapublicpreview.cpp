@@ -12,8 +12,8 @@
 #include <cmath>
 #include <memory>
 #include <vector>
-DEFINE_BUILDER("Aura",TAuraEffect)
-REGISTER_BUILDER(TAuraEffect)
+DEFINE_OBJECT_DEF("Aura",TAuraEffect)
+REGISTER_OBJECT_DEF(TAuraEffect)
 void TAuraEffect::Initialize(){first_time=true;}
 void TAuraEffect::Pulse(){TEffect::Pulse();if(first_time && spell){spell->SetDefense(spell->VariantData()->mindamage);spell->SetOffense(spell->VariantData()->maxdamage);first_time=false;}S3DPoint p=GetCharacter()?IntPos(GetCharacter()):IntPos(*this);SetPos(p);if(spell){spell->SetDefense(spell->VariantData()->mindamage);spell->SetOffense(spell->VariantData()->maxdamage);}}
 namespace aura_public_preview {
@@ -34,10 +34,10 @@ static bool IntegerBone(T3DAnimator*anim,int index,hmm_mat4&matrix){
 }
 State* Spawn(const S3DPoint&origin){
  if(!Renderer || !SpellList.Initialize())return nullptr;auto*data=SpellList.GetSpellDataByName("Aura");auto*variant=SpellList.GetVariantDataByName("Aura");if(!data || !variant || variant->mindamage!=0 || variant->maxdamage!=0)return nullptr;auto s=std::make_unique<State>();auto*ac=TObjectClass::GetClass(OBJCLASS_CHARACTER);const int at=ac?ac->FindObjType("Acolyte"):-1;if(at<0)return nullptr;
- SObjectDef a={};a.objclass=OBJCLASS_CHARACTER;a.objtype=short(at);a.pos=origin;s->actor.reset(dynamic_cast<TCharacter*>(ac->NewObject(&a)));if(!s->actor || s->actor->Health()!=102 || s->actor->Radius()!=16)return nullptr;
+ SObjectState a={};a.objclass=OBJCLASS_CHARACTER;a.objtype=short(at);a.pos=origin;s->actor.reset(dynamic_cast<TCharacter*>(ac->NewObject(&a)));if(!s->actor || s->actor->Health()!=102 || s->actor->Radius()!=16)return nullptr;
  s->actor->Face(96); // Declared shared facing; native constructor has96 in this fixture.
  auto* anim=dynamic_cast<T3DAnimator*>(s->actor->GetAnimator());if(!anim || anim->NumObjects()!=22 || static_cast<TObjectInstance*>(s->actor.get())->GetState()!=14)return nullptr;
- auto* ec=TObjectClass::GetClass(OBJCLASS_EFFECT);const int et=ec?ec->FindObjType(0x00ab1d1du):-1;if(et<0)return nullptr;SObjectDef e={};e.objclass=OBJCLASS_EFFECT;e.objtype=short(et);e.pos=origin;s->owner.reset(dynamic_cast<TAuraEffect*>(ec->NewObject(&e)));if(!s->owner)return nullptr;TObjectInstance*target=s->actor.get();S3DPoint source=origin;s->spell=std::make_unique<TSpell>(s->actor.get(),&target,1,&source,data,variant);s->owner->SetSpell(s->spell.get());s->owner->OnScreen();
+ auto* ec=TObjectClass::GetClass(OBJCLASS_EFFECT);const int et=ec?ec->FindObjType(0x00ab1d1du):-1;if(et<0)return nullptr;SObjectState e={};e.objclass=OBJCLASS_EFFECT;e.objtype=short(et);e.pos=origin;s->owner.reset(dynamic_cast<TAuraEffect*>(ec->NewObject(&e)));if(!s->owner)return nullptr;TObjectInstance*target=s->actor.get();S3DPoint source=origin;s->spell=std::make_unique<TSpell>(s->actor.get(),&target,1,&source,data,variant);s->owner->SetSpell(s->spell.get());s->owner->OnScreen();
  auto*im=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!im || !aura_profile::Matches(im->GetResFilename(),im->GetBody(),im->GetResSize(),im->NumStates(),im->GetAniLength(0),im->GetAniFlags(0)))return nullptr;
  for(int index=0;index<22;++index){hmm_mat4 m;if(!IntegerBone(anim,index,m))return nullptr;log_info("[aura-actor-pose] object=%d ok=1 matrix=%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g",index,m.Elements[0][0],m.Elements[0][1],m.Elements[0][2],m.Elements[0][3],m.Elements[1][0],m.Elements[1][1],m.Elements[1][2],m.Elements[1][3],m.Elements[2][0],m.Elements[2][1],m.Elements[2][2],m.Elements[2][3],m.Elements[3][0],m.Elements[3][1],m.Elements[3][2],m.Elements[3][3]);}
  log_info("[aura-resource] size=%u objects=%d verts=%d faces=%d materials=%d textures=%d frames=%d flags=%x",unsigned(im->GetResSize()),im->NumObjects(),im->NumVerts(),im->NumFaces(),im->NumMaterials(),im->NumTextures(),im->GetAniLength(0),im->GetAniFlags(0));

@@ -9,7 +9,7 @@
 #include "game/imagery/3dimage.h"
 #include "game/world/mappane.h"
 
-REGISTER_BUILDER(THelper)
+REGISTER_OBJECT_DEF(THelper)
 
 TObjectClass HelperClass("HELPER", OBJCLASS_HELPER, 0);
 

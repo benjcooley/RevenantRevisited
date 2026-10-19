@@ -19,7 +19,7 @@ struct State {
 };
 State* Spawn(const S3DPoint& origin){
  if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto* cl=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cl?cl->FindObjType(0xded3dbedu):-1;if(type<0)return nullptr;
- SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));if(!s->owner || s->owner->ObjId()!=0xded3dbedu)return nullptr;s->owner->OnScreen();
+ SObjectState d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));if(!s->owner || s->owner->ObjId()!=0xded3dbedu)return nullptr;s->owner->OnScreen();
  auto* img=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!img || img->NumObjects()!=2 || img->NumStates()!=3 || img->NumTextures()!=2 || img->NumMaterials()!=2 || img->NumTags()!=0)return nullptr;
  for(int i=0;i<2;++i){if(std::strcmp(img->GetObjectName(i),i?"box02":"box01") || img->GetObjectParent(i,0)!=-1)return nullptr;std::vector<SMeshVertex> vertices;std::vector<uint16_t> faces;if(!ExtractSubMeshTextureSlot(img,i,i+1,vertices,faces) || vertices.size()!=12 || faces.size()!=36)return nullptr;
   S3DTex texture={};img->GetTexture(i,&texture);const auto& p=texture.desc.pixelFormat;if(texture.numframes!=1 || p.dwRGBBitCount!=16 || img->GetTextureHandle(i)==kInvalidTexture)return nullptr;

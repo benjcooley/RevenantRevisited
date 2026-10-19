@@ -193,13 +193,12 @@ protected:
     }
 };
 
-class TCureObjectBuilder final : public TObjectBuilder
+class TCureObjectDef final : public TStateObjectDef<SObjectState>
 {
 public:
-    TCureObjectBuilder():TObjectBuilder("Cure") {}
-    TObjectInstance* Build(TObjectImagery* imagery) override { return new TCureEffect_Bespoke(imagery); }
-    TObjectInstance* Build(SObjectDef* def,TObjectImagery* imagery) override
-    { return new TCureEffect_Bespoke(def,imagery); }
+    TObjectInstance* Create(TObjectImagery* imagery) const override { return new TCureEffect_Bespoke(imagery); }
+    TObjectInstance* Create(SObjectState& state,TObjectImagery* imagery) const override
+    { return new TCureEffect_Bespoke(&state,imagery); }
 };
 class TCureAnimatorBuilder final : public T3DAnimatorBuilder
 {
@@ -214,7 +213,7 @@ public:
         else log_error("[cure-runtime] exact Cure owner was not built by its typed object builder");
     }
 };
-TCureObjectBuilder cure_object_builder;
+static TObjectDef::SRegistrar cure_object_def("Cure", []() -> std::unique_ptr<TObjectDef> { return std::make_unique<TCureObjectDef>(); });
 TCureAnimatorBuilder cure_animator_builder;
 }
 
@@ -248,7 +247,7 @@ struct TCureEffect_Bespoke::Impl
 
 TCureEffect_Bespoke::TCureEffect_Bespoke(TObjectImagery* imagery)
     :TEffect(imagery),impl_(std::make_unique<Impl>()) {}
-TCureEffect_Bespoke::TCureEffect_Bespoke(SObjectDef* def,TObjectImagery* imagery)
+TCureEffect_Bespoke::TCureEffect_Bespoke(SObjectState* def,TObjectImagery* imagery)
     :TEffect(def,imagery),impl_(std::make_unique<Impl>()) {}
 TCureEffect_Bespoke::~TCureEffect_Bespoke()=default;
 

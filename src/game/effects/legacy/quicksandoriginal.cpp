@@ -21,7 +21,7 @@ struct State {
 };
 State* Spawn(const S3DPoint& source){
  if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto* cl=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cl?cl->FindObjType(0xbabefaceu):-1;if(type<0)return nullptr;
- SObjectDef d{};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=source;s->owner.reset(cl->NewObject(&d));
+ SObjectState d{};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=source;s->owner.reset(cl->NewObject(&d));
  if(!s->owner || s->owner->ObjId()!=0xbabefaceu)return nullptr;SetIntPos(s->owner, source);s->source=source;s->owner->OnScreen();
  auto* im=dynamic_cast<T3DImagery*>(s->owner->GetImagery());
  if(!im || im->NumStates()!=1 || im->GetAniLength(0)!=3 || im->GetAniFlags(0)!=0x2001 || im->NumObjects()!=4 || im->NumMaterials()!=4 || im->NumTextures()!=4 || im->NumTags()!=0)return nullptr;

@@ -31,7 +31,7 @@
 extern TObjectClass  CharacterClass; // Used to indicate player is derived from character
 extern TObjectClass TalismanClass;
 
-REGISTER_BUILDER(TPlayer)
+REGISTER_OBJECT_DEF(TPlayer)
 TObjectClass PlayerClass("PLAYER", OBJCLASS_PLAYER, 0, &CharacterClass);
 
 // REVSYNC: the shipped game's PLAYER object stats 17-83 (SStatEntry
@@ -147,7 +147,7 @@ TPlayer::TPlayer(TObjectImagery* newim) : TCharacter(newim)
     ClearPlayer();
 }
 
-TPlayer::TPlayer(SObjectDef* def, TObjectImagery* newim) : TCharacter(def, newim)
+TPlayer::TPlayer(SObjectState* def, TObjectImagery* newim) : TCharacter(def, newim)
 {
     ClearPlayer();
 }
@@ -699,7 +699,7 @@ void TPlayer::AwardKillExp(TCharacter *victim)
   // sound, then its effect.
     SetCast("invoke2", nullptr, 90);
     extern TObjectClass EffectClass;
-    SObjectDef def{};
+    SObjectState def{};
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = EffectClass.FindObjType("PowerUp");
     def.level = MapPane.GetMapLevel();

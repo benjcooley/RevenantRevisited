@@ -77,13 +77,13 @@ public:
     S3DPoint target_position[PARA_MAX_TARGETS];
     int32_t num_targets;
     TParaEffect(TObjectImagery* newim) : TEffect(newim) { }
-    TParaEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { }
+    TParaEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { }
     void Initialize();
     void Pulse();
 };
 
-DEFINE_BUILDER("Paralize1", TParaEffect)
-REGISTER_BUILDER(TParaEffect)
+DEFINE_OBJECT_DEF("Paralize1", TParaEffect)
+REGISTER_OBJECT_DEF(TParaEffect)
 
 void TParaEffect::Initialize()
 {
@@ -729,13 +729,13 @@ public:
     int32_t ticks;      // how many ticks til the next stage...
 
     TManaDrainEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TManaDrainEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TManaDrainEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
 };
 
-DEFINE_BUILDER("ManaDrain", TManaDrainEffect)
-REGISTER_BUILDER(TManaDrainEffect)
+DEFINE_OBJECT_DEF("ManaDrain", TManaDrainEffect)
+REGISTER_OBJECT_DEF(TManaDrainEffect)
 
 
 void TManaDrainEffect::Initialize()
@@ -1175,13 +1175,13 @@ class TShriekEffect : public TEffect
 protected:
 public:
     TShriekEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TShriekEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TShriekEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
 };
 
-DEFINE_BUILDER("Shriek", TShriekEffect)
-REGISTER_BUILDER(TShriekEffect)
+DEFINE_OBJECT_DEF("Shriek", TShriekEffect)
+REGISTER_OBJECT_DEF(TShriekEffect)
 
 
 void TShriekEffect::Initialize()
@@ -1374,13 +1374,13 @@ class TPukeEffect : public TEffect
 protected:
 public:
     TPukeEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TPukeEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TPukeEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
 };
 
-DEFINE_BUILDER("Puke", TPukeEffect)
-REGISTER_BUILDER(TPukeEffect)
+DEFINE_OBJECT_DEF("Puke", TPukeEffect)
+REGISTER_OBJECT_DEF(TPukeEffect)
 
 
 void TPukeEffect::Initialize()
@@ -2097,13 +2097,13 @@ protected:
 public:
     int32_t life;
     TFunnelEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TFunnelEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TFunnelEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
 };
 
-DEFINE_BUILDER("Funnel", TFunnelEffect)
-REGISTER_BUILDER(TFunnelEffect)
+DEFINE_OBJECT_DEF("Funnel", TFunnelEffect)
+REGISTER_OBJECT_DEF(TFunnelEffect)
 
 _CLASSDEF(TFunnelAnimator)
 class TFunnelAnimator : public T3DAnimator
@@ -2336,14 +2336,14 @@ protected:
 public:
     int32_t life;
     TInvisibleEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TInvisibleEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TInvisibleEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
     void OffScreen();
 };
 
-DEFINE_BUILDER("Invisible", TInvisibleEffect)
-REGISTER_BUILDER(TInvisibleEffect)
+DEFINE_OBJECT_DEF("Invisible", TInvisibleEffect)
+REGISTER_OBJECT_DEF(TInvisibleEffect)
 
 
 void TInvisibleEffect::Initialize()
@@ -2726,14 +2726,14 @@ class TRestEffect : public TEffect
 protected:
 public:
     TRestEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TRestEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TRestEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
     void OffScreen();
 };
 
-DEFINE_BUILDER("Rest", TRestEffect)
-REGISTER_BUILDER(TRestEffect)
+DEFINE_OBJECT_DEF("Rest", TRestEffect)
+REGISTER_OBJECT_DEF(TRestEffect)
 
 _CLASSDEF(TRestAnimator)
 class TRestAnimator : public T3DAnimator
@@ -2959,7 +2959,7 @@ public:
     hmm_vec3 velocity;
     S3DPoint position;
     TCataclysmEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TCataclysmEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TCataclysmEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
     void OffScreen();
@@ -2967,8 +2967,8 @@ public:
     void SetUp();
 };
 
-DEFINE_BUILDER("Cataclysm", TCataclysmEffect)
-REGISTER_BUILDER(TCataclysmEffect)
+DEFINE_OBJECT_DEF("Cataclysm", TCataclysmEffect)
+REGISTER_OBJECT_DEF(TCataclysmEffect)
 
 _CLASSDEF(TCataclysmAnimator)
 class TCataclysmAnimator : public T3DAnimator
@@ -3491,14 +3491,14 @@ class TIceStormEffect : public TMissileEffect
 protected:
 public:
     TIceStormEffect(TObjectImagery* newim) : TMissileEffect(newim) { Initialize(); }
-    TIceStormEffect(SObjectDef* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
+    TIceStormEffect(SObjectState* def, TObjectImagery* newim) : TMissileEffect(def, newim) { Initialize(); }
     void Initialize();
     void Pulse();
     void OffScreen();
 };
 
-DEFINE_BUILDER("IceStorm", TIceStormEffect)
-REGISTER_BUILDER(TIceStormEffect)
+DEFINE_OBJECT_DEF("IceStorm", TIceStormEffect)
+REGISTER_OBJECT_DEF(TIceStormEffect)
 
 _CLASSDEF(TIceStormAnimator)
 class TIceStormAnimator : public T3DAnimator

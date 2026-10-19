@@ -306,7 +306,7 @@ class TSpell
     void ManaDrain();
 
   protected:
-    TEffect* NewEffect(SObjectDef& def, int32_t imagery = -1);
+    TEffect* NewEffect(SObjectState& def, int32_t imagery = -1);
       // An effect from `def` (with that imagery, -1 the type's) made in the
       // map: the last one made; when there is one, its spell is this and it
       // joins the list
@@ -362,11 +362,11 @@ class TStrikeSpell : public TSpell
   protected:
     // REVSYNC: 0x00540bc0 -- the def of an effect on `target`: at it, plus
     // POS, or its ATTACH point (or 50, 50, 50) and the source
-    [[nodiscard]] SObjectDef EffectDef(TObjectInstance* target) const;
+    [[nodiscard]] SObjectState EffectDef(TObjectInstance* target) const;
     // The CONTROLDATA IMAGERY effect from `def`, following `anchor` with
     // FOLLOW (orbiting at angle and dist when `orbit`) for DURATION. Retail
     // repeats this block in every branch of its Timer.
-    TEffect* NewStrikeEffect(SObjectDef& def, TObjectInstance* anchor, int32_t angle, int32_t dist, bool orbit);
+    TEffect* NewStrikeEffect(SObjectState& def, TObjectInstance* anchor, int32_t angle, int32_t dist, bool orbit);
     // An effect's timed life: DURATION, blinking out over DURATION2, held
     // for random(0, WAIT) first
     void Time(TEffect* fx) const;

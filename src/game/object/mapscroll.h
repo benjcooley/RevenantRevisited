@@ -25,7 +25,7 @@ class TMapScroll : public TObjectInstance
 {
   public:
     TMapScroll(TObjectImagery* newim) : TObjectInstance(newim) {}
-    TMapScroll(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
+    TMapScroll(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 };
 
-DEFINE_BUILDER("MAPSCROLL", TMapScroll)
+DEFINE_OBJECT_DEF("MAPSCROLL", TMapScroll)

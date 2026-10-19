@@ -23,7 +23,7 @@ static int Ground(State* s,pulp_core::Point p){const int height=MapPane.GetWalkH
 static State* Spawn(const S3DPoint& origin,bool isolated){
  if(!Renderer)return nullptr;auto s=std::make_unique<State>();s->display=origin;
  auto* effects=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=effects?effects->FindObjType(0x152dafddu):-1;if(type<0)return nullptr;
- SObjectDef def={};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos={10000,10000,16};s->owner.reset(effects->NewObject(&def));if(!s->owner || s->owner->ObjId()!=0x152dafddu)return nullptr;
+ SObjectState def={};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos={10000,10000,16};s->owner.reset(effects->NewObject(&def));if(!s->owner || s->owner->ObjId()!=0x152dafddu)return nullptr;
  auto* image=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!image || image->NumObjects()!=11 || image->NumStates()!=1 || image->GetAniLength(0)!=1 || image->NumMaterials()!=4 || image->NumTextures()!=4 || image->NumTags()!=0)return nullptr;
  for(int i=0;i<4;++i){S3DTex t={};image->GetTexture(i,&t);const auto& f=t.desc.pixelFormat;if(t.numframes!=1 || t.desc.width!=uint32_t(i==1?16:32) || t.desc.height!=t.desc.width || f.dwRGBBitCount!=16 || f.dwRBitMask!=0xf800 || f.dwGBitMask!=0x7e0 || f.dwBBitMask!=31 || f.dwRGBAlphaBitMask || image->GetTextureHandle(i)==kInvalidTexture)return nullptr;}
  for(int i=0;i<11;++i){const auto& p=pulp_profile::objects[i];S3DObj o={};image->GetObject(i,&o);if(std::strcmp(o.name,p.name) || o.material!=p.material || o.numverts!=p.vertices || o.numfaces!=p.faces || o.parent[0]!=-1)return nullptr;
@@ -32,7 +32,7 @@ static State* Spawn(const S3DPoint& origin,bool isolated){
   s->meshes[i]=Renderer->RegisterMeshAsset(0x50554c5000000000ull+i,vertices.data(),int(vertices.size()),indices.data(),int(indices.size()),image->GetTextureHandle(p.slot-1));if(!s->meshes[i])return nullptr;Renderer->AddMeshAssetRef(s->meshes[i]);
  }
  auto* chars=TObjectClass::GetClass(OBJCLASS_CHARACTER);const int actor_type=chars?chars->FindObjType("Acolyte"):-1;if(actor_type<0)return nullptr;
- SObjectDef character={};character.objclass=OBJCLASS_CHARACTER;character.objtype=short(actor_type);character.pos={10000,10000,16};s->actor.reset(dynamic_cast<TCharacter*>(chars->NewObject(&character)));if(!s->actor || !s->actor->CreateAnimator())return nullptr;
+ SObjectState character={};character.objclass=OBJCLASS_CHARACTER;character.objtype=short(actor_type);character.pos={10000,10000,16};s->actor.reset(dynamic_cast<TCharacter*>(chars->NewObject(&character)));if(!s->actor || !s->actor->CreateAnimator())return nullptr;
  auto* animator=dynamic_cast<T3DAnimator*>(s->actor->GetAnimator());if(!animator || animator->NumObjects()!=22)return nullptr;s->actor_flags=s->actor->Flags();
  const auto& snap=FrameSnap::GetConfig();if(isolated && snap.seed_set)SeedRandom(snap.seed);s->initial_draws=RandomDraws();
  s->core.Initialize({0,0,8},{10000,10000,16},animator->NumObjects(),[](int a,int b){return random(a,b);},[&](int i){const auto* object=animator->GetObject(i);return pulp_core::Vec{object->rot.X,object->rot.Y,object->rot.Z};},[&](auto p){return Ground(s.get(),p);});
@@ -46,7 +46,7 @@ void Advance(State* s,double dt){
  if(!s || !std::isfinite(dt) || dt<=0)return;s->accumulator+=dt;
  while(s->accumulator+1e-10>=TTime::LegacyFrameSeconds){s->accumulator-=TTime::LegacyFrameSeconds;if(!Alive(s))return;s->owner->NextFrame();s->core.Advance({10000,10000,16},[](int a,int b){return random(a,b);},[&](auto p){return Ground(s,p);},[&](bool settled,int variant,auto p){
    char name[24];std::snprintf(name,sizeof(name),settled?"Blood%d":"BloodS%d",variant);auto* tiles=TObjectClass::GetClass(OBJCLASS_TILE);const int type=tiles?tiles->FindObjType(name):-1;if(type<0){s->context_valid=false;log_error("[pulp] missing original tile%s",name);return;}
-   SObjectDef def={};def.objclass=OBJCLASS_TILE;def.objtype=short(type);def.pos={p.x,p.y,p.z};def.level=uint16_t(MapPane.GetMapLevel());const auto before=RandomDraws();const int index=MapPane.NewObject(&def);++s->decal_requests;
+   SObjectState def={};def.objclass=OBJCLASS_TILE;def.objtype=short(type);def.pos={p.x,p.y,p.z};def.level=uint16_t(MapPane.GetMapLevel());const auto before=RandomDraws();const int index=MapPane.NewObject(&def);++s->decal_requests;
    if(index!=-1 || RandomDraws()!=before){s->context_valid=false;log_error("[pulp] unsupported decal result=%d constructor_rng=%llu",index,static_cast<unsigned long long>(RandomDraws()-before));return;}
    // Original44ce30 MakeIndex does these operations even when AddObject fails.
    // Keep modern global IDs unchanged; this explicit fixture declares clock0.

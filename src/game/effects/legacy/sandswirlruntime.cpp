@@ -80,7 +80,7 @@ struct Effect::Runtime {
  std::vector<int32_t> quicksands,query;
 };
 Effect::Effect(TObjectImagery*im):TEffect(im),runtime(std::make_unique<Runtime>()){AddComponent(std::make_unique<HiddenVisual>());}
-Effect::Effect(SObjectDef*d,TObjectImagery*im):TEffect(d,im),runtime(std::make_unique<Runtime>()){AddComponent(std::make_unique<HiddenVisual>());}
+Effect::Effect(SObjectState*d,TObjectImagery*im):TEffect(d,im),runtime(std::make_unique<Runtime>()){AddComponent(std::make_unique<HiddenVisual>());}
 Effect::~Effect()=default;
 bool Effect::UseQualifiedSparks(int32_t seekz){if(runtime->attempted)return false;runtime->qualified=true;runtime->restored=false;runtime->seekz=seekz;return true;}
 bool Effect::UseRestoredLegacySand(int32_t seekz){if(runtime->attempted)return false;runtime->restored=true;runtime->qualified=false;runtime->seekz=seekz;return true;}
@@ -95,7 +95,7 @@ bool Effect::InitializeRuntime(){
  if(ObjId()!=0xbecefedau){runtime->parent.Start(false);SetFlag(OF_KILL);return false;}
  auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cl?(runtime->qualified?cl->FindObjType(0x14db0f2eu):cl->FindObjType("sand")):-1;
  if(type<0 || (!runtime->qualified && !runtime->restored)){runtime->parent.Start(false);SetFlag(OF_KILL);log_warn("[sandswirl-runtime] missing intended sand dependency; no alias or static fallback");return false;}
- SObjectDef d{};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.level=MapPane.GetMapLevel();d.pos=IntPos(*this);
+ SObjectState d{};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.level=MapPane.GetMapLevel();d.pos=IntPos(*this);
  const int index=MapPane.NewObject(&d);auto*child=MapPane.GetInstance(index);if(!child){runtime->parent.Start(false);SetFlag(OF_KILL);return false;}
  child->CreateAnimator();int direction=0;
  if(spell){auto*invoker=spell->GetInvokerRef().Get();auto*target=spell->GetTargetRef().Get();if(target && target!=invoker)direction=ConvertToFacing(IntPos(*this),IntPos(target));else if(invoker)direction=IntFacing(invoker);else{child->SetFlag(OF_KILL);runtime->parent.Start(false);SetFlag(OF_KILL);return false;}}
@@ -115,7 +115,7 @@ void Effect::Pulse(){
  }
  const auto result=runtime->parent.Advance(caller);
  for(unsigned i=0;i<result.spawn_count;++i){auto*target=reinterpret_cast<TObjectInstance*>(result.spawn_for[i]);auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cl?cl->FindObjType("Quicksand"):-1;if(type<0)continue;
-  SObjectDef d{};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.level=MapPane.GetMapLevel();d.pos=IntPos(target);const int index=MapPane.NewObject(&d);auto*child=MapPane.GetInstance(index);
+  SObjectState d{};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.level=MapPane.GetMapLevel();d.pos=IntPos(target);const int index=MapPane.NewObject(&d);auto*child=MapPane.GetInstance(index);
   if(child && AttachNullQuicksand(*child)){runtime->quicksands.push_back(index);log_info("[sandswirl-runtime-quicksand] parent_tick=%d child=%d null_spell=1 initializer_ret8=1",runtime->parent.Frame(),index);}else if(child)child->SetFlag(OF_KILL);
  }
  if(result.reset_targets){auto*child=runtime->child.Get();auto*anim=child?child->GetComponent<SeekingAnimator>():nullptr;if(!anim){SetFlag(OF_KILL);return;}auto p=anim->core.params;const auto&t=runtime->parent.Targets();p.seeking=t.seeking;p.target_count=int(t.count);p.turn=t.turn;p.speed=t.speed;p.autorange=t.autorange;p.hitrange=t.hitrange;
@@ -131,5 +131,5 @@ void Effect::Pulse(){
 }
 // Exact class name, resolved normally by class.def. No child alias registered.
 using TSandswirlRuntimeEffect=sandswirl_runtime::Effect;
-DEFINE_BUILDER("Sandswirl", TSandswirlRuntimeEffect)
-REGISTER_BUILDER(TSandswirlRuntimeEffect)
+DEFINE_OBJECT_DEF("Sandswirl", TSandswirlRuntimeEffect)
+REGISTER_OBJECT_DEF(TSandswirlRuntimeEffect)

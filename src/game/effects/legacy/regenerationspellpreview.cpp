@@ -58,7 +58,7 @@ State* Spawn(const S3DPoint& origin) {
     if(!MapPane.BindCommandMapWindow(State::level,origin))return nullptr;
     auto* cls=TObjectClass::GetClass(OBJCLASS_CHARACTER);const int type=cls?cls->FindObjType("Acolyte"):-1;
     if(type<0)return nullptr;
-    SObjectDef def={};def.objclass=OBJCLASS_CHARACTER;def.objtype=short(type);def.level=State::level;def.pos=origin;
+    SObjectState def={};def.objclass=OBJCLASS_CHARACTER;def.objtype=short(type);def.level=State::level;def.pos=origin;
     s->invoker=MapPane.GetInstance(MapPane.NewObject(&def));def.pos.x+=96;
     s->target=MapPane.GetInstance(MapPane.NewObject(&def));
     auto* actor=dynamic_cast<TCharacter*>(s->invoker.Get());auto* target=dynamic_cast<TCharacter*>(s->target.Get());

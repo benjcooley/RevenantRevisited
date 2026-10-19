@@ -62,11 +62,11 @@ struct SQuadDrawItem {bool retail_software_projection=false,retail_argb4444=fals
  EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 struct TRenderer {std::vector<SQuadDrawItem> draws;void SubmitFxQuad(const SQuadDrawItem& i){draws.push_back(i);}};
 TRenderer renderer;TRenderer* Renderer=&renderer;
-struct TObjectImagery {};struct SObjectDef {};
+struct TObjectImagery {};struct SObjectState {};
 struct World {hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4& Matrix()const{return m;}};
 struct TObjectInstance {int GetFace()const{return 0;}World world;S3DPoint pos;virtual ~TObjectInstance()=default;
  const World& Transform()const{return world;}const S3DPoint& Pos()const{return pos;}};
-struct TEffect:TObjectInstance {TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};
+struct TEffect:TObjectInstance {TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};
  virtual void Pulse(){};};
 '''
     records=struct.unpack_from('<32f',asset,VERTEX_OFFSET)

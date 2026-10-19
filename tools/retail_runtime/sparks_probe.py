@@ -179,8 +179,8 @@ struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};struct{T
 struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};
 struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
 struct TObjectInstance{World world;const World&Transform()const{return world;}};
-struct TObjectImagery{};struct SObjectDef{};
-struct TEffect{TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual~TEffect()=default;};
+struct TObjectImagery{};struct SObjectState{};
+struct TEffect{TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};virtual~TEffect()=default;};
 void log_error(const char*,...){}
 std::ifstream rng;int random_count=0;
 int random(int lo,int hi){int a,b,v;if(!(rng>>a>>b>>v)||a!=lo||b!=hi)throw std::runtime_error("Native RNG call order mismatch");++random_count;return v;}

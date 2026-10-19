@@ -369,10 +369,10 @@ class TFixtureItem : public TArmor
     int32_t Protection() override { return protection; }
 
   private:
-    static std::unique_ptr<SObjectDef> Def(const JsonValue& spec)
+    static std::unique_ptr<SObjectState> Def(const JsonValue& spec)
     {
-        auto def = std::make_unique<SObjectDef>();
-        memset(def.get(), 0, sizeof(SObjectDef));
+        auto def = std::make_unique<SObjectState>();
+        memset(def.get(), 0, sizeof(SObjectState));
         def->objclass = (short)spec["class"].Int(OBJCLASS_ARMOR);
         if (!TObjectClass::GetClass(def->objclass))
             throw std::runtime_error("no class " + std::to_string(def->objclass) + " loaded");
@@ -517,10 +517,10 @@ class TFixtureChar : public Base, public IFixtureChar
     // The object definition the game builds a character from: its class
     // (player or character) and its class.def type -- the case's "type",
     // else its name -- so the class record and stat layout are the real ones.
-    static std::unique_ptr<SObjectDef> Def(const JsonValue& spec)
+    static std::unique_ptr<SObjectState> Def(const JsonValue& spec)
     {
-        auto def = std::make_unique<SObjectDef>();
-        memset(def.get(), 0, sizeof(SObjectDef));
+        auto def = std::make_unique<SObjectState>();
+        memset(def.get(), 0, sizeof(SObjectState));
         def->objclass = (short)spec["class"].Int(OBJCLASS_CHARACTER);
         const std::string type = spec.Has("type") ? spec["type"].Str() : spec["name"].Str();
         TObjectClass* cl = TObjectClass::GetClass(def->objclass);

@@ -21,8 +21,8 @@ def run(reference,output):
 #undef min
 #undef max
 using MeshHandle=uint32_t;struct SMeshVertex{float p[8];};struct S3DMat{};
-struct TObjectImagery{};struct SObjectDef{};enum class EFxDebugMode{Normal};
-struct TEffect{TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual ~TEffect()=default;virtual void OffScreen(){};void KillThisEffect(){}};
+struct TObjectImagery{};struct SObjectState{};enum class EFxDebugMode{Normal};
+struct TEffect{TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};virtual ~TEffect()=default;virtual void OffScreen(){};void KillThisEffect(){}};
 std::ifstream input;int draws=0;
 int random(int a,int b){int x,y,v;if(!(input>>x>>y>>v)||a!=x||b!=y)throw std::runtime_error("Heal RNG range/order differs");++draws;return v;}
 '''

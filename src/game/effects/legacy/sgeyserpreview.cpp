@@ -29,7 +29,7 @@ static bool Pose(State& s,int object,int frame,hmm_mat4& m){auto*img=static_cast
 }
 State* Spawn(const S3DPoint& origin){
  if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto*cls=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cls?cls->FindObjType(0xad92bd30u):-1;if(type<0)return nullptr;
- SObjectDef def={};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=origin;s->owner.reset(cls->NewObject(&def));if(!s->owner || s->owner->ObjId()!=0xad92bd30u)return nullptr;s->owner->OnScreen();
+ SObjectState def={};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=origin;s->owner.reset(cls->NewObject(&def));if(!s->owner || s->owner->ObjId()!=0xad92bd30u)return nullptr;s->owner->OnScreen();
  auto*img=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!img || img->NumObjects()!=3 || img->NumStates()!=1 || img->GetAniLength(0)!=45 || img->GetAniFlags(0)!=0x2000 || img->NumTags()!=2 || img->NumTextures()!=1 || img->NumMaterials()!=1)return nullptr;
  constexpr const char* names[]={"#steam","steam","#blast"};constexpr int counts[]={6,6,44};constexpr uint32_t hashes[]={0xbbb06f21u,0x76c1714u,0x5c7b93b5u};
  for(int i=0;i<3;++i){S3DObj o={};img->GetObject(i,&o);if(std::strcmp(img->GetObjectName(i),names[i]) || o.parent[0]!=-1 || o.numanikeys[0]!=counts[i] || Hash(o.anikeys[0],counts[i]*4)!=hashes[i])return nullptr;}

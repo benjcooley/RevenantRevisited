@@ -70,7 +70,7 @@ endif()
 # functions, accept the C runtime's classic string functions, and supply
 # the POSIX headers the port uses (src/engine/platform/windows/include).
 if(WIN32)
-  add_compile_definitions(NOMINMAX _CRT_SECURE_NO_WARNINGS)
+  add_compile_definitions(NOMINMAX _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
   include_directories(BEFORE "${CMAKE_SOURCE_DIR}/src/engine/platform/windows/include")
 endif()
 

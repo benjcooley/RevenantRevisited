@@ -14,7 +14,7 @@ class TTrap : public TObjectInstance
 {
   public:
     TTrap(TObjectImagery* newim) : TObjectInstance(newim) { flags |= OF_IMMOBILE; }
-    TTrap(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { flags |= OF_IMMOBILE; }
+    TTrap(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) { flags |= OF_IMMOBILE; }
 };
 
-DEFINE_BUILDER("TRAP", TTrap)
+DEFINE_OBJECT_DEF("TRAP", TTrap)

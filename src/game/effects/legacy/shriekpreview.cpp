@@ -22,7 +22,7 @@ struct State {
 };
 State* Spawn(const S3DPoint& origin){
  if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto* cl=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cl?cl->FindObjType(0xad92bc12u):-1;if(type<0)return nullptr;
- SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));if(!s->owner || s->owner->ObjId()!=0xad92bc12u)return nullptr;s->owner->OnScreen();
+ SObjectState d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));if(!s->owner || s->owner->ObjId()!=0xad92bc12u)return nullptr;s->owner->OnScreen();
  auto* img=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!img || img->NumObjects()!=4 || img->NumStates()!=1 || img->GetAniLength(0)!=100 || img->NumTextures()!=4 || img->NumMaterials()!=4 || img->NumTags()!=0)return nullptr;
  for(int i=0;i<4;++i){const char* name=i==0?"box01":i==1?"box02":i==2?"box03":"box04";if(std::strcmp(img->GetObjectName(i),name) || img->GetObjectParent(i,0)!=-1)return nullptr;
   S3DTex texture={};img->GetTexture(i,&texture);const auto& pf=texture.desc.pixelFormat;

@@ -15,7 +15,7 @@ class TTalisman : public TObjectInstance
 {
   public:
     TTalisman(TObjectImagery* newim) : TObjectInstance(newim) {}
-    TTalisman(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
+    TTalisman(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 
     virtual void RemoveFromInventory();
         // Remove this object from whatever inventory it is in
@@ -24,6 +24,6 @@ class TTalisman : public TObjectInstance
     STATFUNC(Code)
 };
 
-DEFINE_BUILDER("TALISMAN", TTalisman)
+DEFINE_OBJECT_DEF("TALISMAN", TTalisman)
 
 extern TObjectClass TalismanClass;

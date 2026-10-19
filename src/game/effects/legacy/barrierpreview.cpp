@@ -30,7 +30,7 @@ State* Spawn(uint32_t type_id,const S3DPoint& origin) {
     auto* cl=TObjectClass::GetClass(OBJCLASS_EFFECT);
     const int type=cl?cl->FindObjType(type_id):-1;
     if(type<0)return nullptr;
-    SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;
+    SObjectState d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;
     s->owner.reset(cl->NewObject(&d));
     auto* im=s->owner?dynamic_cast<T3DImagery*>(s->owner->GetImagery()):nullptr;
     if(!im || s->owner->ObjId()!=type_id || !barrier_legacy::Matches(

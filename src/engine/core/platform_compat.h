@@ -36,9 +36,15 @@ using HRESULT = int32_t;
 #define SUCCEEDED(hr) (((HRESULT)(hr)) >= 0)
 #define FAILED(hr)    (((HRESULT)(hr)) < 0)
 
-// Case-insensitive compares under the names the 1998 code uses.
+// Case-insensitive compares under the names the 1998 code uses. The
+// Windows C runtime declares both itself (its "oldnames", extern "C", so
+// a C++ declaration of ours would clash); everywhere else they are ours.
+#if defined(_WIN32)
+#include <string.h>
+#else
 int32_t stricmp(const char* s1, const char* s2);
 int32_t strnicmp(const char* s1, const char* s2, size_t n);
+#endif
 
 // The 1998 critical section around the shared caches. The port is single
 // threaded (threading is a later subsystem), so both are no-ops.

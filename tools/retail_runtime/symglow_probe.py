@@ -64,9 +64,9 @@ struct SQuadDrawItem{bool retail_argb4444=false;int corner_count=4,retail_textur
  struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};};
 struct TRenderer{bool UsesRetailSoftwareMeshLighting()const{return true;}std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};
 TRenderer renderer;TRenderer*Renderer=&renderer;
-struct TObjectImagery{};struct SObjectDef{};
+struct TObjectImagery{};struct SObjectState{};
 struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
-struct TEffect{World world;TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual~TEffect()=default;
+struct TEffect{World world;TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};virtual~TEffect()=default;
  virtual void OffScreen(){};void KillThisEffect(){};void SetCommandDone(bool){};const World&Transform()const{return world;}};
 std::ifstream inputs;int rng_count=0;
 int random(int low,int high){int a,b,v;if(!(inputs>>a>>b>>v)||a!=low||b!=high)throw std::runtime_error("Native RNG order changed");++rng_count;return v;}

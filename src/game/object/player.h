@@ -131,7 +131,7 @@ class TPlayer : public TCharacter
       // Logs level, attributes and vitals
 
     TPlayer(TObjectImagery* newim);
-    TPlayer(SObjectDef* def, TObjectImagery* newim);
+    TPlayer(SObjectState* def, TObjectImagery* newim);
     ~TPlayer();
 
     bool GetZ(const TObjectInstance* frontmost) override { if (!Editor) return false; return TCharacter::GetZ(frontmost); }
@@ -524,7 +524,7 @@ class TPlayer : public TCharacter
     SAutoMapRecord automap;                         // +0x314: explored automap
 };
 
-DEFINE_BUILDER("Player", TPlayer)
+DEFINE_OBJECT_DEF("Player", TPlayer)
 
 typedef TPointerArray<TPlayer, 4, 4> TPlayerArray;
 

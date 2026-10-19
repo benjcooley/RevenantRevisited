@@ -527,7 +527,7 @@ bool BuildRigCharacter(int32_t roster_idx,
     TObjectClass* cl = TObjectClass::GetClass(objclass);
     if (!cl) return false;
 
-    SObjectDef def = {};
+    SObjectState def = {};
     def.objclass = short(objclass);
     def.objtype  = short(objtype);
     def.state    = 0;
@@ -711,7 +711,7 @@ bool EnsureRigForStyle(VfxTest::EVfxPreviewStyle style)
         {
             const auto [objclass, objtype] = rig.roster[size_t(i)];
             TObjectClass* cl = TObjectClass::GetClass(objclass);
-            const SObjectInfo* info = cl ? cl->GetObjType(objtype) : nullptr;
+            const TObjectDef* info = cl ? cl->GetObjType(objtype) : nullptr;
             if (info && !stricmp(info->name, StartupVfxRig) && BuildRigCharacter(i, style))
                 return true;
         }

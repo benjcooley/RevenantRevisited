@@ -14,7 +14,7 @@ class TTool : public TObjectInstance
 {
   public:
     TTool(TObjectImagery* newim) : TObjectInstance(newim) {}
-    TTool(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
+    TTool(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 
     virtual bool Use(TObjectInstance* user, int32_t with = -1);
     int32_t CursorType(TObjectInstance* with = nullptr) override;
@@ -24,4 +24,4 @@ class TTool : public TObjectInstance
     STATFUNC(Pick)
 };
 
-DEFINE_BUILDER("TOOL", TTool)
+DEFINE_OBJECT_DEF("TOOL", TTool)

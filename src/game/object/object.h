@@ -61,53 +61,7 @@ class TVisualComponent;
 // sector include chain into object.h. Defined in mappane.cpp.
 TObjectInstance* LookupMapIndex(int32_t mapindex);
 
-// *************************************************************
-// * TObjectBuilder - Creates objects for a given object class *
-// *************************************************************
-
-#define MAXOBJECTTYPES 2048
-
-_CLASSDEF(SObjectDef)
-// TComponent + TObjectInstance forward decls and the update-method
-// typedef now live in component.h; included above.
-
-_CLASSDEF(TObjectBuilder)
-class TObjectBuilder
-{
-  public:
-    TObjectBuilder(const char *name);
-      // Sets name and adds builder to builder array
-    virtual TObjectInstance* Build(TObjectImagery* img) = 0;
-      // Creates a new object from the given 'def' structure
-    virtual TObjectInstance* Build(SObjectDef* def, TObjectImagery* img) = 0;
-      // Creates a new object from the given 'def' structure
-
-    static TObjectBuilder* GetBuilder(int32_t objtype);
-      // Gets a pointer to a builder in the builder array
-    static TObjectBuilder* GetBuilder(const char *name);
-      // Gets a pointer to a builder in the builder array
-
-    char *GetTypeName() { return objtypename; }
-
-  private:
-    static int32_t numobjtypes;                         // Number of object types
-    static TObjectBuilder* builders[MAXOBJECTTYPES];    // Object builder for each type
-
-    char *objtypename;
-};
-
-#define DEFINE_BUILDER(name, obj)                                               \
-class obj##Builder : public TObjectBuilder                                      \
-{                                                                               \
-  public:                                                                       \
-    obj##Builder() : TObjectBuilder(name) {}                                    \
-    virtual TObjectInstance* Build(TObjectImagery* img)                         \
-        { return new obj(img); }                                                \
-    virtual TObjectInstance* Build(SObjectDef* def, TObjectImagery* img)        \
-        { return new obj(def, img); }                                           \
-};
-
-#define REGISTER_BUILDER(obj) obj##Builder obj##BuilderInstance;
+#include "game/object/objectdef.h"
 
 // **********************
 // * TInventoryIterator *
@@ -327,31 +281,8 @@ struct SStatEntry
     static SStatEntry se_##n;\
   public:
 
-typedef TSizableArray<int32_t, 0, 1> TStatisticList;
-
 #define MAXOBJECTCLASSES    64
 #define MAXRESNAMELEN       64
-
-// THIS STRUCTURE IS MULTIPLIED BY THE NUMBER OF OBJECT USED IN THE SYSTEM (WHICH IS IN THE
-// THOUSANDS.  THE LARGER THIS STRUCTURE IS, THE MORE MEMORY THE SYSTEM USES.  KEEP THIS
-// STRUCTURE AS *****SMALL***** AS POSSIBLE!!  BEN
-
-_STRUCTDEF(SObjectInfo)
-struct SObjectInfo
-{   // HEY!  KEEP ME SMALL!
-    SObjectInfo()
-      { name = nullptr; objbuilder = nullptr; imageryid = 0; imagery = nullptr; uniqueid = 0; stats.Clear(); objstats.Clear(); }
-    SObjectInfo(char *n, TObjectBuilder* b, int32_t id, uint32_t uid)
-      { name = _strdup(n); objbuilder = b; imageryid = id; imagery = nullptr; uniqueid = uid; stats.Clear(); objstats.Clear(); }
-    ~SObjectInfo() { delete [] name; stats.Clear(); objstats.Clear(); }
-
-    char *name;                             // Name of object (allocated with _strdup()
-    TObjectBuilder* objbuilder;             // Object builder for this object
-    int32_t  imageryid;                     // Imagery object for this object
-    TObjectImagery* imagery;                // Imagery object for this object
-    TStatisticList stats, objstats;         // Statistics (class and object)
-    uint32_t uniqueid;                      // Unique ID for this object
-};
 
 _CLASSDEF(TObjectClass)
 class TObjectClass
@@ -392,14 +323,14 @@ class TObjectClass
         // Removes an object type
 
   // Object functions
-    TObjectInstance* NewObject(SObjectDef* objectdef, int32_t imageryid = -1);
+    TObjectInstance* NewObject(SObjectState* objectdef, int32_t imageryid = -1);
         // REVSYNC: 0x00474bb0 -- a new object of the def's type, with that
         // registered imagery (-1: the type's, kept as the type's)
 
   // Type functions
-    int32_t NumTypes() const { return objinfo.NumItems(); }
+    int32_t NumTypes() const { return int32_t(objinfo.size()); }
         // Returns number of object types in the class
-    SObjectInfo* GetObjType(int32_t index) const { if (!objinfo.Used(index)) return nullptr; else return &(objinfo[index]); }
+    TObjectDef* GetObjType(int32_t index) const { return (uint32_t)index < objinfo.size() ? objinfo[index].get() : nullptr; }
         // Return objinfo pointer for given index
     int32_t FindObjType(const char *objtypename, bool partial = false) const;
         // Return type of object given name
@@ -441,20 +372,20 @@ class TObjectClass
 
         // Individual stat access stuff
 
-    int32_t GetStat(int32_t objtype, int32_t statid) const { return objinfo[objtype].stats[statid]; }
+    int32_t GetStat(int32_t objtype, int32_t statid) const { return objinfo[objtype]->stats[statid]; }
         // Returns a statistic for an object
     int32_t GetStat(int32_t objtype, const char *statname) const
         { int32_t statid = statdefs.FindStat(statname); 
-          if (statid >= 0) return objinfo[objtype].stats[statid]; else return 0; }
+          if (statid >= 0) return objinfo[objtype]->stats[statid]; else return 0; }
         // Returns a statistic for an object
-    void SetStat(int32_t objtype, int32_t statid, int32_t newvalue) { objinfo[objtype].stats[statid] = newvalue; }
+    void SetStat(int32_t objtype, int32_t statid, int32_t newvalue) { objinfo[objtype]->stats[statid] = newvalue; }
         // Sets a statistic for an object (Note: converted to a string if stat is string stat)
     void SetStat(int32_t objtype, const char *statname, int32_t newvalue)
         { int32_t statid = statdefs.FindStat(statname); 
-          if (statid >= 0) objinfo[objtype].stats[statid] = newvalue; }
+          if (statid >= 0) objinfo[objtype]->stats[statid] = newvalue; }
         // Sets a statistic for an object (Note: converted to a string if stat is a string stat)
     void ResetStat(int32_t objtype, int32_t statid)
-        { objinfo[objtype].stats[statid] = StatDef(statid); }
+        { objinfo[objtype]->stats[statid] = StatDef(statid); }
         // Reset Statistic to default value for class
 
   // Object statistic functions
@@ -485,20 +416,20 @@ class TObjectClass
 
         // Individual obj stat access stuff
 
-    int32_t GetObjStat(int32_t objtype, int32_t statid) const { return objinfo[objtype].objstats[statid]; }
+    int32_t GetObjStat(int32_t objtype, int32_t statid) const { return objinfo[objtype]->objstats[statid]; }
         // Returns a statistic for an object
     int32_t GetObjStat(int32_t objtype, char *statname) const
         { int32_t statid = objstatdefs.FindStat(statname); 
-          if (statid >= 0) return objinfo[objtype].objstats[statid]; else return 0; }
+          if (statid >= 0) return objinfo[objtype]->objstats[statid]; else return 0; }
         // Returns a statistic for an object
-    void SetObjStat(int32_t objtype, int32_t statid, int32_t newvalue) { objinfo[objtype].objstats[statid] = newvalue; }
+    void SetObjStat(int32_t objtype, int32_t statid, int32_t newvalue) { objinfo[objtype]->objstats[statid] = newvalue; }
         // Sets a statistic for an object (Note: converted to a string if stat is string stat)
     void SetObjStat(int32_t objtype, const char *statname, int32_t newvalue)
         { int32_t statid = objstatdefs.FindStat(statname); 
-          if (statid >= 0) objinfo[objtype].objstats[statid] = newvalue; }
+          if (statid >= 0) objinfo[objtype]->objstats[statid] = newvalue; }
         // Sets a statistic for an object (Note: converted to a string if stat is a string stat)
     void ResetObjStat(int32_t objtype, int32_t statid)
-        { objinfo[objtype].objstats[statid] = ObjStatDef(statid); }
+        { objinfo[objtype]->objstats[statid] = ObjStatDef(statid); }
         // Reset Statistic to default value for class
 
     void CopyStats(const TObjectClass* from);
@@ -526,7 +457,7 @@ class TObjectClass
     TObjectClass*   basedon;
 
     TStatisticDefList statdefs, objstatdefs;// Statistics for objects
-    TVirtualArray<SObjectInfo> objinfo;     // There are no limits to these arrays!!
+    std::vector<std::unique_ptr<TObjectDef>> objinfo;  // The type table: the archetypes, by type index (holes stay null)
 };
 
 // ****************************************************
@@ -642,34 +573,6 @@ constexpr uint32_t OF_FIXEDFLAGS = OF_COMPLEX | OF_NOTIFY | OF_NONMAP | OF_AI | 
 #define MOVE_FALLING    (1 << 2)    // Object is falling due to gravity
 #define MOVE_NOTMOVING  (1 << 3)    // This object has no current velocity
 
-// The spawn record: what a caller fills before NewObject builds an object
-// from it. It describes the object's initial state and nothing the class
-// sets up itself. It is not part of the object; the constructor applies it
-// and lets it go (docs/OBJECT_MODEL_PLAN.md).
-struct SObjectDef
-{
-    short       objclass = -1;      // Class of item (-1 if no object)
-    short       objtype  = -1;      // Type of item in class (-1 if no object)
-    uint32_t    flags    = 0;       // Flags for object
-
-    uint16_t    state    = 0;       // State of object
-    uint16_t    level    = 0;       // Level of object
-
-    S3DPoint    pos{0, 0, 0};       // Position of object in the map (the exact center of the object)
-    S3DPoint    vel{0, 0, 0};       // Movement velocity vector (divide by 0x100 to get world position units)
-    S3DPoint    accum{0, 0, 0};     // Accumulator for movement
-
-    uint8_t     rotatex = 0;        // Rotation around the x axis (0 - 255)
-    uint8_t     rotatey = 0;        // Rotation around the y axis (0 - 255)
-    union
-    {
-        uint8_t     rotatez = 0;    // Rotation around the z axis (0 - 255)
-        uint8_t     facing;         // Direction object is facing (0 to 255 on x-y plane)
-    };
-
-    uint8_t     group = 0;          // Group of object
-};
-
 // Instance-specific names - keep this number smallish
 #define MAXCONTEXTNAME      20
 
@@ -717,6 +620,7 @@ class TObjectInstance : public TComponent
 {
     REFL_FRIEND(TObjectInstance)
     friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
+    friend class TObjectDef;            // Apply / Capture (objectdef.h)
     friend class TLegacySerialize;
 
   // Function Members
@@ -730,7 +634,7 @@ class TObjectInstance : public TComponent
     TObjectInstance() { AdoptNode(); ClearObject(); }
     TObjectInstance(TObjectImagery* img);
         // Constructor for new objects
-    TObjectInstance(SObjectDef* def, TObjectImagery* img);
+    TObjectInstance(SObjectState* def, TObjectImagery* img);
         // Constructor for new objects
     virtual ~TObjectInstance();
         // Destructor - call class to decrease usage count
@@ -756,7 +660,7 @@ class TObjectInstance : public TComponent
     template <class T> [[nodiscard]] T* FindComponent() const { return Node()->GetComponent<T>(); }
 
   // Object status functions
-    SObjectInfo* GetInfo() const { return inf; }
+    TObjectDef* GetInfo() const { return inf; }
         // Get the object's info struct
     const char *GetClassName() const { return cl->ClassName(); }
         // Get the object's info struct
@@ -1209,6 +1113,18 @@ class TObjectInstance : public TComponent
       // If 'nr' is not -1, the number in nr is added to end of soundname (i.e. "sound1")
       // Volume and freq are DirectSound volume and frequency values (-1 is default)
 
+  // Class information and instance state (objectdef.h)
+    [[nodiscard]] const TObjectDef* Archetype() const { return inf; }
+        // The type's archetype: type-level data, and the state codec
+    [[nodiscard]] const SObjectState* InitialState() const { return initial_state_.get(); }
+        // The state this object was spawned or loaded in, or nullptr for
+        // an object built without one
+    void Reset();
+        // Puts the initial state back onto the object and re-derives the
+        // class flags
+    void CaptureState(SObjectState& state) const;
+        // The object's current values into a record (the archetype's Capture)
+
   // Light: a TLightComponent on the node, there exactly when OF_LIGHT is
   // set (ResetFlags keeps the two in step; the flag is what the sector
   // stream records). Everything about the light goes through the component.
@@ -1337,7 +1253,7 @@ class TObjectInstance : public TComponent
     short objclass = -1;        // Class of object (index into the object classes)
     short objtype  = -1;        // Type within the class
 
-  // State retail kept in the object header (SObjectDef applies the initial values)
+  // State retail kept in the object header (SObjectState applies the initial values)
     uint32_t flags = 0;         // OF_* flags
     uint16_t state = 0;         // Animation state
     PROP(18, "Movement velocity, 1/256 wu per tick")   S3DPoint vel   = {0, 0, 0};
@@ -1356,7 +1272,7 @@ class TObjectInstance : public TComponent
                                 // tenant of the slot. Assigned fresh in
                                 // ClearObject() from a global counter.
     TObjectClass* cl;           // Pointer to object's class
-    SObjectInfo* inf;           // Pointer to object type info
+    TObjectDef* inf;            // The archetype: the type's entry in its class's type table
     int32_t shadow;             // Attached shadow (-1 if none)
 
   //Animation/drawing
@@ -1401,6 +1317,11 @@ class TObjectInstance : public TComponent
 
   // Visual
     TSafeComponentRef<TVisualComponent> visual_; // the imagery-born visual
+
+  // Instance state
+    std::unique_ptr<SObjectState> initial_state_;   // what the object was spawned or loaded in
+    [[nodiscard]] uint32_t ClassFlags() const;
+        // The OF_* bits the class and imagery add to any record's flags
     void AttachVisual();
         // Adds the imagery's visual component, in the constructors
 

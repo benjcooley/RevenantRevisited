@@ -31,7 +31,7 @@
 extern short DistX[256];
 extern short DistY[256];
 
-REGISTER_BUILDER(TExit)
+REGISTER_OBJECT_DEF(TExit)
 TObjectClass ExitClass("EXIT", OBJCLASS_EXIT, 0);
 
 // Hard coded class stats
@@ -562,7 +562,7 @@ class TPressPlate : public TExit
 {
   public:
     TPressPlate(TObjectImagery* newim) : TExit(newim) {}
-    TPressPlate(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) {}
+    TPressPlate(SObjectState* def, TObjectImagery* newim) : TExit(def, newim) {}
 
     // REVSYNC: 0x0050df30
     bool Use(TObjectInstance* user, int32_t with = -1) override { return false; }
@@ -572,8 +572,8 @@ class TPressPlate : public TExit
     void Unactivate() override { SetState(0); }
 };
 
-DEFINE_BUILDER("PressPlate", TPressPlate)
-REGISTER_BUILDER(TPressPlate)
+DEFINE_OBJECT_DEF("PressPlate", TPressPlate)
+REGISTER_OBJECT_DEF(TPressPlate)
 
 // ************
 // * TUpBlock *
@@ -585,7 +585,7 @@ class TUpBlock : public TExit
 {
   public:
     TUpBlock(TObjectImagery* newim) : TExit(newim) {}
-    TUpBlock(SObjectDef* def, TObjectImagery* newim) : TExit(def, newim) {}
+    TUpBlock(SObjectState* def, TObjectImagery* newim) : TExit(def, newim) {}
 
     // REVSYNC: 0x0050dae0
     bool Use(TObjectInstance* user, int32_t with = -1) override;
@@ -595,8 +595,8 @@ class TUpBlock : public TExit
     void Pulse() override;
 };
 
-DEFINE_BUILDER("UpBlock", TUpBlock)
-REGISTER_BUILDER(TUpBlock)
+DEFINE_OBJECT_DEF("UpBlock", TUpBlock)
+REGISTER_OBJECT_DEF(TUpBlock)
 
 // A finished move settles (raw states).
 void TUpBlock::Pulse()
@@ -673,7 +673,7 @@ bool TDragonEntAnimator::Render()
 // * TLever      *
 // ***************
 
-REGISTER_BUILDER(TLever)
+REGISTER_OBJECT_DEF(TLever)
 
 bool TLever::Use(TObjectInstance* user, int32_t with)
 {

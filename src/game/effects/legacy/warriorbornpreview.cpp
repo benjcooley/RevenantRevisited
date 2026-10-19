@@ -27,7 +27,7 @@ State* Spawn(const S3DPoint& origin) {
     auto* effect_class=TObjectClass::GetClass(OBJCLASS_EFFECT);
     const int32_t type=effect_class ? effect_class->FindObjType(0x9de2a0feu) : -1;
     if(type<0) return nullptr;
-    SObjectDef definition={}; definition.objclass=OBJCLASS_EFFECT; definition.objtype=short(type); definition.pos=origin;
+    SObjectState definition={}; definition.objclass=OBJCLASS_EFFECT; definition.objtype=short(type); definition.pos=origin;
     context->owner.reset(effect_class->NewObject(&definition));
     auto* owner=context->owner.get();
     if(!owner || owner->ObjId()!=0x9de2a0feu || owner->GetMapIndex()<=0 || !dynamic_cast<TEffect*>(owner)) return nullptr;

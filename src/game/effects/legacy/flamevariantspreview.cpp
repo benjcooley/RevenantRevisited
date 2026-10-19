@@ -23,7 +23,7 @@ bool Matches(const TObjectInstance* owner,T3DImagery* img)
 State* Spawn(uint32_t id,const S3DPoint& origin)
 {
  if(!Renderer || (id!=0x50ba373cu && id!=0x50ba373du))return nullptr;
- auto s=std::make_unique<State>();auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);int type=cl?cl->FindObjType(id):-1;if(type<0)return nullptr;SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));if(!s->owner)return nullptr;s->owner->OnScreen();auto*img=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!Matches(s->owner.get(),img))return nullptr;
+ auto s=std::make_unique<State>();auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);int type=cl?cl->FindObjType(id):-1;if(type<0)return nullptr;SObjectState d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));if(!s->owner)return nullptr;s->owner->OnScreen();auto*img=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!Matches(s->owner.get(),img))return nullptr;
  TFlameEffect::AttachVisualComponent(s->owner.get(),img);s->owner->ActivateComponents();if(!s->owner->GetComponent<TFlipbookBillboardComponent>())return nullptr;
  log_info("[native-domain] enabled=%d camera_z=0 owner=RzRxRyT Flame variant typed=%08x",int(StartupVfxNativeDomain),id);log_info("[flame-variant] typed_id=%08x authored18tick8cell atlas",id);return s.release();
 }

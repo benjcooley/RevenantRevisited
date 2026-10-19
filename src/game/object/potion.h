@@ -28,9 +28,9 @@ class TPotion : public TFood
 {
   public:
     TPotion(TObjectImagery* newim) : TFood(newim) {}
-    TPotion(SObjectDef* def, TObjectImagery* newim) : TFood(def, newim) {}
+    TPotion(SObjectState* def, TObjectImagery* newim) : TFood(def, newim) {}
 };
 
-DEFINE_BUILDER("POTION", TPotion)
+DEFINE_OBJECT_DEF("POTION", TPotion)
 
 extern TObjectClass PotionClass;

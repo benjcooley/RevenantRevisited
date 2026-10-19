@@ -149,7 +149,7 @@ int32_t InstantiateInstance(const SParsedBlock& blk, bool preserve_refid)
         return -1;
     }
 
-    SObjectDef def{};
+    SObjectState def{};
     def.objclass = (short)objclass;
     def.objtype  = (short)objtype;
     def.level    = (uint16_t)mr->CameraLevel();

@@ -14,7 +14,7 @@ class TArmor : public TObjectInstance
 {
   public:
     TArmor(TObjectImagery* newim) : TObjectInstance(newim) {}
-    TArmor(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
+    TArmor(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
 
     // Armor stats
     STATFUNC(EqSlot)
@@ -27,4 +27,4 @@ class TArmor : public TObjectInstance
     STATFUNC(MinConstitution)
 };
 
-DEFINE_BUILDER("ARMOR", TArmor)
+DEFINE_OBJECT_DEF("ARMOR", TArmor)

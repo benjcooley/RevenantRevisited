@@ -132,7 +132,7 @@ bool ParseCase(const std::string& text, SCase& c)
 const char* TalismanType(char code)
 {
     for (int32_t type = 0; type < TalismanClass.NumTypes(); ++type)
-        if (const SObjectInfo* info = TalismanClass.GetObjType(type))
+        if (const TObjectDef* info = TalismanClass.GetObjType(type))
             if (TalismanClass.GetStat(type, "Code") == code)
                 return info->name;
     return nullptr;

@@ -20,7 +20,7 @@
 
 #include <string>
 
-REGISTER_BUILDER(TContainer)
+REGISTER_OBJECT_DEF(TContainer)
 TObjectClass ContainerClass("CONTAINER", OBJCLASS_CONTAINER, 0);
 
 // Hard coded class stats
@@ -102,7 +102,7 @@ void Say(TObjectInstance* user, const std::string& line)
 // the effects don't have spawns nothing, as retail's NewObject failed.
 void SpawnTrapEffect(TObjectInstance* container, const char* type, int32_t facing)
 {
-    SObjectDef def{};
+    SObjectState def{};
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = short(EffectClass.FindObjType(type));
     if (def.objtype < 0)
@@ -194,7 +194,7 @@ bool TContainer::TakeOut(TObjectInstance* user)
     if (regen > 0)
     {
         TObjectClass* const cl = TObjectClass::GetClass(item->ObjClass());
-        SObjectDef def{};
+        SObjectState def{};
         def.objclass = short(item->ObjClass());
         def.objtype = short(item->ObjType());
         given = cl ? cl->NewObject(&def) : nullptr;
@@ -446,8 +446,8 @@ bool TContainer::CheckKeyUse(TObjectInstance* user, TObjectInstance* inst)
 // *************
 
 _CLASSDEF(TVialRack)
-DEFINE_BUILDER("VIAL RACK", TVialRack)
-REGISTER_BUILDER(TVialRack)
+DEFINE_OBJECT_DEF("VIAL RACK", TVialRack)
+REGISTER_OBJECT_DEF(TVialRack)
 
 bool TVialRack::Use(TObjectInstance* user, int32_t with)
 {
@@ -462,8 +462,8 @@ bool TVialRack::Use(TObjectInstance* user, int32_t with)
             else
             {
                 // generate a new vial
-                SObjectDef def;
-                memset(&def, 0, sizeof(SObjectDef));
+                SObjectState def;
+                memset(&def, 0, sizeof(SObjectState));
                 def.objclass = OBJCLASS_CONTAINER;
                 def.objtype = ContainerClass.FindObjType("Empty Vial");
                 def.pos = IntPos(*this);

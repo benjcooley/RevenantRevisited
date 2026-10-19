@@ -71,7 +71,7 @@ class TStripEffect : public TEffect
     {
         flags |= OF_IMMOBILE | OF_PULSE;
     }
-    TStripEffect(SObjectDef* def, TObjectImagery* newim)
+    TStripEffect(SObjectState* def, TObjectImagery* newim)
         : TEffect(def, newim)
     {
         flags |= OF_IMMOBILE | OF_PULSE;
@@ -158,7 +158,7 @@ class TWindStripEffect : public TEffect
     int32_t count;
   public:
     TWindStripEffect(TObjectImagery* newim) : TEffect(newim) { Initialize(); }
-    TWindStripEffect(SObjectDef* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
+    TWindStripEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) { Initialize(); }
     virtual ~TWindStripEffect() {}
     virtual void Initialize();
     virtual void Pulse();

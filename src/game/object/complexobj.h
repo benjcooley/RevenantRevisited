@@ -141,7 +141,7 @@ class TComplexObject : public TObjectInstance
     void ClearComplexObj();
 
     TComplexObject(TObjectImagery* newim) : TObjectInstance(newim) { ClearComplexObj(); }
-    TComplexObject(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { ClearComplexObj(); }
+    TComplexObject(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) { ClearComplexObj(); }
 
     virtual void Pulse();
       // Main pulse (done before frame is drawn)

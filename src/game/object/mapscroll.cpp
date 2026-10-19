@@ -12,5 +12,5 @@
 #include "game/object/mapscroll.h"
 #include "game/object/object.h"
 
-REGISTER_BUILDER(TMapScroll)
+REGISTER_OBJECT_DEF(TMapScroll)
 TObjectClass MapScrollClass("MAPSCROLL", OBJCLASS_MAPSCROLL, 0);

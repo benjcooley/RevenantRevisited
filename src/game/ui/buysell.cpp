@@ -134,7 +134,7 @@ constexpr int32_t kFirstEquipSlot = 0x100;
 // its length).
 int32_t TypeStat(const TObjectClass& cl, int32_t objtype, const char* stat)
 {
-    const SObjectInfo* info = cl.GetObjType(objtype);
+    const TObjectDef* info = cl.GetObjType(objtype);
     const int32_t statid = cl.FindStat(stat);
     if (!info || statid < 0 || statid >= info->stats.NumItems())
         return 0;
@@ -415,7 +415,7 @@ bool TBuySellPane::BuildItem(const char* name, int32_t amount, SBuySellItem& ite
             objtype = cl->FindObjType(name);
     if (objtype < 0)
         return false;
-    const SObjectInfo* info = cl->GetObjType(objtype);
+    const TObjectDef* info = cl->GetObjType(objtype);
 
     item.name   = DisplayName(name);
     item.type   = name;
@@ -541,7 +541,7 @@ void TBuySellPane::AddCriteria(const char* stat, int32_t min, int32_t max)
             continue;
         for (int32_t objtype = 0; objtype < cl->NumTypes(); ++objtype)
         {
-            const SObjectInfo* info = cl->GetObjType(objtype);
+            const TObjectDef* info = cl->GetObjType(objtype);
             if (!info)
                 continue;
             const int32_t value = TypeStat(*cl, objtype, stat);

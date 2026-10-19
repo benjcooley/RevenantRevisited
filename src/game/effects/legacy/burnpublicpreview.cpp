@@ -13,8 +13,8 @@
 #include <cmath>
 #include <memory>
 #include <vector>
-DEFINE_BUILDER("Burn",TBurnEffect)
-REGISTER_BUILDER(TBurnEffect)
+DEFINE_OBJECT_DEF("Burn",TBurnEffect)
+REGISTER_OBJECT_DEF(TBurnEffect)
 void TBurnEffect::Initialize(){character=nullptr;frame=0;SetNotify(3);}
 void TBurnEffect::Pulse(){TEffect::Pulse();++frame;if(random(0,34)<2 && frame<50){if(spell)spell->Damage(character);else if(character)character->Damage(random(1,2),DT_BURN);}if(character){S3DPoint p;p = IntPos(character);p.z=int(double(p.z)*double(1.4600000381469727f));SetPos(p);}}
 void TBurnEffect::Notify(int32_t notify,void*ptr){if(GetSector()==ptr)return;TObjectInstance::Notify(notify,ptr);if(character && NOTIFY_DELETED(ptr,character)){SetFlags(Flags()|OF_KILL);character->ClearBurn();character=nullptr;}}
@@ -36,10 +36,10 @@ static bool IntegerBone(T3DAnimator*anim,int index,hmm_mat4&matrix){
 }
 State* Spawn(const S3DPoint&origin){
  if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto*ac=TObjectClass::GetClass(OBJCLASS_CHARACTER);const int at=ac?ac->FindObjType("Acolyte"):-1;if(at<0)return nullptr;
- SObjectDef a={};a.objclass=OBJCLASS_CHARACTER;a.objtype=short(at);a.pos=origin;s->actor.reset(dynamic_cast<TCharacter*>(ac->NewObject(&a)));if(!s->actor || s->actor->Health()!=102 || s->actor->Radius()!=16)return nullptr;
+ SObjectState a={};a.objclass=OBJCLASS_CHARACTER;a.objtype=short(at);a.pos=origin;s->actor.reset(dynamic_cast<TCharacter*>(ac->NewObject(&a)));if(!s->actor || s->actor->Health()!=102 || s->actor->Radius()!=16)return nullptr;
  s->actor->Face(96); // Declared shared facing; native constructor has96 in this fixture.
  auto* anim=dynamic_cast<T3DAnimator*>(s->actor->GetAnimator());if(!anim || anim->NumObjects()!=22 || static_cast<TObjectInstance*>(s->actor.get())->GetState()!=14)return nullptr;
- auto* ec=TObjectClass::GetClass(OBJCLASS_EFFECT);const int et=ec?ec->FindObjType(0x55471bffu):-1;if(et<0)return nullptr;SObjectDef e={};e.objclass=OBJCLASS_EFFECT;e.objtype=short(et);e.pos=origin;s->owner.reset(dynamic_cast<TBurnEffect*>(ec->NewObject(&e)));if(!s->owner)return nullptr;s->owner->Set(s->actor.get());s->owner->OnScreen();
+ auto* ec=TObjectClass::GetClass(OBJCLASS_EFFECT);const int et=ec?ec->FindObjType(0x55471bffu):-1;if(et<0)return nullptr;SObjectState e={};e.objclass=OBJCLASS_EFFECT;e.objtype=short(et);e.pos=origin;s->owner.reset(dynamic_cast<TBurnEffect*>(ec->NewObject(&e)));if(!s->owner)return nullptr;s->owner->Set(s->actor.get());s->owner->OnScreen();
  auto*im=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!im || !burn_profile::Matches(im->GetResFilename(),im->GetBody(),im->GetResSize(),im->NumStates(),im->GetAniLength(0),im->GetAniFlags(0)))return nullptr;
  for(int i=0;i<2;++i){std::vector<SMeshVertex>v;std::vector<uint16_t>f;if(!ExtractSubMeshTextureSlot(im,i,i+1,v,f)||v.size()!=4||f.size()!=6)return nullptr;s->mesh[i]=Renderer->RegisterMeshAsset(0x4255524e00000000ull+i,v.data(),4,f.data(),6,im->GetTextureHandle(i));if(!s->mesh[i])return nullptr;Renderer->AddMeshAssetRef(s->mesh[i]);}
  if(std::string(StartupTestMode)=="vfx")SeedRandom(2);

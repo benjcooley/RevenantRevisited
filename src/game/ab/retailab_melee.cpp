@@ -230,7 +230,7 @@ void MakeHelpers(const JsonValue& cs)
     const TObjectClass* helpers = TObjectClass::GetClass(OBJCLASS_HELPER);
     for (const JsonValue& w : cs["waypoints"].Items())
     {
-        SObjectDef def{};
+        SObjectState def{};
         def.objclass = OBJCLASS_HELPER;
         const std::string type = w.Has("type") ? w["type"].Str() : "Waypoint";
         def.objtype = (short)helpers->FindObjType(type.c_str());
@@ -530,10 +530,10 @@ std::string LowerName(const char* name)
 }
 
 // The def NewObject is given, as the retail fixture records it.
-void RecordNewObject(const SObjectDef* def, int32_t imagery)
+void RecordNewObject(const SObjectState* def, int32_t imagery)
 {
     TObjectClass* cl = TObjectClass::GetClass(def->objclass);
-    SObjectInfo* info = cl ? cl->GetObjType(def->objtype) : nullptr;
+    TObjectDef* info = cl ? cl->GetObjType(def->objtype) : nullptr;
     JsonOut j;
     j.Begin('{').FieldString("seam", "NewObject").Field("class", def->objclass).Key("type");
     if (info)
@@ -547,7 +547,7 @@ void RecordNewObject(const SObjectDef* def, int32_t imagery)
     Seam(j.str());
 }
 
-int32_t CaseNewObject(SObjectDef* def, int32_t imagery)
+int32_t CaseNewObject(SObjectState* def, int32_t imagery)
 {
     RecordNewObject(def, imagery);
     if (g_madeUsed == g_made.size())
@@ -655,7 +655,7 @@ TPlayer* AsPlayer(TCharacter* c)
 class TFixtureProp : public TObjectInstance
 {
   public:
-    TFixtureProp(SObjectDef* def, std::string label, std::vector<std::string> statenames)
+    TFixtureProp(SObjectState* def, std::string label, std::vector<std::string> statenames)
         : TObjectInstance(def, new TFixtureImagery(TFixtureImagery::Register({}), label, {}, false)),
           who(std::move(label)), states(std::move(statenames))
     {
@@ -890,7 +890,7 @@ std::vector<TObjectInstance*> CasePaneObjects(TCharacter* self)
 
 // NewObject: the def recorded; the case's next `made` character, now in
 // the map; none left, an id no object has.
-int32_t CaseBossNewObject(SObjectDef* def, int32_t imagery)
+int32_t CaseBossNewObject(SObjectState* def, int32_t imagery)
 {
     RecordNewObject(def, imagery);
     const auto& made = (*g_boss.cs)["made"].Items();
@@ -917,7 +917,7 @@ class SBossScope
         g_boss.cs = &cs;
         for (const JsonValue& p : cs["props"].Items())
         {
-            SObjectDef def{};
+            SObjectState def{};
             def.objclass = (short)p["class"].Int(OBJCLASS_TILE);
             const TObjectClass* cl = TObjectClass::GetClass(def.objclass);
             if (!cl)

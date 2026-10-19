@@ -32,7 +32,7 @@ class TAmmo : public TObjectInstance
   public:
     // REVSYNC: TAmmo::TAmmo @ 0x004c01b0 -- a moving, pulsed object
     TAmmo(TObjectImagery* newim) : TObjectInstance(newim) { flags |= OF_MOVING | OF_PULSE; }
-    TAmmo(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) { flags |= OF_MOVING | OF_PULSE; }
+    TAmmo(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) { flags |= OF_MOVING | OF_PULSE; }
     ~TAmmo() override;
 
     static bool Initialize();
@@ -101,4 +101,4 @@ class TAmmo : public TObjectInstance
     TSafeRef<TObjectInstance> shooter;   // +0xd8: who shot it (none: a trap's)
 };
 
-DEFINE_BUILDER("AMMO", TAmmo)
+DEFINE_OBJECT_DEF("AMMO", TAmmo)

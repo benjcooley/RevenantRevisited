@@ -10,7 +10,7 @@
 #include "game/world/mappane.h"
 #include "game/object/player.h"
 
-REGISTER_BUILDER(TKey)
+REGISTER_OBJECT_DEF(TKey)
 TObjectClass KeyClass("KEY", OBJCLASS_KEY, 0);
 
 // Hard coded class stats

@@ -12,6 +12,6 @@
 #include "game/object/invcontainer.h"
 #include "game/object/object.h"
 
-REGISTER_BUILDER(TInvContainer)
+REGISTER_OBJECT_DEF(TInvContainer)
 extern TObjectClass ContainerClass;
 TObjectClass InvContainerClass("INVCONTAINER", OBJCLASS_INVCONTAINER, 0, &ContainerClass);  // retail: based on CONTAINER

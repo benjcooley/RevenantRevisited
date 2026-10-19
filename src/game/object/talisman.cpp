@@ -8,7 +8,7 @@
 
 #include "game/ui/spellpane.h"
 
-REGISTER_BUILDER(TTalisman)
+REGISTER_OBJECT_DEF(TTalisman)
 
 TObjectClass TalismanClass("TALISMAN", OBJCLASS_TALISMAN, 0);
 

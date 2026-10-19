@@ -998,9 +998,9 @@ int32_t GetOverlayTile(uint8_t *overmap, int32_t x, int32_t y, int32_t code)
 TObjectInstance* GenerateObj(TSector* sect, uint8_t *map, uint8_t *overmap, int32_t type, int32_t x, int32_t y, int32_t px, int32_t py, int32_t flux = 0)
 {
     TObjectInstance* inst;
-    SObjectDef def;
+    SObjectState def;
 
-    memset(&def, 0, sizeof(SObjectDef));
+    memset(&def, 0, sizeof(SObjectState));
     def.objclass = OBJCLASS_TILE;
 
     int32_t tx = (x * PLATESPERSECTX) + px;
@@ -2184,9 +2184,9 @@ static void AddWhat(TToken& t, S3DPoint pos, int32_t number)
 
     if (t.Is("light", 1))
     {
-        SObjectDef def;
+        SObjectState def;
         constexpr int32_t intensity = 220, mult = 12;
-        memset(&def, 0, sizeof(SObjectDef));
+        memset(&def, 0, sizeof(SObjectState));
 
         def.objclass = OBJCLASS_TILE;
         def.objtype = TileClass.FindObjType("light");
@@ -2225,8 +2225,8 @@ static void AddWhat(TToken& t, S3DPoint pos, int32_t number)
         return;
     }
 
-    SObjectDef def;
-    memset(&def, 0, sizeof(SObjectDef));
+    SObjectState def;
+    memset(&def, 0, sizeof(SObjectState));
     def.objclass = cl->ClassId();
     def.objtype = objtype;
     def.flags = 0;
@@ -3717,7 +3717,7 @@ bool ShowObjList(TObjectClass* cl, char *match)
 
 void ShowObjTypeInfo(TObjectClass* cl, int32_t objtype)
 {
-    SObjectInfo* inf = cl->GetObjType(objtype);
+    TObjectDef* inf = cl->GetObjType(objtype);
 
     if (!cl || !inf)
         return;
@@ -3897,8 +3897,8 @@ COMMAND(CmdReplace)
         }
         else
         {
-            SObjectDef def;
-            memset(&def, 0, sizeof(SObjectDef));
+            SObjectState def;
+            memset(&def, 0, sizeof(SObjectState));
 
             def.objclass = cl->ClassId();
             def.objtype = objtype;

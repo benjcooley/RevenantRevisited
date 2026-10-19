@@ -28,7 +28,7 @@ State* Spawn(const S3DPoint& origin, uint32_t id)
     auto* effect_class = TObjectClass::GetClass(OBJCLASS_EFFECT);
     const int type = effect_class ? effect_class->FindObjType(id) : -1;
     if (type < 0) return nullptr;
-    SObjectDef definition{};
+    SObjectState definition{};
     definition.objclass = OBJCLASS_EFFECT;
     definition.objtype = short(type);
     definition.pos = origin;

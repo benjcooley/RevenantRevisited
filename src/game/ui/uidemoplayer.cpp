@@ -111,7 +111,7 @@ TPlayer* NewLocke(const char* name)
         return nullptr;
     }
 
-    SObjectDef def = {};
+    SObjectState def = {};
     def.objclass = OBJCLASS_PLAYER;
     def.objtype  = static_cast<short>(objtype);
     auto* player = dynamic_cast<TPlayer*>(PlayerClass.NewObject(&def));
@@ -202,7 +202,7 @@ TObjectInstance* AddItem(TObjectInstance* owner, const char* name, int32_t slot,
         if (type < 0)
             continue;
 
-        SObjectDef def = {};
+        SObjectState def = {};
         def.objclass = static_cast<short>(cl->ClassId());
         def.objtype  = static_cast<short>(type);
         TObjectInstance* item = cl->NewObject(&def);

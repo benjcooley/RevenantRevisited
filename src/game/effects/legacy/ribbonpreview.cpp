@@ -17,7 +17,7 @@ struct State {
 };
 State* Spawn(const S3DPoint& origin)
 {
- if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);int type=cl?cl->FindObjType(0x562c7439u):-1;if(type<0)return nullptr;SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));if(!s->owner || s->owner->ObjId()!=0x562c7439u)return nullptr;s->owner->OnScreen();auto*im=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!im || !ribbon_legacy::Matches(im->GetResFilename(),static_cast<SOld3DImageryBody*>(im->GetBody()),im->GetResSize(),im->NumStates(),im->GetAniLength(0),im->GetAniFlags(0)))return nullptr;
+ if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto*cl=TObjectClass::GetClass(OBJCLASS_EFFECT);int type=cl?cl->FindObjType(0x562c7439u):-1;if(type<0)return nullptr;SObjectState d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));if(!s->owner || s->owner->ObjId()!=0x562c7439u)return nullptr;s->owner->OnScreen();auto*im=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!im || !ribbon_legacy::Matches(im->GetResFilename(),static_cast<SOld3DImageryBody*>(im->GetBody()),im->GetResSize(),im->NumStates(),im->GetAniLength(0),im->GetAniFlags(0)))return nullptr;
  if(im->NumObjects()!=2 || im->NumMaterials()!=2 || im->NumTextures()!=2 || im->NumTags())return nullptr;
  S3DTex t={};im->GetTexture(0,&t);if(t.numframes!=5 || !t.framehtexs)return nullptr;std::vector<SMeshVertex> v;std::vector<uint16_t>indices;
  if(!ExtractSubMeshTextureSlot(im,0,1,v,indices) || v.size()!=12 || indices.size()!=36)return nullptr;

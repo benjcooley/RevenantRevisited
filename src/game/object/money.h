@@ -17,7 +17,7 @@ class TMoney : public TObjectInstance
 {
   public:
     TMoney(TObjectImagery* newim) : TObjectInstance(newim) { }
-    TMoney(SObjectDef* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
+    TMoney(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) {}
     virtual ~TMoney();
 
     static bool Initialize();
@@ -58,5 +58,5 @@ class TMoney : public TObjectInstance
 
 };
 
-DEFINE_BUILDER("MONEY", TMoney)
+DEFINE_OBJECT_DEF("MONEY", TMoney)
 

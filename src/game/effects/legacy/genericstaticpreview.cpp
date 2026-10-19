@@ -19,7 +19,7 @@ struct State {
 };
 State* Spawn(const S3DPoint& origin,uint32_t id){
  if(!Renderer||!generic_static_profile::Find(id))return nullptr;auto state=std::make_unique<State>();auto*cls=TObjectClass::GetClass(OBJCLASS_EFFECT);const int type=cls?cls->FindObjType(id):-1;if(type<0)return nullptr;
- SObjectDef def={};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=origin;state->owner.reset(cls->NewObject(&def));auto*owner=state->owner.get();auto*im=owner?dynamic_cast<T3DImagery*>(owner->GetImagery()):nullptr;
+ SObjectState def={};def.objclass=OBJCLASS_EFFECT;def.objtype=short(type);def.pos=origin;state->owner.reset(cls->NewObject(&def));auto*owner=state->owner.get();auto*im=owner?dynamic_cast<T3DImagery*>(owner->GetImagery()):nullptr;
  if(!generic_static_profile::Matches(owner,im)||!dynamic_cast<TEffect*>(owner)||owner->GetMapIndex()<=0)return nullptr;state->identity=owner;owner->OnScreen();owner->Animate(false);if(!dynamic_cast<T3DAnimator*>(owner->GetAnimator()))return nullptr;
  for(int object=0;object<im->NumObjects();++object)for(int slot=1;slot<=im->NumTextures();++slot){
   std::vector<SMeshVertex>vertices;std::vector<uint16_t>indices;if(!ExtractSubMeshTextureSlot(im,object,slot,vertices,indices)||indices.empty())continue;S3DTex texture={};im->GetTexture(slot-1,&texture);if(texture.htexture==kInvalidTexture)return nullptr;

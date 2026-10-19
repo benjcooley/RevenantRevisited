@@ -389,8 +389,8 @@ void TStripEffect::TickAndSubmitForTest(EFxDebugMode debug_mode)
 // * TStripEffect   *
 // ******************
 
-DEFINE_BUILDER("LightStrip", TStripEffect)
-REGISTER_BUILDER(TStripEffect)
+DEFINE_OBJECT_DEF("LightStrip", TStripEffect)
+REGISTER_OBJECT_DEF(TStripEffect)
 
 void TStripEffect::Initialize()
 {
@@ -976,8 +976,8 @@ void TLightningAnimator::RefreshZBuffer()
 // * WindStrip Effect *
 // ********************
 
-DEFINE_BUILDER("WindStrip", TWindStripEffect)
-REGISTER_BUILDER(TWindStripEffect)
+DEFINE_OBJECT_DEF("WindStrip", TWindStripEffect)
+REGISTER_OBJECT_DEF(TWindStripEffect)
 
 void TWindStripEffect::Initialize()
 {

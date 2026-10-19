@@ -820,7 +820,7 @@ void TRules::BindTypes()
             continue;
         for (int32_t type = 0; type < cl->NumTypes(); type++)
         {
-            if (const SObjectInfo *info = cl->GetObjType(type))
+            if (const TObjectDef *info = cl->GetObjType(type))
             {
                 BindType(info->name, type);
                 BindTypeData(info->name, type);

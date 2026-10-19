@@ -20,7 +20,7 @@ static uint64_t PoolHash(const retail_dragonfire::Pool& pool){uint64_t h=1469598
 static void Log(State* s){log_info("[dragonfire-phase] tick=%d frame=%d alive=%d rng=%llu fire=%llx smoke=%llx",s->ticks,s->core.frame,int(s->core.alive),static_cast<unsigned long long>(RandomDraws()-s->initial_draws),static_cast<unsigned long long>(PoolHash(s->core.fire)),static_cast<unsigned long long>(PoolHash(s->core.smoke)));}
 State* Spawn(const S3DPoint& origin){
  if(!Renderer)return nullptr;auto s=std::make_unique<State>();auto* cl=TObjectClass::GetClass(OBJCLASS_EFFECT);int type=cl?cl->FindObjType(0xad92bc1au):-1;if(type<0)return nullptr;
- SObjectDef d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));if(!s->owner || s->owner->ObjId()!=0xad92bc1au)return nullptr;
+ SObjectState d={};d.objclass=OBJCLASS_EFFECT;d.objtype=short(type);d.pos=origin;s->owner.reset(cl->NewObject(&d));if(!s->owner || s->owner->ObjId()!=0xad92bc1au)return nullptr;
  auto* img=dynamic_cast<T3DImagery*>(s->owner->GetImagery());if(!img || img->NumObjects()!=2 || img->NumTextures()!=2 || img->NumMaterials()!=2 || img->NumStates()!=1 || img->NumTags()!=0)return nullptr;
  for(int i=0;i<2;++i){S3DObj o={};img->GetObject(i,&o);if(o.numverts!=4 || o.numfaces!=2 || o.material!=i || o.parent[0]!=-1)return nullptr;
   S3DVertex raw[4];S3DFace faces[2];img->GetObjVerts(i,raw,0,0);img->GetObjFaces(i,faces);if(Hash(raw,sizeof(raw))!=0x8d7ec6f02e765863ull || Hash(faces,sizeof(faces))!=0xf44208a16a617ed8ull)return nullptr;

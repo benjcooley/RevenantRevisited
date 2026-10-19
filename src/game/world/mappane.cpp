@@ -1527,7 +1527,7 @@ void TMapPane::SetMapPos(S3DPoint& newpos)
 // ********************
 
 // Create object
-int32_t TMapPane::NewObject(SObjectDef* def, int32_t imagery)
+int32_t TMapPane::NewObject(SObjectState* def, int32_t imagery)
 {
     if (newObjectSeam)
         return newObjectSeam(def, imagery);
@@ -1703,8 +1703,8 @@ int32_t TMapPane::AddShadow(TObjectInstance* oi)
         return -1;
     }
 
-    SObjectDef def;
-    memset(&def, 0, sizeof(SObjectDef));
+    SObjectState def;
+    memset(&def, 0, sizeof(SObjectState));
 
     char buf[80];
     sprintf(buf, "shadow_%s", oi->GetTypeName());
