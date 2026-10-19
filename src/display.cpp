@@ -53,6 +53,12 @@ bool TDisplay::Initialize(int32_t dwidth, int32_t dheight, int32_t /*dbitsperpix
 
     // ---- sokol_gfx context ------------------------------------------------
     sg_desc desc = {};
+    // Validation failures print to stderr (unbuffered) so an unattended run
+    // keeps the exact _sg_validate message before the assert.
+    desc.logger.log_cb = [](const char* message, void* /*user_data*/) {
+        fprintf(stderr, "[sokol] %s\n", message ? message : "(no message)");
+        fflush(stderr);
+    };
     desc.context          = sapp_sgcontext();
     // Full-level scenes can now cache hundreds of rigid mesh assets in
     // addition to tile/backbuffer/ImGui buffers. Each mesh asset owns a vertex

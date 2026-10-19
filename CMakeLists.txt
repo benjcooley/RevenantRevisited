@@ -56,6 +56,9 @@ endif()
 # original codebase relies on (std:c++20 turns /permissive- on).
 if(MSVC)
   add_compile_options(/utf-8 /bigobj /permissive)
+  # Crash triage: map + PDB let a faulting RVA be resolved to a symbol.
+  add_link_options($<$<CONFIG:Release>:/MAP> $<$<CONFIG:Release>:/MAPINFO:EXPORTS> $<$<CONFIG:Release>:/DEBUG>)
+  add_compile_options($<$<CONFIG:Release>:/Zi>)
 endif()
 
 # clang-cl parses templates late for MSVC compatibility, which C++20
@@ -89,6 +92,11 @@ endif()
 # ----------------------------------------------------------------------------
 option(REVENANT_ASAN "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
 if(REVENANT_ASAN)
+  if(MSVC)
+    message(STATUS "Sanitizers: AddressSanitizer (MSVC /fsanitize=address)")
+    add_compile_options(/fsanitize=address /Zi)
+    add_link_options(/INCREMENTAL:NO /DEBUG)
+  else()
   message(STATUS "Sanitizers: AddressSanitizer + UndefinedBehaviorSanitizer enabled")
 
   # Check that the sanitizer runtime can start on this OS before building
@@ -125,6 +133,7 @@ if(REVENANT_ASAN)
                       -fsanitize-recover=address
                       -fno-omit-frame-pointer -fno-optimize-sibling-calls -g -O1)
   add_link_options(-fsanitize=address -fsanitize=undefined -fno-sanitize=vptr)
+  endif()
 endif()
 
 # ----------------------------------------------------------------------------
