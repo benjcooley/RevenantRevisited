@@ -1617,6 +1617,8 @@ void TPlayScreen::Pulse()
 {
     Update();
     TScreen::Pulse();
+    // A level held for a door script is released once the script ends.
+    GameFlow.Session().UpdateHeldLevels();
     if (!ModalHas(MODAL_PAUSE))
         AutoMap.RecordTravels();
 }

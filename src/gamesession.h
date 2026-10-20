@@ -86,6 +86,10 @@ class TGameSession
     // until the script ends.
     [[nodiscard]] bool ReleasePending() const { return releaseDelay > 0; }
 
+    // Counts the release delay down and releases the levels that are not
+    // used any more. A level held for a door script waits for the script.
+    void UpdateHeldLevels();
+
   private:
     enum class EState : uint8_t { Idle, Loading, Ready, Failed };
 

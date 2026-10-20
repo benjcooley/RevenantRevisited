@@ -4026,15 +4026,25 @@ void TMapPane::ForEachTickObject(int32_t objset, Visit&& visit)
 
 // A door script waits for the screen fade before it gives the control back
 // (the mod's door script does its "control on" after the fade-in), and the
-// object it stands in is in the level the level change releases. The object
-// leaves its sector, so the release leaves it alive, and it is pulsed here
-// until its script ends.
+// object it stands in is in the level the level change releases. The level
+// stays while the script runs, so the object stays in its sector and the
+// door is still drawn and still answers the pointer; the level is released
+// once the script ends.
 void TMapPane::KeepAlive(TObjectInstance* inst)
 {
     if (!inst)
         return;
-    RemoveFromSector(inst);
     keptalive.push_back(inst);
+}
+
+// A level with a script still running in it is not released: the door's
+// object, its imagery and its script live in that level.
+bool TMapPane::HasKeptAlive(int32_t level) const
+{
+    for (TObjectInstance* inst : keptalive)
+        if (inst && inst->GetLevel() == level)
+            return true;
+    return false;
 }
 
 void TMapPane::FreeKeptAlive(int32_t level)

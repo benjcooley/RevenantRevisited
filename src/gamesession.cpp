@@ -278,7 +278,13 @@ void TGameSession::ReleaseUnusedLevels(int32_t current) const
             occupied = player && player->GetLevel() == map->Level();
         }
         if (!occupied)
+        {
+            // A level with a door script still running in it is held: the
+            // door's object, its imagery and its script live in that level.
+            if (MapPane.HasKeptAlive(map->Level()))
+                continue;
             unused.push_back(map->Level());
+        }
     }
     for (const int32_t level : unused)
     {
@@ -297,10 +303,29 @@ void TGameSession::ReleaseUnusedLevels(int32_t current) const
 // the level with the door's object in it freed the object, its imagery and
 // its script, and the player was left frozen without control in the new
 // room.
+void TGameSession::UpdateHeldLevels()
+{
+    UpdateReleaseDelay();
+}
+
 void TGameSession::UpdateReleaseDelay()
 {
     if (releaseDelay <= 0)
-        return;
+    {
+        // A level held for a door script is released once the script ends;
+        // keep the delay running while one is still held.
+        for (int32_t i = 0; i < MapManager.NumCached(); i++)
+        {
+            const TGameMap* map = MapManager.Cached(i);
+            if (map && MapPane.HasKeptAlive(map->Level()))
+            {
+                releaseDelay = kReleaseDelayTicks;
+                break;
+            }
+        }
+        if (releaseDelay <= 0)
+            return;
+    }
     if (--releaseDelay > 0)
         return;
     ReleaseUnusedLevels(MapManager.CurrentLevel());

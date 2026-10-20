@@ -659,6 +659,8 @@ class TMapPane : public TPane
     void Notify(uint32_t notify, void *ptr);
 
     void KeepAlive(TObjectInstance* inst);
+    // True while a script of that level is still running (the level is held).
+    [[nodiscard]] bool HasKeptAlive(int32_t level) const;
         // Keep an object alive outside the map: a door script waits for the
         // screen fade before its "control on", and the object it stands in
         // is in the level the level change releases. The object leaves its
