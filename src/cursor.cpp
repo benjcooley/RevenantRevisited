@@ -86,7 +86,14 @@ void SetMouseBitmap(PTBitmap cursor)
     {
         g_os_cursor_owns_pixels = rev_platform::SetOSCursor(cursor, cursor->regx, cursor->regy);
         if (!g_os_cursor_owns_pixels)
-            log_warn("[cursor] SetOSCursor declined; falling back to in-game draw");
+        {
+            // The platform's cursor backend cannot take our pixels (the
+            // Windows and Linux stubs), so the game draws the cursor in
+            // frame. The OS pointer must not sit on top of it: hide it,
+            // or the user sees two cursors at once.
+            sapp_show_mouse(false);
+            log_info("[cursor] drawing the cursor in frame; the OS pointer is hidden");
+        }
     }
     else
     {
@@ -105,6 +112,12 @@ void SetHardwareCursorEnabled(bool enabled)
         // draw (RefreshOSCursor sets g_os_cursor_owns_pixels on success).
         sapp_show_mouse(true);
         RefreshOSCursor();
+        if (!g_os_cursor_owns_pixels)
+        {
+            // The platform could not take the pixels: the in-frame cursor
+            // stays, so the OS pointer has to go.
+            sapp_show_mouse(false);
+        }
     }
     else
     {

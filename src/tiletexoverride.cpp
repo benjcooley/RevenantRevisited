@@ -322,7 +322,23 @@ bool TileTexOverride::Load(int32_t objtype, const char* type_name, SImage& out)
     out.height = h;
     out.rgba.assign(pixels, pixels + size_t(w) * size_t(h) * 4);
     stbi_image_free(pixels);
+    // The alpha counts as the art's own when the PNG carries one: a colour
+    // type with an alpha channel (grey+alpha, RGBA), or a palette with a
+    // transparent entry, or any pixel that is not fully opaque. The colour
+    // type alone is not enough -- a palette PNG with tRNS decodes to alpha
+    // below 255, and the art's shape lives in that alpha.
     out.has_alpha = PngHasAlphaChannel(encoded);
+    if (!out.has_alpha)
+    {
+        for (size_t i = 3; i < out.rgba.size(); i += 4)
+        {
+            if (out.rgba[i] < 255)
+            {
+                out.has_alpha = true;
+                break;
+            }
+        }
+    }
     return true;
 }
 

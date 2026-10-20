@@ -1441,6 +1441,29 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                 }
             }
         }
+        if (used_bone_xform)
+        {
+            // Sub-tick motion. The world position is a whole pixel and only
+            // changes at the legacy 24 Hz tick, so the mesh is drawn where
+            // the tick started, advanced by the fraction of the tick that
+            // has passed: the sprite glides instead of stepping 1-2 px six
+            // times a second. The renderer matrix is column-vector after
+            // the transpose, so the translation is the last column.
+            const S3DPoint prev = oi->PrevPos();
+            const float frac = float(TTime::LegacyFrameFraction());
+            const float scale = frac - 1.0f;
+            // A jump (a teleport, a script that placed the object) is not
+            // a step of a tick: the object is drawn where it is.
+            const int32_t step_x = world_pos.x - prev.x;
+            const int32_t step_y = world_pos.y - prev.y;
+            const int32_t step_z = world_pos.z - prev.z;
+            if (std::abs(step_x) <= 8 && std::abs(step_y) <= 8 && std::abs(step_z) <= 8)
+            {
+                world_renderer[12] += float(step_x) * scale;
+                world_renderer[13] += float(step_y) * scale;
+                world_renderer[14] += float(step_z) * scale;
+            }
+        }
         if (!used_bone_xform)
         {
             if (!ctx.force_mesh_preview_pose)
