@@ -122,10 +122,6 @@ fs_out main_ps(vs_out in_) {
         in_.pos.x >= albedo_pad && in_.pos.x < (gbuf_size.x - albedo_pad) &&
         in_.pos.y >= albedo_pad && in_.pos.y < (gbuf_size.y - albedo_pad);
     if (c.a < 0.01) discard;
-    if (!tile_depth_valid(in_.uv)) discard;
-    float zraw = tile_depth_read(in_.uv);
-    float d    = zparams.x + zraw * zparams.y;
-    if (d < 0.0 || d > 1.0) discard;
     float nr  = max(filter_.x, 0.5);
     float thr = max(filter_.y, 0.0);
     float tw, th; depth_tex.GetDimensions(tw, th);
@@ -136,6 +132,24 @@ fs_out main_ps(vs_out in_) {
     float zrs = tile_depth_read(in_.uv + float2(tex.x, 0.0));
     float zt  = tile_depth_read(in_.uv - float2(0.0, tex.y));
     float zb  = tile_depth_read(in_.uv + float2(0.0, tex.y));
+    float zraw = tile_depth_read(in_.uv);
+    // The depth map's own empty texels are not "the highest surface" -- they
+    // are where the map has no data, and the tile's shape comes from the
+    // art (clipped to the coverage), not from the map's holes. Take the
+    // height from the closest neighbour that has one, so the map's black
+    // border neither covers what stands on the tile nor tilts its edge.
+    if (abs(zraw) <= 0.0001)
+    {
+        float sum = 0.0, cnt = 0.0;
+        if (abs(zl)  > 0.0001) { sum += zl;  cnt += 1.0; }
+        if (abs(zrs) > 0.0001) { sum += zrs; cnt += 1.0; }
+        if (abs(zt)  > 0.0001) { sum += zt;  cnt += 1.0; }
+        if (abs(zb)  > 0.0001) { sum += zb;  cnt += 1.0; }
+        if (cnt > 0.5) zraw = sum / cnt;
+        else discard;   // no depth anywhere near: the tile carries no relief
+    }
+    float d    = zparams.x + zraw * zparams.y;
+    if (d < 0.0 || d > 1.0) discard;
     if (abs(zl  - zraw) > thr + EDGE_EPS) zl  = zraw;
     if (abs(zrs - zraw) > thr + EDGE_EPS) zrs = zraw;
     if (abs(zt  - zraw) > thr + EDGE_EPS) zt  = zraw;

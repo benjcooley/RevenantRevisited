@@ -1230,7 +1230,11 @@ void TPlayScreen::RenderFrame()
         const S3DPoint p = MapPane.CameraPos(0.0);
         mapRenderer->SetCameraWorld(MapPane.GetMapLevel(), p.x, p.y, p.z);
         float scroll_x = 0.0f, scroll_y = 0.0f;
-        if (!Editor)
+        // Under a pause modal the world does not tick, so the tick's fraction
+        // runs on without the camera moving: the scroll would drift through
+        // the camera's step and back, and the picture would shiver. The
+        // editor has a camera of its own and does not scroll at all.
+        if (!Editor && !ModalHas(MODAL_PAUSE))
             MapPane.CameraScrollStep(TTime::LegacyFrameFraction(), scroll_x, scroll_y);
         mapRenderer->SetCameraScroll(scroll_x, scroll_y);
     }
