@@ -848,8 +848,10 @@ static bool UploadTileBitmap(PTBitmap bm,
 
     // High-res tile art (see tiletexoverride.h). The colour is swapped for the
     // matching upscaled PNG; depth, coverage and every derived value below
-    // stay retail's, and the override's alpha is clipped to the retail
-    // silhouette (nearest 1x sample) so art cannot leak outside the tile.
+    // stay retail's. A PNG that brought its own alpha keeps it -- that is
+    // the art's own shape (a picture that hangs over its tile, say). One
+    // without an alpha is clipped to the retail silhouette (nearest 1x
+    // sample) so art cannot leak outside the tile.
     const uint8_t* color_pixels = rgba.get();
     size_t color_size = npx * 4;
     int32_t color_w = w, color_h = h;
@@ -858,22 +860,27 @@ static bool UploadTileBitmap(PTBitmap bm,
         TileTexOverride::Load(override_objtype, override_name, override_image) &&
         override_image.width > 0 && override_image.height > 0)
     {
-        const int32_t ow = override_image.width;
-        const int32_t oh = override_image.height;
-        for (int32_t y = 0; y < oh; ++y)
-        for (int32_t x = 0; x < ow; ++x)
+        if (!override_image.has_alpha)
         {
-            const int32_t sx = int32_t((int64_t(x) * w) / ow);
-            const int32_t sy = int32_t((int64_t(y) * h) / oh);
-            if (!rgba[(size_t(sy) * size_t(w) + size_t(sx)) * 4 + 3])
-                override_image.rgba[(size_t(y) * size_t(ow) + size_t(x)) * 4 + 3] = 0;
+            const int32_t ow = override_image.width;
+            const int32_t oh = override_image.height;
+            for (int32_t y = 0; y < oh; ++y)
+            for (int32_t x = 0; x < ow; ++x)
+            {
+                const int32_t sx = int32_t((int64_t(x) * w) / ow);
+                const int32_t sy = int32_t((int64_t(y) * h) / oh);
+                if (!rgba[(size_t(sy) * size_t(w) + size_t(sx)) * 4 + 3])
+                    override_image.rgba[(size_t(y) * size_t(ow) + size_t(x)) * 4 + 3] = 0;
+            }
         }
-        log_info("[tiletex] %s %dx%d -> %dx%d (%.2fx)", override_name, w, h, ow, oh,
-                 float(ow) / float(w));
+        log_info("[tiletex] %s %dx%d -> %dx%d (%.2fx)%s", override_name, w, h,
+                 override_image.width, override_image.height,
+                 float(override_image.width) / float(w),
+                 override_image.has_alpha ? " (own alpha)" : "");
         color_pixels = override_image.rgba.data();
         color_size = override_image.rgba.size();
-        color_w = ow;
-        color_h = oh;
+        color_w = override_image.width;
+        color_h = override_image.height;
     }
 
     const uint64_t gpu_bytes = uint64_t(color_size) + uint64_t(npx) * uint64_t(sizeof(float));

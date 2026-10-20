@@ -842,6 +842,72 @@ static int32_t BuildProjectedSourceRectProxy(float src_x0,
                                          out_max_x, out_max_y);
 }
 
+// The colour's mip chain. The high-res tile art is many times the tile's
+// own size, so a minified tile aliased hard -- the art shimmered when the
+// camera was not zoomed in. Each level is the box average of the level
+// above, the colour weighted by the alpha (the alpha is the coverage, not
+// a colour) and the coverage itself kept at its strongest, so the tile's
+// silhouette stays as sharp as it was.
+struct SColorMipChain {
+    uint64_t bytes = 0;
+    std::vector<std::vector<uint8_t>> levels;   // RGBA8, widest first
+};
+
+static SColorMipChain BuildColorMipChain(const uint8_t* rgba,
+                                         int32_t width,
+                                         int32_t height)
+{
+    SColorMipChain chain = {};
+    if (!rgba || width <= 0 || height <= 0)
+        return chain;
+
+    std::vector<uint8_t> level(rgba, rgba + size_t(width) * size_t(height) * 4u);
+    int32_t w = width;
+    int32_t h = height;
+    for (int32_t mip = 0; mip < SG_MAX_MIPMAPS; ++mip)
+    {
+        chain.bytes += uint64_t(w) * uint64_t(h) * 4u;
+        chain.levels.push_back(std::move(level));
+        if (w == 1 && h == 1)
+            break;
+
+        const int32_t prev_w = w;
+        const int32_t prev_h = h;
+        const std::vector<uint8_t>& prev = chain.levels.back();
+        w = (std::max)(1, prev_w / 2);
+        h = (std::max)(1, prev_h / 2);
+        level.assign(size_t(w) * size_t(h) * 4u, 0u);
+
+        for (int32_t y = 0; y < h; ++y)
+        for (int32_t x = 0; x < w; ++x)
+        {
+            const int32_t x0 = (std::min)(prev_w - 1, x * 2);
+            const int32_t y0 = (std::min)(prev_h - 1, y * 2);
+            const int32_t x1 = (std::min)(prev_w - 1, x0 + 1);
+            const int32_t y1 = (std::min)(prev_h - 1, y0 + 1);
+            float acc[3] = {0.0f, 0.0f, 0.0f};
+            float wsum = 0.0f;
+            uint8_t amax = 0;
+            for (int32_t sy = y0; sy <= y1; ++sy)
+            for (int32_t sx = x0; sx <= x1; ++sx)
+            {
+                const uint8_t* px = &prev[(size_t(sy) * size_t(prev_w) + size_t(sx)) * 4u];
+                const float a = float(px[3]) / 255.0f;
+                acc[0] += float(px[0]) * a;
+                acc[1] += float(px[1]) * a;
+                acc[2] += float(px[2]) * a;
+                wsum += a;
+                amax = (std::max)(amax, px[3]);
+            }
+            uint8_t* out = &level[(size_t(y) * size_t(w) + size_t(x)) * 4u];
+            for (int32_t c = 0; c < 3; ++c)
+                out[c] = wsum > 0.0f ? uint8_t(std::lround(acc[c] / wsum)) : 0;
+            out[3] = amax;
+        }
+    }
+    return chain;
+}
+
 static SHeightMinMaxMipChain BuildHeightMinMaxMipChain(const float* depth,
                                                        int32_t width,
                                                        int32_t height)
@@ -2402,22 +2468,27 @@ RendererImagePairHandle TRenderer::RegisterImagePairAsset(uint64_t key,
     // shader's normals and heights are UV-based, so that stays exact) and only
     // enlarges the colour.
     //
-    // The colour deliberately has no mip chain. The tile pass samples it with
-    // the implicit LOD, and that LOD comes out several levels deeper than the
-    // tile's actual screen footprint warrants (measured: a 4x tile that era
-    // art drew crisp at 1x turns to mush), while the image desc's max_lod is
-    // not honoured through this sokol/D3D11 build, so the level cannot be
-    // clamped from here. One level keeps the retail look (which is crisply
-    // aliased) and shows the added detail; the upscaled art carries little
-    // energy above 1x resolution, so it shimmers no worse than retail does.
+    // The colour carries a mip chain: the high-res tile art is many times
+    // the tile's own size, and a minified tile aliased hard without it
+    // (the art shimmered when the camera was not zoomed in). The LOD the
+    // tile pass computes is the implicit one, which comes out deeper than
+    // the tile's screen footprint warrants, so the chain is there to take
+    // the aliasing away, not to blur the art at 1x.
+    SColorMipChain color_mips = BuildColorMipChain(static_cast<const uint8_t*>(color_rgba8),
+                                                    color_width, color_height);
     sg_image_desc color_desc = {};
     color_desc.width = color_width;
     color_desc.height = color_height;
     color_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
-    color_desc.min_filter = SG_FILTER_LINEAR;
+    color_desc.min_filter = SG_FILTER_LINEAR_MIPMAP_LINEAR;
     color_desc.mag_filter = SG_FILTER_LINEAR;
     color_desc.wrap_u = color_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-    color_desc.data.subimage[0][0] = { color_rgba8, color_bytes };
+    color_desc.num_mipmaps = int(color_mips.levels.size());
+    for (int32_t mip = 0; mip < color_desc.num_mipmaps; ++mip)
+    {
+        const std::vector<uint8_t>& pixels = color_mips.levels[size_t(mip)];
+        color_desc.data.subimage[0][mip] = { pixels.data(), pixels.size() };
+    }
     color_desc.label = "renderer.imagepair.color";
 
     sg_image_desc depth_desc = {};

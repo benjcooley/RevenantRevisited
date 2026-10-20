@@ -37,6 +37,11 @@ struct SImage {
     int32_t              width  = 0;
     int32_t              height = 0;
     std::vector<uint8_t> rgba;   // width * height * 4
+    // The PNG brought its own alpha (a colour type with an alpha channel).
+    // Then that alpha is the art's own shape and is used as it is; without
+    // one the alpha is the retail silhouette's, clipped in by the tile
+    // upload.
+    bool                 has_alpha = false;
 };
 
 // Index the configured tree. Call once at boot, after LoadRevisitedSettings.

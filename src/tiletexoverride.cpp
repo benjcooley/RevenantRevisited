@@ -16,6 +16,7 @@
 
 #include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -247,6 +248,18 @@ bool TileTexOverride::Enabled()
     return s_enabled;
 }
 
+// The PNG's own colour type: 4 (grey + alpha) and 6 (RGBA) carry an alpha
+// channel, 2 (RGB) and 3 (palette) do not. The IHDR is the ninth chunk of
+// a PNG, its colour type the byte at 25.
+bool PngHasAlphaChannel(const std::vector<uint8_t>& png)
+{
+    static const uint8_t kSignature[8] = { 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A };
+    if (png.size() < 26 || std::memcmp(png.data(), kSignature, sizeof(kSignature)) != 0)
+        return false;
+    const uint8_t color_type = png[25];
+    return color_type == 4 || color_type == 6;
+}
+
 bool TileTexOverride::Load(int32_t objtype, const char* type_name, SImage& out)
 {
     if (!s_enabled || objtype < 0 || !type_name || !*type_name)
@@ -309,6 +322,7 @@ bool TileTexOverride::Load(int32_t objtype, const char* type_name, SImage& out)
     out.height = h;
     out.rgba.assign(pixels, pixels + size_t(w) * size_t(h) * 4);
     stbi_image_free(pixels);
+    out.has_alpha = PngHasAlphaChannel(encoded);
     return true;
 }
 
