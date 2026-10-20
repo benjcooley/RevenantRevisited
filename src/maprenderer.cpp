@@ -865,7 +865,13 @@ static bool UploadTileBitmap(PTBitmap bm,
         TileTexOverride::Load(override_objtype, override_name, override_image) &&
         override_image.width > 0 && override_image.height > 0)
     {
-        if (!override_image.has_alpha)
+        // The art never leaks outside the tile's coverage: the upscaled PNG
+        // carries a wide, soft, half-transparent band around the shape (the
+        // upscaler's edge), and those texels have no height in the depth map
+        // -- they would be drawn at the tile's base plane, which the iso
+        // projection puts in front of whatever stands there. Clip the art to
+        // the coverage, so the tile's shape is the coverage again and the
+        // art only fills it.
         {
             const int32_t ow = override_image.width;
             const int32_t oh = override_image.height;
@@ -3741,9 +3747,15 @@ void TMapRenderer::RenderFrame()
     Renderer->SetPerspectiveProjectionMode(s.sectorPerspectiveCamera ? s.sectorPerspectiveProjectionMode : 0);
     Renderer->SetPerspectiveProxyRasterScale(s.sectorPerspectiveCamera ? s.sectorPerspectiveProxyRasterScale : 1.0f);
     Renderer->SetPerspectiveRaycastParams(s.sectorPerspectiveSteps, s.sectorPerspectiveRefine);
+    // The camera's world position for the mesh projection stays whole: the
+    // meshes (the characters) are drawn from it, and a sprite drawn between
+    // two pixels is resampled -- blurry, and it wobbles as it moves. The
+    // world itself scrolls by the fraction (the tiles take it in their
+    // screen position), so the picture moves smoothly while the sprites
+    // keep their pixels.
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy), s.z_near, s.z_far,
-                                      float(s.sectorCameraWorld.x) + s.cameraScrollX,
-                                      float(s.sectorCameraWorld.y) + s.cameraScrollY,
+                                      float(s.sectorCameraWorld.x),
+                                      float(s.sectorCameraWorld.y),
                                       camera_forward, s.sectorPerspectiveCamera ? 1.0f : 0.0f,
                                       effective_camera_zoom,
                                       s.sectorPerspectiveZOffset,

@@ -91,12 +91,6 @@ vs_out main_vs(vs_in i) {
     float persp_scale = ((camz.w > 0.5) ? (camz.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
     float spx = vp.x + S * persp_scale;
     float spy = vp.y + T * persp_scale;
-    // Pixel grid: the camera's step scrolls the world by a fraction of a
-    // pixel between the ticks, and a sprite drawn between two pixels is
-    // resampled (blurred, and it wobbles as it moves). The mesh lands on
-    // whole pixels, as retail drew it.
-    spx = floor(spx + 0.5);
-    spy = floor(spy + 0.5);
 
     vs_out o;
     o.pos.x = 2.0 * spx / max(vp.z, 1.0) - 1.0;
