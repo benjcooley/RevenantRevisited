@@ -59,7 +59,7 @@ std::vector<uint8_t> ReadWholeFile(const char* path)
 }
 
 // The glyphs are rasterized 2x2 oversampled with a pixel of padding.
-constexpr int kOversample = 2;
+constexpr int kOversample = 1;
 constexpr int kPadding    = 1;
 constexpr int kMaxAtlasDim = 4096;
 
@@ -335,8 +335,11 @@ const SFontAtlas* Build(const char* path, const std::string& key, const SSizing&
     atlas->shadow = RetailTextShadow(atlas->lineStep);
     if (face)
         atlas->face = face;
-    // GDI's glyphs read heavier than one pass of the oversampled coverage.
-    atlas->doubleStrike = true;
+    // No double strike here: the atlas holds the glyphs at their own size
+    // (kOversample is 1), so one pass already carries the coverage GDI
+    // draws. The extra pass was there to lift the thin coverage of the
+    // 2x-oversampled atlas, whose 2:1 downscale made the small glyphs
+    // read as a doubled, smeared image.
 
     if (Renderer)
     {
