@@ -20,6 +20,7 @@
 #include <fstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace {
 
@@ -264,7 +265,12 @@ bool TileTexOverride::Load(int32_t objtype, const char* type_name, SImage& out)
         // unique across classes; fall back to the name when it is unambiguous.
         auto named = s_by_name.find(lower(safe));
         if (named == s_by_name.end() || named->second.empty())
+        {
+            static std::unordered_set<std::string> reported;
+            if (reported.insert(lower(safe)).second)
+                log_info("[tiletex] no art for '%s' (objtype %d)", safe.c_str(), objtype);
             return false;
+        }
         it = s_by_key.find(named->second);
         if (it == s_by_key.end())
             return false;

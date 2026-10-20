@@ -35,6 +35,12 @@ Texture2D    normal_tex : register(t1);
 Texture2D    depth_tex  : register(t2);
 SamplerState smp        : register(s0);
 struct vs_out { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
+// Hoskins' hash12: float32-safe per-pixel noise.
+float hash12(float2 p) {
+    float3 p3 = frac(float3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.x + p3.y) * p3.z);
+}
 float3 reconstruct_world(float2 uv, float d, float fbw, float fbh) {
     // Framebuffer pixels are scaled by the active camera zoom/resolution.
     // Undo that first so the iso inverse sees the same units as WorldToScreen.
@@ -59,14 +65,26 @@ float main_ps(vs_out in_) : SV_Target0 {
     if (alb.a < 0.01) return 1.0;
     float strength = max(ao_settings.y, 0.0);
     if (strength <= 0.0) return 1.0;
-    float radius_px = max(ao_settings.x, 1.0);
+    // The ring's radius is in world units, so it scales with the camera
+    // zoom: a fixed pixel radius shrinks in world terms as the camera comes
+    // closer, and then the ring lands inside a single height-map texel,
+    // where the tiny steps of the quantized height tilt it -- the AO's
+    // response broke into horizontal bands over the whole surface. With
+    // the radius in world units the ring always spans several texels and
+    // the AO looks the same at every zoom.
+    float radius_px = max(ao_settings.x, 1.0) * max(camera.x, 1.0);
     float bias = ao_settings.z;
     float max_dist = max(ao_settings.w, 1.0);
     float d = depth_tex.Sample(smp, in_.uv).r;
     float3 N = normalize(normal_tex.Sample(smp, in_.uv).xyz * 2.0 - 1.0);
     float fbw, fbh; albedo_tex.GetDimensions(fbw, fbh);
     float3 W = reconstruct_world(in_.uv, d, fbw, fbh);
-    float h = frac(sin(dot(in_.uv, float2(12.9898, 78.233))) * 43758.5453);
+    // Per-pixel noise for the sample ring. The classic frac(sin(dot(...)) *
+    // 43758.0) hash degenerates in float32: sin of a big argument loses its
+    // low bits, so the value barely changes along x and the AO's noise came
+    // out as horizontal bands over the whole surface. This one keeps its
+    // bits (Hoskins' hash12).
+    float h = hash12(in_.uv * float2(fbw, fbh));
     const int kSamples = 8;
     float occ = 0.0;
     float wsum = 0.0;
