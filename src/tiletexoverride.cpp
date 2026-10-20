@@ -167,8 +167,10 @@ const std::filesystem::path* FindArt(int32_t objtype, const char* type_name)
 }
 
 // Read a PNG file into an SImage. Returns false when the file is missing or
-// undecodable.
-bool DecodePng(const std::filesystem::path& path, TileTexOverride::SImage& out)
+// undecodable. `detect_alpha` is off for the depth maps: their alpha carries
+// nothing (the height is in the colour channels).
+bool DecodePng(const std::filesystem::path& path, TileTexOverride::SImage& out,
+               bool detect_alpha = true)
 {
     std::ifstream file(path, std::ios::binary);
     std::vector<uint8_t> encoded;
@@ -208,6 +210,8 @@ bool DecodePng(const std::filesystem::path& path, TileTexOverride::SImage& out)
     // transparent entry, or any pixel that is not fully opaque. The colour
     // type alone is not enough -- a palette PNG with tRNS decodes to alpha
     // below 255, and the art's shape lives in that alpha.
+    if (!detect_alpha)
+        return true;
     out.has_alpha = PngHasAlphaChannel(encoded);
     if (!out.has_alpha)
     {
@@ -386,24 +390,17 @@ bool TileTexOverride::LoadDepth(int32_t objtype, const char* type_name, SImage& 
         return false;
 
     // The map sits in a "depth" folder next to the art and is named after it.
-    const std::filesystem::path depth_path =
-        art->parent_path() / "depth" / std::filesystem::path(art->stem().string() + "_depth.png");
     auto it = s_depth_by_key.find(lower(art->stem().string()));
     if (it != s_depth_by_key.end())
-    {
-        if (!DecodePng(it->second, out))
-            return false;
-    }
-    else
-    {
-        std::error_code ec;
-        if (!std::filesystem::exists(depth_path, ec))
-            return false;
-        if (!DecodePng(depth_path, out))
-            return false;
-    }
-    out.is_depth = true;
-    return true;
+        return DecodePng(it->second, out, /*detect_alpha=*/false);
+
+    // A map that sits next to the art instead of in a "depth" folder.
+    const std::filesystem::path depth_path =
+        art->parent_path() / "depth" / std::filesystem::path(art->stem().string() + "_depth.png");
+    std::error_code ec;
+    if (!std::filesystem::exists(depth_path, ec))
+        return false;
+    return DecodePng(depth_path, out, /*detect_alpha=*/false);
 }
 
 const char* TileTexOverride::Root()

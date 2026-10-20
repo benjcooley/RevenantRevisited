@@ -49,9 +49,6 @@ struct SImage {
     // one the alpha is the retail silhouette's, clipped in by the tile
     // upload.
     bool                 has_alpha = false;
-    // A depth map, not albedo: the red channel holds the height, normalised
-    // over the tile's height range (the dumper's encoding).
-    bool                 is_depth = false;
 };
 
 // Index the configured tree. Call once at boot, after LoadRevisitedSettings.

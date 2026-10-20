@@ -700,6 +700,32 @@ static void ComputeAuthoredLocalDepthRange(int32_t wwidth, int32_t wlength, int3
     }
 }
 
+// The art never leaks outside the tile's coverage: the upscaled PNG carries a
+// wide, soft, half-transparent band around the shape (the upscaler's edge),
+// and those texels have no height in the depth map -- they would be drawn at
+// the tile's base plane, which the iso projection puts in front of whatever
+// stands there. The coverage is sampled nearest (the retail 1x alpha).
+static void ClipArtToCoverage(std::vector<uint8_t>& art, int32_t aw, int32_t ah,
+                               const uint8_t* retail_rgba, int32_t rw, int32_t rh)
+{
+    if (aw <= 0 || ah <= 0 || rw <= 0 || rh <= 0)
+        return;
+    std::vector<int32_t> column(static_cast<size_t>(aw), 0);
+    for (int32_t x = 0; x < aw; ++x)
+        column[size_t(x)] = int32_t((int64_t(x) * rw) / aw);
+    for (int32_t y = 0; y < ah; ++y)
+    {
+        const int32_t sy = int32_t((int64_t(y) * rh) / ah);
+        const uint8_t* src = retail_rgba + (size_t(sy) * size_t(rw)) * 4 + 3;
+        uint8_t* dst = art.data() + (size_t(y) * size_t(aw)) * 4 + 3;
+        for (int32_t x = 0; x < aw; ++x)
+        {
+            if (!src[size_t(column[size_t(x)]) * 4])
+                dst[size_t(x) * 4] = 0;
+        }
+    }
+}
+
 static bool UploadTileBitmap(PTBitmap bm,
                              RendererImagePairHandle* out_image_pair,
                              uint64_t* out_key,
@@ -849,10 +875,9 @@ static bool UploadTileBitmap(PTBitmap bm,
 
     // High-res tile art (see tiletexoverride.h). The colour is swapped for the
     // matching upscaled PNG; depth, coverage and every derived value below
-    // stay retail's. A PNG that brought its own alpha keeps it -- that is
-    // the art's own shape (a picture that hangs over its tile, say). One
-    // without an alpha is clipped to the retail silhouette (nearest 1x
-    // sample) so art cannot leak outside the tile.
+    // stay retail's. The art is clipped to the retail coverage (the depth
+    // map's shape), so the tile's shape is the coverage and the art only
+    // fills it.
     const uint8_t* color_pixels = rgba.get();
     size_t color_size = npx * 4;
     int32_t color_w = w, color_h = h;
@@ -865,25 +890,8 @@ static bool UploadTileBitmap(PTBitmap bm,
         TileTexOverride::Load(override_objtype, override_name, override_image) &&
         override_image.width > 0 && override_image.height > 0)
     {
-        // The art never leaks outside the tile's coverage: the upscaled PNG
-        // carries a wide, soft, half-transparent band around the shape (the
-        // upscaler's edge), and those texels have no height in the depth map
-        // -- they would be drawn at the tile's base plane, which the iso
-        // projection puts in front of whatever stands there. Clip the art to
-        // the coverage, so the tile's shape is the coverage again and the
-        // art only fills it.
-        {
-            const int32_t ow = override_image.width;
-            const int32_t oh = override_image.height;
-            for (int32_t y = 0; y < oh; ++y)
-            for (int32_t x = 0; x < ow; ++x)
-            {
-                const int32_t sx = int32_t((int64_t(x) * w) / ow);
-                const int32_t sy = int32_t((int64_t(y) * h) / oh);
-                if (!rgba[(size_t(sy) * size_t(w) + size_t(sx)) * 4 + 3])
-                    override_image.rgba[(size_t(y) * size_t(ow) + size_t(x)) * 4 + 3] = 0;
-            }
-        }
+        ClipArtToCoverage(override_image.rgba, override_image.width, override_image.height,
+                           rgba.get(), w, h);
         log_info("[tiletex] %s %dx%d -> %dx%d (%.2fx)%s", override_name, w, h,
                  override_image.width, override_image.height,
                  float(override_image.width) / float(w),
