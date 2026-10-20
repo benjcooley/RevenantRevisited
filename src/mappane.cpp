@@ -2013,8 +2013,14 @@ TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectIns
             continue;
         if (!Editor && inst->ObjClass() == OBJCLASS_TILE)
             continue;
+        // The 3D scenery is not picked by the pointer (retail: the 3D
+        // scene's probe returns it as is). The characters are 3D meshes in
+        // the port, though -- they are drawn as meshes, not as the sprites
+        // retail picked them as -- so they are not dropped here; their own
+        // cursor type decides (the player has none, so he is not picked).
         if (const TObjectImagery* img = inst->GetImagery())
-            if (img->GetHeader() && img->GetHeader()->imageryid == OBJIMAGE_MESH3D)
+            if (img->GetHeader() && img->GetHeader()->imageryid == OBJIMAGE_MESH3D &&
+                !inst->IsCharacter())
                 continue;
         if (on && !inst->AlwaysOnTop() && (priority || !inst->GetZ(pick.frontmost)))
             continue;
