@@ -1230,7 +1230,8 @@ void TPlayScreen::RenderFrame()
         const S3DPoint p = MapPane.CameraPos(0.0);
         mapRenderer->SetCameraWorld(MapPane.GetMapLevel(), p.x, p.y, p.z);
         float scroll_x = 0.0f, scroll_y = 0.0f;
-        MapPane.CameraScrollStep(TTime::LegacyFrameFraction(), scroll_x, scroll_y);
+        if (!Editor)
+            MapPane.CameraScrollStep(TTime::LegacyFrameFraction(), scroll_x, scroll_y);
         mapRenderer->SetCameraScroll(scroll_x, scroll_y);
     }
 
@@ -1692,6 +1693,9 @@ void TPlayScreen::KeyPress(int32_t key, bool down)
         {
             StartEditor();
         }
+        // The editor is an immediate-mode UI: it needs a pointer the user can
+        // aim at widgets with, so the OS pointer comes back while it is open.
+        ForceOSPointer(Editor);
         return;
     }
 
