@@ -2452,6 +2452,16 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
 void TMapRenderer::Initialize()
 {
     DebugUI::RegisterContributor(this);
+
+    // The camera knobs live in the debug panel's state; the [Revisited]
+    // settings carry them between runs (the panel writes them when its
+    // "Save Revisited Settings" is pressed), so apply them here -- the
+    // ini's CameraZoom and ParallaxMode did nothing until now.
+    Impl& s = *impl;
+    const SRevisitedSettings& rs = RevisitedSettings;
+    if (rs.camera_zoom > 0.0f)
+        s.sectorCameraZoom = (float)rs.camera_zoom;
+    s.sectorPerspectiveCamera = rs.parallax_enable;
 }
 
 void TMapRenderer::SetMap(TGameMap* m, bool use_level_origin,
