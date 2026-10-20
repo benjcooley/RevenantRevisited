@@ -58,7 +58,7 @@ std::vector<uint8_t> ReadWholeFile(const char* path)
     return bytes;
 }
 
-// The glyphs are rasterized 2x2 oversampled with a pixel of padding.
+// The glyphs are rasterized at their own size, with a pixel of padding.
 constexpr int kOversample = 1;
 constexpr int kPadding    = 1;
 constexpr int kMaxAtlasDim = 4096;
@@ -244,11 +244,17 @@ const SFontAtlas* Build(const char* path, const std::string& key, const SSizing&
     // RGB stays white; alpha carries coverage. The composite pipeline uses
     // SRC_ALPHA blending, so putting coverage in RGB as well would square the
     // coverage and make tinted text too dim.
+    //
+    // The coverage is lifted a little (a gamma under 1) before it goes into
+    // the atlas: retail's fonts are 1-bit, so their stems are a hard pixel
+    // wide, while a TrueType stem at 12 px is a soft 1.5 px one that the
+    // screen reads as a grey smear. The lift rounds the stem back to a solid
+    // pixel and keeps the edge soft.
     const size_t rgba_bytes = size_t(atlas_w) * atlas_h * 4;
     std::unique_ptr<uint8_t[]> rgba(new uint8_t[rgba_bytes]);
     for (size_t i = 0; i < size_t(atlas_w) * atlas_h; i++)
     {
-        const uint8_t a = coverage[i];
+        const uint8_t a = (uint8_t)std::lround(255.0f * std::pow(float(coverage[i]) / 255.0f, 0.5f));
         rgba[i * 4 + 0] = 255;
         rgba[i * 4 + 1] = 255;
         rgba[i * 4 + 2] = 255;
@@ -273,8 +279,8 @@ const SFontAtlas* Build(const char* path, const std::string& key, const SSizing&
     // and rounds glyph tops/bottoms onto different rows (lowercase bobbing off
     // the baseline). Quantizing the metrics here makes this small UI font
     // behave like the original bitmap fonts — even spacing, one flat baseline —
-    // which is what the pixel-faithful UI needs. (The atlas bitmap stays 2x
-    // oversampled for crisp downsampled coverage; only placement is gridded.)
+    // which is what the pixel-faithful UI needs. (The atlas holds the glyphs
+    // at that same size; only the placement is gridded.)
     //
     // The line metrics (ascent, descent) come from the printable ASCII glyphs
     // alone, as before the atlas held more: an accented capital rises into
@@ -332,7 +338,14 @@ const SFontAtlas* Build(const char* path, const std::string& key, const SSizing&
         atlas->cellBaseline = atlas->ascent - kGdiTopLeading;
     }
     atlas->lineStep = float(pixel_height);
-    atlas->shadow = RetailTextShadow(atlas->lineStep);
+    // A TrueType face is the port's stand-in for retail's GDI fonts, and it
+    // is antialiased where retail's bitmap fonts were hard-edged. Retail's
+    // 3-pass black shadow (a 2 px fringe at the 12 px sizes) then sits so
+    // close to the soft glyph that the two read as one doubled, smeared
+    // image -- the text looks like a fat copy with a black copy beside it.
+    // The stand-in keeps a single 1 px shadow; the bitmap fonts keep retail's
+    // own (font.cpp).
+    atlas->shadow = { 1, 1, true };
     if (face)
         atlas->face = face;
     // No double strike here: the atlas holds the glyphs at their own size

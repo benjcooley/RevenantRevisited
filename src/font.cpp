@@ -407,14 +407,15 @@ namespace {
 // Shared glyph walk: blit each glyph of `text` into the active render-target
 // pass at the given pen baseline, tinted (r,g,b,1). The destination extent is
 // the glyph's LOGICAL size (xoff2-xoff, yoff2-yoff); the source extent is the
-// packed atlas rect (rc.w, rc.h), which is 2x larger because the TTF atlas is
-// 2x2 oversampled (ttfatlas.cpp). The GPU sampler downsamples src->dst, giving
-// crisp antialiased glyphs at the intended size. (Drawing dst == rc.w/rc.h
-// instead renders every glyph 2x too big and overlapping.) Glyphs sit at their
-// true metric position so caps/ascenders keep their height above the baseline;
-// there is no per-glyph cell scissor (that truncated cap tops and made
-// lowercase look top-justified). This matches the vetted RenderTTFMode walk in
-// testmodes.cpp. Used by both the plain and shadowed public helpers.
+// packed atlas rect (rc.w, rc.h), which is the same size: the atlas holds the
+// glyphs at their own size (ttfatlas.cpp). The GPU sampler copies src->dst
+// one to one, giving crisp antialiased glyphs at the intended size. (Drawing
+// dst == rc.w/rc.h is the same here; a 2x atlas needed the downscale.)
+// Glyphs sit at their true metric position so caps/ascenders keep their
+// height above the baseline; there is no per-glyph cell scissor (that
+// truncated cap tops and made lowercase look top-justified). This matches the
+// vetted RenderTTFMode walk in testmodes.cpp. Used by both the plain and
+// shadowed public helpers.
 void DrawGlyphRun(const SFontAtlas* atlas, const char* text, ETextEncoding encoding,
                   float penX, float baselineY,
                   float r, float g, float b,
