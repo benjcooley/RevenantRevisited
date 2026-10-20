@@ -20,11 +20,18 @@
 // alpha (tile.hlsl.h:124) and reconstructs normals + heights from the retail
 // depth texture through UVs, so a higher-resolution colour is safe by
 // construction; UploadTileBitmap still clips the override's alpha to the
-// retail silhouette so art outside retail coverage cannot leak in.
+// retail silhouette when the PNG brings no alpha of its own.
+//
+// The tile's shape is the art's own alpha, not the depth map's: the shader
+// no longer cuts on an empty depth texel, it takes the height from the
+// nearest texel that has one instead. A depth map drawn for the new sprite
+// can replace the relief as well (LoadDepth, off by default -- decoding a
+// map per tile roughly doubles the tile load time).
 //
 // Settings (revisited/resources/Revenant.ini, [Revisited]):
 //   HighResTiles     = 1        use the tree; 0 disables the whole feature
 //   HighResTileRoot  = <path>   tree root; empty = <overlay>/Imagery
+//   HighResTileDepth = 0        also take the relief from the tree's maps
 
 #pragma once
 
@@ -42,6 +49,9 @@ struct SImage {
     // one the alpha is the retail silhouette's, clipped in by the tile
     // upload.
     bool                 has_alpha = false;
+    // A depth map, not albedo: the red channel holds the height, normalised
+    // over the tile's height range (the dumper's encoding).
+    bool                 is_depth = false;
 };
 
 // Index the configured tree. Call once at boot, after LoadRevisitedSettings.
@@ -54,6 +64,12 @@ bool Enabled();
 // Decoded RGBA of the override for a tile, or false when the tile has none.
 // The tiles this covers are stills only (state 0), like the dumper's.
 bool Load(int32_t objtype, const char* type_name, SImage& out);
+
+// Decoded depth map for a tile, or false when the tree holds none for it.
+// The maps live in a "depth" folder next to the art and carry the tile's
+// relief at the art's resolution, so the shape of the relief follows the
+// new sprite instead of being stretched over it.
+bool LoadDepth(int32_t objtype, const char* type_name, SImage& out);
 
 // Diagnostics for logs / the debug panel.
 const char* Root();

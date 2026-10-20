@@ -855,7 +855,11 @@ static bool UploadTileBitmap(PTBitmap bm,
     const uint8_t* color_pixels = rgba.get();
     size_t color_size = npx * 4;
     int32_t color_w = w, color_h = h;
+    const float* depth_pixels = dflt.get();
+    size_t depth_size = npx * sizeof(float);
+    std::vector<float> depth_override;
     TileTexOverride::SImage override_image;
+    bool override_used = false;
     if (override_name && override_objtype >= 0 && Renderer->ImagePairForKey(key) == 0 &&
         TileTexOverride::Load(override_objtype, override_name, override_image) &&
         override_image.width > 0 && override_image.height > 0)
@@ -881,12 +885,70 @@ static bool UploadTileBitmap(PTBitmap bm,
         color_size = override_image.rgba.size();
         color_w = override_image.width;
         color_h = override_image.height;
+        override_used = true;
     }
 
-    const uint64_t gpu_bytes = uint64_t(color_size) + uint64_t(npx) * uint64_t(sizeof(float));
+    // The relief can come from the tree as well: a depth map drawn for the
+    // new sprite. Its red channel holds the height, normalised over the
+    // tile's height range; black is "no relief here". The map is sampled
+    // down onto the tile's own depth grid, so the depth texture keeps
+    // retail's size while the heights follow the map.
+    if (override_used && RevisitedSettings.high_res_tile_depth && z_local_max > z_local_min)
+    {
+        TileTexOverride::SImage depth_image;
+        if (TileTexOverride::LoadDepth(override_objtype, override_name, depth_image) &&
+            depth_image.width > 0 && depth_image.height > 0)
+        {
+            const int32_t dw = depth_image.width;
+            const int32_t dh = depth_image.height;
+            std::vector<float> sampled(npx, 0.0f);
+            bool any = false;
+            for (int32_t y = 0; y < h; ++y)
+            {
+                const int32_t sy0 = int32_t((int64_t(y) * dh) / h);
+                const int32_t sy1 = int32_t((int64_t(y + 1) * dh) / h);
+                for (int32_t x = 0; x < w; ++x)
+                {
+                    const int32_t sx0 = int32_t((int64_t(x) * dw) / w);
+                    const int32_t sx1 = int32_t((int64_t(x + 1) * dw) / w);
+                    float sum = 0.0f;
+                    int32_t cnt = 0;
+                    for (int32_t sy = sy0; sy < sy1; ++sy)
+                    for (int32_t sx = sx0; sx < sx1; ++sx)
+                    {
+                        const size_t si = (size_t(sy) * size_t(dw) + size_t(sx)) * 4;
+                        const uint8_t r = depth_image.rgba[si];
+                        const uint8_t g = depth_image.rgba[si + 1];
+                        const uint8_t b = depth_image.rgba[si + 2];
+                        if ((r | g | b) == 0)
+                            continue;   // no relief here
+                        sum += float(r);
+                        ++cnt;
+                    }
+                    if (cnt > 0)
+                    {
+                        const float t = (sum / float(cnt)) / 255.0f;
+                        sampled[size_t(y) * size_t(w) + size_t(x)] =
+                            z_local_min + t * (z_local_max - z_local_min);
+                        any = true;
+                    }
+                }
+            }
+            if (any)
+            {
+                depth_override = std::move(sampled);
+                depth_pixels = depth_override.data();
+                depth_size = depth_override.size() * sizeof(float);
+                log_info("[tiletex] %s depth map %dx%d -> %dx%d (own relief)",
+                         override_name, dw, dh, w, h);
+            }
+        }
+    }
+
+    const uint64_t gpu_bytes = uint64_t(color_size) + uint64_t(depth_size);
     *out_image_pair = Renderer->RegisterImagePairAsset(key,
                                                        color_pixels, color_size,
-                                                       dflt.get(), npx * sizeof(float),
+                                                       depth_pixels, depth_size,
                                                        w, h, gpu_bytes,
                                                        color_w, color_h);
     if (!*out_image_pair)

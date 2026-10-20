@@ -103,10 +103,6 @@ void main() {
         gl_FragCoord.x >= albedo_pad && gl_FragCoord.x < (gbuf_size.x - albedo_pad) &&
         gl_FragCoord.y >= albedo_pad && gl_FragCoord.y < (gbuf_size.y - albedo_pad);
     if (c.a < 0.01) discard;
-    if (!tile_depth_valid(v_uv)) discard;
-    float zraw = tile_depth_read(v_uv);
-    float d    = zparams.x + zraw * zparams.y;
-    if (d < 0.0 || d > 1.0) discard;
     float nr  = max(filter_.x, 0.5);
     float thr = max(filter_.y, 0.0);
     vec2  ts  = vec2(textureSize(depth_tex, 0));
@@ -117,6 +113,22 @@ void main() {
     float zrs = tile_depth_read(v_uv + vec2(tex.x, 0.0));
     float zt  = tile_depth_read(v_uv - vec2(0.0, tex.y));
     float zb  = tile_depth_read(v_uv + vec2(0.0, tex.y));
+    float zraw = tile_depth_read(v_uv);
+    // The tile's shape is the colour's alpha -- the art's own cutout. The
+    // depth map only carries the relief, so a texel without a depth is not a
+    // hole in the tile: take the height from the closest neighbour that has
+    // one and let the surface run flat out to the edge of the art.
+    if (abs(zraw) <= 0.0001) {
+        float sum = 0.0, cnt = 0.0;
+        if (abs(zl)  > 0.0001) { sum += zl;  cnt += 1.0; }
+        if (abs(zrs) > 0.0001) { sum += zrs; cnt += 1.0; }
+        if (abs(zt)  > 0.0001) { sum += zt;  cnt += 1.0; }
+        if (abs(zb)  > 0.0001) { sum += zb;  cnt += 1.0; }
+        if (cnt > 0.5) zraw = sum / cnt;
+        else discard;   // no depth anywhere near: the tile carries no relief
+    }
+    float d    = zparams.x + zraw * zparams.y;
+    if (d < 0.0 || d > 1.0) discard;
     if (abs(zl  - zraw) > thr + EDGE_EPS) zl  = zraw;
     if (abs(zrs - zraw) > thr + EDGE_EPS) zrs = zraw;
     if (abs(zt  - zraw) > thr + EDGE_EPS) zt  = zraw;
