@@ -43,6 +43,12 @@ static PTBitmap g_os_cursor_shown = nullptr;
 // SetHardwareCursorEnabled (see cursor.h). Default: hardware cursor enabled.
 static bool g_hw_cursor_enabled = true;
 
+// The debug panel (F10) is an immediate-mode UI: it needs a real pointer the
+// user can aim at a widget with. The game hides the OS pointer (the in-frame
+// cursor bitmap takes its place), so while the panel is open the OS pointer
+// comes back and the in-frame draw steps aside.
+static bool g_os_pointer_forced = false;
+
 PTBitmap DragBitmap = nullptr;
 int32_t grabx, graby;
 SDragBitmapLayer DragLayers[kMaxDragBitmapLayers] = {};
@@ -132,6 +138,30 @@ void SetHardwareCursorEnabled(bool enabled)
 bool HardwareCursorEnabled()
 {
     return g_hw_cursor_enabled;
+}
+
+// Show the OS pointer even though the game draws its own cursor in-frame.
+// Used by the debug panel, which is an immediate-mode UI and needs a pointer
+// the user can aim at widgets with.
+void ForceOSPointer(bool forced)
+{
+    if (g_os_pointer_forced == forced)
+        return;
+    g_os_pointer_forced = forced;
+    if (forced)
+    {
+        sapp_show_mouse(true);
+        g_os_cursor_owns_pixels = false;
+        g_os_cursor_shown = nullptr;
+        log_info("[cursor] the OS pointer is shown (the debug panel wants it)");
+    }
+    else
+    {
+        // The game owns the pointer again: hide the OS one and let the
+        // in-frame cursor bitmap take over.
+        sapp_show_mouse(false);
+        log_info("[cursor] the OS pointer is hidden again");
+    }
 }
 
 void RefreshOSCursor()
@@ -285,7 +315,7 @@ void TCursorHud::Draw()
         g_os_cursor_owns_pixels = rev_platform::SetOSCursor(shown, shown->regx, shown->regy);
         g_os_cursor_shown = g_os_cursor_owns_pixels ? shown : nullptr;
     }
-    if (shown && !g_os_cursor_owns_pixels)
+    if (shown && !g_os_cursor_owns_pixels && !g_os_pointer_forced)
         Renderer->DrawBitmap(shown, cursorx, cursory);
 }
 

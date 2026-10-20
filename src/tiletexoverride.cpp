@@ -9,11 +9,6 @@
 
 #include <stb_image.h>
 
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-
 #include <cctype>
 #include <cstdio>
 #include <cstring>
@@ -61,43 +56,35 @@ std::string sanitize_component(const char* name)
     return s;
 }
 
+// The path's own text as UTF-8, for the log. std::filesystem converts the
+// native encoding (UTF-16 on Windows, UTF-8 elsewhere) for us.
 std::string to_utf8(const std::filesystem::path& p)
 {
-    const std::wstring w = p.wstring();
-    if (w.empty())
-        return {};
-    const int32_t len = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), int32_t(w.size()),
-                                            nullptr, 0, nullptr, nullptr);
-    if (len <= 0)
-        return {};
-    std::string out(size_t(len), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w.c_str(), int32_t(w.size()), out.data(), len, nullptr, nullptr);
-    return out;
+#if defined(__cpp_lib_char8_t)
+    const std::u8string u8 = p.u8string();
+    return std::string(reinterpret_cast<const char*>(u8.data()), u8.size());
+#else
+    return p.u8string();
+#endif
 }
 
 // The ini is read as UTF-8 (simpleini SetUnicode), so the tiles root may hold
 // non-ASCII directories (the upscale working trees are named in Russian).
-// Build a wide fs::path from it when the narrow interpretation finds nothing.
+// Build the path from that UTF-8 text, whatever the platform's native
+// encoding is.
 std::filesystem::path path_from_utf8(const std::string& s)
 {
     if (s.empty())
         return {};
-    std::error_code ec;
-    std::filesystem::path narrow(s);
-    if (std::filesystem::exists(narrow, ec))
-        return narrow;
-
-    const int32_t len = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), int32_t(s.size()), nullptr, 0);
-    if (len > 0)
-    {
-        std::wstring w(size_t(len), L'\0');
-        MultiByteToWideChar(CP_UTF8, 0, s.c_str(), int32_t(s.size()), w.data(), len);
-        std::filesystem::path wide(w);
-        if (std::filesystem::exists(wide, ec))
-            return wide;
-        return wide;
-    }
-    return narrow;
+#if defined(__cpp_lib_char8_t)
+    std::u8string u8;
+    u8.reserve(s.size());
+    for (const char ch : s)
+        u8.push_back(static_cast<char8_t>(static_cast<unsigned char>(ch)));
+    return std::filesystem::path(u8);
+#else
+    return std::filesystem::u8path(s);
+#endif
 }
 
 // "<NNNN>_<Name>.png" -> lowercase stem, or "" when the file is not one of

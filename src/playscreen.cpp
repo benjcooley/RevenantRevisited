@@ -1221,14 +1221,17 @@ void TPlayScreen::RenderFrame()
     // The view is the map pane's center, which TMapPane::UpdateMapPos moves
     // toward the centeron target each tick, as retail drew every frame from
     // it (the scroll origin is WorldToScreen(center) less half the pane,
-    // 0x004539d0), a tick behind (TMapPane::CameraPos). Following the player
-    // it moves on the tick as he does, so he doesn't shake against it; a pan
-    // elsewhere glides between ticks.
+    // 0x004539d0), a tick behind (TMapPane::CameraPos). The world is drawn
+    // against the camera's position at the tick's start; the part of the
+    // camera's step that has passed scrolls the picture by a fraction of a
+    // pixel, so the view moves smoothly instead of jumping once a tick.
     if (CurrentMode() == GameMode() && Player)
     {
-        const double glide = MapPane.IsFollowingPlayer() ? 0.0 : TTime::LegacyFrameFraction();
-        const S3DPoint p = MapPane.CameraPos(glide);
+        const S3DPoint p = MapPane.CameraPos(0.0);
         mapRenderer->SetCameraWorld(MapPane.GetMapLevel(), p.x, p.y, p.z);
+        float scroll_x = 0.0f, scroll_y = 0.0f;
+        MapPane.CameraScrollStep(TTime::LegacyFrameFraction(), scroll_x, scroll_y);
+        mapRenderer->SetCameraScroll(scroll_x, scroll_y);
     }
 
     // While the editor is paused and nothing is dirty, skip the world

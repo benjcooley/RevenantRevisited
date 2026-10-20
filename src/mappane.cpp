@@ -2764,6 +2764,9 @@ void TMapPane::UpdateMapPos()
         if (jump)
             scrollvel = S3DPoint(0, 0, 0);
         lastcamz = target.z;
+        // A camera that jumped has no smooth step to follow between the ticks
+        // (the picture is not scrolled, it moves in one step).
+        cameraJumped = jump;
 
         if (gridscroll)
         {
@@ -4072,14 +4075,25 @@ void TMapPane::PulseKeptAlive()
             keptalive.erase(keptalive.begin() + i);
             continue;
         }
-        inst->Pulse();
-        // The animation has to advance too: a script waits for its owner's
-        // action to finish, and the door's action is its closing animation.
-        inst->NextFrame();
+        // A held object lives in a level the world has left: its sector is
+        // not updated, so the tick that drives its script comes from here.
+        // Once the player is back in that level the sector drives it again,
+        // and pulsing it twice would run the script at double speed.
+        if (inst->GetLevel() != GetMapLevel())
+        {
+            inst->Pulse();
+            // The animation has to advance too: a script waits for its owner's
+            // action to finish, and the door's action is its closing animation.
+            inst->NextFrame();
+        }
         TScript* script = inst->GetScript();
         if (!script || !script->Running())
         {
-            delete inst;
+            // The script is over, so the object stops being held: it stays
+            // where it is, an ordinary object in its sector again. It is NOT
+            // deleted here -- the door the player walked through lives in the
+            // level they are about to come back to, and retail keeps it until
+            // the level itself is unloaded.
             keptalive.erase(keptalive.begin() + i);
             continue;
         }
@@ -4302,6 +4316,25 @@ S3DPoint TMapPane::CameraPos(double fraction) const
     return S3DPoint(prevcenter.x + (int32_t)std::lround((center.x - prevcenter.x) * f),
                     prevcenter.y + (int32_t)std::lround((center.y - prevcenter.y) * f),
                     prevcenter.z + (int32_t)std::lround((center.z - prevcenter.z) * f));
+}
+
+// The camera's step since the tick began, scaled by the fraction of the tick
+// that has passed. The world is drawn against the camera's position at the
+// tick's start (CameraPos(0)), so this is the rest of the camera's step: the
+// picture scrolls by it, and the view moves smoothly between the ticks
+// instead of jumping once a tick.
+//
+// A camera that jumped (a teleport, a level change, a snap) has no smooth
+// step to follow: nothing scrolls.
+void TMapPane::CameraScrollStep(double fraction, float& out_dx, float& out_dy) const
+{
+    out_dx = 0.0f;
+    out_dy = 0.0f;
+    if (cameraJumped)
+        return;
+    const double f = std::clamp(fraction, 0.0, 1.0);
+    out_dx = float(center.x - prevcenter.x) * float(f);
+    out_dy = float(center.y - prevcenter.y) * float(f);
 }
 
 void TMapPane::BindWindow(TGameMap* map)

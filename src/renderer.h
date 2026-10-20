@@ -145,6 +145,9 @@ struct STileSubmit
 {
     RendererImagePairHandle image_pair = 0;
     int32_t  dst_x, dst_y, dst_w, dst_h;
+    // Sub-pixel part of the tile's position: the camera's step scrolls the
+    // picture between the ticks, so a tile can land between two pixels.
+    float    frac_x = 0.0f, frac_y = 0.0f;
     int32_t  src_w = 0, src_h = 0;  // source sprite dimensions before viewport scaling
     float    anchor_z;        // normalized scene-z of the tile anchor [0..1]
     float    depth_mul;       // bitmap-z -> normalized-scene-z scale

@@ -486,6 +486,7 @@ fragment fs_out _main(vs_out in [[stage_in]],
         in.pos.y >= albedo_pad && in.pos.y < (gbuf_size.y - albedo_pad);
     if (p.camera.w <= 0.5 && c.a < 0.01) discard_fragment();
     if (!projected_heightfield && p.camera.w > 0.5 && c.a < 0.01) discard_fragment();
+    if (!projected_heightfield && !tile_depth_valid(hit_uv, depth_tex)) discard_fragment();
     if (projected_heightfield) c.a = 1.0;
     if (p.debug.x > 1.5) {
         c.rgb = hit_valid_depth ? float3(0.1, 0.2, 1.0) : float3(0.0, 1.0, 0.1);
@@ -494,6 +495,9 @@ fragment fs_out _main(vs_out in [[stage_in]],
         c.rgb = p.debug.yzw;
         c.a = 1.0;
     }
+    float zraw = tile_depth_read(hit_uv, depth_tex, smp);
+    float d    = p.zparams.x + zraw * p.zparams.y;
+    if (d < 0.0 || d > 1.0) discard_fragment();
     float  nr  = max(p.filter.x, 0.5);
     float  thr = max(p.filter.y, 0.0);
     float  tw  = float(depth_tex.get_width());
@@ -505,22 +509,6 @@ fragment fs_out _main(vs_out in [[stage_in]],
     float  zrs = tile_depth_read(hit_uv + float2(tex.x, 0.0), depth_tex, smp);
     float  zt  = tile_depth_read(hit_uv - float2(0.0, tex.y), depth_tex, smp);
     float  zb  = tile_depth_read(hit_uv + float2(0.0, tex.y), depth_tex, smp);
-    float  zraw = tile_depth_read(hit_uv, depth_tex, smp);
-    // The tile's shape is the colour's alpha -- the art's own cutout. The
-    // depth map only carries the relief, so a texel without a depth is not a
-    // hole in the tile: take the height from the closest neighbour that has
-    // one and let the surface run flat out to the edge of the art.
-    if (fabs(zraw) <= 0.0001) {
-        float sum = 0.0, cnt = 0.0;
-        if (fabs(zl)  > 0.0001) { sum += zl;  cnt += 1.0; }
-        if (fabs(zrs) > 0.0001) { sum += zrs; cnt += 1.0; }
-        if (fabs(zt)  > 0.0001) { sum += zt;  cnt += 1.0; }
-        if (fabs(zb)  > 0.0001) { sum += zb;  cnt += 1.0; }
-        if (cnt > 0.5) zraw = sum / cnt;
-        else discard_fragment();   // no depth anywhere near: no relief here
-    }
-    float d    = p.zparams.x + zraw * p.zparams.y;
-    if (d < 0.0 || d > 1.0) discard_fragment();
     if (fabs(zl  - zraw) > thr + EDGE_EPS) zl  = zraw;
     if (fabs(zrs - zraw) > thr + EDGE_EPS) zrs = zraw;
     if (fabs(zt  - zraw) > thr + EDGE_EPS) zt  = zraw;

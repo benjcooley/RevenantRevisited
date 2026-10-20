@@ -3310,6 +3310,11 @@ static void AppEvent(const sapp_event* ev)
         if (down && vk == VK_F10)
         {
             DebugUI::SetVisible(!DebugUI::IsVisible());
+            // The debug panel is an immediate-mode UI: it needs a pointer the
+            // user can aim at widgets with, so the OS pointer comes back
+            // while it is open (the game hides it and draws its own cursor
+            // bitmap in-frame instead).
+            ForceOSPointer(DebugUI::IsVisible());
             break;
         }
 

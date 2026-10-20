@@ -3232,8 +3232,8 @@ void TRenderer::EmitTransparentTile(const STileSubmit& t)
     const int32_t py  = t.dst_y + kGBufPad;
     const int32_t src_w = t.src_w > 0 ? t.src_w : t.dst_w;
     const int32_t src_h = t.src_h > 0 ? t.src_h : t.dst_h;
-    float rect_x = float(px);
-    float rect_y = float(py);
+    float rect_x = float(px) + t.frac_x;
+    float rect_y = float(py) + t.frac_y;
     float rect_w = float(t.dst_w);
     float rect_h = float(t.dst_h);
     float cov_x0 = std::clamp(t.coverage_px_x0, 0.0f, float(src_w));
@@ -4221,8 +4221,8 @@ void TRenderer::EmitTile(const STileSubmit& t)
     const int32_t py  = t.dst_y + kGBufPad;
     const int32_t src_w = t.src_w > 0 ? t.src_w : t.dst_w;
     const int32_t src_h = t.src_h > 0 ? t.src_h : t.dst_h;
-    float rect_x = float(px);
-    float rect_y = float(py);
+    float rect_x = float(px) + t.frac_x;
+    float rect_y = float(py) + t.frac_y;
     float rect_w = float(t.dst_w);
     float rect_h = float(t.dst_h);
     float proxy_vertices[kMaxTileProxyVerticesPerDraw * 4] = {};

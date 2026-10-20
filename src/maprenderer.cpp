@@ -63,6 +63,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -1273,10 +1274,21 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         float spx = 0.0f, spy = 0.0f;
         ProjectCameraRelToScreen(ctx, rel, spx, spy);
         const float sprite_scale = (std::max)(ctx.camera_zoom, 0.0001f);
+        // The camera's step since the tick began: the world is drawn against
+        // the camera's position at the tick's start, and the part of the step
+        // that has passed scrolls the picture (the iso projection of the world
+        // delta, scaled by the zoom). The tile then lands between pixels and
+        // the view moves smoothly instead of jumping once a tick.
+        const float scroll_sx = -(ctx.cameraScrollX - ctx.cameraScrollY) * sprite_scale;
+        const float scroll_sy = -((ctx.cameraScrollX + ctx.cameraScrollY) * 0.5f) * sprite_scale;
+        const float fx = spx - float(regx) * sprite_scale + scroll_sx;
+        const float fy = spy - float(regy) * sprite_scale + scroll_sy;
+        const int32_t dx = int32_t(std::lround(fx)) + ctx.cam_ox;
+        const int32_t dy = int32_t(std::lround(fy)) + ctx.cam_oy;
+        const float frac_x = fx - float(std::lround(fx));
+        const float frac_y = fy - float(std::lround(fy));
         const float anchor_scene = CameraDepth(rel, ctx.cam_forward) - ctx.depth_mul * float(regz);
         const float anchor_scene_norm = std::fabs(ctx.zspan) > 1e-6f ? (anchor_scene - ctx.z_near) / ctx.zspan : 0.5f;
-        const int32_t dx = int32_t(std::lround(spx - float(regx) * sprite_scale)) + ctx.cam_ox;
-        const int32_t dy = int32_t(std::lround(spy - float(regy) * sprite_scale)) + ctx.cam_oy;
         const int32_t dst_w = ScalePixel(sprite_scale, float(tex.w));
         const int32_t dst_h = ScalePixel(sprite_scale, float(tex.h));
         if (!image_pair) { ++stats.draw_invalid_img; return; }
@@ -1335,6 +1347,8 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         sub.dst_y       = dy;
         sub.dst_w       = dst_w;
         sub.dst_h       = dst_h;
+        sub.frac_x      = frac_x;
+        sub.frac_y      = frac_y;
         sub.src_w       = tex.w;
         sub.src_h       = tex.h;
         sub.anchor_z    = anchor_scene_norm;
@@ -2138,6 +2152,16 @@ void TMapRenderer::SetCameraWorld(int32_t level, int32_t world_x, int32_t world_
     Impl& s = *impl;
     s.cameraLevel        = level;
     s.sectorCameraWorld  = S3DPoint{ world_x, world_y, world_z };
+}
+
+// The camera's step since the tick began: the world is drawn against the
+// camera's position at the tick's start, and this scrolls the picture by the
+// part of the step that has passed (see TMapPane::CameraScrollStep).
+void TMapRenderer::SetCameraScroll(float world_dx, float world_dy)
+{
+    if (!impl) return;
+    impl->cameraScrollX = world_dx;
+    impl->cameraScrollY = world_dy;
 }
 
 void TMapRenderer::SetOutputViewport(int32_t width, int32_t height)
@@ -3718,7 +3742,8 @@ void TMapRenderer::RenderFrame()
     Renderer->SetPerspectiveProxyRasterScale(s.sectorPerspectiveCamera ? s.sectorPerspectiveProxyRasterScale : 1.0f);
     Renderer->SetPerspectiveRaycastParams(s.sectorPerspectiveSteps, s.sectorPerspectiveRefine);
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy), s.z_near, s.z_far,
-                                      float(s.sectorCameraWorld.x), float(s.sectorCameraWorld.y),
+                                      float(s.sectorCameraWorld.x) + s.cameraScrollX,
+                                      float(s.sectorCameraWorld.y) + s.cameraScrollY,
                                       camera_forward, s.sectorPerspectiveCamera ? 1.0f : 0.0f,
                                       effective_camera_zoom,
                                       s.sectorPerspectiveZOffset,
@@ -3809,6 +3834,8 @@ void TMapRenderer::RenderFrame()
     drawctx.mesh_assets = &s.sectorMeshAsset;
     drawctx.debug_green_texture = s.debugGreenTexture;
     drawctx.sectorCameraWorld = s.sectorCameraWorld;
+    drawctx.cameraScrollX = s.cameraScrollX;
+    drawctx.cameraScrollY = s.cameraScrollY;
     drawctx.cam_ox = cam_ox;
     drawctx.cam_oy = cam_oy;
     drawctx.vw = vw;

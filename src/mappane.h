@@ -409,6 +409,12 @@ class TMapPane : public TPane
       // The camera follows the player
     [[nodiscard]] S3DPoint CameraPos(double fraction) const;
       // Where the camera looks: the last tick's center, `fraction` of the way to this tick's
+    void CameraScrollStep(double fraction, float& out_dx, float& out_dy) const;
+      // The camera's step since the tick began, scaled by the fraction of the
+      // tick that has passed, in world units. The world is drawn against the
+      // camera's position at the tick's start; this is the rest of its step,
+      // which scrolls the picture by a fraction of a pixel. Zero when the
+      // camera jumped (a teleport, a level change).
     void CenterOnPos(const S3DPoint& pos, int32_t level, uint32_t flags = 0);
       // Center on a point. REVSYNC: SetCameraPos @ 0x00453940 (flags as above)
     void GetCenterOnPos(S3DPoint& pos, int32_t &level) { pos = centeron.pos; level = centeron.level; }
@@ -732,6 +738,7 @@ class TMapPane : public TPane
     int32_t scrollx, scrolly;                       // Scroll position of current frame
     S3DPoint center;                                // World coordinates of pane center (current pos)
     S3DPoint prevcenter;                            // The center at the previous tick (camera interpolation)
+    bool     cameraJumped = false;                   // The camera jumped this tick: no smooth scroll to follow
     S3DPoint scrollvel{};                           // Smooth-scroll velocity (retail 0x00658468..70)
     int32_t  lastcamz = 0;                          // The target z last update (retail 0x00658320)
     SCenterOnState centeron;                        // Pane will attempt to scroll to this object or point

@@ -95,6 +95,10 @@ class TMapRenderer
     // the editor's Frame Selection command (and anything else that wants
     // to teleport the view).
     void SetCameraWorld(int32_t level, int32_t world_x, int32_t world_y, int32_t world_z);
+    // The camera's step since the tick began, in world units: the picture
+    // scrolls by this much, so the view moves smoothly between the ticks
+    // instead of jumping once a tick.
+    void SetCameraScroll(float world_dx, float world_dy);
 
     // Limit the live game render to an on-screen viewport. The reconstructed
     // HUD reserves the right sidebar and bottom bar just like retail, so the
