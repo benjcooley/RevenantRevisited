@@ -6642,11 +6642,20 @@ void TRenderer::DrainFxQueue()
         light.ambient_color[2] * light.ambient,
     };
     float u[24] = {};
+    // The FX billboards, particles and strips are drawn from the same
+    // fractional camera as the ground (see PackMeshVsUniforms), or they sit
+    // a whole camera step away from the world they belong to.
+    const bool fx_ortho = recon.reserved <= 0.5f;
+    float fx_camw_x = 0.0f, fx_camw_y = 0.0f, fx_camz_z = 0.0f;
+    MeshCameraUniforms(recon.center_wx, recon.center_wy, recon.kcam_forward,
+                       fx_ortho ? recon.cam_scroll_x : 0.0f,
+                       fx_ortho ? recon.cam_scroll_y : 0.0f,
+                       fx_camw_x, fx_camw_y, fx_camz_z);
     FillFxUniforms(u, *this,
                    recon.ox, recon.oy,
                    float(width + 2 * kGBufPad), float(height + 2 * kGBufPad),
-                   recon.z_near, recon.zspan, recon.kcam_forward, recon.reserved,
-                   recon.center_wx, recon.center_wy, recon.zoom,
+                   recon.z_near, recon.zspan, fx_camz_z, recon.reserved,
+                   fx_camw_x, fx_camw_y, recon.zoom,
                    sun_dir, sun_col, amb_col);
     const sg_range u_range = { u, sizeof(u) };
 
