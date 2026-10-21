@@ -452,6 +452,17 @@ inline void ProjectWorldPointToScreen(const SMapRenderContext& ctx,
         world.z
     };
     ProjectCameraRelToScreen(ctx, rel, sx, sy);
+    if (!ctx.perspective_camera)
+    {
+        // The picture is drawn against the camera plus the part of the
+        // camera's step that has passed, so a projected point has to move
+        // with it (the mouse pick would miss by that much otherwise).
+        float scroll_sx = 0.0f, scroll_sy = 0.0f;
+        CameraScrollPixels(ctx.cameraScrollX, ctx.cameraScrollY,
+                           (std::max)(ctx.camera_zoom, 0.0001f), scroll_sx, scroll_sy);
+        sx += scroll_sx;
+        sy += scroll_sy;
+    }
     const float scene_z = CameraDepth(rel, ctx.cam_forward);
     if (scene_z_out)
         *scene_z_out = scene_z;
@@ -592,6 +603,13 @@ static bool TileCameraVolumeVisible(const SMapRenderContext& ctx,
     else
     {
         ProjectCameraRelToScreen(ctx, rel, anchor_x, anchor_y);
+        // The picture scrolls with the camera: a tile the scroll brings into
+        // view must not be culled, or the edge of the screen shows a gap.
+        float scroll_sx = 0.0f, scroll_sy = 0.0f;
+        CameraScrollPixels(ctx.cameraScrollX, ctx.cameraScrollY,
+                           (std::max)(ctx.camera_zoom, 0.0001f), scroll_sx, scroll_sy);
+        anchor_x += scroll_sx;
+        anchor_y += scroll_sy;
     }
 
     const float scale = ctx.perspective_camera
@@ -1929,8 +1947,10 @@ void TMapRenderer::ScreenToWorld(int32_t screen_x, int32_t screen_y,
     ::ScreenToWorld(int32_t(std::lround(float(screen_x - v.cam_ox) / v.zoom)),
                     int32_t(std::lround(float(screen_y - v.cam_oy) / v.zoom)),
                     wp_rel, z_floor);
-    out.x = wp_rel.x + s.sectorCameraWorld.x;
-    out.y = wp_rel.y + s.sectorCameraWorld.y;
+    // The picture is drawn against the camera plus the part of the camera's
+    // step that has passed, so the inverse has to start from the same camera.
+    out.x = wp_rel.x + s.sectorCameraWorld.x + int32_t(std::lround(s.cameraScrollX));
+    out.y = wp_rel.y + s.sectorCameraWorld.y + int32_t(std::lround(s.cameraScrollY));
     out.z = z_floor;
 }
 
@@ -1945,7 +1965,9 @@ bool TMapRenderer::ScreenToMapScreen(int32_t screen_x, int32_t screen_y,
     const Impl& s = *impl;
     const SViewUnwrap v = ComputeViewUnwrap(s);
     int32_t cam_sx = 0, cam_sy = 0;
-    ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x, s.sectorCameraWorld.y, 0), cam_sx, cam_sy);
+    ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x + int32_t(std::lround(s.cameraScrollX)),
+                             s.sectorCameraWorld.y + int32_t(std::lround(s.cameraScrollY)), 0),
+                    cam_sx, cam_sy);
     map_x = cam_sx + int32_t(std::lround(float(screen_x - v.cam_ox) / v.zoom));
     map_y = cam_sy + int32_t(std::lround(float(screen_y - v.cam_oy) / v.zoom));
     return screen_x >= 0 && screen_y >= 0 && screen_x < v.vw && screen_y < v.vh;
@@ -1958,7 +1980,9 @@ bool TMapRenderer::MapScreenToScreen(float map_x, float map_y, float& screen_x, 
     const Impl& s = *impl;
     const SViewUnwrap v = ComputeViewUnwrap(s);
     int32_t cam_sx = 0, cam_sy = 0;
-    ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x, s.sectorCameraWorld.y, 0), cam_sx, cam_sy);
+    ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x + int32_t(std::lround(s.cameraScrollX)),
+                             s.sectorCameraWorld.y + int32_t(std::lround(s.cameraScrollY)), 0),
+                    cam_sx, cam_sy);
     screen_x = float(v.cam_ox) + (map_x - float(cam_sx)) * v.zoom;
     screen_y = float(v.cam_oy) + (map_y - float(cam_sy)) * v.zoom;
     return true;
@@ -2283,8 +2307,8 @@ void TMapRenderer::GetViewProj(float view_out[16], float proj_out[16],
     // matrix built with target.z=0 disagreed with the actual scene
     // pixels whenever Locke was off sea level, and ImGuizmo / overlays
     // drifted accordingly.
-    const hmm_vec3 target = HMM_Vec3(float(s.sectorCameraWorld.x),
-                                     float(s.sectorCameraWorld.y),
+    const hmm_vec3 target = HMM_Vec3(float(s.sectorCameraWorld.x) + s.cameraScrollX,
+                                     float(s.sectorCameraWorld.y) + s.cameraScrollY,
                                      float(s.sectorCameraWorld.z));
     const hmm_vec3 eye    = HMM_Vec3(target.X + kOffX * D,
                                      target.Y + kOffY * D,
@@ -3527,14 +3551,8 @@ void TMapRenderer::RenderFrame()
             const auto& tex = s.sectorTileTex[inst.asset_idx];
             float spx = 0.0f, spy = 0.0f;
             ProjectWorldPointToScreen(projectctx, inst.world_pos, spx, spy);
-            // The tile is drawn against the tick's camera plus the part of
-            // the camera's step that has passed; the occlusion rectangle has
-            // to sit where the tile really is.
-            float occl_scroll_x = 0.0f, occl_scroll_y = 0.0f;
-            CameraScrollPixels(projectctx.cameraScrollX, projectctx.cameraScrollY,
-                               effective_camera_zoom, occl_scroll_x, occl_scroll_y);
-            const int32_t x0 = int32_t(std::lround(spx - float(inst.regx) * effective_camera_zoom + occl_scroll_x)) + cam_ox;
-            const int32_t y0 = int32_t(std::lround(spy - float(inst.regy) * effective_camera_zoom + occl_scroll_y)) + cam_oy;
+            const int32_t x0 = int32_t(std::lround(spx - float(inst.regx) * effective_camera_zoom)) + cam_ox;
+            const int32_t y0 = int32_t(std::lround(spy - float(inst.regy) * effective_camera_zoom)) + cam_oy;
             const int32_t x1 = x0 + ScalePixel(effective_camera_zoom, float(tex.w));
             const int32_t y1 = y0 + ScalePixel(effective_camera_zoom, float(tex.h));
             // Fit depth against the same padded rectangle the renderer fills
@@ -4005,6 +4023,8 @@ void TMapRenderer::HandleMouseClick(int32_t button, int32_t x, int32_t y)
             pickctx.vh = vh;
             pickctx.cam_forward = s.sectorCameraForward(HEIGHT);
             pickctx.camera_zoom = s.sectorCameraZoom * camera_view.scale;
+            pickctx.cameraScrollX = s.cameraScrollX;
+            pickctx.cameraScrollY = s.cameraScrollY;
             pickctx.tile_scale = s.sectorPerspectiveTileScale;
             pickctx.perspective_camera = s.sectorPerspectiveCamera;
             float best_d2 = 24.0f * 24.0f;

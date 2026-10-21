@@ -1225,19 +1225,22 @@ void TPlayScreen::RenderFrame()
     // against the camera's position at the tick's start; the part of the
     // camera's step that has passed scrolls the picture by a fraction of a
     // pixel, so the view moves smoothly instead of jumping once a tick.
+    // The editor has a camera of its own and does not scroll at all, and so
+    // does a frame without a player, so the scroll is zeroed outside the
+    // game mode: a leftover scroll would draw the whole editor world shifted
+    // by up to a camera step.
+    float scroll_x = 0.0f, scroll_y = 0.0f;
     if (CurrentMode() == GameMode() && Player)
     {
         const S3DPoint p = MapPane.CameraPos(0.0);
         mapRenderer->SetCameraWorld(MapPane.GetMapLevel(), p.x, p.y, p.z);
-        float scroll_x = 0.0f, scroll_y = 0.0f;
         // Under a pause modal the world does not tick, so the tick's fraction
         // runs on without the camera moving: the scroll would drift through
-        // the camera's step and back, and the picture would shiver. The
-        // editor has a camera of its own and does not scroll at all.
+        // the camera's step and back, and the picture would shiver.
         if (!Editor && !ModalHas(MODAL_PAUSE))
             MapPane.CameraScrollStep(TTime::LegacyFrameFraction(), scroll_x, scroll_y);
-        mapRenderer->SetCameraScroll(scroll_x, scroll_y);
     }
+    mapRenderer->SetCameraScroll(scroll_x, scroll_y);
 
     // While the editor is paused and nothing is dirty, skip the world
     // render entirely. The renderer's lit_target persists, so the Game
