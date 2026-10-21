@@ -418,7 +418,7 @@ target_link_libraries(test_classiclighting PRIVATE GTest::gtest_main)
 
 # The ground and the meshes have to be drawn from the same camera, or the
 # characters drift off the ground by a whole camera step, 24 times a second.
-# The camera helpers live in renderer.h (header only), no engine code needed.
+# The camera helpers live in camerascroll.h (header only), no engine code needed.
 add_executable(test_camerascroll
   tools/test_camerascroll.cpp)
 target_include_directories(test_camerascroll PRIVATE

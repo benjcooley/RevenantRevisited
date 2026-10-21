@@ -18,7 +18,7 @@
 // Run via build/test_camerascroll after build.
 // *************************************************************************
 
-#include "../src/renderer.h"
+#include "../src/camerascroll.h"
 
 #include <gtest/gtest.h>
 
