@@ -121,7 +121,6 @@ bool LoadRevisitedSettings()
     s.point_light_range_mul = ini.GetDoubleValue(kSection, "PointLightRange", s.point_light_range_mul);
 
     s.high_res_tiles = ini.GetBoolValue(kSection, "HighResTiles", s.high_res_tiles);
-    s.high_res_tile_depth = ini.GetBoolValue(kSection, "HighResTileDepth", s.high_res_tile_depth);
     if (const char *root = ini.GetValue(kSection, "HighResTileRoot", s.high_res_tile_root.c_str()))
         s.high_res_tile_root = root;
 
@@ -149,7 +148,6 @@ bool LoadTileArtOverrideSettings()
 
     SRevisitedSettings &s = RevisitedSettings;
     s.high_res_tiles = ini.GetBoolValue(kSection, "HighResTiles", s.high_res_tiles);
-    s.high_res_tile_depth = ini.GetBoolValue(kSection, "HighResTileDepth", s.high_res_tile_depth);
     if (const char *root = ini.GetValue(kSection, "HighResTileRoot", s.high_res_tile_root.c_str()))
         s.high_res_tile_root = root;
     return s.high_res_tiles;
@@ -292,8 +290,6 @@ bool SaveRevisitedSettings(char *out_path, int32_t out_len)
         "; Swap a tile's colour for matching upscaled art (keeps retail depth/normals)", true);
     ini.SetValue(kSection, "HighResTileRoot", s.high_res_tile_root.c_str(),
         "; Tile art tree, names '<NNNN>_<Name>.png' as --dumptiles writes them; empty = <overlay>/Imagery", true);
-    ini.SetBoolValue(kSection, "HighResTileDepth", s.high_res_tile_depth,
-        "; Take the tile's relief from the tree's depth maps as well; doubles the tile load time", true);
 
     if (ini.SaveFile(path.string().c_str()) < 0)
     {

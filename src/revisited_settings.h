@@ -85,11 +85,6 @@ struct SRevisitedSettings {
     // ---- High-res tile art (see tiletexoverride.h) -------------------------
     bool        high_res_tiles = true;  // swap a tile's colour for matching art from high_res_tile_root
     std::string high_res_tile_root;     // tile art tree; empty = <overlay>/Imagery
-    // Take the tile's relief from the tree's depth maps too. The maps are
-    // decoded per tile, which roughly doubles the tile load time, so this is
-    // off by default: retail's depth is used until the maps are recomputed
-    // for the new sprites.
-    bool        high_res_tile_depth = false;
 };
 
 // The live in-memory copy. Populated by LoadRevisitedSettings on boot; the

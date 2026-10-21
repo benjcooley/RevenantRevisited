@@ -140,7 +140,6 @@ bool         s_enabled = false;
 int32_t      s_count = 0;
 std::unordered_map<std::string, std::filesystem::path> s_by_key;  // "0763_kep" -> file
 std::unordered_map<std::string, std::string> s_by_name;           // "kep" -> key ("" when ambiguous)
-std::unordered_map<std::string, std::filesystem::path> s_depth_by_key;  // "0763_kep" -> depth png
 
 // The art file for a tile, or nullptr when the tree has none. Names are
 // unique per class in retail, but objtype indices are not unique across
@@ -235,7 +234,6 @@ int32_t TileTexOverride::Init()
     s_root_display.clear();
     s_by_key.clear();
     s_by_name.clear();
-    s_depth_by_key.clear();
     s_count = 0;
     s_enabled = false;
 
@@ -276,36 +274,6 @@ int32_t TileTexOverride::Init()
         const fs::directory_entry& de = *it;
         if (de.is_directory(walk_ec))
         {
-            const std::string dir_name = lower(de.path().filename().string());
-            if (dir_name == "depth")
-            {
-                // Depth maps carry the tile's relief, not its colour. They
-                // live in a "depth" folder next to the art and are named
-                // "<NNNN>_<Name>_depth.png"; index them on their own key.
-                std::error_code fec;
-                for (fs::directory_iterator fit(de.path(),
-                                                fs::directory_options::skip_permission_denied, fec),
-                     fend;
-                     fit != fend; fit.increment(fec))
-                {
-                    if (fec)
-                        break;
-                    if (!fit->is_regular_file(fec))
-                        continue;
-                    const std::string dstem = tile_stem(fit->path().filename().string());
-                    if (dstem.empty() || dstem.size() < 7 ||
-                        dstem.compare(dstem.size() - 6, 6, "_depth") != 0)
-                        continue;
-                    const std::string key = dstem.substr(0, dstem.size() - 6);
-                    auto found = s_depth_by_key.find(key);
-                    if (found == s_depth_by_key.end())
-                        s_depth_by_key.emplace(key, fit->path());
-                    else if (preferred_folder(fit->path()) && !preferred_folder(found->second))
-                        found->second = fit->path();
-                }
-                it.disable_recursion_pending();
-                continue;
-            }
             if (skipped_dir(de.path().filename().string()))
                 it.disable_recursion_pending();
             continue;
@@ -354,8 +322,8 @@ int32_t TileTexOverride::Init()
     s_root = root;
     s_root_display = to_utf8(root);
     s_enabled = true;
-    log_info("[tiletex] high-res tile art: %d tiles from %s (%d duplicate entries, 'Final' wins, %d depth maps)",
-             s_count, s_root_display.c_str(), duplicates, int32_t(s_depth_by_key.size()));
+    log_info("[tiletex] high-res tile art: %d tiles from %s (%d duplicate entries, 'Final' wins)",
+             s_count, s_root_display.c_str(), duplicates);
     return s_count;
 }
 
@@ -378,29 +346,6 @@ bool TileTexOverride::Load(int32_t objtype, const char* type_name, SImage& out)
         return false;
     }
     return DecodePng(*art, out);
-}
-
-bool TileTexOverride::LoadDepth(int32_t objtype, const char* type_name, SImage& out)
-{
-    if (!s_enabled || objtype < 0 || !type_name || !*type_name)
-        return false;
-
-    const std::filesystem::path* art = FindArt(objtype, type_name);
-    if (!art)
-        return false;
-
-    // The map sits in a "depth" folder next to the art and is named after it.
-    auto it = s_depth_by_key.find(lower(art->stem().string()));
-    if (it != s_depth_by_key.end())
-        return DecodePng(it->second, out, /*detect_alpha=*/false);
-
-    // A map that sits next to the art instead of in a "depth" folder.
-    const std::filesystem::path depth_path =
-        art->parent_path() / "depth" / std::filesystem::path(art->stem().string() + "_depth.png");
-    std::error_code ec;
-    if (!std::filesystem::exists(depth_path, ec))
-        return false;
-    return DecodePng(depth_path, out, /*detect_alpha=*/false);
 }
 
 const char* TileTexOverride::Root()

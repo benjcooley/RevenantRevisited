@@ -24,14 +24,14 @@
 //
 // The tile's shape is the art's own alpha, not the depth map's: the shader
 // no longer cuts on an empty depth texel, it takes the height from the
-// nearest texel that has one instead. A depth map drawn for the new sprite
-// can replace the relief as well (LoadDepth, off by default -- decoding a
-// map per tile roughly doubles the tile load time).
+// nearest texel that has one instead. The relief stays retail's: the tree's
+// depth maps are a soft mask of the sprite's silhouette, not the world
+// height of the tile, so substituting them leaves every tile standing at
+// its own level and the neighbours no longer meet.
 //
 // Settings (revisited/resources/Revenant.ini, [Revisited]):
 //   HighResTiles     = 1        use the tree; 0 disables the whole feature
 //   HighResTileRoot  = <path>   tree root; empty = <overlay>/Imagery
-//   HighResTileDepth = 0        also take the relief from the tree's maps
 
 #pragma once
 
@@ -61,12 +61,6 @@ bool Enabled();
 // Decoded RGBA of the override for a tile, or false when the tile has none.
 // The tiles this covers are stills only (state 0), like the dumper's.
 bool Load(int32_t objtype, const char* type_name, SImage& out);
-
-// Decoded depth map for a tile, or false when the tree holds none for it.
-// The maps live in a "depth" folder next to the art and carry the tile's
-// relief at the art's resolution, so the shape of the relief follows the
-// new sprite instead of being stretched over it.
-bool LoadDepth(int32_t objtype, const char* type_name, SImage& out);
 
 // Diagnostics for logs / the debug panel.
 const char* Root();
