@@ -81,6 +81,7 @@
 #include "logging.h"
 #include "stripeffect.h"   // S04: STRIP_* constants for TLightningAnimator_Bespoke
 #include "time.h"
+#include "fxinterp.h"      // sub-tick motion helpers (tick fraction, lerp, guard)
 
 #include <algorithm>
 #include <cstring>
@@ -9107,6 +9108,11 @@ class TPixieReferenceComponent final : public TFlipbookBillboardComponent
 };
 TWaterReferenceBuilder<TPixieEffect_Bespoke> g_pixie_reference_builder("Pixie");
 TWaterReferenceAnimatorBuilder<TPixieEffect_Bespoke> g_pixie_reference_animator_builder("Pixie");
+
+// Sub-tick motion for the pixie swarm. The step of one 24 Hz tick is the
+// per-tick velocity; the centring force (kPixieBespokeAcc) lets |vel| settle
+// around 6 wu, so a step of 16 wu cannot be a tick and is treated as a jump.
+constexpr float kPixieBespokeMaxStep = 16.0f;
 }
 
 void TPixieEffect_Bespoke::Initialize(bool attach_runtime_component)
@@ -9143,6 +9149,9 @@ void TPixieEffect_Bespoke::Initialize(bool attach_runtime_component)
         pix_[i].vel.Y = float(double(random(-32, 32)) * double(0.04f));
         pix_[i].vel.Z = float(double(random(-32, 32)) * double(0.04f));
         pix_[i].time  = random(0, 1);
+        // The snapshot starts at the seeded state: until the first tick the
+        // two ends of the blend are the same, so nothing moves.
+        pix_prev_[i]  = pix_[i];
     }
     charnear_     = 100;
     sim_accum_ms_ = 0.0;
@@ -9177,6 +9186,13 @@ void TPixieEffect_Bespoke::Advance(double elapsed_seconds)
     while (sim_accum_ms_ + 1e-9 >= kPixieBespokeSimTickMs)
     {
         sim_accum_ms_ -= double(kPixieBespokeSimTickMs);
+
+        // Sub-tick motion: keep the state of the previous tick so Submit can
+        // ease between the two authored states (retailblood.h's snapshot
+        // pattern). The velocity changes inside the tick, so the previous
+        // position cannot be reconstructed and has to be kept.
+        for (int32_t i = 0; i < kPixieBespokeNumParts; i++)
+            pix_prev_[i] = pix_[i];
 
         // Per-particle integration (effect_old.cpp:12134-12163).
         for (int32_t i = 0; i < kPixieBespokeNumParts; i++)
@@ -9264,17 +9280,44 @@ void TPixieEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     item.key.blend=uint8_t(EFxBlend::Alpha);
     item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);
     item.debug_mode=debug_mode;
-    for (const auto& particle:pix_) {
+    // REVSYNC-DIVERGENCE: retail drew the tick's state; the port eases every
+    // particle from the previous tick's position to the current one within
+    // the tick being drawn, so the swarm drifts smoothly at any frame rate
+    // (the picture trails the simulation by at most one tick).
+    // The fraction is this effect's own leftover time: the pixie keeps an
+    // accumulator of its own, so its ticks start when the effect was
+    // spawned and its phase is offset from the global legacy tick - the
+    // global fraction would make the picture stutter.
+    const float fraction=FxTickFraction(sim_accum_ms_/1000.0,
+                                         kPixieBespokeSimTickMs/1000.0);
+    for (int32_t i=0;i<kPixieBespokeNumParts;i++) {
+        const SPixieParticle& particle=pix_[i];
+        const SPixieParticle& was=pix_prev_[i];
+        // The scale is re-rolled every tick and the glow variant flips on a
+        // 1/49 chance: both snap, only the position is eased.
         const int j=particle.time; item.key.texture=textures_[j];
         const float scl=particle.scale.X/(1.0f+float(j)*2.0f);
         hmm_mat4 local={}; MtxClear(&local);
         const hmm_vec3 scale={scl,scl,scl}; MtxScale(&local,&scale);
         MtxRotateZ(&local,-float((GetFace()*360)/256)*float(M_PI/180.0));
+        // Position: the previous tick's position eased to the current one.
+        // A pixie is never born or killed, so the only guard that can bite
+        // is the step: a step that no tick could have produced is a jump.
+        float from[3]={was.pos.X,was.pos.Y,was.pos.Z};
+        float to[3]={particle.pos.X,particle.pos.Y,particle.pos.Z};
+        const float step=(std::max)(std::fabs(to[0]-from[0]),
+                                   (std::max)(std::fabs(to[1]-from[1]),
+                                              std::fabs(to[2]-from[2])));
+        if(!FxShouldInterpolate(true,true,true,step,kPixieBespokeMaxStep)) {
+            from[0]=to[0]; from[1]=to[1]; from[2]=to[2];
+        }
+        float blended[3]={};
+        FxLerp3(from,to,fraction,blended);
         // Retail 0x4f3dc1 uses the float 0.01 reciprocal and retains both
         // products until the final position store.
-        const hmm_vec3 pos={float(double(charnear_)*double(particle.pos.X)*double(0.01f)),
-                           float(double(charnear_)*double(particle.pos.Y)*double(0.01f)),
-                           float(kPixieBespokeHeight)+particle.pos.Z};
+        const hmm_vec3 pos={float(double(charnear_)*double(blended[0])*double(0.01f)),
+                           float(double(charnear_)*double(blended[1])*double(0.01f)),
+                           float(kPixieBespokeHeight)+blended[2]};
         MtxTranslate(&local,&pos);
         for (size_t face=0;face+2<indices_[j].size();face+=3) {
             for (int k=0;k<3;++k) {
@@ -11617,6 +11660,11 @@ constexpr const char* kFlyBespokeImageryPath = "Misc\\Flies.I3D";
 namespace {
 TWaterReferenceBuilder<TFlyEffect_Bespoke> g_flies_reference_builder("Flies");
 TWaterReferenceAnimatorBuilder<TFlyEffect_Bespoke> g_flies_reference_animator_builder("Flies");
+
+// Sub-tick motion for the fly swarm. One tick moves a fly by at most
+// random(-2,2) wu per axis (the edge reflect flips the sign of the step but
+// not its length), so a step of 4 wu cannot be a tick and is a jump.
+constexpr float kFlyBespokeMaxStep = 4.0f;
 }
 
 void TFlyEffect_Bespoke::Initialize(bool attach_runtime_component)
@@ -11633,6 +11681,9 @@ void TFlyEffect_Bespoke::Initialize(bool attach_runtime_component)
         fly.pos={float(random(-30,30)),float(random(-30,30)),float(random(-30,30))};
         fly.scl={.3f,.3f,.3f};fly.rot={0,0,0};fly.used=false;
     }
+    // The snapshot starts at the seeded state: until the first tick the two
+    // ends of the blend are the same, so nothing moves.
+    for(int32_t i=0;i<kFlyBespokeCount;i++)flies_prev_[i]=flies_[i];
     initialized_=true;runtime_owned_=attach_runtime_component;
     if(attach_runtime_component) {
         auto component=std::make_unique<TWaterReferenceComponent<TFlyEffect_Bespoke>>();
@@ -11656,6 +11707,10 @@ void TFlyEffect_Bespoke::Advance(double seconds)
     tick_seconds_+=seconds;
     while(tick_seconds_+1e-12>=TTime::LegacyFrameSeconds) {
         tick_seconds_-=TTime::LegacyFrameSeconds;SetCommandDone(false);
+        // Sub-tick motion: keep the state of the previous tick so Submit can
+        // ease between the two authored states. The per-tick velocity is a
+        // local draw, so the previous position cannot be reconstructed.
+        for(int32_t i=0;i<kFlyBespokeCount;i++)flies_prev_[i]=flies_[i];
         int32_t chance=random(0,1);
         // Actual4e8280 keeps moving dormant particles and consumes all60
         // velocity draws each tick, before or after a staged activation.
@@ -11674,11 +11729,36 @@ void TFlyEffect_Bespoke::Submit(EFxDebugMode debug_mode) const
     if(!Renderer || !initialized_ || texture_==kInvalidTexture || (Flags()&OF_KILL))return;
     const auto&owner=native_domain_?native_owner_:Transform().Matrix();
     SQuadDrawItem item={};item.key.texture=texture_;item.key.blend=uint8_t(EFxBlend::Alpha);item.key.depth_mode=uint8_t(EFxDepthMode::TestNoWrite);item.light_mode=EFxLightMode::Unlit;item.retail_argb4444=true;item.retail_software_projection=native_domain_;item.debug_mode=debug_mode;
-    for(const auto&fly:flies_) {
+    // REVSYNC-DIVERGENCE: retail drew the tick's state; the port eases every
+    // fly from the previous tick's position to the current one within the
+    // tick being drawn, so the swarm drifts smoothly at any frame rate (the
+    // picture trails the simulation by at most one tick).
+    // The fraction is this effect's own leftover time: the flies keep an
+    // accumulator of their own, so their ticks start when the effect was
+    // spawned and their phase is offset from the global legacy tick - the
+    // global fraction would make the picture stutter.
+    const float fraction=FxTickFraction(tick_seconds_,TTime::LegacyFrameSeconds);
+    for(int32_t i=0;i<kFlyBespokeCount;i++) {
+        const SFlyParticleBespoke&fly=flies_[i];
         if(!fly.used)continue;
+        // Position: the previous tick's position eased to the current one.
+        // A fly that was switched on during this tick was not drawn before,
+        // so it must not glide in from its dormant position.
+        const SFlyParticleBespoke&was=flies_prev_[i];
+        float from[3]={was.pos.X,was.pos.Y,was.pos.Z};
+        float to[3]={fly.pos.X,fly.pos.Y,fly.pos.Z};
+        const float step=(std::max)(std::fabs(to[0]-from[0]),
+                                   (std::max)(std::fabs(to[1]-from[1]),
+                                              std::fabs(to[2]-from[2])));
+        if(!FxShouldInterpolate(was.used,fly.used,true,step,kFlyBespokeMaxStep)) {
+            from[0]=to[0]; from[1]=to[1]; from[2]=to[2];
+        }
+        float blended[3]={};
+        FxLerp3(from,to,fraction,blended);
+        const hmm_vec3 draw_pos={blended[0],blended[1],blended[2]};
         // Whole original TParticleSystem::Render(false,false): local rotations,
         // fixed tip/spin, scale, raw relative translation, then real owner.
-        hmm_mat4 local={};MtxClear(&local);MtxRotateX(&local,float(fly.rot.X*TORADIAN));MtxRotateY(&local,float(fly.rot.Y*TORADIAN));MtxRotateZ(&local,float(fly.rot.Z*TORADIAN));MtxRotateX(&local,-float(M_PI/2.0));MtxRotateZ(&local,-float(M_PI/4.0));MtxScale(&local,&fly.scl);MtxTranslate(&local,&fly.pos);
+        hmm_mat4 local={};MtxClear(&local);MtxRotateX(&local,float(fly.rot.X*TORADIAN));MtxRotateY(&local,float(fly.rot.Y*TORADIAN));MtxRotateZ(&local,float(fly.rot.Z*TORADIAN));MtxRotateX(&local,-float(M_PI/2.0));MtxRotateZ(&local,-float(M_PI/4.0));MtxScale(&local,&fly.scl);MtxTranslate(&local,&draw_pos);
         for(int corner=0;corner<4;++corner) {
             hmm_vec3 p={},world={};MtxTransform(&local,&vertices_[corner].pos,&p);MtxTransform(&owner,&p,&world);
             std::memcpy(item.world_pos[corner],world.Elements,3*sizeof(float));item.uv[corner][0]=vertices_[corner].tu;item.uv[corner][1]=vertices_[corner].tv;
