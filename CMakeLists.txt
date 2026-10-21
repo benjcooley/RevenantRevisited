@@ -416,6 +416,24 @@ target_include_directories(test_classiclighting PRIVATE
 target_compile_definitions(test_classiclighting PRIVATE SOKOL_${SOKOL_BACKEND})
 target_link_libraries(test_classiclighting PRIVATE GTest::gtest_main)
 
+# The ground and the meshes have to be drawn from the same camera, or the
+# characters drift off the ground by a whole camera step, 24 times a second.
+# The camera helpers live in renderer.h (header only), no engine code needed.
+add_executable(test_camerascroll
+  tools/test_camerascroll.cpp)
+target_include_directories(test_camerascroll PRIVATE
+  ${SOKOL_DIR}
+  ${HANDMADE_MATH_DIR}
+  ${SIMPLEINI_DIR}
+  ${MINIZ_DIR}
+  ${LOG_DIR}
+  ${ARGH_DIR}
+  ${STB_DIR}
+  ${IMGUI_DIR}
+)
+target_compile_definitions(test_camerascroll PRIVATE SOKOL_${SOKOL_BACKEND})
+target_link_libraries(test_camerascroll PRIVATE GTest::gtest_main)
+
 # Player-stat rules (maxima, STATLEVEL, kill experience, STATLINE).
 # playerstats.cpp needs only the tokenizer; the test stubs parse.cpp's
 # engine hooks like test_parse does.
@@ -536,6 +554,7 @@ endforeach()
 # <executable>.<Suite>.<Case>.
 foreach(test IN ITEMS
     test_audio_decode
+    test_camerascroll
     test_classiclighting
     test_defio
     test_defwidget

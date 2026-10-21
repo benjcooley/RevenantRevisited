@@ -1234,9 +1234,10 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         // the camera's position at the tick's start, and the part of the step
         // that has passed scrolls the picture (the iso projection of the world
         // delta, scaled by the zoom). The tile then lands between pixels and
-        // the view moves smoothly instead of jumping once a tick.
-        const float scroll_sx = -(ctx.cameraScrollX - ctx.cameraScrollY) * sprite_scale;
-        const float scroll_sy = -((ctx.cameraScrollX + ctx.cameraScrollY) * 0.5f) * sprite_scale;
+        // the view moves smoothly instead of jumping once a tick. The meshes
+        // are drawn from the same camera (MeshCameraUniforms).
+        float scroll_sx = 0.0f, scroll_sy = 0.0f;
+        CameraScrollPixels(ctx.cameraScrollX, ctx.cameraScrollY, sprite_scale, scroll_sx, scroll_sy);
         const float fx = spx - float(regx) * sprite_scale + scroll_sx;
         const float fy = spy - float(regy) * sprite_scale + scroll_sy;
         const int32_t dx = int32_t(std::lround(fx)) + ctx.cam_ox;
@@ -1287,6 +1288,14 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                 const float z = (std::max)(CameraDepth(rel, ctx.cam_forward), 1.0f);
                 const float focal_zoom = (std::max)(ctx.cam_forward * ctx.camera_zoom, 1.0f);
                 overlay_scale = focal_zoom / z;
+            }
+            else
+            {
+                // The overlay scrolls with the camera like the ground does,
+                // or it sits a whole camera step away from the world it
+                // belongs to and jumps once a tick.
+                light_sx += scroll_sx;
+                light_sy += scroll_sy;
             }
             SOverlaySubmit sub = {};
             sub.image_pair = tex.image_pair;
@@ -3460,6 +3469,8 @@ void TMapRenderer::RenderFrame()
     projectctx.vh = vh;
     projectctx.cam_forward = camera_forward;
     projectctx.camera_zoom = effective_camera_zoom;
+    projectctx.cameraScrollX = s.cameraScrollX;
+    projectctx.cameraScrollY = s.cameraScrollY;
     projectctx.tile_scale = s.sectorPerspectiveTileScale;
     projectctx.z_near = s.z_near;
     projectctx.z_far = s.z_far;
@@ -3516,8 +3527,14 @@ void TMapRenderer::RenderFrame()
             const auto& tex = s.sectorTileTex[inst.asset_idx];
             float spx = 0.0f, spy = 0.0f;
             ProjectWorldPointToScreen(projectctx, inst.world_pos, spx, spy);
-            const int32_t x0 = int32_t(std::lround(spx - float(inst.regx) * effective_camera_zoom)) + cam_ox;
-            const int32_t y0 = int32_t(std::lround(spy - float(inst.regy) * effective_camera_zoom)) + cam_oy;
+            // The tile is drawn against the tick's camera plus the part of
+            // the camera's step that has passed; the occlusion rectangle has
+            // to sit where the tile really is.
+            float occl_scroll_x = 0.0f, occl_scroll_y = 0.0f;
+            CameraScrollPixels(projectctx.cameraScrollX, projectctx.cameraScrollY,
+                               effective_camera_zoom, occl_scroll_x, occl_scroll_y);
+            const int32_t x0 = int32_t(std::lround(spx - float(inst.regx) * effective_camera_zoom + occl_scroll_x)) + cam_ox;
+            const int32_t y0 = int32_t(std::lround(spy - float(inst.regy) * effective_camera_zoom + occl_scroll_y)) + cam_oy;
             const int32_t x1 = x0 + ScalePixel(effective_camera_zoom, float(tex.w));
             const int32_t y1 = y0 + ScalePixel(effective_camera_zoom, float(tex.h));
             // Fit depth against the same padded rectangle the renderer fills
@@ -3697,12 +3714,12 @@ void TMapRenderer::RenderFrame()
     Renderer->SetPerspectiveProjectionMode(s.sectorPerspectiveCamera ? s.sectorPerspectiveProjectionMode : 0);
     Renderer->SetPerspectiveProxyRasterScale(s.sectorPerspectiveCamera ? s.sectorPerspectiveProxyRasterScale : 1.0f);
     Renderer->SetPerspectiveRaycastParams(s.sectorPerspectiveSteps, s.sectorPerspectiveRefine);
-    // The camera's world position for the mesh projection stays whole: the
-    // meshes (the characters) are drawn from it, and a sprite drawn between
-    // two pixels is resampled -- blurry, and it wobbles as it moves. The
-    // world itself scrolls by the fraction (the tiles take it in their
-    // screen position), so the picture moves smoothly while the sprites
-    // keep their pixels.
+    // The world is drawn against the tick's camera plus the part of the
+    // camera's step that has already passed (the tiles take that fraction
+    // in their screen position, so the picture scrolls smoothly instead of
+    // jumping once a tick). The meshes have to be drawn from the same
+    // camera: left on the whole one, every character drifts off the ground
+    // by up to a whole camera step and snaps back, 24 times a second.
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy), s.z_near, s.z_far,
                                       float(s.sectorCameraWorld.x),
                                       float(s.sectorCameraWorld.y),
@@ -3710,7 +3727,8 @@ void TMapRenderer::RenderFrame()
                                       effective_camera_zoom,
                                       s.sectorPerspectiveZOffset,
                                       s.sectorPerspectiveZScale,
-                                      s.sectorPerspectiveTileScale);
+                                      s.sectorPerspectiveTileScale,
+                                      s.cameraScrollX, s.cameraScrollY);
     mark_phase(timings.render_state_ms);
 
     SMapRenderStats stats = {};

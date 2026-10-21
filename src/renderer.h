@@ -106,6 +106,37 @@ constexpr uint32_t kObjFlagNoShadow = 1u << 28;
 constexpr uint32_t kObjIdMask       = 0x0FFFFFFFu;
 constexpr uint32_t kObjFlagMask     = 0xF0000000u;
 
+// The camera's step since the tick began, in world units. The world is drawn
+// against the camera's position at the tick's start, and the part of the
+// step that has passed scrolls the picture by a fraction of a pixel, so the
+// view moves smoothly instead of jumping once a tick (see
+// TMapPane::CameraScrollStep).
+//
+// The ground takes that scroll in its screen position; the meshes have to
+// be drawn from the same camera, or every character drifts off the ground
+// by up to a whole camera step and snaps back, 24 times a second.
+
+// The ground's scroll, in screen pixels.
+inline void CameraScrollPixels(float scroll_x, float scroll_y, float zoom,
+                               float& screen_x, float& screen_y)
+{
+    screen_x = -(scroll_x - scroll_y) * zoom;
+    screen_y = -0.5f * (scroll_x + scroll_y) * zoom;
+}
+
+// The camera the meshes are drawn from: the tick's camera plus that same
+// scroll. The depth base is compensated by the same amount, so the scene
+// depth (which the ground's depth is measured against) does not move.
+// 0.867 is the shaders' ISO_COS30 (mesh.glsl.h / mesh.hlsl.h / mesh.metal.h).
+inline void MeshCameraUniforms(float center_wx, float center_wy, float kcam_forward,
+                                float scroll_x, float scroll_y,
+                                float& camw_x, float& camw_y, float& camz_z)
+{
+    camw_x = center_wx + scroll_x;
+    camw_y = center_wy + scroll_y;
+    camz_z = kcam_forward - 0.867f * (scroll_x + scroll_y);
+}
+
 // Inputs to the light pass's Classic model (lighting mode 0), which lights
 // the two G-buffer surface classes the way retail lit them: static tiles
 // with the DLS light tables, 3D meshes with T3DScene's vertex lighting.
@@ -838,6 +869,7 @@ public:
     //   perspective  -- non-zero enables perspective projection
     //   zoom         -- camera-plane scale multiplier (1 = authored scale)
     //   z_offset/z_scale -- debug tweaks for perspective tile relief depth
+    //   cam_scroll_x/y -- world-space camera step already elapsed this tick
     void SetReconstructionParams(float ox, float oy,
                                  float z_near, float z_far,
                                  float center_wx, float center_wy,
@@ -845,7 +877,9 @@ public:
                                  float zoom = 1.0f,
                                  float z_offset = 0.0f,
                                  float z_scale = 1.0f,
-                                 float tile_scale = 1.0f);
+                                 float tile_scale = 1.0f,
+                                 float cam_scroll_x = 0.0f,
+                                 float cam_scroll_y = 0.0f);
     // 0 = normal iso mesh projection, 1 = retail D3D viewport projection
     // used by the live EquipmentPane paperdoll.
     void SetMeshProjectionMode(int32_t mode);
@@ -1608,6 +1642,11 @@ private:
         float z_scale = 1.0f;
         float tile_scale = 1.0f;
         float mesh_projection_mode = 0.0f;
+        // The camera's step already elapsed this tick, in world units. The
+        // ground scrolls by it (the tiles take it in their screen position),
+        // so the meshes have to scroll by the same amount or they drift off
+        // the ground by up to a whole camera step, 24 times a second.
+        float cam_scroll_x = 0, cam_scroll_y = 0;
     } recon;
 
     // ---- Pipeline setup / teardown --------------------------------------

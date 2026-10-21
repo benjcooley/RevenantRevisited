@@ -3203,16 +3203,30 @@ sg_buffer TRenderer::NextMeshInstanceBuffer()
 
 void TRenderer::PackMeshVsUniforms(float (&u)[20]) const
 {
+    // The ground is drawn against the tick's camera plus the part of the
+    // camera's step that has already passed this tick (the tiles take that
+    // fraction in their screen position). The meshes have to be drawn
+    // against the same camera, or they drift off the ground by up to a
+    // whole camera step, 24 times a second -- the hero judders against the
+    // floor while the camera eases after it.
+    // camz.z is compensated by the same amount so the scene depth (which
+    // the ground's depth is measured against) stays exactly as it was.
+    const bool ortho = recon.reserved <= 0.5f;
+    const float scroll_x = ortho ? recon.cam_scroll_x : 0.0f;
+    const float scroll_y = ortho ? recon.cam_scroll_y : 0.0f;
+    float camw_x = 0.0f, camw_y = 0.0f, camz_z = 0.0f;
+    MeshCameraUniforms(recon.center_wx, recon.center_wy, recon.kcam_forward,
+                       scroll_x, scroll_y, camw_x, camw_y, camz_z);
     u[0] = recon.ox;
     u[1] = recon.oy;
     u[2] = float(width  + 2 * kGBufPad);
     u[3] = float(height + 2 * kGBufPad);
     u[4] = recon.z_near;
     u[5] = recon.zspan;
-    u[6] = recon.kcam_forward;
+    u[6] = camz_z;
     u[7] = recon.reserved;
-    u[8] = recon.center_wx;
-    u[9] = recon.center_wy;
+    u[8] = camw_x;
+    u[9] = camw_y;
     u[10] = recon.zoom;
     u[11] = recon.mesh_projection_mode;
     for (int c=0;c<3;++c) { u[12+c]=retail_mesh_ambient[c]; u[16+c]=retail_mesh_directional[c]; }
@@ -3399,10 +3413,21 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     vsu[vo++] = float(height + 2 * kGBufPad);
     vsu[vo++] = recon.z_near;
     vsu[vo++] = recon.zspan;
-    vsu[vo++] = recon.kcam_forward;
+    // The same fractional camera the ground scrolls by (see
+    // PackMeshVsUniforms). The retail software projection runs in its own
+    // camera domain, so it keeps the whole camera.
+    const bool helper_modern = !s.retail_software_projection;
+    const bool helper_ortho  = recon.reserved <= 0.5f;
+    const float helper_scroll_x = (helper_modern && helper_ortho) ? recon.cam_scroll_x : 0.0f;
+    const float helper_scroll_y = (helper_modern && helper_ortho) ? recon.cam_scroll_y : 0.0f;
+    float helper_camw_x = 0.0f, helper_camw_y = 0.0f, helper_camz_z = 0.0f;
+    MeshCameraUniforms(recon.center_wx, recon.center_wy, recon.kcam_forward,
+                       helper_scroll_x, helper_scroll_y,
+                       helper_camw_x, helper_camw_y, helper_camz_z);
+    vsu[vo++] = helper_camz_z;
     vsu[vo++] = recon.reserved;
-    vsu[vo++] = recon.center_wx;
-    vsu[vo++] = recon.center_wy;
+    vsu[vo++] = helper_camw_x;
+    vsu[vo++] = helper_camw_y;
     vsu[vo++] = recon.zoom;
     vsu[vo++] = 0.0f;
     // An explicit helper reference mode selects the software path even when
@@ -3951,7 +3976,9 @@ void TRenderer::SetReconstructionParams(float ox, float oy,
                                         float zoom,
                                         float z_offset,
                                         float z_scale,
-                                        float tile_scale)
+                                        float tile_scale,
+                                        float cam_scroll_x,
+                                        float cam_scroll_y)
 {
     // Callers pass the world-origin screen offset in display-space pixels.
     // The light shader samples the padded G-buffer, so shift by +pad to
@@ -3968,6 +3995,8 @@ void TRenderer::SetReconstructionParams(float ox, float oy,
     recon.z_offset     = z_offset;
     recon.z_scale      = z_scale > 0.0f ? z_scale : 1.0f;
     recon.tile_scale   = tile_scale > 0.0f ? tile_scale : 1.0f;
+    recon.cam_scroll_x = cam_scroll_x;
+    recon.cam_scroll_y = cam_scroll_y;
 }
 
 void TRenderer::SetMeshProjectionMode(int32_t mode)
