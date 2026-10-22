@@ -618,9 +618,10 @@ void TCharAnimator::SubmitFx(TRenderer& renderer) const
     if (SubTickOffset(inst->Pos().x - prev.x, inst->Pos().y - prev.y,
                       inst->Pos().z - prev.z, frac, sub_x, sub_y, sub_z))
     {
-        model_to_world.Elements[12] += sub_x;
-        model_to_world.Elements[13] += sub_y;
-        model_to_world.Elements[14] += sub_z;
+        // hmm_mat4 is float[4][4]: the translation is the last row.
+        model_to_world.Elements[3][0] += sub_x;
+        model_to_world.Elements[3][1] += sub_y;
+        model_to_world.Elements[3][2] += sub_z;
     }
     SubmitSwipeStrip(renderer, strip, model_to_world);
 }
