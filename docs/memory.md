@@ -254,8 +254,8 @@ cmake --build build --config Release --parallel
 2. Native/retail-software проекция helper-мешей намеренно осталась на целой камере — задокументировать.
 3. Эффекты: Mist (нужна параболическая коррекция падения), fire-семейство, PE-бакеты с `tick_hz>0`.
    У Pixie сам эффект (owner-трансформ) прыгает на 2-4 wu за тик — это не состояние частиц.
-4. Фича спрайт-арта (незакоммиченная): не компилируется `src/command.cpp` (`DebugUI::IsVisible/SetVisible`,
-   `CmdDebugUI`); фикс §4 должен уйти вместе с ней в `main`.
+4. ~~Фича спрайт-арта не компилируется~~ — снято: сборка чистая, фича
+   работает (см. §10).
 
 **Проверено и работает:** `85f0e15` (тайлы), `c1e31ab`+`4c0f55a`+`b6c3340`+`f5e38e9` (камера),
 `7316016` (Fizzle/Pixie/Flies). CI зелёный на всех платформах (linux/osx/windows/native) — проверено на `7316016`.
@@ -263,6 +263,39 @@ cmake --build build --config Release --parallel
 **Не работает / не повторять:** `HighResTileDepth` (глубина из арта), `FitArtToCoverage`, глобальная
 `TTime::LegacyFrameFraction()` для эффектов с собственным аккумулятором, «спрайт между пикселями пересемплируется,
 значит меши должны быть на целой камере» (пользователь сознательно выбрал дробную камеру, мыло приемлемо).
+
+---
+
+## 10. Арт-оверрайд: тайлы локации и 3D-модели (реализовано, не закоммичено)
+
+**Подмена тайлов локации** (`tiletexoverride`) получила live-reload: `src/tiletreload.{h,cpp}`
+— `TileArtReload::ReloadAll(mode, &out_tiles)` (0 = retail-пиксели, 1 = арт из дерева).
+Сначала переиндексирует дерево, потом перезаливает цветовой образ image-пары
+(`TRenderer::UpdateImagePairColor`, renderer.cpp ~2575): образ пересоздаётся копией
+`UpdateTextureAsset`-паттерна (DYNAMIC без `desc.data`, один `sg_update_image`/кадр),
+handle сохраняется, глубина/рельеф остаются ретейла. Реестр загруженных тайлов —
+`STileArtEntry` в `maprenderer_internal.h` (`NoteTileArt` в `CacheSectorBitmap` и в
+полном аплоаде сектора), публично: `TMapRenderer::TileArtCount/TileArtAt`,
+`MapRendererInstanceCount/At`.
+
+- Режим на старте: `[Revisited] HighResTileMode = 0|1` (default 1 = modern) в
+  `revisited_settings.{h,cpp}`; в `UploadTileBitmap` (maprenderer.cpp ~950) арт
+  применяется только при mode==1.
+- Консоль: `reloadtiles [retail|modern]` (command.cpp, `CmdReloadTiles`); панель:
+  вкладка **Sprites** (top-level, после Map) → секция «Location art (tiles)» — радио
+  Retail/Modern + «Reload tiles»; обе идут через `TileArtReload::ReloadAll`.
+- Проверено вживую (Release, оконный прогон с оверлеем ini `[Revisited]->HighResTileRoot=<
+  копия Final>`): маджента-тинт PNG на диске → `reloadtiles retail` — 66970 → 5 маджента-пикселей
+  на экране; `reloadtiles modern` — 5 → 99402; глубина/силуэт чистые (квадратов нет).
+- Панель имела баг фикстур: overlay ini без заголовка `[Revisited]` не читается (§«проверено»).
+
+**Хитрости для тестов такого рода:**
+- `--exec` «sleep N» = N **тиков** (~20 тиков/сек, зависит от FPS), не секунд (consoleexec.cpp).
+- Скриншоты: `tmp-snap/spr_shot.ps1` (PrintWindow + Raise=SW_RESTORE(9)+HWND_TOPMOST);
+  окно игры может свалиться в минимизацию — обязательно SW_RESTORE перед копированием.
+- Маджента-тинт PNG без перебора пикселей: System.Drawing `ColorMatrix` (tmp-snap/tile_tint.ps1).
+- Большая задержка между шагами через лог-маркеры: поллить `revenant.log` на
+  `tiletex.*KInBenchN` (загрузка тайла) / `tiletex.*reload.*mode=retail|modern`.
 
 ---
 
