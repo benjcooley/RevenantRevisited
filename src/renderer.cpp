@@ -2562,6 +2562,96 @@ const SRendererImagePairInfo* TRenderer::ImagePairInfo(RendererImagePairHandle h
     return &image_pair_assets[handle - 1];
 }
 
+// Replace the colour image of an image pair (a tile's albedo). The depth
+// map, the height min/max chain and the tight proxy hull stay as they are:
+// only the tile's colour changes.
+//
+// The pixels go into a FRESH image, not into the one the frame still has
+// bound: a D3D11 texture that is bound as a shader resource can not be
+// mapped reliably (the map is dropped and the old pixels stay on the
+// screen), and the failure is silent in a release build. A new image is
+// never bound, so the upload always lands. The handle stays the same, so
+// every holder of it keeps working.
+bool TRenderer::UpdateImagePairColor(RendererImagePairHandle handle,
+                                      const void* pixels, size_t pixel_bytes,
+                                      int32_t width, int32_t height)
+{
+    if (handle == 0 || handle > image_pair_assets.size() || !pixels)
+        return false;
+    if (width <= 0 || height <= 0)
+        return false;
+    SRendererImagePairEntry& e = image_pair_assets[handle - 1];
+    if (pixel_bytes != size_t(width) * size_t(height) * 4)
+    {
+        log_warn("[renderer] image pair %u wants %zu bytes for %dx%d -- skipped",
+                 (unsigned)handle, pixel_bytes, width, height);
+        return false;
+    }
+
+    // The colour carries a mip chain (the tile pass minifies the tile's
+    // albedo), so the new image needs the chain too.
+    const SColorMipChain color_mips = BuildColorMipChain(static_cast<const uint8_t*>(pixels),
+                                                          width, height);
+    if (color_mips.levels.empty())
+    {
+        log_warn("[renderer] image pair %u could not build a colour mip chain -- skipped",
+                 (unsigned)handle);
+        return false;
+    }
+
+    sg_image_desc color_desc = {};
+    color_desc.width = width;
+    color_desc.height = height;
+    // The image is created immutable, with the pixels in it: sokol copies
+    // the data into the texture when the image is made, exactly like the
+    // first upload does (RegisterImagePairAsset).
+    //
+    // A dynamic image would need the pixels poured in with sg_update_image
+    // (sokol ignores the initial data of a dynamic image), but sokol's
+    // D3D11 backend maps a dynamic texture with D3D11_CPU_ACCESS_WRITE,
+    // which allows ONE mip level only -- a dynamic colour image with a mip
+    // chain fails to create, silently, in a release build. The immutable
+    // image keeps the mips and needs no per-frame update either.
+    color_desc.usage = SG_USAGE_IMMUTABLE;
+    color_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    color_desc.min_filter = SG_FILTER_LINEAR_MIPMAP_LINEAR;
+    color_desc.mag_filter = SG_FILTER_LINEAR;
+    color_desc.wrap_u = color_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+    color_desc.num_mipmaps = int(color_mips.levels.size());
+    for (int32_t mip = 0; mip < color_desc.num_mipmaps; ++mip)
+    {
+        const std::vector<uint8_t>& level = color_mips.levels[size_t(mip)];
+        color_desc.data.subimage[0][mip] = { level.data(), level.size() };
+    }
+    color_desc.label = "renderer.imagepair.color";
+
+    sg_image image = sg_make_image(&color_desc);
+    if (sg_query_image_state(image) != SG_RESOURCESTATE_VALID)
+    {
+        if (image.id) sg_destroy_image(image);
+        log_warn("[renderer] image pair %u could not be recreated -- the colour was not updated",
+                 (unsigned)handle);
+        return false;
+    }
+
+    // The colour's size may have changed (the high-res art is bigger than
+    // the tile, and the retail pixels are smaller again): the asset's GPU
+    // byte count follows it.
+    const uint64_t old_color_bytes = uint64_t(e.color_width) * uint64_t(e.color_height) * 4ull;
+    const uint64_t new_color_bytes = uint64_t(width) * uint64_t(height) * 4ull;
+    if (e.gpu_bytes >= old_color_bytes)
+        e.gpu_bytes = e.gpu_bytes - old_color_bytes + new_color_bytes;
+    else
+        e.gpu_bytes = new_color_bytes;
+
+    if (e.color.id)
+        sg_destroy_image(e.color);
+    e.color = image;
+    e.color_width = width;
+    e.color_height = height;
+    return true;
+}
+
 RendererImagePairHandle TRenderer::ImagePairForKey(uint64_t key) const
 {
     if (key == 0)
@@ -2593,7 +2683,8 @@ TTextureHandle TRenderer::RegisterTextureAsset(uint64_t key,
                                                ERendererTextureFormat format,
                                                uint64_t gpu_bytes,
                                                ERendererTextureFilter filter,
-                                               bool repeat)
+                                               bool repeat,
+                                               bool updatable)
 {
     if (!pixels || width <= 0 || height <= 0)
         return kInvalidTexture;
@@ -2602,17 +2693,65 @@ TTextureHandle TRenderer::RegisterTextureAsset(uint64_t key,
     {
         auto it = texture_by_key.find(key);
         if (it != texture_by_key.end())
+        {
+            SRendererTextureEntry& existing = texture_assets[it->second - 1];
+            // A texture that was registered as immutable can not be updated
+            // in place: sokol fixes the usage when the image is created. The
+            // sprite reload needs an updatable texture, so the image is
+            // recreated as a dynamic one -- the handle stays the same, so
+            // every holder of it keeps working.
+            if (updatable && !existing.updatable)
+            {
+                log_info("[renderer] texture %llu was immutable -- recreated as updatable",
+                         (unsigned long long)key);
+                if (existing.image.id)
+                    sg_destroy_image(existing.image);
+                existing.image = {};
+                existing.updatable = true;
+                existing.update_frame = 0;
+
+                sg_image_desc desc = {};
+                desc.width = width;
+                desc.height = height;
+                desc.usage = SG_USAGE_DYNAMIC;
+                desc.pixel_format = format == ERendererTextureFormat::R32F ? SG_PIXELFORMAT_R32F : SG_PIXELFORMAT_RGBA8;
+                desc.min_filter = filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
+                desc.mag_filter = filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
+                desc.wrap_u = desc.wrap_v = repeat ? SG_WRAP_REPEAT : SG_WRAP_CLAMP_TO_EDGE;
+                desc.label = "renderer.texture";
+                existing.image = sg_make_image(&desc);
+                if (sg_query_image_state(existing.image) != SG_RESOURCESTATE_VALID)
+                {
+                    if (existing.image.id) sg_destroy_image(existing.image);
+                    existing.image = {};
+                    existing.updatable = false;
+                    return kInvalidTexture;
+                }
+                sg_image_data data = {};
+                data.subimage[0][0] = { pixels, pixel_bytes };
+                sg_update_image(existing.image, &data);
+                existing.width  = width;
+                existing.height = height;
+                existing.gpu_bytes = uint64_t(pixel_bytes);
+                existing.update_frame = sapp_frame_count();
+            }
             return it->second;
+        }
     }
 
     sg_image_desc desc = {};
     desc.width = width;
     desc.height = height;
+    desc.usage = updatable ? SG_USAGE_DYNAMIC : SG_USAGE_IMMUTABLE;
     desc.pixel_format = format == ERendererTextureFormat::R32F ? SG_PIXELFORMAT_R32F : SG_PIXELFORMAT_RGBA8;
     desc.min_filter = filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
     desc.mag_filter = filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
     desc.wrap_u = desc.wrap_v = repeat ? SG_WRAP_REPEAT : SG_WRAP_CLAMP_TO_EDGE;
-    desc.data.subimage[0][0] = { pixels, pixel_bytes };
+    // sokol refuses an image that is created dynamic *and* initialized with
+    // data ("dynamic/stream images cannot be initialized with data"), so the
+    // initial pixels of a dynamic image go through the update path below.
+    if (!updatable)
+        desc.data.subimage[0][0] = { pixels, pixel_bytes };
     desc.label = "renderer.texture";
 
     SRendererTextureEntry asset = {};
@@ -2621,10 +2760,24 @@ TTextureHandle TRenderer::RegisterTextureAsset(uint64_t key,
     asset.width = width;
     asset.height = height;
     asset.gpu_bytes = gpu_bytes;
+    asset.updatable = updatable;
+    asset.format = format;
+    asset.filter = filter;
+    asset.repeat = repeat;
     if (sg_query_image_state(asset.image) != SG_RESOURCESTATE_VALID)
     {
         if (asset.image.id) sg_destroy_image(asset.image);
         return kInvalidTexture;
+    }
+    // sokol only uploads the initial data of an immutable image (the D3D11
+    // backend creates a dynamic texture empty, _sg_d3d11_create_image), so
+    // an updatable texture gets its first pixels through the update path.
+    if (updatable)
+    {
+        sg_image_data data = {};
+        data.subimage[0][0] = { pixels, pixel_bytes };
+        sg_update_image(asset.image, &data);
+        asset.update_frame = sapp_frame_count();
     }
 
     texture_assets.push_back(asset);
@@ -2632,6 +2785,89 @@ TTextureHandle TRenderer::RegisterTextureAsset(uint64_t key,
     if (key != 0)
         texture_by_key[key] = handle;
     return handle;
+}
+
+// Replace the pixels of an updatable texture in place. The GPU image stays,
+// so the handle keeps its meaning for everyone holding it.
+bool TRenderer::UpdateTextureAsset(TTextureHandle handle,
+                                   const void* pixels,
+                                   size_t pixel_bytes,
+                                   int32_t width,
+                                   int32_t height)
+{
+    if (handle == 0 || handle > texture_assets.size() || !pixels)
+        return false;
+    SRendererTextureEntry& e = texture_assets[handle - 1];
+    if (!e.updatable)
+    {
+        log_warn("[renderer] texture %u is not updatable -- the pixels can not be replaced",
+                 (unsigned)handle);
+        return false;
+    }
+    if (e.width != width || e.height != height)
+    {
+        log_warn("[renderer] texture %u is %dx%d, the new pixels are %dx%d -- skipped",
+                 (unsigned)handle, e.width, e.height, width, height);
+        return false;
+    }
+    if (pixel_bytes != size_t(width) * size_t(height) * 4)
+    {
+        log_warn("[renderer] texture %u wants %zu bytes for %dx%d -- skipped",
+                 (unsigned)handle, pixel_bytes, width, height);
+        return false;
+    }
+    // sokol allows only one sg_update_image per image and frame. A second
+    // reload in the same frame would be dropped by sokol (in a debug build it
+    // trips an assert), so the repeat is skipped here -- the pixels of the
+    // first update in this frame are the wanted ones.
+    const uint64_t frame = sapp_frame_count();
+    if (frame != 0 && e.update_frame == frame)
+    {
+        log_info("[renderer] texture %u was already updated in frame %llu -- skipped",
+                 (unsigned)handle, (unsigned long long)frame);
+        return true;
+    }
+
+    // The pixels go into a FRESH image, not into the one the frame still has
+    // bound: a D3D11 texture that is bound as a shader resource can not be
+    // mapped reliably (the map is dropped and the old pixels stay on the
+    // screen), and the failure is silent in a release build. A new image is
+    // never bound, so the upload always lands. The handle stays the same, so
+    // every holder of it (the animator snapshots, the mesh assets, the
+    // flipbook components) keeps working -- they look the image up by handle
+    // when they bind it.
+    sg_image_desc desc = {};
+    desc.width = width;
+    desc.height = height;
+    desc.usage = e.updatable ? SG_USAGE_DYNAMIC : SG_USAGE_IMMUTABLE;
+    desc.pixel_format = e.format == ERendererTextureFormat::R32F ? SG_PIXELFORMAT_R32F : SG_PIXELFORMAT_RGBA8;
+    desc.min_filter = e.filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
+    desc.mag_filter = e.filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
+    desc.wrap_u = desc.wrap_v = e.repeat ? SG_WRAP_REPEAT : SG_WRAP_CLAMP_TO_EDGE;
+    desc.label = "renderer.texture";
+    if (!e.updatable)
+        desc.data.subimage[0][0] = { pixels, pixel_bytes };
+
+    sg_image image = sg_make_image(&desc);
+    if (sg_query_image_state(image) != SG_RESOURCESTATE_VALID)
+    {
+        if (image.id) sg_destroy_image(image);
+        log_warn("[renderer] texture %u could not be recreated -- the pixels were not updated",
+                 (unsigned)handle);
+        return false;
+    }
+    if (e.updatable)
+    {
+        sg_image_data data = {};
+        data.subimage[0][0] = { pixels, pixel_bytes };
+        sg_update_image(image, &data);
+    }
+    if (e.image.id)
+        sg_destroy_image(e.image);
+    e.image = image;
+    e.update_frame = frame;
+    e.gpu_bytes = uint64_t(pixel_bytes);
+    return true;
 }
 
 const SRendererTextureInfo* TRenderer::TextureInfo(TTextureHandle handle) const

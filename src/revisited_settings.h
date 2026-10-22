@@ -85,6 +85,16 @@ struct SRevisitedSettings {
     // ---- High-res tile art (see tiletexoverride.h) -------------------------
     bool        high_res_tiles = true;  // swap a tile's colour for matching art from high_res_tile_root
     std::string high_res_tile_root;     // tile art tree; empty = <overlay>/Imagery
+    // Which tile art the game shows: 0 = the retail pixels, 1 = the tree's
+    // art (the default, so the tile art works as it did before). The mode
+    // can be switched while the game runs (the "reloadtiles" command, the
+    // debug panel): the loaded tiles are re-coloured in place then.
+    int32_t     high_res_tile_mode = 1;
+
+    // ---- Sprite art (see spritetexoverride.h) ------------------------------
+    bool        sprite_override = true;  // index the sprite art tree
+    std::string sprite_root;             // sprite art tree; empty = <overlay>/Sprites
+    int32_t     sprite_mode = 0;         // 0 = retail art, 1 = modern (override) art
 };
 
 // The live in-memory copy. Populated by LoadRevisitedSettings on boot; the
@@ -97,10 +107,18 @@ extern SRevisitedSettings RevisitedSettings;
 // No-op when --revisited is off (RevisitedSettings stays at C++ defaults).
 bool LoadRevisitedSettings();
 
-// Reads only [Revisited] HighResTiles / HighResTileRoot. Called by
-// TileTexOverride::Init when --revisited is off, so the local high-res tile
-// art (a player-side extra, not a Revisited tunable) works in a plain launch.
+// Reads only [Revisited] HighResTiles / HighResTileRoot / HighResTileMode.
+// Called once at boot by revmain when --revisited is off, so the local
+// high-res tile art (a player-side extra, not a Revisited tunable) works in
+// a plain launch. Read once, never during the session: the debug panel
+// edits the root and the mode live (the art reloads re-initialize the art
+// tree and must not pull the ini values over the panel's own).
 bool LoadTileArtOverrideSettings();
+
+// Same contract for the [Revisited] sprite art keys (SpriteOverride /
+// SpriteRoot / SpriteMode): boot-only, called by revmain when --revisited
+// is off.
+bool LoadSpriteArtOverrideSettings();
 
 // Push RevisitedSettings into renderer state. Two split functions so each
 // can be called when its respective owner becomes live (TRenderer in

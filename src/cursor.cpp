@@ -88,7 +88,7 @@ void SetMouseBitmap(PTBitmap cursor)
     // at all. Fall back to the in-game TCursorHud draw + sapp_show_mouse
     // (false) in that case. (macOS-only today; the non-macOS stub also
     // returns false and the same fallback applies.)
-    if (cursor && Windowed && g_hw_cursor_enabled)
+    if (cursor && Windowed && g_hw_cursor_enabled && !g_os_pointer_forced)
     {
         g_os_cursor_owns_pixels = rev_platform::SetOSCursor(cursor, cursor->regx, cursor->regy);
         if (!g_os_cursor_owns_pixels)
@@ -103,6 +103,10 @@ void SetMouseBitmap(PTBitmap cursor)
     }
     else
     {
+        // Nothing on the OS side: while the debug panel is open it owns the
+        // pointer (the arrow stays visible), otherwise the in-frame draw
+        // handles it. Reset the handoff state so a later frame doesn't think
+        // the OS still shows the previous pixels.
         g_os_cursor_owns_pixels = false;
     }
     g_os_cursor_shown = g_os_cursor_owns_pixels ? cursor : nullptr;
@@ -166,6 +170,10 @@ void ForceOSPointer(bool forced)
 
 void RefreshOSCursor()
 {
+    // The debug panel owns the pointer while it is open; don't hand the game
+    // cursor pixels to the OS from under it.
+    if (g_os_pointer_forced)
+        return;
     if (MouseCursor && Windowed && g_hw_cursor_enabled)
     {
         g_os_cursor_owns_pixels = rev_platform::SetOSCursor(
@@ -310,7 +318,7 @@ void TCursorHud::Draw()
     // one, else the arrow. With the OS drawing the pointer, the OS cursor
     // shows the corner bitmap for as long as it is set.
     PTBitmap const shown = MouseCursorAdd ? MouseCursorAdd : MouseCursor;
-    if (shown && shown != g_os_cursor_shown && Windowed && g_hw_cursor_enabled)
+    if (shown && !g_os_pointer_forced && shown != g_os_cursor_shown && Windowed && g_hw_cursor_enabled)
     {
         g_os_cursor_owns_pixels = rev_platform::SetOSCursor(shown, shown->regx, shown->regy);
         g_os_cursor_shown = g_os_cursor_owns_pixels ? shown : nullptr;

@@ -688,9 +688,31 @@ public:
     // Handle for an already-registered key, or 0. Lets callers skip work
     // (e.g. decoding high-res tile art) when the asset is already resident.
     RendererImagePairHandle ImagePairForKey(uint64_t key) const;
+
+    // Replace the COLOUR image of an image pair (a tile's albedo). The depth
+    // map, the height min/max chain and the tight proxy hull stay as they
+    // are: only the tile's colour changes, so the relief, the coverage and
+    // every derived value stay retail's.
+    //
+    // The handle stays the same, so every holder of it (the map renderer's
+    // tile records, the pick tables, the asset cache's references) keeps
+    // working -- they look the image up by handle when they bind it. The
+    // new colour may have another size than the old one (the high-res tile
+    // art is bigger than the tile); the shader samples the colour by
+    // normalised UVs, so that is fine.
+    //
+    // The pixels go into a FRESH GPU image (a texture that is bound as a
+    // shader resource can not be mapped reliably -- see UpdateTextureAsset),
+    // and the colour's mip chain is rebuilt with them.
+    bool UpdateImagePairColor(RendererImagePairHandle handle,
+                               const void* pixels, size_t pixel_bytes,
+                               int32_t width, int32_t height);
     void AddImagePairAssetRef(RendererImagePairHandle handle, uint32_t count = 1);
     void ReleaseImagePairAssetRef(RendererImagePairHandle handle, uint32_t count = 1);
 
+    // Register a keyed texture. `updatable` creates the GPU image with
+    // SG_USAGE_DYNAMIC so UpdateTextureAsset can replace its pixels later
+    // without handing out a new handle.
     TTextureHandle RegisterTextureAsset(uint64_t key,
                                         const void* pixels,
                                         size_t pixel_bytes,
@@ -699,8 +721,23 @@ public:
                                         ERendererTextureFormat format,
                                         uint64_t gpu_bytes,
                                         ERendererTextureFilter filter = ERendererTextureFilter::Linear,
-                                        bool repeat = false);
+                                        bool repeat = false,
+                                        bool updatable = false);
     const SRendererTextureInfo* TextureInfo(TTextureHandle handle) const;
+
+    // Replace the pixels of a texture registered as updatable. The handle and
+    // the GPU image stay, so every holder of the handle (animator texture
+    // snapshots, flipbook components) keeps working. The new size has to
+    // match the texture's own.
+    //
+    // sokol allows only one update per image and frame, so a second update of
+    // the same texture in the same frame is dropped (the pixels are already
+    // the wanted ones).
+    bool UpdateTextureAsset(TTextureHandle handle,
+                            const void* pixels,
+                            size_t pixel_bytes,
+                            int32_t width,
+                            int32_t height);
     void AddTextureAssetRef(TTextureHandle handle, uint32_t count = 1);
     void ReleaseTextureAssetRef(TTextureHandle handle, uint32_t count = 1);
     void ResetAssetRefCounts();
@@ -1497,6 +1534,15 @@ private:
     };
     struct SRendererTextureEntry : SRendererTextureInfo {
         sg_image image = {};
+        bool updatable = false;   // created with SG_USAGE_DYNAMIC
+        // The frame the texture was last updated in. sokol allows only one
+        // sg_update_image per image and frame.
+        uint64_t update_frame = 0;
+        // The creation parameters, kept so an update can replace the GPU
+        // image with an identical one (see UpdateTextureAsset).
+        ERendererTextureFormat format = ERendererTextureFormat::RGBA8;
+        ERendererTextureFilter filter = ERendererTextureFilter::Linear;
+        bool repeat = false;
     };
     std::vector<SRendererImagePairEntry> image_pair_assets; // index+1 handle
     std::unordered_map<uint64_t, RendererImagePairHandle> image_pair_by_key;

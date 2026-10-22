@@ -724,128 +724,118 @@ static void ComputeAuthoredLocalDepthRange(int32_t wwidth, int32_t wlength, int3
 // and those texels have no height in the depth map -- they would be drawn at
 // the tile's base plane, which the iso projection puts in front of whatever
 // stands there. The coverage is sampled nearest (the retail 1x alpha).
-static void ClipArtToCoverage(std::vector<uint8_t>& art, int32_t aw, int32_t ah,
-                               const uint8_t* retail_rgba, int32_t rw, int32_t rh)
-{
-    if (aw <= 0 || ah <= 0 || rw <= 0 || rh <= 0)
-        return;
-    std::vector<int32_t> column(static_cast<size_t>(aw), 0);
-    for (int32_t x = 0; x < aw; ++x)
-        column[size_t(x)] = int32_t((int64_t(x) * rw) / aw);
-    for (int32_t y = 0; y < ah; ++y)
-    {
-        const int32_t sy = int32_t((int64_t(y) * rh) / ah);
-        const uint8_t* src = retail_rgba + (size_t(sy) * size_t(rw)) * 4 + 3;
-        uint8_t* dst = art.data() + (size_t(y) * size_t(aw)) * 4 + 3;
-        for (int32_t x = 0; x < aw; ++x)
-        {
-            if (!src[size_t(column[size_t(x)]) * 4])
-                dst[size_t(x) * 4] = 0;
-        }
-    }
-}
+//
+// Not static: the art reload path (tiletreload.cpp) clips the same way, so
+// an edited PNG gets the same silhouette it had at load time.
+// (Defined below, outside this file's anonymous namespace.)
 
-static bool UploadTileBitmap(PTBitmap bm,
-                             RendererImagePairHandle* out_image_pair,
-                             uint64_t* out_key,
-                             int32_t* out_w, int32_t* out_h,
-                             float* out_z_local_min = nullptr,
-                             float* out_z_local_max = nullptr,
-                             SSectorTileTex::SDepthDump* out_z_dump = nullptr,
-                             bool* out_has_alpha = nullptr,
-                             uint32_t* out_bm_flags = nullptr,
-                             std::vector<float>* out_cpu_depth_local = nullptr,
-                             std::vector<uint8_t>* out_cpu_opaque = nullptr,
-                             int32_t override_objtype = -1,
-                             const char* override_name = nullptr)
+// The retail tile bitmap's planes, decoded: the palette indices (or the
+// 15/16-bit colours), the depth and the alpha. The colour conversion and
+// the depth map both read these, and the art reload path decodes them again
+// (see MapDecodeTileBitmapRGBA).
+struct STileBitmapPlanes
 {
-    if (!Renderer || !out_image_pair || !bm || bm->width <= 0 || bm->height <= 0) return false;
+    int32_t w = 0, h = 0;
+    bool    is_8bit = false;
+    bool    has_zbuffer = false;
+    bool    has_alpha = false;
+    uint8_t  key8 = 0;
+    uint16_t key16 = 0;
+    std::vector<uint8_t>  idx;     // palette indices (8-bit bitmaps)
+    std::vector<uint16_t> rgb16;  // 15/16-bit colours
+    std::vector<uint16_t> z;      // depth
+    std::vector<uint8_t>  alpha;  // alpha plane
+};
+
+static bool LoadTileBitmapPlanes(PTBitmap bm, STileBitmapPlanes& out)
+{
+    if (!bm || bm->width <= 0 || bm->height <= 0)
+        return false;
     const bool is_8bit = (bm->flags & BM_8BIT) != 0;
     const bool is_16bit = (bm->flags & (BM_15BIT | BM_16BIT)) != 0;
-    const bool has_zbuffer = (bm->flags & BM_ZBUFFER) != 0;
-    const bool has_alpha = (bm->flags & BM_ALPHA) != 0;
     if (!is_8bit && !is_16bit)
-    {
-        static bool once = false;
-        if (!once) { once = true; log_error("[triage] UploadTileBitmap: neither 8-bit nor 16-bit (flags=0x%x %dx%d)", bm->flags, bm->width, bm->height); }
         return false;
-    }
-    SPalette* pal = (SPalette*)bm->palette.ptr();
-    if (is_8bit && !pal)
-    {
-        static bool once = false;
-        if (!once) { once = true; log_error("[triage] UploadTileBitmap: 8-bit tile without palette (flags=0x%x)", bm->flags); }
-        return false;
-    }
-    const int32_t w = bm->width, h = bm->height;
-    const size_t npx = size_t(w) * size_t(h);
-    const uint8_t key8 = (uint8_t)bm->keycolor;
-    const uint16_t key16 = (uint16_t)bm->keycolor;
-    std::unique_ptr<uint8_t[]> idxplane;
-    std::unique_ptr<uint16_t[]> rgbplane16;
-    if (is_8bit) idxplane.reset(new uint8_t[npx]); else rgbplane16.reset(new uint16_t[npx]);
-    std::unique_ptr<uint16_t[]> zplane;
-    if (has_zbuffer) zplane.reset(new uint16_t[npx]);
-    std::unique_ptr<uint8_t[]> alphaplane;
-    if (has_alpha) alphaplane.reset(new uint8_t[npx]);
+
+    out.w = bm->width;
+    out.h = bm->height;
+    out.is_8bit = is_8bit;
+    out.has_zbuffer = (bm->flags & BM_ZBUFFER) != 0;
+    out.has_alpha = (bm->flags & BM_ALPHA) != 0;
+    out.key8 = (uint8_t)bm->keycolor;
+    out.key16 = (uint16_t)bm->keycolor;
+
+    const size_t npx = size_t(out.w) * size_t(out.h);
+    if (is_8bit) out.idx.assign(npx, 0); else out.rgb16.assign(npx, 0);
+    if (out.has_zbuffer) out.z.assign(npx, 0);
+    if (out.has_alpha) out.alpha.assign(npx, 0);
+
     if (bm->flags & BM_CHUNKED)
     {
         if (!bm->CacheChunks()) return false;
         SChunkHeader* hdr = (SChunkHeader*)(void*)bm->data8;
-        SChunkHeader* zhdr = has_zbuffer ? (SChunkHeader*)bm->zbuffer.ptr() : nullptr;
-        if (!hdr || (has_zbuffer && !zhdr)) return false;
+        SChunkHeader* zhdr = out.has_zbuffer ? (SChunkHeader*)bm->zbuffer.ptr() : nullptr;
+        if (!hdr || (out.has_zbuffer && !zhdr)) return false;
         const int32_t cw = hdr->width, ch = hdr->height;
-        if (is_8bit) std::memset(idxplane.get(), key8, npx);
-        else std::fill_n(rgbplane16.get(), npx, key16);
-        if (has_zbuffer) for (size_t i = 0; i < npx; ++i) zplane[i] = 0x7F7F;
-        if (has_alpha) std::fill_n(alphaplane.get(), npx, uint8_t(31));
+        if (is_8bit) std::memset(out.idx.data(), out.key8, npx);
+        else std::fill_n(out.rgb16.data(), npx, out.key16);
+        if (out.has_zbuffer) for (size_t i = 0; i < npx; ++i) out.z[i] = 0x7F7F;
+        if (out.has_alpha) std::fill_n(out.alpha.data(), npx, uint8_t(31));
         for (int32_t by = 0; by < ch; ++by)
         for (int32_t bx = 0; bx < cw; ++bx)
         {
             void* cptr = hdr->block[by * cw + bx].ptr();
-            void* zptr = zhdr->block[by * cw + bx].ptr();
+            void* zptr = zhdr ? zhdr->block[by * cw + bx].ptr() : nullptr;
             const uint8_t*  c8  = (is_8bit && cptr) ? (const uint8_t*)ChunkCache.AddChunk(cptr, 1) : nullptr;
             const uint16_t* c16 = (is_16bit && cptr) ? (const uint16_t*)ChunkCache.AddChunk16(cptr, 1) : nullptr;
-            const uint16_t* z16 = (has_zbuffer && zptr) ? (const uint16_t*)ChunkCache.AddChunkZ(zptr, 2) : nullptr;
+            const uint16_t* z16 = (out.has_zbuffer && zptr) ? (const uint16_t*)ChunkCache.AddChunkZ(zptr, 2) : nullptr;
             const int32_t x0 = bx * CHUNKWIDTH, y0 = by * CHUNKHEIGHT;
-            const int32_t cxmax = (w - x0 < CHUNKWIDTH) ? (w - x0) : CHUNKWIDTH;
-            const int32_t cymax = (h - y0 < CHUNKHEIGHT) ? (h - y0) : CHUNKHEIGHT;
+            const int32_t cxmax = (out.w - x0 < CHUNKWIDTH) ? (out.w - x0) : CHUNKWIDTH;
+            const int32_t cymax = (out.h - y0 < CHUNKHEIGHT) ? (out.h - y0) : CHUNKHEIGHT;
             if (cxmax <= 0 || cymax <= 0) continue;
             for (int32_t y = 0; y < cymax; ++y)
             {
-                if (c8) std::memcpy(&idxplane[(y0 + y) * w + x0], &c8[y * CHUNKWIDTH], cxmax);
-                if (c16) std::memcpy(&rgbplane16[(y0 + y) * w + x0], &c16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
-                if (z16) std::memcpy(&zplane[(y0 + y) * w + x0], &z16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
+                if (c8) std::memcpy(&out.idx[(y0 + y) * out.w + x0], &c8[y * CHUNKWIDTH], cxmax);
+                if (c16) std::memcpy(&out.rgb16[(y0 + y) * out.w + x0], &c16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
+                if (z16) std::memcpy(&out.z[(y0 + y) * out.w + x0], &z16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
             }
         }
     }
     else
     {
-        uint16_t* zbuf = has_zbuffer ? (uint16_t*)bm->zbuffer.ptr() : nullptr;
-        uint8_t* abuf = has_alpha ? (uint8_t*)bm->alpha.ptr() : nullptr;
-        if (is_8bit) std::memcpy(idxplane.get(), bm->data8, npx);
-        else std::memcpy(rgbplane16.get(), bm->data16, npx * sizeof(uint16_t));
-        if (has_zbuffer && zbuf) std::memcpy(zplane.get(), zbuf, npx * sizeof(uint16_t));
-        if (has_alpha && abuf) std::memcpy(alphaplane.get(), abuf, npx);
+        uint16_t* zbuf = out.has_zbuffer ? (uint16_t*)bm->zbuffer.ptr() : nullptr;
+        uint8_t* abuf = out.has_alpha ? (uint8_t*)bm->alpha.ptr() : nullptr;
+        if (is_8bit) std::memcpy(out.idx.data(), bm->data8, npx);
+        else std::memcpy(out.rgb16.data(), bm->data16, npx * sizeof(uint16_t));
+        if (out.has_zbuffer && zbuf) std::memcpy(out.z.data(), zbuf, npx * sizeof(uint16_t));
+        if (out.has_alpha && abuf) std::memcpy(out.alpha.data(), abuf, npx);
     }
-    std::unique_ptr<uint8_t[]> rgba(new uint8_t[npx * 4]);
-    std::unique_ptr<float[]> dflt(new float[npx]);
-    float z_local_min = FLT_MAX, z_local_max = -FLT_MAX;
-    SSectorTileTex::SDepthDump z_dump = {};
+    return true;
+}
+
+// The retail tile bitmap's pixels as RGBA8: the palette's colours, the
+// alpha the bitmap carries, and zero where the tile is transparent (the
+// key colour, or a depth of 0 / 0x7F7F when the tile has a depth map).
+static bool TilePlanesToRGBA(const STileBitmapPlanes& p, SPalette* pal,
+                              std::vector<uint8_t>& rgba, bool* out_any_alpha)
+{
+    const size_t npx = size_t(p.w) * size_t(p.h);
+    if (npx == 0)
+        return false;
+    if (p.is_8bit && !pal)
+        return false;
+
+    rgba.assign(npx * 4, 0);
     bool any_alpha = false;
     for (size_t i = 0; i < npx; ++i)
     {
-        const uint8_t idx8 = is_8bit ? idxplane[i] : 0;
-        const uint16_t px16 = is_16bit ? rgbplane16[i] : 0;
-        const uint16_t z = has_zbuffer ? zplane[i] : 0;
-        const bool transparent = has_zbuffer ? (z == 0 || z == 0x7F7F)
-                                             : (is_8bit ? (idx8 == key8) : (px16 == key16));
-        if (transparent) {
-            rgba[i*4+0]=rgba[i*4+1]=rgba[i*4+2]=rgba[i*4+3]=0;
-            dflt[i] = 0.0f;
-            continue;
-        }
-        if (is_8bit)
+        const uint8_t idx8 = p.is_8bit ? p.idx[i] : 0;
+        const uint16_t px16 = p.is_8bit ? 0 : p.rgb16[i];
+        const uint16_t z = p.has_zbuffer ? p.z[i] : 0;
+        const bool transparent = p.has_zbuffer ? (z == 0 || z == 0x7F7F)
+                                              : (p.is_8bit ? (idx8 == p.key8) : (px16 == p.key16));
+        if (transparent)
+            continue;   // the RGBA stays zero: the tile is not there
+        if (p.is_8bit)
         {
             const uint32_t c = pal->rgbcolors[idx8];
             rgba[i*4+0] = (uint8_t)( c        & 0xFF);
@@ -859,14 +849,73 @@ static bool UploadTileBitmap(PTBitmap bm,
             rgba[i*4+2] = (uint8_t)(( px16        & 0x1F) << 3);
         }
         uint8_t alpha_u8 = 255;
-        if (has_alpha && alphaplane)
+        if (p.has_alpha)
         {
-            const uint8_t a31 = alphaplane[i] > 31 ? 31 : alphaplane[i];
+            const uint8_t a31 = p.alpha[i] > 31 ? 31 : p.alpha[i];
             alpha_u8 = uint8_t((uint32_t(a31) * 255u) / 31u);
             any_alpha |= (a31 < 31);
         }
         rgba[i*4+3] = alpha_u8;
-        if (!has_zbuffer) { dflt[i] = 0.0f; continue; }
+    }
+    if (out_any_alpha)
+        *out_any_alpha = any_alpha;
+    return true;
+}
+
+// The retail tile bitmap's pixels as RGBA8. The art reload path uses it to
+// put the retail pixels back into a tile (the retail mode) and to clip the
+// high-res art to the retail coverage (the modern mode).
+// (Defined below, outside this file's anonymous namespace.)
+
+static bool UploadTileBitmap(PTBitmap bm,
+                             RendererImagePairHandle* out_image_pair,
+                             uint64_t* out_key,
+                             int32_t* out_w, int32_t* out_h,
+                             float* out_z_local_min = nullptr,
+                             float* out_z_local_max = nullptr,
+                             SSectorTileTex::SDepthDump* out_z_dump = nullptr,
+                             bool* out_has_alpha = nullptr,
+                             uint32_t* out_bm_flags = nullptr,
+                             std::vector<float>* out_cpu_depth_local = nullptr,
+                             std::vector<uint8_t>* out_cpu_opaque = nullptr,
+                             int32_t override_objtype = -1,
+                             const char* override_name = nullptr,
+                             bool* out_modern = nullptr)
+{
+    if (!Renderer || !out_image_pair || !bm || bm->width <= 0 || bm->height <= 0) return false;
+    STileBitmapPlanes planes;
+    if (!LoadTileBitmapPlanes(bm, planes))
+    {
+        static bool once = false;
+        if (!once) { once = true; log_error("[triage] UploadTileBitmap: neither 8-bit nor 16-bit (flags=0x%x %dx%d)", bm->flags, bm->width, bm->height); }
+        return false;
+    }
+    SPalette* pal = (SPalette*)bm->palette.ptr();
+    if (planes.is_8bit && !pal)
+    {
+        static bool once = false;
+        if (!once) { once = true; log_error("[triage] UploadTileBitmap: 8-bit tile without palette (flags=0x%x)", bm->flags); }
+        return false;
+    }
+    const int32_t w = planes.w, h = planes.h;
+    const size_t npx = size_t(w) * size_t(h);
+    std::vector<uint8_t> rgba;
+    bool any_alpha = false;
+    if (!TilePlanesToRGBA(planes, pal, rgba, &any_alpha))
+        return false;
+
+    std::vector<float> dflt(npx, 0.0f);
+    float z_local_min = FLT_MAX, z_local_max = -FLT_MAX;
+    SSectorTileTex::SDepthDump z_dump = {};
+    for (size_t i = 0; i < npx; ++i)
+    {
+        const uint8_t idx8 = planes.is_8bit ? planes.idx[i] : 0;
+        const uint16_t px16 = planes.is_8bit ? 0 : planes.rgb16[i];
+        const uint16_t z = planes.has_zbuffer ? planes.z[i] : 0;
+        const bool transparent = planes.has_zbuffer ? (z == 0 || z == 0x7F7F)
+                                                  : (planes.is_8bit ? (idx8 == planes.key8) : (px16 == planes.key16));
+        if (transparent) { dflt[i] = 0.0f; continue; }
+        if (!planes.has_zbuffer) { dflt[i] = 0.0f; continue; }
         ++z_dump.sample_count;
         if (z & 0x8000) ++z_dump.high_bit_count;
         if (z < z_dump.u16_min) z_dump.u16_min = z;
@@ -897,19 +946,26 @@ static bool UploadTileBitmap(PTBitmap bm,
     // stay retail's. The art is clipped to the retail coverage (the depth
     // map's shape), so the tile's shape is the coverage and the art only
     // fills it.
-    const uint8_t* color_pixels = rgba.get();
-    size_t color_size = npx * 4;
+    //
+    // The tile art mode ([Revisited] HighResTileMode) decides what a tile
+    // starts with: 0 = the retail pixels, 1 = the tree's art. The mode can
+    // be switched while the game runs (the "reloadtiles" command, the debug
+    // panel); the already loaded tiles are then re-coloured in place (see
+    // tiletreload.h).
+    const uint8_t* color_pixels = rgba.data();
+    size_t color_size = rgba.size();
     int32_t color_w = w, color_h = h;
-    const float* depth_pixels = dflt.get();
+    const float* depth_pixels = dflt.data();
     size_t depth_size = npx * sizeof(float);
     TileTexOverride::SImage override_image;
     bool override_used = false;
     if (override_name && override_objtype >= 0 && Renderer->ImagePairForKey(key) == 0 &&
+        RevisitedSettings.high_res_tile_mode == 1 &&
         TileTexOverride::Load(override_objtype, override_name, override_image) &&
         override_image.width > 0 && override_image.height > 0)
     {
-        ClipArtToCoverage(override_image.rgba, override_image.width, override_image.height,
-                           rgba.get(), w, h);
+        MapClipArtToCoverage(override_image.rgba, override_image.width, override_image.height,
+                              rgba.data(), w, h);
         log_info("[tiletex] %s %dx%d -> %dx%d (%.2fx)%s", override_name, w, h,
                  override_image.width, override_image.height,
                  float(override_image.width) / float(w),
@@ -940,13 +996,16 @@ static bool UploadTileBitmap(PTBitmap bm,
     if (out_z_dump) *out_z_dump = z_dump;
     if (out_has_alpha) *out_has_alpha = any_alpha;
     if (out_bm_flags) *out_bm_flags = bm->flags;
-    if (out_cpu_depth_local) out_cpu_depth_local->assign(dflt.get(), dflt.get() + npx);
+    if (out_cpu_depth_local) out_cpu_depth_local->assign(dflt.begin(), dflt.end());
     if (out_cpu_opaque)
     {
         out_cpu_opaque->resize(npx);
         for (size_t i = 0; i < npx; ++i)
             (*out_cpu_opaque)[i] = rgba[i * 4 + 3] ? 1 : 0;
     }
+    // Whether the tree's art is in the colour image now: the art reload
+    // needs to know which tiles have something to put back.
+    if (out_modern) *out_modern = override_used;
     return true;
 }
 
@@ -992,6 +1051,7 @@ static int32_t FindSectorBitmap(const std::vector<SSectorTileTex>& cache, const 
 
 static int32_t CacheSectorBitmap(std::vector<SSectorTileTex>& cache,
                                  std::unordered_map<PTBitmap, int32_t>& by_bitmap,
+                                 std::vector<STileArtEntry>* art_registry,
                                  PTBitmap bm,
                                  TObjectInstance* oi,
                                  TObjectImagery* img,
@@ -1016,12 +1076,14 @@ static int32_t CacheSectorBitmap(std::vector<SSectorTileTex>& cache,
     tex.debug_regz = img ? img->GetRegZ(state) : 0;
     uint32_t bm_flags = 0;
     uint64_t renderer_key = 0;
+    bool modern = false;
     if (!UploadTileBitmap(bm, &tex.image_pair, &renderer_key, &tex.w, &tex.h,
                           &tex.z_local_min, &tex.z_local_max,
                           &tex.z_dump, &tex.has_alpha, &bm_flags,
                           &tex.cpu_depth_local, &tex.cpu_opaque,
                           (state == 0 && oi) ? oi->ObjType() : -1,
-                          (state == 0 && oi) ? oi->GetTypeName() : nullptr))
+                          (state == 0 && oi) ? oi->GetTypeName() : nullptr,
+                          &modern))
         return -1;
     AddRendererImagePairSourceRef(img, renderer_key, tex.image_pair);
     tex.pixel_count = tex.w * tex.h;
@@ -1031,6 +1093,15 @@ static int32_t CacheSectorBitmap(std::vector<SSectorTileTex>& cache,
     const int32_t idx = int32_t(cache.size());
     cache.push_back(std::move(tex));
     by_bitmap[bm] = idx;
+    // The art reload needs the tile: its image pair, the retail bitmap and
+    // the type the art tree's files are named after.
+    if (art_registry)
+    {
+        NoteTileArt(*art_registry, cache[size_t(idx)].image_pair, bm,
+                    (state == 0 && oi) ? oi->ObjType() : -1,
+                    (state == 0 && oi) ? oi->GetTypeName() : nullptr,
+                    cache[size_t(idx)].w, cache[size_t(idx)].h, modern);
+    }
     return idx;
 }
 
@@ -1126,6 +1197,90 @@ void LoadObjectMaterial(T3DImagery* img, int32_t objnum, SHelperMeshSubmit& m)
 }
 
 } // namespace
+
+// The art never leaks outside the tile's coverage: the upscaled PNG carries a
+// wide, soft, half-transparent band around the shape (the upscaler's edge),
+// and those texels have no height in the depth map -- they would be drawn at
+// the tile's base plane, which the iso projection puts in front of whatever
+// stands there. The coverage is sampled nearest (the retail 1x alpha).
+void MapClipArtToCoverage(std::vector<uint8_t>& art, int32_t aw, int32_t ah,
+                           const uint8_t* retail_rgba, int32_t rw, int32_t rh)
+{
+    if (aw <= 0 || ah <= 0 || rw <= 0 || rh <= 0)
+        return;
+    std::vector<int32_t> column(static_cast<size_t>(aw), 0);
+    for (int32_t x = 0; x < aw; ++x)
+        column[size_t(x)] = int32_t((int64_t(x) * rw) / aw);
+    for (int32_t y = 0; y < ah; ++y)
+    {
+        const int32_t sy = int32_t((int64_t(y) * rh) / ah);
+        const uint8_t* src = retail_rgba + (size_t(sy) * size_t(rw)) * 4 + 3;
+        uint8_t* dst = art.data() + (size_t(y) * size_t(aw)) * 4 + 3;
+        for (int32_t x = 0; x < aw; ++x)
+        {
+            if (!src[size_t(column[size_t(x)]) * 4])
+                dst[size_t(x) * 4] = 0;
+        }
+    }
+}
+
+// The retail tile bitmap's pixels as RGBA8: the palette's colours, the
+// bitmap's own alpha, zero where the tile is transparent. The art reload
+// path uses it to put the retail pixels back into a tile and to clip the
+// tree's art to the retail coverage.
+bool MapDecodeTileBitmapRGBA(PTBitmap bm, std::vector<uint8_t>& out_rgba,
+                             int32_t* out_w, int32_t* out_h)
+{
+    STileBitmapPlanes planes;
+    if (!LoadTileBitmapPlanes(bm, planes))
+        return false;
+    SPalette* pal = (SPalette*)bm->palette.ptr();
+    if (!TilePlanesToRGBA(planes, pal, out_rgba, nullptr))
+        return false;
+    if (out_w) *out_w = planes.w;
+    if (out_h) *out_h = planes.h;
+    return true;
+}
+
+// Remember a loaded tile so the art reload can re-colour it. One entry per
+// image pair: the same bitmap uploaded twice (two map renderers, the same
+// tile in two sectors) is one GPU image and one entry.
+void NoteTileArt(std::vector<STileArtEntry>& registry,
+                 RendererImagePairHandle image_pair,
+                 void* bm, int32_t objtype, const char* type_name,
+                 int32_t w, int32_t h, bool modern)
+{
+    if (!image_pair) return;
+    for (STileArtEntry& e : registry)
+    {
+        if (e.image_pair != image_pair)
+            continue;
+        e.modern = e.modern || modern;
+        // One GPU image is one entry. The pair can be first noted from a
+        // state other than 0 (no type known yet); the state-0 upload knows
+        // the type, so fill what the entry lacks instead of keeping holes.
+        if (e.objtype < 0 && objtype >= 0)
+        {
+            e.objtype = objtype;
+            e.type_name = type_name ? type_name : "";
+        }
+        if (e.w == 0 && w > 0)
+        {
+            e.w = w;
+            e.h = h;
+        }
+        return;
+    }
+    STileArtEntry e;
+    e.image_pair = image_pair;
+    e.bm = bm;
+    e.objtype = objtype;
+    e.type_name = type_name ? type_name : "";
+    e.w = w;
+    e.h = h;
+    e.modern = modern;
+    registry.push_back(std::move(e));
+}
 
 void SSectorDrawableInst::UpdateFromInstance()
 {
@@ -1870,7 +2025,37 @@ const std::vector<SSectorMeshAsset>& TMapRenderer::Impl::equipObjectMeshes(T3DIm
     return meshes;
 }
 
-TMapRenderer::TMapRenderer() : impl(std::make_unique<Impl>()) {}
+// Every live map renderer. The tile art reload walks them all: the GPU
+// images belong to the one TRenderer, so a tile uploaded by any of them can
+// be re-coloured (see tiletreload.h).
+namespace {
+// The list is deliberately never destroyed: a map renderer can outlive the
+// statics at exit, and a static destructor order crash would be a silly way
+// to end the game.
+std::vector<TMapRenderer*>& MapRendererList()
+{
+    static std::vector<TMapRenderer*>* list = new std::vector<TMapRenderer*>();
+    return *list;
+}
+} // namespace
+
+int32_t MapRendererInstanceCount()
+{
+    return int32_t(MapRendererList().size());
+}
+
+TMapRenderer* MapRendererInstanceAt(int32_t index)
+{
+    const std::vector<TMapRenderer*>& list = MapRendererList();
+    if (index < 0 || index >= int32_t(list.size()))
+        return nullptr;
+    return list[size_t(index)];
+}
+
+TMapRenderer::TMapRenderer() : impl(std::make_unique<Impl>())
+{
+    MapRendererList().push_back(this);
+}
 TMapRenderer::~TMapRenderer()
 {
   // Defensive: unregister our map listener even if Shutdown() wasn't
@@ -1883,6 +2068,15 @@ TMapRenderer::~TMapRenderer()
         {
             m->RemoveListener(impl->mapListenerId);
             impl->mapListenerId = 0;
+        }
+    }
+    std::vector<TMapRenderer*>& list = MapRendererList();
+    for (size_t i = 0; i < list.size(); ++i)
+    {
+        if (list[i] == this)
+        {
+            list.erase(list.begin() + std::ptrdiff_t(i));
+            break;
         }
     }
 }
@@ -2153,6 +2347,18 @@ TSector* TMapRenderer::FindLoadedSector(int32_t level, int32_t sector_x, int32_t
     TGameMap* m = impl->currentMap.Get();
     if (!m || m->Level() != level) return nullptr;
     return m->FindSector(sector_x, sector_y);
+}
+
+int32_t TMapRenderer::TileArtCount() const
+{
+    return impl ? int32_t(impl->tileArt.size()) : 0;
+}
+
+STileArtEntry* TMapRenderer::TileArtAt(int32_t index) const
+{
+    if (!impl || index < 0 || index >= int32_t(impl->tileArt.size()))
+        return nullptr;
+    return &impl->tileArt[size_t(index)];
 }
 
 void TMapRenderer::SyncContentsCache()
@@ -3065,7 +3271,7 @@ void TMapRenderer::RebuildForCurrentMap()
             {
                 PTBitmap bm = StateAnimationBitmap(img, st, oi->GetFrame());
                 const int32_t tex_idx = bm
-                    ? CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st)
+                    ? CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, &s.tileArt, bm, oi, img, st)
                     : -1;
                 // Keep an empty animation record for ordinary objects, so a
                 // state change can supply frames without replacing the still.
@@ -3123,12 +3329,14 @@ void TMapRenderer::RebuildForCurrentMap()
                 t.debug_regz = img->GetRegZ(st);
                 uint32_t bm_flags = 0;
                 uint64_t renderer_key = 0;
+                bool modern = false;
                 if (!UploadTileBitmap(bm, &t.image_pair, &renderer_key, &t.w, &t.h,
                                       &t.z_local_min, &t.z_local_max,
                                       &t.z_dump, &t.has_alpha, &bm_flags,
                                       &t.cpu_depth_local, &t.cpu_opaque,
                                       st == 0 ? oi->ObjType() : -1,
-                                      st == 0 ? oi->GetTypeName() : nullptr))
+                                      st == 0 ? oi->GetTypeName() : nullptr,
+                                      &modern))
                 { ++upload_fail; continue; }
                 AddRendererImagePairSourceRef(img, renderer_key, t.image_pair);
                 t.pixel_count = t.w * t.h;
@@ -3137,6 +3345,13 @@ void TMapRenderer::RebuildForCurrentMap()
                 tex_idx = (int32_t)s.sectorTileTex.size();
                 t.bm_flags = bm_flags;
                 s.sectorTileTex.push_back(std::move(t));
+                // The art reload needs the tile: its image pair, the retail
+                // bitmap and the type the art tree's files are named after.
+                NoteTileArt(s.tileArt, s.sectorTileTex[size_t(tex_idx)].image_pair, bm,
+                            st == 0 ? oi->ObjType() : -1,
+                            st == 0 ? oi->GetTypeName() : nullptr,
+                            s.sectorTileTex[size_t(tex_idx)].w,
+                            s.sectorTileTex[size_t(tex_idx)].h, modern);
             }
             SSectorDrawableInst winst = {};
             winst.kind = ESectorDrawableKind::Tile;
@@ -3482,7 +3697,7 @@ void TMapRenderer::RenderFrame()
             TObjectImagery* img = oi->GetImagery();
             const int32_t st = oi->GetState();
             PTBitmap bm = StateAnimationBitmap(img, st, oi->GetFrame());
-            const int32_t tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st);
+            const int32_t tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, &s.tileArt, bm, oi, img, st);
             inst.asset_idx = tex_idx;
             if (tex_idx >= 0)
             {
@@ -3506,7 +3721,7 @@ void TMapRenderer::RenderFrame()
                     TBitmap* bm = StateStillBitmap(img, st);
                     int32_t tex_idx = bm ? FindSectorBitmap(s.sectorTileTex, bm) : -1;
                     if (bm && tex_idx < 0)
-                        tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st);
+                        tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, &s.tileArt, bm, oi, img, st);
                     inst.asset_idx = tex_idx;
                 }
                 inst.regx = img->GetRegX(st);

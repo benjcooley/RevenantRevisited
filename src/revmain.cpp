@@ -74,6 +74,7 @@ static SForceHeapCheckAlways g_force_heap_check_always;
 #include "shadow/shadowrun.h"
 #include "revisited_defaults.h"
 #include "revisited_settings.h"
+#include "spritetexoverride.h"
 #include "tiletexoverride.h"
 #include "testscreen.h"
 #include "cinematicscreen.h"
@@ -2894,7 +2895,17 @@ static bool BootGame()
     // of Apply fires from there.
     GetBakedRevisitedDefaults(RevisitedSettings);
     LoadRevisitedSettings();
+    // Without --revisited the art trees are still a player-side extra: read
+    // their ini keys once here. The session's own changes -- the debug
+    // panel's folders and modes -- must survive every later re-init (this
+    // is why the Init calls below and the art reloads never touch the ini).
+    if (!RevisitedEnabled)
+    {
+        LoadTileArtOverrideSettings();
+        LoadSpriteArtOverrideSettings();
+    }
     TileTexOverride::Init();
+    SpriteTexOverride::Init();
     ApplyRevisitedSettingsToRenderer(Renderer);
 
     if (StartupTestMode[0])
@@ -3098,6 +3109,10 @@ static void AppFrame()
 
     // The cursor's corner picture starts over each frame (cursor.h).
     BeginCursorFrame();
+    // The immediate-mode UIs own the OS pointer while open. Sync every frame
+    // instead of only at the F10/F12 toggles, so the editor's Window > Debug
+    // menu item brings the pointer back too.
+    ForceOSPointer(DebugUI::IsVisible() || Editor);
 
     // The frame's simulation: one step, or under Shadow Smoke's turbo as
     // many as fit its budget, each a whole frame's worth -- the time step,
@@ -3310,11 +3325,8 @@ static void AppEvent(const sapp_event* ev)
         if (down && vk == VK_F10)
         {
             DebugUI::SetVisible(!DebugUI::IsVisible());
-            // The debug panel is an immediate-mode UI: it needs a pointer the
-            // user can aim at widgets with, so the OS pointer comes back
-            // while it is open (the game hides it and draws its own cursor
-            // bitmap in-frame instead).
-            ForceOSPointer(DebugUI::IsVisible());
+            // The OS pointer follows state every frame in AppFrame; nothing
+            // else to do here.
             break;
         }
 

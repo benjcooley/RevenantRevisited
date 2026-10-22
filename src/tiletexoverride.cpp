@@ -110,23 +110,32 @@ std::string tile_stem(const std::string& filename)
     return lower(filename.substr(0, n - 4));
 }
 
-// "Final" holds the hand-finished picks, "Remade" the hand-remade art; both
-// beat the bulk upscale when the same tile exists in several sets.
-bool preferred_folder(const std::filesystem::path& p)
+// Hand-staged sets beat the bulk upscale, in tiers: "Final" is the finished
+// pick (tier 2), "Remade" and "Rework" are the hand-redone art (tier 1),
+// everything else is the bulk set (tier 0). A tier replaces everything below
+// it no matter which was found first; equal tiers keep the first one (the
+// walk order is stable).
+int32_t preferred_tier(const std::filesystem::path& p)
 {
+    int32_t tier = 0;
     for (const auto& part : p)
     {
         const std::string s = lower(part.string());
-        if (s == "final" || s == "remade")
-            return true;
+        if (s == "final")
+            return 2;
+        if (s == "remade" || s == "rework")
+            tier = 1;
     }
-    return false;
+    return tier;
 }
 
-// Directories that hold something other than tile albedo art.
+// Directories that hold something other than tile albedo art. ("Remade" is
+// NOT here: its properly named files are hand-staged albedo art -- see
+// preferred_tier -- and its stray files do not match the tile naming and
+// are ignored anyway.)
 bool skipped_dir(const std::string& name)
 {
-    static const char* kSkip[] = {"alpha", "depth", "remade", "original", "gemini", "raw", "icons"};
+    static const char* kSkip[] = {"alpha", "depth", "original", "gemini", "raw", "icons"};
     const std::string lowered = lower(name);
     for (const char* skip : kSkip)
         if (lowered == skip)
@@ -237,8 +246,11 @@ int32_t TileTexOverride::Init()
     s_count = 0;
     s_enabled = false;
 
-    if (!RevisitedEnabled && !LoadTileArtOverrideSettings())
-        return 0;
+    // The ini keys (HighResTiles / HighResTileRoot) were read once at boot
+    // (the gated loader with --revisited, revmain's explicit read without
+    // it). A re-init during the session -- the art reload -- must not pull
+    // them from the ini again: the debug panel edits the root and the mode
+    // live.
     if (!RevisitedSettings.high_res_tiles)
     {
         log_info("[tiletex] high-res tile art disabled (HighResTiles=0)");
@@ -290,9 +302,9 @@ int32_t TileTexOverride::Init()
         {
             s_by_key.emplace(stem, de.path());
         }
-        else if (preferred_folder(de.path()) && !preferred_folder(found->second))
+        else if (preferred_tier(de.path()) > preferred_tier(found->second))
         {
-            found->second = de.path(); // hand-finished art wins over the bulk set
+            found->second = de.path(); // hand-staged art wins over the bulk set
             ++duplicates;
         }
         else

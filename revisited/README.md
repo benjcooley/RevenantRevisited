@@ -73,12 +73,20 @@ overlay's path shadowing, and it does not need `--revisited`.
   root means `<overlay>/Imagery`, i.e. **`revisited/resources/Imagery/`**
   in the dev layout.
 - Entries are named `<NNNN>_<Name>.png`, as `--dumptiles` writes them,
-  and may sit in subdirectories. A copy under a `Final/` directory wins
-  over the 4x base; `original/`, `alpha/`, `depth/` and other names are
+  and may sit in subdirectories. Hand-staged copies win over the bulk
+  upscale, in tiers: `Final/` (finished picks) > `Remade/` + `Rework/`
+  (hand-redone art) > the base set -- no matter which one the scanner
+  meets first; `original/`, `alpha/`, `depth/` and other names are
   skipped.
 - Only the still state's albedo is swapped. The override's alpha is
   clipped to the retail silhouette (nearest 1x sample) so art cannot
   leak outside the tile.
+- `[Revisited] HighResTileMode = 0|1` (default 1 = modern): what a tile
+  loads at boot -- the tree's art (1) or the retail pixels (0). The live
+  switch/reload is `reloadtiles [retail|modern]` (console) or the panel
+  button (see below): it re-indexes the tree and re-colours the tiles the
+  game already holds, so editing a PNG shows up without leaving the game.
+  Depth, height chain, coverage and the walkmap always stay retail's.
 - The two keys above are read even without `--revisited`; every other
   Revisited tunable still needs the flag.
 - Dropping PNGs straight into `revisited/resources/` does **nothing**:
@@ -87,6 +95,42 @@ overlay's path shadowing, and it does not need `--revisited`.
   `HighResTileRoot` elsewhere) and keep the set out of git;
   `builders/import_tile_textures.py` mirrors an external art tree into
   `Imagery/`.
+
+## Sprite art (local override, retail vs modern)
+
+The 3D models (characters, monsters, props, effect billboards) can take
+their textures from a local tree of PNGs instead of the palettised bitmaps
+inside the retail `.I3D` files (`src/spritetexoverride.cpp`). Same idea as
+the tile art: a player-side extra that does not need `--revisited`.
+
+- `[Revisited] SpriteOverride = 1` (default on), `SpriteRoot = <dir>` and
+  `SpriteMode = 0|1` (0 = retail art, 1 = modern art) in the overlay's
+  `Revenant.ini`. An empty root means `<overlay>/Sprites`, else
+  `<HighResTileRoot>/sprites`.
+- Entries are laid out the way `--dumpi3d` writes them:
+  `<root>/<subdir>/<name>/texture_<NN>_frame_<NN>.png`, where
+  `<subdir>/<name>` is the `.I3D`'s path without its extension
+  (`Chars\locke.i3d` -> `chars/locke`). `texture_<NN>.png` covers every
+  frame of that texture.
+- The art has to have the retail texture's size: the model's own
+  dimensions come from it (flipbook cells, face aspect). A differently
+  sized file is skipped with a warning.
+- The debug panel's top-level **Sprites** tab (F10, after *Map*) has two
+  sections. **Location art (tiles)**: retail/modern radio for the tile
+  art, an *art root* box -- type a folder, press "Use this folder" and the
+  tree is re-indexed from it in the running game (empty keeps the
+  configured default) -- plus "Reload tiles" (re-index the tree, re-read
+  every tile PNG and put it into the tiles the renderer already draws --
+  an edited PNG shows up in the running game). **Model textures (3D)**:
+  the same switch, *art root* box and reload for the 3D models' textures.
+  The boxes edit the session only; nothing is written to `Revenant.ini`
+  until the panel's Save button. The console commands do the same
+  from a script: `reloadsprites [retail|modern]`, `reloadtiles
+  [retail|modern]` (each switches the mode, re-indexes and reloads) and
+  `debugui` (open the panel).
+- `--test=i3ddump --dumpi3d=<file.I3D>` writes the **retail** pixels of a
+  model, so the dumped PNGs can be used as the base for modern art (the
+  dump is taken before the art override is applied).
 
 ## Phase plan
 

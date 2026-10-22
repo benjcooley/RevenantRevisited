@@ -12,8 +12,9 @@
 //
 // Naming follows what --dumptiles writes: "<NNNN>_<Name>.png", NNNN = the
 // tile objtype index and Name = its object type name (e.g. 0763_Kep.png).
-// The tree is scanned once at boot; a file under a "Final" folder wins over
-// the plain set (hand-finished art over the bulk upscale). See
+// The tree is scanned once at boot (and re-indexed by the tile art reload);
+// the "Final" folder beats the "Remade"/"Rework" folders, which beat the
+// bulk sets, no matter which one the walker finds first. See
 // revisited/builders/import_tile_textures.py for a tree we can copy from.
 //
 // Only the colour changes. The tile shader keys coverage off the colour

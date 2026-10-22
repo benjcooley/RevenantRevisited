@@ -284,6 +284,10 @@ handle сохраняется, глубина/рельеф остаются ре
 - Консоль: `reloadtiles [retail|modern]` (command.cpp, `CmdReloadTiles`); панель:
   вкладка **Sprites** (top-level, после Map) → секция «Location art (tiles)» — радио
   Retail/Modern + «Reload tiles»; обе идут через `TileArtReload::ReloadAll`.
+- **Приоритет дерева арта (tiletexoverride, ревью 22.10.2026):** тиры
+  Final (2) > Remade + Rework (1) > bulk (0) — `preferred_tier`; папка `Remade`
+  больше НЕ в skipped_dir (раньше её отсекал walker, и зам пер-арт был недоступен;
+  мусорные имена типа `Gemini_Generated_*.png` отфильтровываются `tile_stem`).
 - Проверено вживую (Release, оконный прогон с оверлеем ini `[Revisited]->HighResTileRoot=<
   копия Final>`): маджента-тинт PNG на диске → `reloadtiles retail` — 66970 → 5 маджента-пикселей
   на экране; `reloadtiles modern` — 5 → 99402; глубина/силуэт чистые (квадратов нет).
@@ -296,6 +300,73 @@ handle сохраняется, глубина/рельеф остаются ре
 - Маджента-тинт PNG без перебора пикселей: System.Drawing `ColorMatrix` (tmp-snap/tile_tint.ps1).
 - Большая задержка между шагами через лог-маркеры: поллить `revenant.log` на
   `tiletex.*KInBenchN` (загрузка тайла) / `tiletex.*reload.*mode=retail|modern`.
+
+**Второе ревью (тоже 22.10.2026), факты для PR:**
+- Retail-reload тайлов декодит по тем же `LoadTileBitmapPlanes`/`TilePlanesToRGBA`, что и
+  upload — расхождений нет; image_pair_assets резидентны до shutdown, указатели в
+  реестре не висят; `MapRendererList` убирает уничтоженный рендерер.
+- `NoteTileArt` дозаполняет запись (objtype/type_name/w,h), если пара была отмечена
+  до state-0; `TileArtAt` неконстантный и reload синхронизирует `e.modern`
+  (второй retail подряд: 0 updated, 121 skipped — skip работает).
+- Логи: per-tile — DEBUG (в файл всё равно TRACE), пропуски агрегированы по причинам
+  с примерами; boot-путь арта в `UploadTileBitmap` паритетен reload-пути.
+- 3D retail-reload: retail-пиксели из свежего `GetBody()` GOG-файлов; страховка
+  `retail_all` — без дерева перечитывает все текстуры (случай удалённого корня).
+- `DebugUI::DrawFrame` больше не выходит при пустом списке contributor'ов (иначе
+  вкладка Sprites была недоступна). Защиты: bounds `framenum` в
+  `T3DImagery::UploadTextureFrame`, guard переполнения цифр в
+  `parse_texture_name` (guard должен считать ТОЛЬКО цифры, не остаток имени —
+  иначе ломается `texture_00_frame_00`; первый вариант был именно таковым).
+
+**Третье ревью (22.10.2026) + выбор папок арта:**
+- Выбор папки в панели: обе секции Sprites-вкладки получили текстовое
+  *art root*-поле + «Use this folder»:buf копируется из настроек один раз
+  (`g_tile_root_buf_ready`), Apply → `RevisitedSettings.high_res_tile_root` /
+  `sprite_root` (в буферную строку с трим-quotes/spaces, `TrimmedPath`) →
+  reload в текущем режиме. Сессия-only, ini пишет только Save.
+- Ключевая правка семантики ini: `LoadTileArtOverrideSettings` /
+  `LoadSpriteArtOverrideSettings` теперь вызываются **один раз на boot**
+  (revmain; off-revisited — явный вызов), а `TileTexOverride::Init` /
+  `SpriteTexOverride::Init` ini больше НЕ перечитывают. Причина: reload
+  пути вызывают Init и раньше перечитывали `*Mode`/root из ini, затирая
+  выбор панели (фикс `*Mode`-клоббера: режим ставится ПОСЛЕ Init в
+  `ReloadAll` и `ApplyMode`).
+- Верификация: `--revisited` boot → `reloadtiles modern` 121/111/10,
+  `reloadsprites retail` 5 кадров/556 imagery; без `--revisited` boot тоже
+  индексирует оба дерева (ключи арта читаются при off-revisited),
+  `reloadtiles retail` 111/121 («already the retail pixels» для 10 — бут
+  был modern), `reloadsprites modern` 5 кадров. Русские пути в логе —
+  UTF-8, читать с `-Encoding UTF8` (без него mojibake — артефакт
+  конвейера PowerShell, не кода).
+
+**Четвёртое ревью (22.10.2026) — финал:**
+- ImGui ID: `Button("Use this folder##tileroot")` и `InputText("##tileroot")` —
+  ОДИН ID (`ImHashStr` резетит при `##`); кнопка и поле в одной секции
+  делили одно имя. Фикс: кнопки получили ID `tileapply` / `spriteapply`.
+- ImGui ID: `RadioButton(label, bool)` — ID только от label, bool не участвует.
+  Группы «Retail/Modern» в секциях тайлов и моделей делили ID. Фикс: модельная
+  группа обёрнута в `ImGui::PushID("modelart")`.
+- `AddTexture` assumed-index (NumItems до Add) — мин. риск, дырки не образуются
+  (RemoveTexture только из ClearTextures).
+
+**Пятое ревью (22.10.2026) — зачистка хвостов:**
+- Проверены целиком: `SSkipLog`, `BuildColorMipChain` (cap `SG_MAX_MIPMAPS`,
+  счёт уровней совпадает с ожиданием sokol), `UpdateImagePairColor`
+  (immutable+mips, валидации полные, destroy после успешного make),
+  `ApplySpriteArtOverride`/`ReloadTextures` (retail_all-страховка, FreeBody
+  только своего body), `FindArt`/`candidate_folders`, `DecodePng`,
+  `SaveRevisitedSettings` (пишет оба root + оба mode), `NoteTileArt`,
+  консольные `reloadtiles`/`reloadsprites`.
+- Исправлено: лог modern-reload 3D печатал `slot.htexture` (кадр 0) для всех
+  кадров мульткадровой текстуры — теперь берёт `framehtexs[frame]`;
+  панельный Apply-лог печатает триммированное значение, а не сырой буфер.
+- Smoke: modern → retail → retail: 121/111/10 → 5 кадров (556 imagery) →
+  121/111/10 («already the retail pixels» только у 10 без арта — корректно).
+- Отложено (не баг на практике): `T3DImagery::AddTexture` берёт
+  `texture_index = textures.NumItems()` ДО `Add`, а `TVirtualArray::AddPtr`
+  умеет переиспользовать дырки; дырки не образуются, т.к. `RemoveTexture`
+  зовётся только из `ClearTextures`. Если когда-нибудь появится удаление
+  текстуры в мид-лайфе — индекс арта в `LoadTexture` поедет.
 
 ---
 
