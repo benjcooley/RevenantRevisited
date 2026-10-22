@@ -110,3 +110,67 @@ TEST(CameraScroll, NoScrollKeepsTheWholeCamera)
     EXPECT_FLOAT_EQ(camw_y, center_wy);
     EXPECT_FLOAT_EQ(camz_z, kcam_forward);
 }
+
+// The pixel-snap: a fractional scroll draws everything between two pixels
+// and the resampled pixels crawl while the camera moves, so the scroll is
+// snapped to whole screen pixels (the ground, the meshes and the effects
+// then step together), and every object is shifted onto the grid as a
+// whole (a world translation -- the ortho projection is affine, so the
+// mesh keeps its shape and does not blur).
+TEST(CameraScroll, SnappedScrollProjectsToWholePixels)
+{
+    for (float zoom : {1.0f, 1.5f, 2.0f, 2.6666f, 4.0f})
+    {
+        for (float wx = -6.0f; wx <= 6.0f; wx += 0.37f)
+        {
+            for (float wy = -5.0f; wy <= 5.0f; wy += 0.43f)
+            {
+                float psx = 0.0f, psy = 0.0f;
+                CameraScrollPixels(wx, wy, zoom, psx, psy);
+                const float want_x = std::floor(psx + 0.5f);
+                const float want_y = std::floor(psy + 0.5f);
+
+                float snap_wx = 0.0f, snap_wy = 0.0f;
+                SnapCameraScroll(wx, wy, zoom, snap_wx, snap_wy);
+                float rsx = 0.0f, rsy = 0.0f;
+                CameraScrollPixels(snap_wx, snap_wy, zoom, rsx, rsy);
+
+                EXPECT_NEAR(rsx, want_x, kEps);
+                EXPECT_NEAR(rsy, want_y, kEps);
+
+                // Snapping again must not move it: it is already whole.
+                float snap2_wx = 0.0f, snap2_wy = 0.0f;
+                SnapCameraScroll(snap_wx, snap_wy, zoom, snap2_wx, snap2_wy);
+                EXPECT_NEAR(snap2_wx, snap_wx, kEps);
+                EXPECT_NEAR(snap2_wy, snap_wy, kEps);
+            }
+        }
+    }
+}
+
+TEST(CameraScroll, MeshSnapDeltaLandsTheAnchorOnTheGrid)
+{
+    for (float zoom : {1.0f, 1.5f, 2.0f, 2.6666f, 4.0f})
+    {
+        for (float wx = -30.0f; wx <= 30.0f; wx += 1.31f)
+        {
+            for (float wy = -30.0f; wy <= 30.0f; wy += 0.77f)
+            {
+                for (float wz = -4.0f; wz <= 4.0f; wz += 1.7f)
+                {
+                    float dx = 0.0f, dy = 0.0f;
+                    MeshPixelSnapDelta(wx, wy, wz, zoom, dx, dy);
+
+                    // The camera is not moved by the shift: the anchor's
+                    // projected pixels land on the grid.
+                    const float sx = (wx - wy) * zoom;
+                    const float sy = (0.5f * (wx + wy) - wz * kIsoCos30) * zoom;
+                    const float snapped_sx = ((wx + dx) - (wy + dy)) * zoom;
+                    const float snapped_sy = (0.5f * ((wx + dx) + (wy + dy)) - wz * kIsoCos30) * zoom;
+                    EXPECT_NEAR(snapped_sx, std::floor(sx + 0.5f), kEps);
+                    EXPECT_NEAR(snapped_sy, std::floor(sy + 0.5f), kEps);
+                }
+            }
+        }
+    }
+}

@@ -6684,8 +6684,21 @@ void TRenderer::DrainFxQueue()
         for (const auto& e : fx_billboard_queue)
         {
             const auto& it = e.item;
-            scratch.push_back(it.world_pos[0]);
-            scratch.push_back(it.world_pos[1]);
+            // Snap the sprite onto the pixel grid: the fractional camera
+            // drew it between two pixels and its pixels crawled while it or
+            // the camera moved. The shift is a world translation, so the
+            // whole sprite keeps its shape.
+            float px = it.world_pos[0], py = it.world_pos[1];
+            if (fx_ortho)
+            {
+                float snap_x = 0.0f, snap_y = 0.0f;
+                MeshPixelSnapDelta(px - fx_camw_x, py - fx_camw_y, it.world_pos[2],
+                                   recon.zoom, snap_x, snap_y);
+                px += snap_x;
+                py += snap_y;
+            }
+            scratch.push_back(px);
+            scratch.push_back(py);
             scratch.push_back(it.world_pos[2]);
             scratch.push_back(it.size_wu[0]);
             scratch.push_back(it.size_wu[1]);
@@ -6754,8 +6767,18 @@ void TRenderer::DrainFxQueue()
         for (const auto& e : fx_particle_queue)
         {
             const auto& it = e.item;
-            scratch.push_back(it.world_pos[0]);
-            scratch.push_back(it.world_pos[1]);
+            float px = it.world_pos[0], py = it.world_pos[1];
+            // The particles snap onto the pixel grid like the billboards.
+            if (fx_ortho)
+            {
+                float snap_x = 0.0f, snap_y = 0.0f;
+                MeshPixelSnapDelta(px - fx_camw_x, py - fx_camw_y, it.world_pos[2],
+                                   recon.zoom, snap_x, snap_y);
+                px += snap_x;
+                py += snap_y;
+            }
+            scratch.push_back(px);
+            scratch.push_back(py);
             scratch.push_back(it.world_pos[2]);
             scratch.push_back(it.size_wu[0]);
             scratch.push_back(it.size_wu[1]);
@@ -6936,6 +6959,14 @@ void TRenderer::DrainFxQueue()
         // No camera-facing expansion or axis-aligned bounding-box fitting.
         for (const SQuadDrawItem& quad : fx_quad_queue)
         {
+            // The quad (the weapon swipe) snaps onto the pixel grid with the
+            // rest: the anchor is its first corner; the shift is a world
+            // translation, so all corners move by the same pixel amount.
+            float snap_x = 0.0f, snap_y = 0.0f;
+            if (fx_ortho)
+                MeshPixelSnapDelta(quad.world_pos[0][0] - fx_camw_x,
+                                   quad.world_pos[0][1] - fx_camw_y,
+                                   quad.world_pos[0][2], recon.zoom, snap_x, snap_y);
             DrawSpan ds = {};
             ds.first = int32_t(scratch.size() / kFxStripVertexFloats);
             ds.count = quad.corner_count == 3 ? 3 : 6;
@@ -6954,7 +6985,7 @@ void TRenderer::DrainFxQueue()
             {
                 const int32_t corner = ds.count == 3 ? triangle[i] : corners[i];
                 const float* pos = quad.world_pos[corner];
-                scratch.push_back(pos[0]); scratch.push_back(pos[1]); scratch.push_back(pos[2]);
+                scratch.push_back(pos[0] + snap_x); scratch.push_back(pos[1] + snap_y); scratch.push_back(pos[2]);
                 // A nonzero tangent keeps all shader normalizations defined.
                 scratch.push_back(1.0f); scratch.push_back(0.0f); scratch.push_back(0.0f);
                 scratch.push_back(0.0f);  // no strip extrusion

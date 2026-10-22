@@ -1501,6 +1501,7 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                 }
             }
         }
+        float sub_x = 0.0f, sub_y = 0.0f, sub_z = 0.0f;
         if (used_bone_xform)
         {
             // Sub-tick motion. The world position is a whole pixel and only
@@ -1516,7 +1517,6 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             const int32_t step_x = world_pos.x - prev.x;
             const int32_t step_y = world_pos.y - prev.y;
             const int32_t step_z = world_pos.z - prev.z;
-            float sub_x = 0.0f, sub_y = 0.0f, sub_z = 0.0f;
             if (SubTickOffset(step_x, step_y, step_z, frac, sub_x, sub_y, sub_z))
             {
                 world_renderer[12] += sub_x;
@@ -1557,6 +1557,24 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             MatrixScale16(ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z, world_scale);
             MatrixMul16(world_scale, world_renderer, scaled_world);
             std::memcpy(world_renderer, scaled_world, sizeof(world_renderer));
+        }
+        // Snap the mesh onto the pixel grid: the fractional camera drew the
+        // character between two pixels, so its pixels crawled and blurred
+        // while it moved. The shift is a world translation -- the ortho
+        // projection is affine, so every vertex moves by the same pixel
+        // amount and the mesh keeps its shape -- and the character lands
+        // whole-pixel steps, as retail drew it.
+        if (!ctx.perspective_camera)
+        {
+            const float cam_wx = float(ctx.sectorCameraWorld.x) + ctx.cameraScrollX;
+            const float cam_wy = float(ctx.sectorCameraWorld.y) + ctx.cameraScrollY;
+            float snap_x = 0.0f, snap_y = 0.0f;
+            MeshPixelSnapDelta(float(world_pos.x) + sub_x - cam_wx,
+                               float(world_pos.y) + sub_y - cam_wy,
+                               float(world_pos.z) + sub_z,
+                               ctx.camera_zoom, snap_x, snap_y);
+            world_renderer[12] += snap_x;
+            world_renderer[13] += snap_y;
         }
 
         uint32_t authored_blend = 0;
@@ -1766,6 +1784,18 @@ void TMapRenderer::Impl::submitEquipment(const SMapRenderContext& ctx, SMapRende
     float sub_x = 0.0f, sub_y = 0.0f, sub_z = 0.0f;
     const bool sub_tick = SubTickOffset(world_pos.x - prev.x, world_pos.y - prev.y,
                                         world_pos.z - prev.z, frac, sub_x, sub_y, sub_z);
+    // The body is snapped onto the pixel grid; the equipment must carry the
+    // same shift, or the sword sits a pixel off the hand as the body moves.
+    float snap_x = 0.0f, snap_y = 0.0f;
+    if (!ctx.perspective_camera)
+    {
+        const float cam_wx = float(ctx.sectorCameraWorld.x) + ctx.cameraScrollX;
+        const float cam_wy = float(ctx.sectorCameraWorld.y) + ctx.cameraScrollY;
+        MeshPixelSnapDelta(float(world_pos.x) + (sub_tick ? sub_x : 0.0f) - cam_wx,
+                           float(world_pos.y) + (sub_tick ? sub_y : 0.0f) - cam_wy,
+                           float(world_pos.z) + (sub_tick ? sub_z : 0.0f),
+                           ctx.camera_zoom, snap_x, snap_y);
+    }
     float scale[16];
     MatrixScale16(ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z, scale);
     for (const TCharAnimator::SEquipAttachment& attachment : animator->EquipAttachments())
@@ -1786,6 +1816,8 @@ void TMapRenderer::Impl::submitEquipment(const SMapRenderContext& ctx, SMapRende
             world[13] += sub_y;
             world[14] += sub_z;
         }
+        world[12] += snap_x;
+        world[13] += snap_y;
         for (const SSectorMeshAsset& asset : equipObjectMeshes(*mesh, attachment.object))
         {
             SMeshSubmit m = {};
@@ -3507,6 +3539,17 @@ void TMapRenderer::RenderFrame()
     projectctx.vh = vh;
     projectctx.cam_forward = camera_forward;
     projectctx.camera_zoom = effective_camera_zoom;
+    // Snap the camera's step to whole screen pixels and carry it back in
+    // world units, so every path (the ground tiles, the meshes, the
+    // overlays, the effects) sees the same quantized camera: the fractional
+    // scroll drew everything between two pixels, and the resampled pixels
+    // crawled while the camera eased after the hero.
+    {
+        float snap_wx = 0.0f, snap_wy = 0.0f;
+        SnapCameraScroll(s.cameraScrollX, s.cameraScrollY, effective_camera_zoom, snap_wx, snap_wy);
+        s.cameraScrollX = snap_wx;
+        s.cameraScrollY = snap_wy;
+    }
     projectctx.cameraScrollX = s.cameraScrollX;
     projectctx.cameraScrollY = s.cameraScrollY;
     projectctx.tile_scale = s.sectorPerspectiveTileScale;
