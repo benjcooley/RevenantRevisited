@@ -139,6 +139,10 @@ struct SMapRenderContext {
     const std::vector<SSectorMeshAsset>* mesh_assets = nullptr;
     TTextureHandle debug_green_texture = kInvalidTexture;
     S3DPoint sectorCameraWorld = {0,0,0};
+    // The camera's step since the tick began, in world units. The world is
+    // drawn against the camera's position at the tick's start; the part of
+    // the step that has passed scrolls the picture by a fraction of a pixel.
+    float cameraScrollX = 0.0f, cameraScrollY = 0.0f;
     int32_t cam_ox = 0, cam_oy = 0;
     int32_t vw = 0, vh = 0;
     float cam_forward = 2750.0f;
@@ -360,6 +364,9 @@ struct TMapRenderer::Impl
     int32_t sectorCenterOy = 0;
     S3DPoint sectorWorldCenter = {0,0,0};
     S3DPoint sectorCameraWorld = {0,0,0};
+    // The camera's step since the tick began, in world units (see
+    // SMapRenderContext::cameraScrollX).
+    float cameraScrollX = 0.0f, cameraScrollY = 0.0f;
     int32_t  cameraLevel = 0;
     int32_t  drawRecordLevel = -1;
     int32_t  drawRangeMinSx = 0;

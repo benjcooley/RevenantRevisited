@@ -510,8 +510,12 @@ out) both call it, so a fading mesh is lit exactly like an opaque one
 
 The ambient both models read is `TMapPane::ambient`, which now carries the
 gamma offset (§2.5, `TMapPane::SetAmbientLight` in `src/mappane.cpp`,
-`GammaAmbientOffset` in `src/gameoptions.h`). The Options pane's OK re-sets
-it as retail does (`TOptionsPane::Apply`).
+`GammaAmbientOffset` in `src/gameoptions.h`). The Options pane's OK goes
+through `TMapPane::ReapplyAmbientGamma` (`TOptionsPane::Apply`): the offset
+the value already carries comes off before the current level's goes on, so
+repeated OK is idempotent and a GammaLevel change still lands. Retail passed
+the value it had just read straight back, offset included, so each OK added
+it again (question 93); the port diverges here since 2026-10-19.
 
 Known simplifications, each to confirm with a retail shot (§7):
 

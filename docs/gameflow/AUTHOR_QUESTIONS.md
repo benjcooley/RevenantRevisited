@@ -271,7 +271,12 @@ Answer inline (or in chat) and the owning doc gets updated.
     seen in the shipped game: in the opening capture session the pane
     opened and closed through OK several times, and the Keep got brighter
     each time while the HUD stayed the same (`opening-20261006-run2.avi`,
-    about 8:56, 10:03, 10:28, 11:58; OPTIONS.md §7.11). The port keeps it.
+    about 8:56, 10:03, 10:28, 11:58; OPTIONS.md §7.11). The port kept it
+    until 2026-10-19: `TOptionsPane::Apply` now calls
+    `TMapPane::ReapplyAmbientGamma`, which takes the old offset off before
+    the current level's goes on, so repeated OK is idempotent. Deliberate
+    divergence -- a player toggling the light options left the area
+    overexposed with no way back short of re-entering it.
 
 ## Camera and control ([forensics/COMMAND_SYSTEM.md](forensics/COMMAND_SYSTEM.md) §4)
 

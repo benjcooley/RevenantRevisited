@@ -1221,15 +1221,26 @@ void TPlayScreen::RenderFrame()
     // The view is the map pane's center, which TMapPane::UpdateMapPos moves
     // toward the centeron target each tick, as retail drew every frame from
     // it (the scroll origin is WorldToScreen(center) less half the pane,
-    // 0x004539d0), a tick behind (TMapPane::CameraPos). Following the player
-    // it moves on the tick as he does, so he doesn't shake against it; a pan
-    // elsewhere glides between ticks.
+    // 0x004539d0), a tick behind (TMapPane::CameraPos). The world is drawn
+    // against the camera's position at the tick's start; the part of the
+    // camera's step that has passed scrolls the picture by a fraction of a
+    // pixel, so the view moves smoothly instead of jumping once a tick.
+    // The editor has a camera of its own and does not scroll at all, and so
+    // does a frame without a player, so the scroll is zeroed outside the
+    // game mode: a leftover scroll would draw the whole editor world shifted
+    // by up to a camera step.
+    float scroll_x = 0.0f, scroll_y = 0.0f;
     if (CurrentMode() == GameMode() && Player)
     {
-        const double glide = MapPane.IsFollowingPlayer() ? 0.0 : TTime::LegacyFrameFraction();
-        const S3DPoint p = MapPane.CameraPos(glide);
+        const S3DPoint p = MapPane.CameraPos(0.0);
         mapRenderer->SetCameraWorld(MapPane.GetMapLevel(), p.x, p.y, p.z);
+        // Under a pause modal the world does not tick, so the tick's fraction
+        // runs on without the camera moving: the scroll would drift through
+        // the camera's step and back, and the picture would shiver.
+        if (!Editor && !ModalHas(MODAL_PAUSE))
+            MapPane.CameraScrollStep(TTime::LegacyFrameFraction(), scroll_x, scroll_y);
     }
+    mapRenderer->SetCameraScroll(scroll_x, scroll_y);
 
     // While the editor is paused and nothing is dirty, skip the world
     // render entirely. The renderer's lit_target persists, so the Game
@@ -1617,6 +1628,8 @@ void TPlayScreen::Pulse()
 {
     Update();
     TScreen::Pulse();
+    // A level held for a door script is released once the script ends.
+    GameFlow.Session().UpdateHeldLevels();
     if (!ModalHas(MODAL_PAUSE))
         AutoMap.RecordTravels();
 }
@@ -1687,6 +1700,9 @@ void TPlayScreen::KeyPress(int32_t key, bool down)
         {
             StartEditor();
         }
+        // The editor is an immediate-mode UI: it needs a pointer the user can
+        // aim at widgets with, so the OS pointer comes back while it is open.
+        ForceOSPointer(Editor);
         return;
     }
 

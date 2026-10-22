@@ -33,6 +33,7 @@
 #include "mapmanager.h"
 #include "dls.h"
 #include "revisited_settings.h"
+#include "tiletexoverride.h"
 #include "mappane.h"
 #include "playscreen.h"
 #include "math3d.h"
@@ -48,6 +49,7 @@
 #include "testconfig.h"
 #include "sceneviewport.h"
 #include "time.h"
+#include "subtick.h"
 
 #include <algorithm>
 #include <chrono>
@@ -62,6 +64,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -450,6 +453,17 @@ inline void ProjectWorldPointToScreen(const SMapRenderContext& ctx,
         world.z
     };
     ProjectCameraRelToScreen(ctx, rel, sx, sy);
+    if (!ctx.perspective_camera)
+    {
+        // The picture is drawn against the camera plus the part of the
+        // camera's step that has passed, so a projected point has to move
+        // with it (the mouse pick would miss by that much otherwise).
+        float scroll_sx = 0.0f, scroll_sy = 0.0f;
+        CameraScrollPixels(ctx.cameraScrollX, ctx.cameraScrollY,
+                           (std::max)(ctx.camera_zoom, 0.0001f), scroll_sx, scroll_sy);
+        sx += scroll_sx;
+        sy += scroll_sy;
+    }
     const float scene_z = CameraDepth(rel, ctx.cam_forward);
     if (scene_z_out)
         *scene_z_out = scene_z;
@@ -590,6 +604,13 @@ static bool TileCameraVolumeVisible(const SMapRenderContext& ctx,
     else
     {
         ProjectCameraRelToScreen(ctx, rel, anchor_x, anchor_y);
+        // The picture scrolls with the camera: a tile the scroll brings into
+        // view must not be culled, or the edge of the screen shows a gap.
+        float scroll_sx = 0.0f, scroll_sy = 0.0f;
+        CameraScrollPixels(ctx.cameraScrollX, ctx.cameraScrollY,
+                           (std::max)(ctx.camera_zoom, 0.0001f), scroll_sx, scroll_sy);
+        anchor_x += scroll_sx;
+        anchor_y += scroll_sy;
     }
 
     const float scale = ctx.perspective_camera
@@ -698,6 +719,32 @@ static void ComputeAuthoredLocalDepthRange(int32_t wwidth, int32_t wlength, int3
     }
 }
 
+// The art never leaks outside the tile's coverage: the upscaled PNG carries a
+// wide, soft, half-transparent band around the shape (the upscaler's edge),
+// and those texels have no height in the depth map -- they would be drawn at
+// the tile's base plane, which the iso projection puts in front of whatever
+// stands there. The coverage is sampled nearest (the retail 1x alpha).
+static void ClipArtToCoverage(std::vector<uint8_t>& art, int32_t aw, int32_t ah,
+                               const uint8_t* retail_rgba, int32_t rw, int32_t rh)
+{
+    if (aw <= 0 || ah <= 0 || rw <= 0 || rh <= 0)
+        return;
+    std::vector<int32_t> column(static_cast<size_t>(aw), 0);
+    for (int32_t x = 0; x < aw; ++x)
+        column[size_t(x)] = int32_t((int64_t(x) * rw) / aw);
+    for (int32_t y = 0; y < ah; ++y)
+    {
+        const int32_t sy = int32_t((int64_t(y) * rh) / ah);
+        const uint8_t* src = retail_rgba + (size_t(sy) * size_t(rw)) * 4 + 3;
+        uint8_t* dst = art.data() + (size_t(y) * size_t(aw)) * 4 + 3;
+        for (int32_t x = 0; x < aw; ++x)
+        {
+            if (!src[size_t(column[size_t(x)]) * 4])
+                dst[size_t(x) * 4] = 0;
+        }
+    }
+}
+
 static bool UploadTileBitmap(PTBitmap bm,
                              RendererImagePairHandle* out_image_pair,
                              uint64_t* out_key,
@@ -708,16 +755,28 @@ static bool UploadTileBitmap(PTBitmap bm,
                              bool* out_has_alpha = nullptr,
                              uint32_t* out_bm_flags = nullptr,
                              std::vector<float>* out_cpu_depth_local = nullptr,
-                             std::vector<uint8_t>* out_cpu_opaque = nullptr)
+                             std::vector<uint8_t>* out_cpu_opaque = nullptr,
+                             int32_t override_objtype = -1,
+                             const char* override_name = nullptr)
 {
     if (!Renderer || !out_image_pair || !bm || bm->width <= 0 || bm->height <= 0) return false;
     const bool is_8bit = (bm->flags & BM_8BIT) != 0;
     const bool is_16bit = (bm->flags & (BM_15BIT | BM_16BIT)) != 0;
     const bool has_zbuffer = (bm->flags & BM_ZBUFFER) != 0;
     const bool has_alpha = (bm->flags & BM_ALPHA) != 0;
-    if (!is_8bit && !is_16bit) return false;
+    if (!is_8bit && !is_16bit)
+    {
+        static bool once = false;
+        if (!once) { once = true; log_error("[triage] UploadTileBitmap: neither 8-bit nor 16-bit (flags=0x%x %dx%d)", bm->flags, bm->width, bm->height); }
+        return false;
+    }
     SPalette* pal = (SPalette*)bm->palette.ptr();
-    if (is_8bit && !pal) return false;
+    if (is_8bit && !pal)
+    {
+        static bool once = false;
+        if (!once) { once = true; log_error("[triage] UploadTileBitmap: 8-bit tile without palette (flags=0x%x)", bm->flags); }
+        return false;
+    }
     const int32_t w = bm->width, h = bm->height;
     const size_t npx = size_t(w) * size_t(h);
     const uint8_t key8 = (uint8_t)bm->keycolor;
@@ -832,13 +891,48 @@ static bool UploadTileBitmap(PTBitmap bm,
         z_dump.bbox_x1 = z_dump.bbox_y1 = 0;
     }
     const uint64_t key = RendererSourcePointerKey(1u, bm);
-    const uint64_t gpu_bytes = uint64_t(npx) * (4u + uint64_t(sizeof(float)));
+
+    // High-res tile art (see tiletexoverride.h). The colour is swapped for the
+    // matching upscaled PNG; depth, coverage and every derived value below
+    // stay retail's. The art is clipped to the retail coverage (the depth
+    // map's shape), so the tile's shape is the coverage and the art only
+    // fills it.
+    const uint8_t* color_pixels = rgba.get();
+    size_t color_size = npx * 4;
+    int32_t color_w = w, color_h = h;
+    const float* depth_pixels = dflt.get();
+    size_t depth_size = npx * sizeof(float);
+    TileTexOverride::SImage override_image;
+    bool override_used = false;
+    if (override_name && override_objtype >= 0 && Renderer->ImagePairForKey(key) == 0 &&
+        TileTexOverride::Load(override_objtype, override_name, override_image) &&
+        override_image.width > 0 && override_image.height > 0)
+    {
+        ClipArtToCoverage(override_image.rgba, override_image.width, override_image.height,
+                           rgba.get(), w, h);
+        log_info("[tiletex] %s %dx%d -> %dx%d (%.2fx)%s", override_name, w, h,
+                 override_image.width, override_image.height,
+                 float(override_image.width) / float(w),
+                 override_image.has_alpha ? " (own alpha)" : "");
+        color_pixels = override_image.rgba.data();
+        color_size = override_image.rgba.size();
+        color_w = override_image.width;
+        color_h = override_image.height;
+        override_used = true;
+    }
+
+    const uint64_t gpu_bytes = uint64_t(color_size) + uint64_t(depth_size);
     *out_image_pair = Renderer->RegisterImagePairAsset(key,
-                                                       rgba.get(), npx * 4,
-                                                       dflt.get(), npx * sizeof(float),
-                                                       w, h, gpu_bytes);
+                                                       color_pixels, color_size,
+                                                       depth_pixels, depth_size,
+                                                       w, h, gpu_bytes,
+                                                       color_w, color_h);
     if (!*out_image_pair)
+    {
+        static bool once = false;
+        if (!once) { once = true; log_error("[triage] UploadTileBitmap: RegisterImagePairAsset failed (%dx%d)", w, h); }
         return false;
+    }
     if (out_key) *out_key = key;
     *out_w = w; *out_h = h;
     if (out_z_local_min) *out_z_local_min = z_local_min;
@@ -925,7 +1019,9 @@ static int32_t CacheSectorBitmap(std::vector<SSectorTileTex>& cache,
     if (!UploadTileBitmap(bm, &tex.image_pair, &renderer_key, &tex.w, &tex.h,
                           &tex.z_local_min, &tex.z_local_max,
                           &tex.z_dump, &tex.has_alpha, &bm_flags,
-                          &tex.cpu_depth_local, &tex.cpu_opaque))
+                          &tex.cpu_depth_local, &tex.cpu_opaque,
+                          (state == 0 && oi) ? oi->ObjType() : -1,
+                          (state == 0 && oi) ? oi->GetTypeName() : nullptr))
         return -1;
     AddRendererImagePairSourceRef(img, renderer_key, tex.image_pair);
     tex.pixel_count = tex.w * tex.h;
@@ -1153,10 +1249,22 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         float spx = 0.0f, spy = 0.0f;
         ProjectCameraRelToScreen(ctx, rel, spx, spy);
         const float sprite_scale = (std::max)(ctx.camera_zoom, 0.0001f);
+        // The camera's step since the tick began: the world is drawn against
+        // the camera's position at the tick's start, and the part of the step
+        // that has passed scrolls the picture (the iso projection of the world
+        // delta, scaled by the zoom). The tile then lands between pixels and
+        // the view moves smoothly instead of jumping once a tick. The meshes
+        // are drawn from the same camera (MeshCameraUniforms).
+        float scroll_sx = 0.0f, scroll_sy = 0.0f;
+        CameraScrollPixels(ctx.cameraScrollX, ctx.cameraScrollY, sprite_scale, scroll_sx, scroll_sy);
+        const float fx = spx - float(regx) * sprite_scale + scroll_sx;
+        const float fy = spy - float(regy) * sprite_scale + scroll_sy;
+        const int32_t dx = int32_t(std::lround(fx)) + ctx.cam_ox;
+        const int32_t dy = int32_t(std::lround(fy)) + ctx.cam_oy;
+        const float frac_x = fx - float(std::lround(fx));
+        const float frac_y = fy - float(std::lround(fy));
         const float anchor_scene = CameraDepth(rel, ctx.cam_forward) - ctx.depth_mul * float(regz);
         const float anchor_scene_norm = std::fabs(ctx.zspan) > 1e-6f ? (anchor_scene - ctx.z_near) / ctx.zspan : 0.5f;
-        const int32_t dx = int32_t(std::lround(spx - float(regx) * sprite_scale)) + ctx.cam_ox;
-        const int32_t dy = int32_t(std::lround(spy - float(regy) * sprite_scale)) + ctx.cam_oy;
         const int32_t dst_w = ScalePixel(sprite_scale, float(tex.w));
         const int32_t dst_h = ScalePixel(sprite_scale, float(tex.h));
         if (!image_pair) { ++stats.draw_invalid_img; return; }
@@ -1200,6 +1308,14 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                 const float focal_zoom = (std::max)(ctx.cam_forward * ctx.camera_zoom, 1.0f);
                 overlay_scale = focal_zoom / z;
             }
+            else
+            {
+                // The overlay scrolls with the camera like the ground does,
+                // or it sits a whole camera step away from the world it
+                // belongs to and jumps once a tick.
+                light_sx += scroll_sx;
+                light_sy += scroll_sy;
+            }
             SOverlaySubmit sub = {};
             sub.image_pair = tex.image_pair;
             sub.dst_x = int32_t(std::lround(light_sx - float(regx) * overlay_scale)) + ctx.cam_ox;
@@ -1215,6 +1331,8 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         sub.dst_y       = dy;
         sub.dst_w       = dst_w;
         sub.dst_h       = dst_h;
+        sub.frac_x      = frac_x;
+        sub.frac_y      = frac_y;
         sub.src_w       = tex.w;
         sub.src_h       = tex.h;
         sub.anchor_z    = anchor_scene_norm;
@@ -1383,6 +1501,29 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                 }
             }
         }
+        float sub_x = 0.0f, sub_y = 0.0f, sub_z = 0.0f;
+        if (used_bone_xform)
+        {
+            // Sub-tick motion. The world position is a whole pixel and only
+            // changes at the legacy 24 Hz tick, so the mesh is drawn where
+            // the tick started, advanced by the fraction of the tick that
+            // has passed: the sprite glides instead of stepping 1-2 px six
+            // times a second. The renderer matrix is column-vector after
+            // the transpose, so the translation is the last column.
+            const S3DPoint prev = oi->PrevPos();
+            const float frac = float(TTime::LegacyFrameFraction());
+            // A jump (a teleport, a script that placed the object) is not
+            // a step of a tick: the object is drawn where it is.
+            const int32_t step_x = world_pos.x - prev.x;
+            const int32_t step_y = world_pos.y - prev.y;
+            const int32_t step_z = world_pos.z - prev.z;
+            if (SubTickOffset(step_x, step_y, step_z, frac, sub_x, sub_y, sub_z))
+            {
+                world_renderer[12] += sub_x;
+                world_renderer[13] += sub_y;
+                world_renderer[14] += sub_z;
+            }
+        }
         if (!used_bone_xform)
         {
             if (!ctx.force_mesh_preview_pose)
@@ -1416,6 +1557,24 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             MatrixScale16(ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z, world_scale);
             MatrixMul16(world_scale, world_renderer, scaled_world);
             std::memcpy(world_renderer, scaled_world, sizeof(world_renderer));
+        }
+        // Snap the mesh onto the pixel grid: the fractional camera drew the
+        // character between two pixels, so its pixels crawled and blurred
+        // while it moved. The shift is a world translation -- the ortho
+        // projection is affine, so every vertex moves by the same pixel
+        // amount and the mesh keeps its shape -- and the character lands
+        // whole-pixel steps, as retail drew it.
+        if (!ctx.perspective_camera)
+        {
+            const float cam_wx = float(ctx.sectorCameraWorld.x) + ctx.cameraScrollX;
+            const float cam_wy = float(ctx.sectorCameraWorld.y) + ctx.cameraScrollY;
+            float snap_x = 0.0f, snap_y = 0.0f;
+            MeshPixelSnapDelta(float(world_pos.x) + sub_x - cam_wx,
+                               float(world_pos.y) + sub_y - cam_wy,
+                               float(world_pos.z) + sub_z,
+                               ctx.camera_zoom, snap_x, snap_y);
+            world_renderer[12] += snap_x;
+            world_renderer[13] += snap_y;
         }
 
         uint32_t authored_blend = 0;
@@ -1618,6 +1777,25 @@ void TMapRenderer::Impl::submitEquipment(const SMapRenderContext& ctx, SMapRende
         return;
 
     const float sort_depth = CameraDepth(MeshCameraRel(ctx, world_pos), ctx.cam_forward);
+    // The body glides between the ticks; the equipment has to glide with it,
+    // or the sword leaves the hand for the rest of the tick.
+    const S3DPoint prev = oi.PrevPos();
+    const float frac = float(TTime::LegacyFrameFraction());
+    float sub_x = 0.0f, sub_y = 0.0f, sub_z = 0.0f;
+    const bool sub_tick = SubTickOffset(world_pos.x - prev.x, world_pos.y - prev.y,
+                                        world_pos.z - prev.z, frac, sub_x, sub_y, sub_z);
+    // The body is snapped onto the pixel grid; the equipment must carry the
+    // same shift, or the sword sits a pixel off the hand as the body moves.
+    float snap_x = 0.0f, snap_y = 0.0f;
+    if (!ctx.perspective_camera)
+    {
+        const float cam_wx = float(ctx.sectorCameraWorld.x) + ctx.cameraScrollX;
+        const float cam_wy = float(ctx.sectorCameraWorld.y) + ctx.cameraScrollY;
+        MeshPixelSnapDelta(float(world_pos.x) + (sub_tick ? sub_x : 0.0f) - cam_wx,
+                           float(world_pos.y) + (sub_tick ? sub_y : 0.0f) - cam_wy,
+                           float(world_pos.z) + (sub_tick ? sub_z : 0.0f),
+                           ctx.camera_zoom, snap_x, snap_y);
+    }
     float scale[16];
     MatrixScale16(ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z, scale);
     for (const TCharAnimator::SEquipAttachment& attachment : animator->EquipAttachments())
@@ -1632,6 +1810,14 @@ void TMapRenderer::Impl::submitEquipment(const SMapRenderContext& ctx, SMapRende
         float world[16];
         TransposeSourceToRenderer(bone->transform.Matrix(), bone_world);
         MatrixMul16(scale, bone_world, world);
+        if (sub_tick)
+        {
+            world[12] += sub_x;
+            world[13] += sub_y;
+            world[14] += sub_z;
+        }
+        world[12] += snap_x;
+        world[13] += snap_y;
         for (const SSectorMeshAsset& asset : equipObjectMeshes(*mesh, attachment.object))
         {
             SMeshSubmit m = {};
@@ -1807,8 +1993,10 @@ void TMapRenderer::ScreenToWorld(int32_t screen_x, int32_t screen_y,
     ::ScreenToWorld(int32_t(std::lround(float(screen_x - v.cam_ox) / v.zoom)),
                     int32_t(std::lround(float(screen_y - v.cam_oy) / v.zoom)),
                     wp_rel, z_floor);
-    out.x = wp_rel.x + s.sectorCameraWorld.x;
-    out.y = wp_rel.y + s.sectorCameraWorld.y;
+    // The picture is drawn against the camera plus the part of the camera's
+    // step that has passed, so the inverse has to start from the same camera.
+    out.x = wp_rel.x + s.sectorCameraWorld.x + int32_t(std::lround(s.cameraScrollX));
+    out.y = wp_rel.y + s.sectorCameraWorld.y + int32_t(std::lround(s.cameraScrollY));
     out.z = z_floor;
 }
 
@@ -1823,7 +2011,9 @@ bool TMapRenderer::ScreenToMapScreen(int32_t screen_x, int32_t screen_y,
     const Impl& s = *impl;
     const SViewUnwrap v = ComputeViewUnwrap(s);
     int32_t cam_sx = 0, cam_sy = 0;
-    ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x, s.sectorCameraWorld.y, 0), cam_sx, cam_sy);
+    ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x + int32_t(std::lround(s.cameraScrollX)),
+                             s.sectorCameraWorld.y + int32_t(std::lround(s.cameraScrollY)), 0),
+                    cam_sx, cam_sy);
     map_x = cam_sx + int32_t(std::lround(float(screen_x - v.cam_ox) / v.zoom));
     map_y = cam_sy + int32_t(std::lround(float(screen_y - v.cam_oy) / v.zoom));
     return screen_x >= 0 && screen_y >= 0 && screen_x < v.vw && screen_y < v.vh;
@@ -1836,7 +2026,9 @@ bool TMapRenderer::MapScreenToScreen(float map_x, float map_y, float& screen_x, 
     const Impl& s = *impl;
     const SViewUnwrap v = ComputeViewUnwrap(s);
     int32_t cam_sx = 0, cam_sy = 0;
-    ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x, s.sectorCameraWorld.y, 0), cam_sx, cam_sy);
+    ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x + int32_t(std::lround(s.cameraScrollX)),
+                             s.sectorCameraWorld.y + int32_t(std::lround(s.cameraScrollY)), 0),
+                    cam_sx, cam_sy);
     screen_x = float(v.cam_ox) + (map_x - float(cam_sx)) * v.zoom;
     screen_y = float(v.cam_oy) + (map_y - float(cam_sy)) * v.zoom;
     return true;
@@ -1997,6 +2189,16 @@ void TMapRenderer::SetCameraWorld(int32_t level, int32_t world_x, int32_t world_
     s.sectorCameraWorld  = S3DPoint{ world_x, world_y, world_z };
 }
 
+// The camera's step since the tick began: the world is drawn against the
+// camera's position at the tick's start, and this scrolls the picture by the
+// part of the step that has passed (see TMapPane::CameraScrollStep).
+void TMapRenderer::SetCameraScroll(float world_dx, float world_dy)
+{
+    if (!impl) return;
+    impl->cameraScrollX = world_dx;
+    impl->cameraScrollY = world_dy;
+}
+
 void TMapRenderer::SetOutputViewport(int32_t width, int32_t height)
 {
     if (!impl) return;
@@ -2151,8 +2353,8 @@ void TMapRenderer::GetViewProj(float view_out[16], float proj_out[16],
     // matrix built with target.z=0 disagreed with the actual scene
     // pixels whenever Locke was off sea level, and ImGuizmo / overlays
     // drifted accordingly.
-    const hmm_vec3 target = HMM_Vec3(float(s.sectorCameraWorld.x),
-                                     float(s.sectorCameraWorld.y),
+    const hmm_vec3 target = HMM_Vec3(float(s.sectorCameraWorld.x) + s.cameraScrollX,
+                                     float(s.sectorCameraWorld.y) + s.cameraScrollY,
                                      float(s.sectorCameraWorld.z));
     const hmm_vec3 eye    = HMM_Vec3(target.X + kOffX * D,
                                      target.Y + kOffY * D,
@@ -2401,6 +2603,16 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
 void TMapRenderer::Initialize()
 {
     DebugUI::RegisterContributor(this);
+
+    // The camera knobs live in the debug panel's state; the [Revisited]
+    // settings carry them between runs (the panel writes them when its
+    // "Save Revisited Settings" is pressed), so apply them here -- the
+    // ini's CameraZoom and ParallaxMode did nothing until now.
+    Impl& s = *impl;
+    const SRevisitedSettings& rs = RevisitedSettings;
+    if (rs.camera_zoom > 0.0f)
+        s.sectorCameraZoom = (float)rs.camera_zoom;
+    s.sectorPerspectiveCamera = rs.parallax_enable;
 }
 
 void TMapRenderer::SetMap(TGameMap* m, bool use_level_origin,
@@ -2914,7 +3126,9 @@ void TMapRenderer::RebuildForCurrentMap()
                 if (!UploadTileBitmap(bm, &t.image_pair, &renderer_key, &t.w, &t.h,
                                       &t.z_local_min, &t.z_local_max,
                                       &t.z_dump, &t.has_alpha, &bm_flags,
-                                      &t.cpu_depth_local, &t.cpu_opaque))
+                                      &t.cpu_depth_local, &t.cpu_opaque,
+                                      st == 0 ? oi->ObjType() : -1,
+                                      st == 0 ? oi->GetTypeName() : nullptr))
                 { ++upload_fail; continue; }
                 AddRendererImagePairSourceRef(img, renderer_key, t.image_pair);
                 t.pixel_count = t.w * t.h;
@@ -3325,6 +3539,19 @@ void TMapRenderer::RenderFrame()
     projectctx.vh = vh;
     projectctx.cam_forward = camera_forward;
     projectctx.camera_zoom = effective_camera_zoom;
+    // Snap the camera's step to whole screen pixels and carry it back in
+    // world units, so every path (the ground tiles, the meshes, the
+    // overlays, the effects) sees the same quantized camera: the fractional
+    // scroll drew everything between two pixels, and the resampled pixels
+    // crawled while the camera eased after the hero.
+    {
+        float snap_wx = 0.0f, snap_wy = 0.0f;
+        SnapCameraScroll(s.cameraScrollX, s.cameraScrollY, effective_camera_zoom, snap_wx, snap_wy);
+        s.cameraScrollX = snap_wx;
+        s.cameraScrollY = snap_wy;
+    }
+    projectctx.cameraScrollX = s.cameraScrollX;
+    projectctx.cameraScrollY = s.cameraScrollY;
     projectctx.tile_scale = s.sectorPerspectiveTileScale;
     projectctx.z_near = s.z_near;
     projectctx.z_far = s.z_far;
@@ -3562,13 +3789,21 @@ void TMapRenderer::RenderFrame()
     Renderer->SetPerspectiveProjectionMode(s.sectorPerspectiveCamera ? s.sectorPerspectiveProjectionMode : 0);
     Renderer->SetPerspectiveProxyRasterScale(s.sectorPerspectiveCamera ? s.sectorPerspectiveProxyRasterScale : 1.0f);
     Renderer->SetPerspectiveRaycastParams(s.sectorPerspectiveSteps, s.sectorPerspectiveRefine);
+    // The world is drawn against the tick's camera plus the part of the
+    // camera's step that has already passed (the tiles take that fraction
+    // in their screen position, so the picture scrolls smoothly instead of
+    // jumping once a tick). The meshes have to be drawn from the same
+    // camera: left on the whole one, every character drifts off the ground
+    // by up to a whole camera step and snaps back, 24 times a second.
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy), s.z_near, s.z_far,
-                                      float(s.sectorCameraWorld.x), float(s.sectorCameraWorld.y),
+                                      float(s.sectorCameraWorld.x),
+                                      float(s.sectorCameraWorld.y),
                                       camera_forward, s.sectorPerspectiveCamera ? 1.0f : 0.0f,
                                       effective_camera_zoom,
                                       s.sectorPerspectiveZOffset,
                                       s.sectorPerspectiveZScale,
-                                      s.sectorPerspectiveTileScale);
+                                      s.sectorPerspectiveTileScale,
+                                      s.cameraScrollX, s.cameraScrollY);
     mark_phase(timings.render_state_ms);
 
     SMapRenderStats stats = {};
@@ -3654,6 +3889,8 @@ void TMapRenderer::RenderFrame()
     drawctx.mesh_assets = &s.sectorMeshAsset;
     drawctx.debug_green_texture = s.debugGreenTexture;
     drawctx.sectorCameraWorld = s.sectorCameraWorld;
+    drawctx.cameraScrollX = s.cameraScrollX;
+    drawctx.cameraScrollY = s.cameraScrollY;
     drawctx.cam_ox = cam_ox;
     drawctx.cam_oy = cam_oy;
     drawctx.vw = vw;
@@ -3843,6 +4080,8 @@ void TMapRenderer::HandleMouseClick(int32_t button, int32_t x, int32_t y)
             pickctx.vh = vh;
             pickctx.cam_forward = s.sectorCameraForward(HEIGHT);
             pickctx.camera_zoom = s.sectorCameraZoom * camera_view.scale;
+            pickctx.cameraScrollX = s.cameraScrollX;
+            pickctx.cameraScrollY = s.cameraScrollY;
             pickctx.tile_scale = s.sectorPerspectiveTileScale;
             pickctx.perspective_camera = s.sectorPerspectiveCamera;
             float best_d2 = 24.0f * 24.0f;

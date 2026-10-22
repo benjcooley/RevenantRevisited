@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "../d3dport.h"
+#include "../fxinterp.h"
 #include "../logging.h"
 #include "../math3d.h"
 #include "../imagery.h"
@@ -60,6 +61,13 @@ constexpr float   kFlickerScale    = 1.5f;    // effectcomp.cpp:1095-97 — boos
 constexpr float   kStaticRotZ      = -float(M_PI) / 4.0f;  // effectcomp.cpp:1089 — -45° static spin
 constexpr float   kTipRotX         = -float(M_PI) / 2.0f;  // effectcomp.cpp:1088 — tip authored XY quad upright
 
+// Sub-tick motion: the largest step a tick may make before it counts as
+// a jump instead of a step (the dust falls at most 4.5 wu in a tick), and
+// the largest change of scale a tick may make (it grows 0.05, shrinks
+// 0.02, and the biggest puff is 0.25 across).
+constexpr float   kMaxDustStep     = 16.0f;   // wu
+constexpr float   kMaxDustScaleStep = 0.25f;  // scale
+
 constexpr int32_t kNumSystems      = 3;       // blue / red / purple
 constexpr const char* kImageryPath = "Magic\\Fizzle.I3D";
 
@@ -87,6 +95,10 @@ struct Particle
     float   max_scl     = 0.1f;       // per-particle peak scale (temp.z)
     float   spin_rate   = 0.0f;       // deg/tick (temp.y)
     bool    flicker     = false;      // re-rolled per tick (×1.5 scale boost when set)
+    // Render-only: the phase (life_span) the particle had before the last
+    // tick, so the draw can tell a particle that stayed in its phase from
+    // one that just changed it. Set by Animate.
+    uint8_t phase_prev  = uint8_t(kLifeSpanGrow);
 };
 
 struct ParticleSystem
@@ -192,6 +204,10 @@ static void Animate(State* st)
                 continue;
             }
             p.life++;
+            // Render-only: remember the phase the particle had before this
+            // tick's scale state machine runs, so the draw can ease the
+            // scale only while the particle stays in its phase.
+            p.phase_prev = uint8_t(p.life_span);
             // :1057-1060 — check_move=true branch: straight-line integrate.
             p.pos[0] += p.vel[0];
             p.pos[1] += p.vel[1];
@@ -311,6 +327,16 @@ static void Render(State* st, const TObjectInstance* owner = nullptr,
     d3d::BlendStateGuard scope;
     d3d::SetBlendState();
 
+    // Sub-tick motion. Retail stepped the dust on the 24 Hz tick, so it
+    // moved in jerks while the game draws at the display rate. The dust is
+    // drawn where it was a tick ago, eased toward the state of the last
+    // tick by the part of that tick which has already passed; the picture
+    // trails the simulation by at most one tick.
+    // The fraction is the effect's own: the fizzle ticks when its own
+    // accumulator runs out, not on the global legacy tick, and the global
+    // phase is offset from it by however long the spell took to spawn.
+    const float frac = FxTickFraction(st->sim_accum_seconds, TTime::LegacyFrameSeconds);
+
     // Apply the source's complete matrix chain to the authored mesh.
     // The live Z spin precedes the X tip and cannot be combined with the
     // final static Z rotation into a WorldXY billboard angle.
@@ -328,15 +354,62 @@ static void Render(State* st, const TObjectInstance* owner = nullptr,
         {
             const Particle& p = st->systems[s].p[i];
             if (!p.used || p.scl <= 0.0f) continue;
+
+            // A particle born in this tick has no state to ease from: its
+            // life counter starts at 0 and the tick that moves it comes
+            // later, so life 0 means "born now". The others were already
+            // on screen and are drawn from where they were.
+            const bool was_alive = p.life > 0;
+            // The scale eases only while the particle stays in its phase:
+            // grow -> shrink is a step of its own.
+            const bool same_phase = (p.phase_prev == uint8_t(p.life_span));
+
+            // The velocity never changes (acc = 1.0), so the position a
+            // tick ago is the current one minus the velocity, and the
+            // position of the picture is that point eased toward the
+            // current one.
+            const float prev_pos[3] = {p.pos[0] - p.vel[0], p.pos[1] - p.vel[1],
+                                       p.pos[2] - p.vel[2]};
+            const float step = std::sqrt(p.vel[0] * p.vel[0] + p.vel[1] * p.vel[1] +
+                                         p.vel[2] * p.vel[2]);
+            // The phase does not change the motion, so the position is
+            // eased whenever the particle was already on screen.
+            const bool move = FxShouldInterpolate(was_alive, p.used, /*same_phase=*/true,
+                                                  step, kMaxDustStep);
+            float draw_pos[3] = {p.pos[0], p.pos[1], p.pos[2]};
+            if (move) FxLerp3(prev_pos, p.pos, frac, draw_pos);
+
+            // The spin is a constant number of degrees per tick, so the
+            // angle a tick ago is the current one minus the spin. The
+            // angle is read the short way round the circle, because the
+            // tick wraps it into [0,360).
+            float draw_rot = p.rot_z_deg;
+            if (move) draw_rot = FxLerpAngleDeg(p.rot_z_deg - p.spin_rate,
+                                                p.rot_z_deg, frac);
+
+            // The scale grows or shrinks by a fixed step per tick.
+            float prev_scl = p.scl;
+            if (same_phase)
+            {
+                if (p.phase_prev == uint8_t(kLifeSpanGrow))
+                    prev_scl = p.scl - kDustSclInc;
+                else if (p.phase_prev == uint8_t(kLifeSpanShrink))
+                    prev_scl = p.scl + kDustSclDec;
+            }
+            float draw_scl = p.scl;
+            if (FxShouldInterpolate(was_alive, p.used, same_phase,
+                                     std::fabs(p.scl - prev_scl), kMaxDustScaleStep))
+                draw_scl = FxLerp(prev_scl, p.scl, frac);
+
             hmm_mat4 local = {};
             MtxClear(&local);
-            MtxRotateZ(&local, p.rot_z_deg * float(M_PI) / 180.0f);
+            MtxRotateZ(&local, draw_rot * float(M_PI) / 180.0f);
             MtxRotateX(&local, kTipRotX);
             MtxRotateZ(&local, kStaticRotZ);
-            const float size = p.scl * (p.flicker ? kFlickerScale : 1.0f);
+            const float size = draw_scl * (p.flicker ? kFlickerScale : 1.0f);
             const hmm_vec3 scale = {size, size, size};
             MtxScale(&local, &scale);
-            const hmm_vec3 pos = {p.pos[0], p.pos[1], p.pos[2]};
+            const hmm_vec3 pos = {draw_pos[0], draw_pos[1], draw_pos[2]};
             MtxTranslate(&local, &pos);
             for (int32_t corner = 0; corner < 4; ++corner)
             {

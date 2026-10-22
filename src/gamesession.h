@@ -80,6 +80,16 @@ class TGameSession
     // as retail's synchronous load stalled the game.
     [[nodiscard]] bool LevelLoading() const { return levelLoading; }
 
+    // True while the level the camera left is still loaded: the door
+    // script that sent the player across is still running on one of its
+    // objects, and the object needs its level (and its imagery) alive
+    // until the script ends.
+    [[nodiscard]] bool ReleasePending() const { return releaseDelay > 0; }
+
+    // Counts the release delay down and releases the levels that are not
+    // used any more. A level held for a door script waits for the script.
+    void UpdateHeldLevels();
+
   private:
     enum class EState : uint8_t { Idle, Loading, Ready, Failed };
 
@@ -109,6 +119,13 @@ class TGameSession
     void PlaceAtDevStart(const TGameMap& map) const;
     void PlacePlayers(TGameMap& map, bool entering) const;
     void ReleaseUnusedLevels(int32_t current) const;
+    // Keeps the objects whose script waits for the screen fade alive when
+    // their level is released (a door script's "control on" comes after
+    // the fade-in).
+    void KeepWaitingScriptsAlive(int32_t level) const;
+    // Counts the release delay down and releases the unused levels when it
+    // runs out.
+    void UpdateReleaseDelay();
     bool SaveNow(const std::string& slot);
 
     SSessionStart start;
@@ -123,4 +140,7 @@ class TGameSession
     bool          pendingLoadAnnounce = false;
     std::string   pendingSave;
     bool          levelLoading = false;    // EnterLevel is part way through a level
+    // Ticks left before the level the camera left is released (see
+    // ReleasePending).
+    int32_t       releaseDelay = 0;
 };
