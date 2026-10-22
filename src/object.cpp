@@ -924,6 +924,9 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
 
             S3DPoint spos;
             s->GetPos(spos);
+            // The shadow rides on the owner, so its tick step is the owner's
+            // step: the renderer glides the shadow with the owner.
+            s->prevpos = spos;
             spos += delta;
             s->SetPos(spos);
         }

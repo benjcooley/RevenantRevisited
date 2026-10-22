@@ -49,6 +49,7 @@
 #include "testconfig.h"
 #include "sceneviewport.h"
 #include "time.h"
+#include "subtick.h"
 
 #include <algorithm>
 #include <chrono>
@@ -1510,17 +1511,17 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             // the transpose, so the translation is the last column.
             const S3DPoint prev = oi->PrevPos();
             const float frac = float(TTime::LegacyFrameFraction());
-            const float scale = frac - 1.0f;
             // A jump (a teleport, a script that placed the object) is not
             // a step of a tick: the object is drawn where it is.
             const int32_t step_x = world_pos.x - prev.x;
             const int32_t step_y = world_pos.y - prev.y;
             const int32_t step_z = world_pos.z - prev.z;
-            if (std::abs(step_x) <= 8 && std::abs(step_y) <= 8 && std::abs(step_z) <= 8)
+            float sub_x = 0.0f, sub_y = 0.0f, sub_z = 0.0f;
+            if (SubTickOffset(step_x, step_y, step_z, frac, sub_x, sub_y, sub_z))
             {
-                world_renderer[12] += float(step_x) * scale;
-                world_renderer[13] += float(step_y) * scale;
-                world_renderer[14] += float(step_z) * scale;
+                world_renderer[12] += sub_x;
+                world_renderer[13] += sub_y;
+                world_renderer[14] += sub_z;
             }
         }
         if (!used_bone_xform)
@@ -1758,6 +1759,13 @@ void TMapRenderer::Impl::submitEquipment(const SMapRenderContext& ctx, SMapRende
         return;
 
     const float sort_depth = CameraDepth(MeshCameraRel(ctx, world_pos), ctx.cam_forward);
+    // The body glides between the ticks; the equipment has to glide with it,
+    // or the sword leaves the hand for the rest of the tick.
+    const S3DPoint prev = oi.PrevPos();
+    const float frac = float(TTime::LegacyFrameFraction());
+    float sub_x = 0.0f, sub_y = 0.0f, sub_z = 0.0f;
+    const bool sub_tick = SubTickOffset(world_pos.x - prev.x, world_pos.y - prev.y,
+                                        world_pos.z - prev.z, frac, sub_x, sub_y, sub_z);
     float scale[16];
     MatrixScale16(ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z, scale);
     for (const TCharAnimator::SEquipAttachment& attachment : animator->EquipAttachments())
@@ -1772,6 +1780,12 @@ void TMapRenderer::Impl::submitEquipment(const SMapRenderContext& ctx, SMapRende
         float world[16];
         TransposeSourceToRenderer(bone->transform.Matrix(), bone_world);
         MatrixMul16(scale, bone_world, world);
+        if (sub_tick)
+        {
+            world[12] += sub_x;
+            world[13] += sub_y;
+            world[14] += sub_z;
+        }
         for (const SSectorMeshAsset& asset : equipObjectMeshes(*mesh, attachment.object))
         {
             SMeshSubmit m = {};

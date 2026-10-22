@@ -81,6 +81,7 @@
 #include "logging.h"
 #include "stripeffect.h"   // S04: STRIP_* constants for TLightningAnimator_Bespoke
 #include "time.h"
+#include "subtick.h"
 #include "fxinterp.h"      // sub-tick motion helpers (tick fraction, lerp, guard)
 
 #include <algorithm>
@@ -1409,9 +1410,16 @@ void TFlipbookBillboardComponent::Submit(TRenderer& renderer, const TObjectInsta
 
     SBillboardDrawItem item = {};
     const S3DPoint& p = inst.Pos();
-    item.world_pos[0] = float(p.x);
-    item.world_pos[1] = float(p.y);
-    item.world_pos[2] = float(p.z);
+    // The billboard glides between the ticks like the meshes do: a shadow
+    // rides on its owner and has to stay under it.
+    const S3DPoint prev = inst.PrevPos();
+    const float frac = float(TTime::LegacyFrameFraction());
+    float sub_x = 0.0f, sub_y = 0.0f, sub_z = 0.0f;
+    const bool sub_tick = SubTickOffset(p.x - prev.x, p.y - prev.y, p.z - prev.z,
+                                        frac, sub_x, sub_y, sub_z);
+    item.world_pos[0] = float(p.x) + (sub_tick ? sub_x : 0.0f);
+    item.world_pos[1] = float(p.y) + (sub_tick ? sub_y : 0.0f);
+    item.world_pos[2] = float(p.z) + (sub_tick ? sub_z : 0.0f);
     item.size_wu[0]   = size_w;
     item.size_wu[1]   = size_h;
     item.color_rgba[0] = 1.0f;
