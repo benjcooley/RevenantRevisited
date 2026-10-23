@@ -204,6 +204,9 @@ class T3DImagery : public TObjectImagery
   protected:
     bool meshinitialized;
     bool hastextures;
+    // Texture frames that came from the sprite art tree instead of the
+    // retail .I3D (spritetexoverride.h). Counted per imagery, logged once.
+    int32_t sprite_override_frames = 0;
 
     int32_t baseobj;
 
@@ -437,6 +440,7 @@ class T3DImagery : public TObjectImagery
         int32_t texture_index);
     void RemoveTexture(int32_t texnum);
     void ClearTextures();
+    bool UploadTextureFrame(int32_t texnum, int32_t framenum, const std::vector<uint8_t>& rgba);
   public:
     int32_t NumTextures();
     void GetTexture(int32_t texnum, S3DTex* tex);
@@ -445,6 +449,14 @@ class T3DImagery : public TObjectImagery
     bool SetTextureFrame(int32_t texnum, int32_t framenum);
     bool SurfacesLost();
     void RestoreSurfaces();
+
+    // Re-reads the sprite textures of this imagery and puts the new pixels
+    // into the GPU textures the frames already use (the handles stay, so the
+    // animator snapshots keep working). The modern art from the sprite tree
+    // replaces the retail pixels when it is the active mode, otherwise the
+    // retail pixels are decoded from the source file again. Returns the
+    // number of texture frames updated.
+    int32_t ReloadTextures();
 
   // Miscellaneous support functions
     void RefreshZBuffer(TObjectInstance* oi);

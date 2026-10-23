@@ -842,6 +842,72 @@ static int32_t BuildProjectedSourceRectProxy(float src_x0,
                                          out_max_x, out_max_y);
 }
 
+// The colour's mip chain. The high-res tile art is many times the tile's
+// own size, so a minified tile aliased hard -- the art shimmered when the
+// camera was not zoomed in. Each level is the box average of the level
+// above, the colour weighted by the alpha (the alpha is the coverage, not
+// a colour) and the coverage itself kept at its strongest, so the tile's
+// silhouette stays as sharp as it was.
+struct SColorMipChain {
+    uint64_t bytes = 0;
+    std::vector<std::vector<uint8_t>> levels;   // RGBA8, widest first
+};
+
+static SColorMipChain BuildColorMipChain(const uint8_t* rgba,
+                                         int32_t width,
+                                         int32_t height)
+{
+    SColorMipChain chain = {};
+    if (!rgba || width <= 0 || height <= 0)
+        return chain;
+
+    std::vector<uint8_t> level(rgba, rgba + size_t(width) * size_t(height) * 4u);
+    int32_t w = width;
+    int32_t h = height;
+    for (int32_t mip = 0; mip < SG_MAX_MIPMAPS; ++mip)
+    {
+        chain.bytes += uint64_t(w) * uint64_t(h) * 4u;
+        chain.levels.push_back(std::move(level));
+        if (w == 1 && h == 1)
+            break;
+
+        const int32_t prev_w = w;
+        const int32_t prev_h = h;
+        const std::vector<uint8_t>& prev = chain.levels.back();
+        w = (std::max)(1, prev_w / 2);
+        h = (std::max)(1, prev_h / 2);
+        level.assign(size_t(w) * size_t(h) * 4u, 0u);
+
+        for (int32_t y = 0; y < h; ++y)
+        for (int32_t x = 0; x < w; ++x)
+        {
+            const int32_t x0 = (std::min)(prev_w - 1, x * 2);
+            const int32_t y0 = (std::min)(prev_h - 1, y * 2);
+            const int32_t x1 = (std::min)(prev_w - 1, x0 + 1);
+            const int32_t y1 = (std::min)(prev_h - 1, y0 + 1);
+            float acc[3] = {0.0f, 0.0f, 0.0f};
+            float wsum = 0.0f;
+            uint8_t amax = 0;
+            for (int32_t sy = y0; sy <= y1; ++sy)
+            for (int32_t sx = x0; sx <= x1; ++sx)
+            {
+                const uint8_t* px = &prev[(size_t(sy) * size_t(prev_w) + size_t(sx)) * 4u];
+                const float a = float(px[3]) / 255.0f;
+                acc[0] += float(px[0]) * a;
+                acc[1] += float(px[1]) * a;
+                acc[2] += float(px[2]) * a;
+                wsum += a;
+                amax = (std::max)(amax, px[3]);
+            }
+            uint8_t* out = &level[(size_t(y) * size_t(w) + size_t(x)) * 4u];
+            for (int32_t c = 0; c < 3; ++c)
+                out[c] = wsum > 0.0f ? uint8_t(std::lround(acc[c] / wsum)) : 0;
+            out[3] = amax;
+        }
+    }
+    return chain;
+}
+
 static SHeightMinMaxMipChain BuildHeightMinMaxMipChain(const float* depth,
                                                        int32_t width,
                                                        int32_t height)
@@ -2382,10 +2448,14 @@ RendererImagePairHandle TRenderer::RegisterImagePairAsset(uint64_t key,
                                                           size_t depth_bytes,
                                                           int32_t width,
                                                           int32_t height,
-                                                          uint64_t gpu_bytes)
+                                                          uint64_t gpu_bytes,
+                                                          int32_t color_width,
+                                                          int32_t color_height)
 {
     if (!color_rgba8 || !depth_r32f || width <= 0 || height <= 0)
         return 0;
+    if (color_width <= 0) color_width = width;
+    if (color_height <= 0) color_height = height;
 
     if (key != 0)
     {
@@ -2394,14 +2464,31 @@ RendererImagePairHandle TRenderer::RegisterImagePairAsset(uint64_t key,
             return it->second;
     }
 
+    // High-res tile art keeps depth + height min/max at sprite resolution (the
+    // shader's normals and heights are UV-based, so that stays exact) and only
+    // enlarges the colour.
+    //
+    // The colour carries a mip chain: the high-res tile art is many times
+    // the tile's own size, and a minified tile aliased hard without it
+    // (the art shimmered when the camera was not zoomed in). The LOD the
+    // tile pass computes is the implicit one, which comes out deeper than
+    // the tile's screen footprint warrants, so the chain is there to take
+    // the aliasing away, not to blur the art at 1x.
+    SColorMipChain color_mips = BuildColorMipChain(static_cast<const uint8_t*>(color_rgba8),
+                                                    color_width, color_height);
     sg_image_desc color_desc = {};
-    color_desc.width = width;
-    color_desc.height = height;
+    color_desc.width = color_width;
+    color_desc.height = color_height;
     color_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
-    color_desc.min_filter = SG_FILTER_LINEAR;
+    color_desc.min_filter = SG_FILTER_LINEAR_MIPMAP_LINEAR;
     color_desc.mag_filter = SG_FILTER_LINEAR;
     color_desc.wrap_u = color_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
-    color_desc.data.subimage[0][0] = { color_rgba8, color_bytes };
+    color_desc.num_mipmaps = int(color_mips.levels.size());
+    for (int32_t mip = 0; mip < color_desc.num_mipmaps; ++mip)
+    {
+        const std::vector<uint8_t>& pixels = color_mips.levels[size_t(mip)];
+        color_desc.data.subimage[0][mip] = { pixels.data(), pixels.size() };
+    }
     color_desc.label = "renderer.imagepair.color";
 
     sg_image_desc depth_desc = {};
@@ -2444,6 +2531,8 @@ RendererImagePairHandle TRenderer::RegisterImagePairAsset(uint64_t key,
     asset.height_minmax = sg_make_image(&height_desc);
     asset.width = width;
     asset.height = height;
+    asset.color_width = color_width;
+    asset.color_height = color_height;
     asset.height_minmax_mips = height_desc.num_mipmaps;
     asset.tight_proxy_hull_px =
         BuildTileTightProxyHull(static_cast<const float*>(depth_r32f), width, height);
@@ -2473,6 +2562,104 @@ const SRendererImagePairInfo* TRenderer::ImagePairInfo(RendererImagePairHandle h
     return &image_pair_assets[handle - 1];
 }
 
+// Replace the colour image of an image pair (a tile's albedo). The depth
+// map, the height min/max chain and the tight proxy hull stay as they are:
+// only the tile's colour changes.
+//
+// The pixels go into a FRESH image, not into the one the frame still has
+// bound: a D3D11 texture that is bound as a shader resource can not be
+// mapped reliably (the map is dropped and the old pixels stay on the
+// screen), and the failure is silent in a release build. A new image is
+// never bound, so the upload always lands. The handle stays the same, so
+// every holder of it keeps working.
+bool TRenderer::UpdateImagePairColor(RendererImagePairHandle handle,
+                                      const void* pixels, size_t pixel_bytes,
+                                      int32_t width, int32_t height)
+{
+    if (handle == 0 || handle > image_pair_assets.size() || !pixels)
+        return false;
+    if (width <= 0 || height <= 0)
+        return false;
+    SRendererImagePairEntry& e = image_pair_assets[handle - 1];
+    if (pixel_bytes != size_t(width) * size_t(height) * 4)
+    {
+        log_warn("[renderer] image pair %u wants %zu bytes for %dx%d -- skipped",
+                 (unsigned)handle, pixel_bytes, width, height);
+        return false;
+    }
+
+    // The colour carries a mip chain (the tile pass minifies the tile's
+    // albedo), so the new image needs the chain too.
+    const SColorMipChain color_mips = BuildColorMipChain(static_cast<const uint8_t*>(pixels),
+                                                          width, height);
+    if (color_mips.levels.empty())
+    {
+        log_warn("[renderer] image pair %u could not build a colour mip chain -- skipped",
+                 (unsigned)handle);
+        return false;
+    }
+
+    sg_image_desc color_desc = {};
+    color_desc.width = width;
+    color_desc.height = height;
+    // The image is created immutable, with the pixels in it: sokol copies
+    // the data into the texture when the image is made, exactly like the
+    // first upload does (RegisterImagePairAsset).
+    //
+    // A dynamic image would need the pixels poured in with sg_update_image
+    // (sokol ignores the initial data of a dynamic image), but sokol's
+    // D3D11 backend maps a dynamic texture with D3D11_CPU_ACCESS_WRITE,
+    // which allows ONE mip level only -- a dynamic colour image with a mip
+    // chain fails to create, silently, in a release build. The immutable
+    // image keeps the mips and needs no per-frame update either.
+    color_desc.usage = SG_USAGE_IMMUTABLE;
+    color_desc.pixel_format = SG_PIXELFORMAT_RGBA8;
+    color_desc.min_filter = SG_FILTER_LINEAR_MIPMAP_LINEAR;
+    color_desc.mag_filter = SG_FILTER_LINEAR;
+    color_desc.wrap_u = color_desc.wrap_v = SG_WRAP_CLAMP_TO_EDGE;
+    color_desc.num_mipmaps = int(color_mips.levels.size());
+    for (int32_t mip = 0; mip < color_desc.num_mipmaps; ++mip)
+    {
+        const std::vector<uint8_t>& level = color_mips.levels[size_t(mip)];
+        color_desc.data.subimage[0][mip] = { level.data(), level.size() };
+    }
+    color_desc.label = "renderer.imagepair.color";
+
+    sg_image image = sg_make_image(&color_desc);
+    if (sg_query_image_state(image) != SG_RESOURCESTATE_VALID)
+    {
+        if (image.id) sg_destroy_image(image);
+        log_warn("[renderer] image pair %u could not be recreated -- the colour was not updated",
+                 (unsigned)handle);
+        return false;
+    }
+
+    // The colour's size may have changed (the high-res art is bigger than
+    // the tile, and the retail pixels are smaller again): the asset's GPU
+    // byte count follows it.
+    const uint64_t old_color_bytes = uint64_t(e.color_width) * uint64_t(e.color_height) * 4ull;
+    const uint64_t new_color_bytes = uint64_t(width) * uint64_t(height) * 4ull;
+    if (e.gpu_bytes >= old_color_bytes)
+        e.gpu_bytes = e.gpu_bytes - old_color_bytes + new_color_bytes;
+    else
+        e.gpu_bytes = new_color_bytes;
+
+    if (e.color.id)
+        sg_destroy_image(e.color);
+    e.color = image;
+    e.color_width = width;
+    e.color_height = height;
+    return true;
+}
+
+RendererImagePairHandle TRenderer::ImagePairForKey(uint64_t key) const
+{
+    if (key == 0)
+        return 0;
+    auto it = image_pair_by_key.find(key);
+    return it == image_pair_by_key.end() ? 0 : it->second;
+}
+
 void TRenderer::AddImagePairAssetRef(RendererImagePairHandle handle, uint32_t count)
 {
     if (handle == 0 || handle > image_pair_assets.size())
@@ -2496,7 +2683,8 @@ TTextureHandle TRenderer::RegisterTextureAsset(uint64_t key,
                                                ERendererTextureFormat format,
                                                uint64_t gpu_bytes,
                                                ERendererTextureFilter filter,
-                                               bool repeat)
+                                               bool repeat,
+                                               bool updatable)
 {
     if (!pixels || width <= 0 || height <= 0)
         return kInvalidTexture;
@@ -2505,17 +2693,65 @@ TTextureHandle TRenderer::RegisterTextureAsset(uint64_t key,
     {
         auto it = texture_by_key.find(key);
         if (it != texture_by_key.end())
+        {
+            SRendererTextureEntry& existing = texture_assets[it->second - 1];
+            // A texture that was registered as immutable can not be updated
+            // in place: sokol fixes the usage when the image is created. The
+            // sprite reload needs an updatable texture, so the image is
+            // recreated as a dynamic one -- the handle stays the same, so
+            // every holder of it keeps working.
+            if (updatable && !existing.updatable)
+            {
+                log_info("[renderer] texture %llu was immutable -- recreated as updatable",
+                         (unsigned long long)key);
+                if (existing.image.id)
+                    sg_destroy_image(existing.image);
+                existing.image = {};
+                existing.updatable = true;
+                existing.update_frame = 0;
+
+                sg_image_desc desc = {};
+                desc.width = width;
+                desc.height = height;
+                desc.usage = SG_USAGE_DYNAMIC;
+                desc.pixel_format = format == ERendererTextureFormat::R32F ? SG_PIXELFORMAT_R32F : SG_PIXELFORMAT_RGBA8;
+                desc.min_filter = filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
+                desc.mag_filter = filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
+                desc.wrap_u = desc.wrap_v = repeat ? SG_WRAP_REPEAT : SG_WRAP_CLAMP_TO_EDGE;
+                desc.label = "renderer.texture";
+                existing.image = sg_make_image(&desc);
+                if (sg_query_image_state(existing.image) != SG_RESOURCESTATE_VALID)
+                {
+                    if (existing.image.id) sg_destroy_image(existing.image);
+                    existing.image = {};
+                    existing.updatable = false;
+                    return kInvalidTexture;
+                }
+                sg_image_data data = {};
+                data.subimage[0][0] = { pixels, pixel_bytes };
+                sg_update_image(existing.image, &data);
+                existing.width  = width;
+                existing.height = height;
+                existing.gpu_bytes = uint64_t(pixel_bytes);
+                existing.update_frame = sapp_frame_count();
+            }
             return it->second;
+        }
     }
 
     sg_image_desc desc = {};
     desc.width = width;
     desc.height = height;
+    desc.usage = updatable ? SG_USAGE_DYNAMIC : SG_USAGE_IMMUTABLE;
     desc.pixel_format = format == ERendererTextureFormat::R32F ? SG_PIXELFORMAT_R32F : SG_PIXELFORMAT_RGBA8;
     desc.min_filter = filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
     desc.mag_filter = filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
     desc.wrap_u = desc.wrap_v = repeat ? SG_WRAP_REPEAT : SG_WRAP_CLAMP_TO_EDGE;
-    desc.data.subimage[0][0] = { pixels, pixel_bytes };
+    // sokol refuses an image that is created dynamic *and* initialized with
+    // data ("dynamic/stream images cannot be initialized with data"), so the
+    // initial pixels of a dynamic image go through the update path below.
+    if (!updatable)
+        desc.data.subimage[0][0] = { pixels, pixel_bytes };
     desc.label = "renderer.texture";
 
     SRendererTextureEntry asset = {};
@@ -2524,10 +2760,24 @@ TTextureHandle TRenderer::RegisterTextureAsset(uint64_t key,
     asset.width = width;
     asset.height = height;
     asset.gpu_bytes = gpu_bytes;
+    asset.updatable = updatable;
+    asset.format = format;
+    asset.filter = filter;
+    asset.repeat = repeat;
     if (sg_query_image_state(asset.image) != SG_RESOURCESTATE_VALID)
     {
         if (asset.image.id) sg_destroy_image(asset.image);
         return kInvalidTexture;
+    }
+    // sokol only uploads the initial data of an immutable image (the D3D11
+    // backend creates a dynamic texture empty, _sg_d3d11_create_image), so
+    // an updatable texture gets its first pixels through the update path.
+    if (updatable)
+    {
+        sg_image_data data = {};
+        data.subimage[0][0] = { pixels, pixel_bytes };
+        sg_update_image(asset.image, &data);
+        asset.update_frame = sapp_frame_count();
     }
 
     texture_assets.push_back(asset);
@@ -2535,6 +2785,89 @@ TTextureHandle TRenderer::RegisterTextureAsset(uint64_t key,
     if (key != 0)
         texture_by_key[key] = handle;
     return handle;
+}
+
+// Replace the pixels of an updatable texture in place. The GPU image stays,
+// so the handle keeps its meaning for everyone holding it.
+bool TRenderer::UpdateTextureAsset(TTextureHandle handle,
+                                   const void* pixels,
+                                   size_t pixel_bytes,
+                                   int32_t width,
+                                   int32_t height)
+{
+    if (handle == 0 || handle > texture_assets.size() || !pixels)
+        return false;
+    SRendererTextureEntry& e = texture_assets[handle - 1];
+    if (!e.updatable)
+    {
+        log_warn("[renderer] texture %u is not updatable -- the pixels can not be replaced",
+                 (unsigned)handle);
+        return false;
+    }
+    if (e.width != width || e.height != height)
+    {
+        log_warn("[renderer] texture %u is %dx%d, the new pixels are %dx%d -- skipped",
+                 (unsigned)handle, e.width, e.height, width, height);
+        return false;
+    }
+    if (pixel_bytes != size_t(width) * size_t(height) * 4)
+    {
+        log_warn("[renderer] texture %u wants %zu bytes for %dx%d -- skipped",
+                 (unsigned)handle, pixel_bytes, width, height);
+        return false;
+    }
+    // sokol allows only one sg_update_image per image and frame. A second
+    // reload in the same frame would be dropped by sokol (in a debug build it
+    // trips an assert), so the repeat is skipped here -- the pixels of the
+    // first update in this frame are the wanted ones.
+    const uint64_t frame = sapp_frame_count();
+    if (frame != 0 && e.update_frame == frame)
+    {
+        log_info("[renderer] texture %u was already updated in frame %llu -- skipped",
+                 (unsigned)handle, (unsigned long long)frame);
+        return true;
+    }
+
+    // The pixels go into a FRESH image, not into the one the frame still has
+    // bound: a D3D11 texture that is bound as a shader resource can not be
+    // mapped reliably (the map is dropped and the old pixels stay on the
+    // screen), and the failure is silent in a release build. A new image is
+    // never bound, so the upload always lands. The handle stays the same, so
+    // every holder of it (the animator snapshots, the mesh assets, the
+    // flipbook components) keeps working -- they look the image up by handle
+    // when they bind it.
+    sg_image_desc desc = {};
+    desc.width = width;
+    desc.height = height;
+    desc.usage = e.updatable ? SG_USAGE_DYNAMIC : SG_USAGE_IMMUTABLE;
+    desc.pixel_format = e.format == ERendererTextureFormat::R32F ? SG_PIXELFORMAT_R32F : SG_PIXELFORMAT_RGBA8;
+    desc.min_filter = e.filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
+    desc.mag_filter = e.filter == ERendererTextureFilter::Nearest ? SG_FILTER_NEAREST : SG_FILTER_LINEAR;
+    desc.wrap_u = desc.wrap_v = e.repeat ? SG_WRAP_REPEAT : SG_WRAP_CLAMP_TO_EDGE;
+    desc.label = "renderer.texture";
+    if (!e.updatable)
+        desc.data.subimage[0][0] = { pixels, pixel_bytes };
+
+    sg_image image = sg_make_image(&desc);
+    if (sg_query_image_state(image) != SG_RESOURCESTATE_VALID)
+    {
+        if (image.id) sg_destroy_image(image);
+        log_warn("[renderer] texture %u could not be recreated -- the pixels were not updated",
+                 (unsigned)handle);
+        return false;
+    }
+    if (e.updatable)
+    {
+        sg_image_data data = {};
+        data.subimage[0][0] = { pixels, pixel_bytes };
+        sg_update_image(image, &data);
+    }
+    if (e.image.id)
+        sg_destroy_image(e.image);
+    e.image = image;
+    e.update_frame = frame;
+    e.gpu_bytes = uint64_t(pixel_bytes);
+    return true;
 }
 
 const SRendererTextureInfo* TRenderer::TextureInfo(TTextureHandle handle) const
@@ -2602,6 +2935,8 @@ void TRenderer::DrawTextureFit(TTextureHandle texture)
     const sg_image img = TextureImage(texture);
     if (!img.id) return;
 
+    // A cinematic fills the window it is shown in, so this one maps against
+    // the real canvas rather than the display.
     const int32_t target_w = sapp_width();
     const int32_t target_h = sapp_height();
     if (target_w <= 0 || target_h <= 0) return;
@@ -3104,16 +3439,30 @@ sg_buffer TRenderer::NextMeshInstanceBuffer()
 
 void TRenderer::PackMeshVsUniforms(float (&u)[20]) const
 {
+    // The ground is drawn against the tick's camera plus the part of the
+    // camera's step that has already passed this tick (the tiles take that
+    // fraction in their screen position). The meshes have to be drawn
+    // against the same camera, or they drift off the ground by up to a
+    // whole camera step, 24 times a second -- the hero judders against the
+    // floor while the camera eases after it.
+    // camz.z is compensated by the same amount so the scene depth (which
+    // the ground's depth is measured against) stays exactly as it was.
+    const bool ortho = recon.reserved <= 0.5f;
+    const float scroll_x = ortho ? recon.cam_scroll_x : 0.0f;
+    const float scroll_y = ortho ? recon.cam_scroll_y : 0.0f;
+    float camw_x = 0.0f, camw_y = 0.0f, camz_z = 0.0f;
+    MeshCameraUniforms(recon.center_wx, recon.center_wy, recon.kcam_forward,
+                       scroll_x, scroll_y, camw_x, camw_y, camz_z);
     u[0] = recon.ox;
     u[1] = recon.oy;
     u[2] = float(width  + 2 * kGBufPad);
     u[3] = float(height + 2 * kGBufPad);
     u[4] = recon.z_near;
     u[5] = recon.zspan;
-    u[6] = recon.kcam_forward;
+    u[6] = camz_z;
     u[7] = recon.reserved;
-    u[8] = recon.center_wx;
-    u[9] = recon.center_wy;
+    u[8] = camw_x;
+    u[9] = camw_y;
     u[10] = recon.zoom;
     u[11] = recon.mesh_projection_mode;
     for (int c=0;c<3;++c) { u[12+c]=retail_mesh_ambient[c]; u[16+c]=retail_mesh_directional[c]; }
@@ -3133,8 +3482,8 @@ void TRenderer::EmitTransparentTile(const STileSubmit& t)
     const int32_t py  = t.dst_y + kGBufPad;
     const int32_t src_w = t.src_w > 0 ? t.src_w : t.dst_w;
     const int32_t src_h = t.src_h > 0 ? t.src_h : t.dst_h;
-    float rect_x = float(px);
-    float rect_y = float(py);
+    float rect_x = float(px) + t.frac_x;
+    float rect_y = float(py) + t.frac_y;
     float rect_w = float(t.dst_w);
     float rect_h = float(t.dst_h);
     float cov_x0 = std::clamp(t.coverage_px_x0, 0.0f, float(src_w));
@@ -3300,10 +3649,21 @@ void TRenderer::EmitTransparentHelper(const SHelperMeshSubmit& s)
     vsu[vo++] = float(height + 2 * kGBufPad);
     vsu[vo++] = recon.z_near;
     vsu[vo++] = recon.zspan;
-    vsu[vo++] = recon.kcam_forward;
+    // The same fractional camera the ground scrolls by (see
+    // PackMeshVsUniforms). The retail software projection runs in its own
+    // camera domain, so it keeps the whole camera.
+    const bool helper_modern = !s.retail_software_projection;
+    const bool helper_ortho  = recon.reserved <= 0.5f;
+    const float helper_scroll_x = (helper_modern && helper_ortho) ? recon.cam_scroll_x : 0.0f;
+    const float helper_scroll_y = (helper_modern && helper_ortho) ? recon.cam_scroll_y : 0.0f;
+    float helper_camw_x = 0.0f, helper_camw_y = 0.0f, helper_camz_z = 0.0f;
+    MeshCameraUniforms(recon.center_wx, recon.center_wy, recon.kcam_forward,
+                       helper_scroll_x, helper_scroll_y,
+                       helper_camw_x, helper_camw_y, helper_camz_z);
+    vsu[vo++] = helper_camz_z;
     vsu[vo++] = recon.reserved;
-    vsu[vo++] = recon.center_wx;
-    vsu[vo++] = recon.center_wy;
+    vsu[vo++] = helper_camw_x;
+    vsu[vo++] = helper_camw_y;
     vsu[vo++] = recon.zoom;
     vsu[vo++] = 0.0f;
     // An explicit helper reference mode selects the software path even when
@@ -3852,7 +4212,9 @@ void TRenderer::SetReconstructionParams(float ox, float oy,
                                         float zoom,
                                         float z_offset,
                                         float z_scale,
-                                        float tile_scale)
+                                        float tile_scale,
+                                        float cam_scroll_x,
+                                        float cam_scroll_y)
 {
     // Callers pass the world-origin screen offset in display-space pixels.
     // The light shader samples the padded G-buffer, so shift by +pad to
@@ -3869,6 +4231,8 @@ void TRenderer::SetReconstructionParams(float ox, float oy,
     recon.z_offset     = z_offset;
     recon.z_scale      = z_scale > 0.0f ? z_scale : 1.0f;
     recon.tile_scale   = tile_scale > 0.0f ? tile_scale : 1.0f;
+    recon.cam_scroll_x = cam_scroll_x;
+    recon.cam_scroll_y = cam_scroll_y;
 }
 
 void TRenderer::SetMeshProjectionMode(int32_t mode)
@@ -4122,8 +4486,8 @@ void TRenderer::EmitTile(const STileSubmit& t)
     const int32_t py  = t.dst_y + kGBufPad;
     const int32_t src_w = t.src_w > 0 ? t.src_w : t.dst_w;
     const int32_t src_h = t.src_h > 0 ? t.src_h : t.dst_h;
-    float rect_x = float(px);
-    float rect_y = float(py);
+    float rect_x = float(px) + t.frac_x;
+    float rect_y = float(py) + t.frac_y;
     float rect_w = float(t.dst_w);
     float rect_h = float(t.dst_h);
     float proxy_vertices[kMaxTileProxyVerticesPerDraw * 4] = {};
@@ -4908,8 +5272,12 @@ TTextureHandle TRenderer::BitmapAsTexture(PTBitmap bm, EBitmapDecode decode)
 void TRenderer::DrawBitmap(PTBitmap bm, int32_t x, int32_t y, EBitmapDecode decode)
 {
     if (!bm) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // UI primitives are authored in display pixels (the same space panes are
+    // laid out in), so they map against the display canvas, not the window:
+    // if the window and the display ever differ the whole UI scales into it
+    // instead of running off the right and bottom edges.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     SBitmapAtlasSlice slice;
     if (LookupUIBitmapAtlasSlice(bm, decode, &slice))
     {
@@ -4933,8 +5301,9 @@ void TRenderer::DrawBitmapSubrect(PTBitmap bm,
                                   int32_t src_w, int32_t src_h)
 {
     if (!bm || src_w <= 0 || src_h <= 0) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     SBitmapAtlasSlice slice;
     if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
     {
@@ -4956,8 +5325,9 @@ void TRenderer::DrawBitmapTinted(PTBitmap bm, int32_t x, int32_t y,
                                  float tr, float tg, float tb, float ta)
 {
     if (!bm) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     SBitmapAtlasSlice slice;
     if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
     {
@@ -4984,8 +5354,9 @@ void TRenderer::DrawBitmapSubrectTinted(PTBitmap bm,
                                         float tr, float tg, float tb, float ta)
 {
     if (!bm || src_w <= 0 || src_h <= 0) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     SBitmapAtlasSlice slice;
     if (LookupUIBitmapAtlasSlice(bm, EBitmapDecode::Pixels, &slice))
     {
@@ -5344,8 +5715,9 @@ void TRenderer::DrawSurface(TSurface* surf, int32_t x, int32_t y)
     if (!surf) return;
     const sg_image img = surf->GetSGImage();
     if (!img.id) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     const int32_t sw = surf->Width();
     const int32_t sh = surf->Height();
     CompositeSwapchain(img, x, y, sw, sh, target_w, target_h,
@@ -5358,8 +5730,9 @@ void TRenderer::DrawSurfaceTinted(TSurface* surf, int32_t x, int32_t y,
     if (!surf) return;
     const sg_image img = surf->GetSGImage();
     if (!img.id) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     const int32_t sw = surf->Width();
     const int32_t sh = surf->Height();
     CompositeSwapchainTinted(img, x, y, sw, sh, target_w, target_h,
@@ -5377,7 +5750,7 @@ void TRenderer::DrawSurfaceSubrectTinted(TSurface* surf,
     const sg_image img = surf->GetSGImage();
     if (!img.id) return;
     CompositeSwapchainTinted(img, dst_x, dst_y, src_w, src_h,
-                             sapp_width(), sapp_height(),
+                             width, height,
                              src_x, src_y, src_w, src_h,
                              surf->Width(), surf->Height(),
                              tr * ta, tg * ta, tb * ta, ta, ECompositeAlpha::Premultiplied);
@@ -5451,8 +5824,9 @@ void TRenderer::DrawSolidRect(int32_t x, int32_t y, int32_t w, int32_t h,
                          (uint32_t(b) <<  8) |  uint32_t(a);
     const sg_image img = GetOrCreateSolidColorImage(key);
     if (!img.id) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     CompositeSwapchain(img, x, y, w, h, target_w, target_h,
                        0, 0, 1, 1, 1, 1);
 }
@@ -5462,8 +5836,9 @@ void TRenderer::FillScreen(float r, float g, float b, float a)
     if (a <= 0.0f) return;
     const sg_image img = GetOrCreateSolidColorImage(0xFFFFFFFFu);
     if (!img.id) return;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
     CompositeSwapchainTinted(img, 0, 0, target_w, target_h, target_w, target_h,
                              0, 0, 1, 1, 1, 1, r, g, b, a);
 }
@@ -5502,8 +5877,9 @@ void TRenderer::DrawNineSlice(PTBitmap bm,
 
     const int32_t sw = bm->width;
     const int32_t sh = bm->height;
-    const int32_t target_w = sapp_width();
-    const int32_t target_h = sapp_height();
+    // Display space, not the window's: see DrawBitmap.
+    const int32_t target_w = width;
+    const int32_t target_h = height;
 
     // Clamp insets to half the source (and ensure non-negative) so any
     // crazy caller input stays sane. Same clamp applies to dest pieces.
@@ -6502,11 +6878,20 @@ void TRenderer::DrainFxQueue()
         light.ambient_color[2] * light.ambient,
     };
     float u[24] = {};
+    // The FX billboards, particles and strips are drawn from the same
+    // fractional camera as the ground (see PackMeshVsUniforms), or they sit
+    // a whole camera step away from the world they belong to.
+    const bool fx_ortho = recon.reserved <= 0.5f;
+    float fx_camw_x = 0.0f, fx_camw_y = 0.0f, fx_camz_z = 0.0f;
+    MeshCameraUniforms(recon.center_wx, recon.center_wy, recon.kcam_forward,
+                       fx_ortho ? recon.cam_scroll_x : 0.0f,
+                       fx_ortho ? recon.cam_scroll_y : 0.0f,
+                       fx_camw_x, fx_camw_y, fx_camz_z);
     FillFxUniforms(u, *this,
                    recon.ox, recon.oy,
                    float(width + 2 * kGBufPad), float(height + 2 * kGBufPad),
-                   recon.z_near, recon.zspan, recon.kcam_forward, recon.reserved,
-                   recon.center_wx, recon.center_wy, recon.zoom,
+                   recon.z_near, recon.zspan, fx_camz_z, recon.reserved,
+                   fx_camw_x, fx_camw_y, recon.zoom,
                    sun_dir, sun_col, amb_col);
     const sg_range u_range = { u, sizeof(u) };
 
@@ -6535,8 +6920,21 @@ void TRenderer::DrainFxQueue()
         for (const auto& e : fx_billboard_queue)
         {
             const auto& it = e.item;
-            scratch.push_back(it.world_pos[0]);
-            scratch.push_back(it.world_pos[1]);
+            // Snap the sprite onto the pixel grid: the fractional camera
+            // drew it between two pixels and its pixels crawled while it or
+            // the camera moved. The shift is a world translation, so the
+            // whole sprite keeps its shape.
+            float px = it.world_pos[0], py = it.world_pos[1];
+            if (fx_ortho)
+            {
+                float snap_x = 0.0f, snap_y = 0.0f;
+                MeshPixelSnapDelta(px - fx_camw_x, py - fx_camw_y, it.world_pos[2],
+                                   recon.zoom, snap_x, snap_y);
+                px += snap_x;
+                py += snap_y;
+            }
+            scratch.push_back(px);
+            scratch.push_back(py);
             scratch.push_back(it.world_pos[2]);
             scratch.push_back(it.size_wu[0]);
             scratch.push_back(it.size_wu[1]);
@@ -6605,8 +7003,18 @@ void TRenderer::DrainFxQueue()
         for (const auto& e : fx_particle_queue)
         {
             const auto& it = e.item;
-            scratch.push_back(it.world_pos[0]);
-            scratch.push_back(it.world_pos[1]);
+            float px = it.world_pos[0], py = it.world_pos[1];
+            // The particles snap onto the pixel grid like the billboards.
+            if (fx_ortho)
+            {
+                float snap_x = 0.0f, snap_y = 0.0f;
+                MeshPixelSnapDelta(px - fx_camw_x, py - fx_camw_y, it.world_pos[2],
+                                   recon.zoom, snap_x, snap_y);
+                px += snap_x;
+                py += snap_y;
+            }
+            scratch.push_back(px);
+            scratch.push_back(py);
             scratch.push_back(it.world_pos[2]);
             scratch.push_back(it.size_wu[0]);
             scratch.push_back(it.size_wu[1]);
@@ -6787,6 +7195,14 @@ void TRenderer::DrainFxQueue()
         // No camera-facing expansion or axis-aligned bounding-box fitting.
         for (const SQuadDrawItem& quad : fx_quad_queue)
         {
+            // The quad (the weapon swipe) snaps onto the pixel grid with the
+            // rest: the anchor is its first corner; the shift is a world
+            // translation, so all corners move by the same pixel amount.
+            float snap_x = 0.0f, snap_y = 0.0f;
+            if (fx_ortho)
+                MeshPixelSnapDelta(quad.world_pos[0][0] - fx_camw_x,
+                                   quad.world_pos[0][1] - fx_camw_y,
+                                   quad.world_pos[0][2], recon.zoom, snap_x, snap_y);
             DrawSpan ds = {};
             ds.first = int32_t(scratch.size() / kFxStripVertexFloats);
             ds.count = quad.corner_count == 3 ? 3 : 6;
@@ -6805,7 +7221,7 @@ void TRenderer::DrainFxQueue()
             {
                 const int32_t corner = ds.count == 3 ? triangle[i] : corners[i];
                 const float* pos = quad.world_pos[corner];
-                scratch.push_back(pos[0]); scratch.push_back(pos[1]); scratch.push_back(pos[2]);
+                scratch.push_back(pos[0] + snap_x); scratch.push_back(pos[1] + snap_y); scratch.push_back(pos[2]);
                 // A nonzero tangent keeps all shader normalizations defined.
                 scratch.push_back(1.0f); scratch.push_back(0.0f); scratch.push_back(0.0f);
                 scratch.push_back(0.0f);  // no strip extrusion

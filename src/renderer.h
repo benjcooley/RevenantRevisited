@@ -79,6 +79,7 @@
 #include "revenant.h"
 #include "bitmapdecode.h"
 #include "render3d_types.h"
+#include "camerascroll.h"
 
 #include <sokol_gfx.h>
 
@@ -105,6 +106,8 @@ constexpr uint32_t kObjFlagSelfLit  = 1u << 29;
 constexpr uint32_t kObjFlagNoShadow = 1u << 28;
 constexpr uint32_t kObjIdMask       = 0x0FFFFFFFu;
 constexpr uint32_t kObjFlagMask     = 0xF0000000u;
+
+
 
 // Inputs to the light pass's Classic model (lighting mode 0), which lights
 // the two G-buffer surface classes the way retail lit them: static tiles
@@ -145,6 +148,9 @@ struct STileSubmit
 {
     RendererImagePairHandle image_pair = 0;
     int32_t  dst_x, dst_y, dst_w, dst_h;
+    // Sub-pixel part of the tile's position: the camera's step scrolls the
+    // picture between the ticks, so a tile can land between two pixels.
+    float    frac_x = 0.0f, frac_y = 0.0f;
     int32_t  src_w = 0, src_h = 0;  // source sprite dimensions before viewport scaling
     float    anchor_z;        // normalized scene-z of the tile anchor [0..1]
     float    depth_mul;       // bitmap-z -> normalized-scene-z scale
@@ -378,8 +384,10 @@ class TParticleBucket;   // forward, see particlefx.h
 struct SRendererImagePairInfo
 {
     uint64_t key = 0;
-    int32_t width = 0;
+    int32_t width = 0;         // sprite (tile) space: depth + height minmax size
     int32_t height = 0;
+    int32_t color_width = 0;   // colour texture size; > width/height when a
+    int32_t color_height = 0;  // high-res tile override supplied bigger art
     int32_t height_minmax_mips = 0;
     uint32_t tight_proxy_points = 0;
     uint64_t gpu_bytes = 0;
@@ -673,11 +681,38 @@ public:
                                                    size_t depth_bytes,
                                                    int32_t width,
                                                    int32_t height,
-                                                   uint64_t gpu_bytes);
+                                                   uint64_t gpu_bytes,
+                                                   int32_t color_width = 0,
+                                                   int32_t color_height = 0);
     const SRendererImagePairInfo* ImagePairInfo(RendererImagePairHandle handle) const;
+    // Handle for an already-registered key, or 0. Lets callers skip work
+    // (e.g. decoding high-res tile art) when the asset is already resident.
+    RendererImagePairHandle ImagePairForKey(uint64_t key) const;
+
+    // Replace the COLOUR image of an image pair (a tile's albedo). The depth
+    // map, the height min/max chain and the tight proxy hull stay as they
+    // are: only the tile's colour changes, so the relief, the coverage and
+    // every derived value stay retail's.
+    //
+    // The handle stays the same, so every holder of it (the map renderer's
+    // tile records, the pick tables, the asset cache's references) keeps
+    // working -- they look the image up by handle when they bind it. The
+    // new colour may have another size than the old one (the high-res tile
+    // art is bigger than the tile); the shader samples the colour by
+    // normalised UVs, so that is fine.
+    //
+    // The pixels go into a FRESH GPU image (a texture that is bound as a
+    // shader resource can not be mapped reliably -- see UpdateTextureAsset),
+    // and the colour's mip chain is rebuilt with them.
+    bool UpdateImagePairColor(RendererImagePairHandle handle,
+                               const void* pixels, size_t pixel_bytes,
+                               int32_t width, int32_t height);
     void AddImagePairAssetRef(RendererImagePairHandle handle, uint32_t count = 1);
     void ReleaseImagePairAssetRef(RendererImagePairHandle handle, uint32_t count = 1);
 
+    // Register a keyed texture. `updatable` creates the GPU image with
+    // SG_USAGE_DYNAMIC so UpdateTextureAsset can replace its pixels later
+    // without handing out a new handle.
     TTextureHandle RegisterTextureAsset(uint64_t key,
                                         const void* pixels,
                                         size_t pixel_bytes,
@@ -686,8 +721,23 @@ public:
                                         ERendererTextureFormat format,
                                         uint64_t gpu_bytes,
                                         ERendererTextureFilter filter = ERendererTextureFilter::Linear,
-                                        bool repeat = false);
+                                        bool repeat = false,
+                                        bool updatable = false);
     const SRendererTextureInfo* TextureInfo(TTextureHandle handle) const;
+
+    // Replace the pixels of a texture registered as updatable. The handle and
+    // the GPU image stay, so every holder of the handle (animator texture
+    // snapshots, flipbook components) keeps working. The new size has to
+    // match the texture's own.
+    //
+    // sokol allows only one update per image and frame, so a second update of
+    // the same texture in the same frame is dropped (the pixels are already
+    // the wanted ones).
+    bool UpdateTextureAsset(TTextureHandle handle,
+                            const void* pixels,
+                            size_t pixel_bytes,
+                            int32_t width,
+                            int32_t height);
     void AddTextureAssetRef(TTextureHandle handle, uint32_t count = 1);
     void ReleaseTextureAssetRef(TTextureHandle handle, uint32_t count = 1);
     void ResetAssetRefCounts();
@@ -828,6 +878,7 @@ public:
     //   perspective  -- non-zero enables perspective projection
     //   zoom         -- camera-plane scale multiplier (1 = authored scale)
     //   z_offset/z_scale -- debug tweaks for perspective tile relief depth
+    //   cam_scroll_x/y -- world-space camera step already elapsed this tick
     void SetReconstructionParams(float ox, float oy,
                                  float z_near, float z_far,
                                  float center_wx, float center_wy,
@@ -835,7 +886,9 @@ public:
                                  float zoom = 1.0f,
                                  float z_offset = 0.0f,
                                  float z_scale = 1.0f,
-                                 float tile_scale = 1.0f);
+                                 float tile_scale = 1.0f,
+                                 float cam_scroll_x = 0.0f,
+                                 float cam_scroll_y = 0.0f);
     // 0 = normal iso mesh projection, 1 = retail D3D viewport projection
     // used by the live EquipmentPane paperdoll.
     void SetMeshProjectionMode(int32_t mode);
@@ -1481,6 +1534,15 @@ private:
     };
     struct SRendererTextureEntry : SRendererTextureInfo {
         sg_image image = {};
+        bool updatable = false;   // created with SG_USAGE_DYNAMIC
+        // The frame the texture was last updated in. sokol allows only one
+        // sg_update_image per image and frame.
+        uint64_t update_frame = 0;
+        // The creation parameters, kept so an update can replace the GPU
+        // image with an identical one (see UpdateTextureAsset).
+        ERendererTextureFormat format = ERendererTextureFormat::RGBA8;
+        ERendererTextureFilter filter = ERendererTextureFilter::Linear;
+        bool repeat = false;
     };
     std::vector<SRendererImagePairEntry> image_pair_assets; // index+1 handle
     std::unordered_map<uint64_t, RendererImagePairHandle> image_pair_by_key;
@@ -1598,6 +1660,11 @@ private:
         float z_scale = 1.0f;
         float tile_scale = 1.0f;
         float mesh_projection_mode = 0.0f;
+        // The camera's step already elapsed this tick, in world units. The
+        // ground scrolls by it (the tiles take it in their screen position),
+        // so the meshes have to scroll by the same amount or they drift off
+        // the ground by up to a whole camera step, 24 times a second.
+        float cam_scroll_x = 0, cam_scroll_y = 0;
     } recon;
 
     // ---- Pipeline setup / teardown --------------------------------------

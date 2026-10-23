@@ -2,6 +2,7 @@
 
 #include "maprenderer.h"
 
+#include "bitmap.h"
 #include "classiclighting.h"
 #include "gamemap.h"
 #include "object.h"
@@ -11,12 +12,54 @@
 
 #include <cstdint>
 #include <map>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 class T3DImagery;
+
+// A loaded tile whose COLOUR image can be replaced at runtime.
+//
+// The tile art reload (tiletreload.h) puts an edited PNG into the image the
+// game already draws, so the art can be edited while the game runs: the
+// image pair's handle (the GPU image the tile pass binds), the retail bitmap
+// the retail pixels come from, the tile's type (the art tree's key) and
+// whether the tree's art is in the image now.
+struct STileArtEntry {
+    RendererImagePairHandle image_pair = 0;
+    void*    bm = nullptr;        // the retail bitmap (PTBitmap)
+    int32_t  objtype = -1;        // the tile's object type (state 0 only)
+    std::string type_name;        // its type name, e.g. "KInWallN"
+    int32_t  w = 0, h = 0;        // the retail bitmap's size
+    bool     modern = false;      // the tree's art is in the colour image now
+};
+
+// Remember a loaded tile so the art reload can re-colour it. One entry per
+// image pair: the same bitmap uploaded twice (two map renderers, the same
+// tile in two sectors) is one GPU image and one entry.
+void NoteTileArt(std::vector<STileArtEntry>& registry,
+                  RendererImagePairHandle image_pair,
+                  void* bm, int32_t objtype, const char* type_name,
+                  int32_t w, int32_t h, bool modern);
+
+// The retail tile bitmap's pixels as RGBA8: the palette's colours, the
+// bitmap's own alpha, zero where the tile is transparent (the key colour, or
+// a depth of 0 / 0x7F7F when the tile has a depth map). The art reload
+// path uses it to put the retail pixels back into a tile and to clip the
+// tree's art to the retail coverage.
+bool MapDecodeTileBitmapRGBA(PTBitmap bm, std::vector<uint8_t>& out_rgba,
+                             int32_t* out_w, int32_t* out_h);
+
+// The art never leaks outside the tile's coverage: the upscaled PNG carries
+// a wide, soft, half-transparent band around the shape (the upscaler's
+// edge), and those texels have no height in the depth map -- they would be
+// drawn at the tile's base plane, which the iso projection puts in front of
+// whatever stands there. The coverage is sampled nearest (the retail 1x
+// alpha).
+void MapClipArtToCoverage(std::vector<uint8_t>& art, int32_t aw, int32_t ah,
+                           const uint8_t* retail_rgba, int32_t rw, int32_t rh);
 
 struct SSectorTileTex {
     struct SDepthDump {
@@ -139,6 +182,10 @@ struct SMapRenderContext {
     const std::vector<SSectorMeshAsset>* mesh_assets = nullptr;
     TTextureHandle debug_green_texture = kInvalidTexture;
     S3DPoint sectorCameraWorld = {0,0,0};
+    // The camera's step since the tick began, in world units. The world is
+    // drawn against the camera's position at the tick's start; the part of
+    // the step that has passed scrolls the picture by a fraction of a pixel.
+    float cameraScrollX = 0.0f, cameraScrollY = 0.0f;
     int32_t cam_ox = 0, cam_oy = 0;
     int32_t vw = 0, vh = 0;
     float cam_forward = 2750.0f;
@@ -258,6 +305,9 @@ struct TMapRenderer::Impl
     // Local ref_counts are source-usage diagnostics from loaded maps/sectors.
     std::vector<SSectorTileTex>  sectorTileTex;
     std::vector<SSectorMeshAsset> sectorMeshAsset;
+    // The loaded tiles whose colour image the art reload can replace (see
+    // STileArtEntry and tiletreload.h). One entry per uploaded image pair.
+    std::vector<STileArtEntry>   tileArt;
     // Bitmap pointer -> sectorTileTex index. Animated effects refresh their
     // frame texture every render frame, so this lookup must stay O(1) against
     // resident asset count. Draw items still do not own renderer assets.
@@ -360,6 +410,9 @@ struct TMapRenderer::Impl
     int32_t sectorCenterOy = 0;
     S3DPoint sectorWorldCenter = {0,0,0};
     S3DPoint sectorCameraWorld = {0,0,0};
+    // The camera's step since the tick began, in world units (see
+    // SMapRenderContext::cameraScrollX).
+    float cameraScrollX = 0.0f, cameraScrollY = 0.0f;
     int32_t  cameraLevel = 0;
     int32_t  drawRecordLevel = -1;
     int32_t  drawRangeMinSx = 0;
@@ -566,6 +619,7 @@ struct TMapRenderer::Impl
     {
         sectorTileTex.clear();
         sectorTileTexByBitmap.clear();
+        tileArt.clear();
         // GPU resources are owned by TRenderer's asset registries and are
         // destroyed by TRenderer::Shutdown. These records are renderer-facing
         // metadata and non-owning handles.

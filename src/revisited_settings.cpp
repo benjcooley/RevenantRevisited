@@ -120,8 +120,68 @@ bool LoadRevisitedSettings()
     s.point_light_int_mul   = ini.GetDoubleValue(kSection, "PointLightInt", s.point_light_int_mul);
     s.point_light_range_mul = ini.GetDoubleValue(kSection, "PointLightRange", s.point_light_range_mul);
 
+    s.high_res_tiles = ini.GetBoolValue(kSection, "HighResTiles", s.high_res_tiles);
+    if (const char *root = ini.GetValue(kSection, "HighResTileRoot", s.high_res_tile_root.c_str()))
+        s.high_res_tile_root = root;
+    s.high_res_tile_mode = (int32_t)ini.GetLongValue(kSection, "HighResTileMode", s.high_res_tile_mode);
+
+    s.sprite_override = ini.GetBoolValue(kSection, "SpriteOverride", s.sprite_override);
+    if (const char *root = ini.GetValue(kSection, "SpriteRoot", s.sprite_root.c_str()))
+        s.sprite_root = root;
+    s.sprite_mode = (int32_t)ini.GetLongValue(kSection, "SpriteMode", s.sprite_mode);
+
     log_info("[revisited] loaded %s", path.string().c_str());
     return true;
+}
+
+// Only the two high-res tile art keys. The art itself is a player-side extra
+// that sits next to the overlay, so a launch without --revisited still gets
+// them (see TileTexOverride::Init); every other tunable stays defaulted.
+bool LoadTileArtOverrideSettings()
+{
+    // Path-only resolver: the gated one (and so overlay_ini_path) is empty
+    // without --revisited, but the overlay's INI is still readable.
+    const char *overlay = rev_revisited_overlay_readonly();
+    if (!overlay || !*overlay) return false;
+
+    const auto path = std::filesystem::path(overlay) / "Revenant.ini";
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec)) return false;
+
+    CSimpleIniA ini;
+    ini.SetUnicode();
+    if (ini.LoadFile(path.string().c_str()) < 0) return false;
+
+    SRevisitedSettings &s = RevisitedSettings;
+    s.high_res_tiles = ini.GetBoolValue(kSection, "HighResTiles", s.high_res_tiles);
+    if (const char *root = ini.GetValue(kSection, "HighResTileRoot", s.high_res_tile_root.c_str()))
+        s.high_res_tile_root = root;
+    s.high_res_tile_mode = (int32_t)ini.GetLongValue(kSection, "HighResTileMode", s.high_res_tile_mode);
+    return s.high_res_tiles;
+}
+
+// Only the sprite art keys. Like the tile art, the sprite art is a
+// player-side extra that sits next to the overlay, so a launch without
+// --revisited still gets it (see SpriteTexOverride::Init).
+bool LoadSpriteArtOverrideSettings()
+{
+    const char *overlay = rev_revisited_overlay_readonly();
+    if (!overlay || !*overlay) return false;
+
+    const auto path = std::filesystem::path(overlay) / "Revenant.ini";
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec)) return false;
+
+    CSimpleIniA ini;
+    ini.SetUnicode();
+    if (ini.LoadFile(path.string().c_str()) < 0) return false;
+
+    SRevisitedSettings &s = RevisitedSettings;
+    s.sprite_override = ini.GetBoolValue(kSection, "SpriteOverride", s.sprite_override);
+    if (const char *root = ini.GetValue(kSection, "SpriteRoot", s.sprite_root.c_str()))
+        s.sprite_root = root;
+    s.sprite_mode = (int32_t)ini.GetLongValue(kSection, "SpriteMode", s.sprite_mode);
+    return s.sprite_override;
 }
 
 void ApplyRevisitedSettingsToRenderer(TRenderer *r)
@@ -256,6 +316,20 @@ bool SaveRevisitedSettings(char *out_path, int32_t out_len)
         "; Global point-light intensity multiplier; per-area POINTLIGHTINT composes multiplicatively", true);
     ini.SetDoubleValue(kSection, "PointLightRange", s.point_light_range_mul,
         "; Global point-light range multiplier; per-area POINTLIGHTRANGE composes multiplicatively", true);
+
+    ini.SetBoolValue(kSection, "HighResTiles", s.high_res_tiles,
+        "; Swap a tile's colour for matching upscaled art (keeps retail depth/normals)", true);
+    ini.SetValue(kSection, "HighResTileRoot", s.high_res_tile_root.c_str(),
+        "; Tile art tree, names '<NNNN>_<Name>.png' as --dumptiles writes them; empty = <overlay>/Imagery", true);
+    ini.SetLongValue(kSection, "HighResTileMode", s.high_res_tile_mode,
+        "; Which tile art the game shows: 0 = retail pixels, 1 = modern (the tree)", true);
+
+    ini.SetBoolValue(kSection, "SpriteOverride", s.sprite_override,
+        "; Swap a sprite's texture for matching PNG art from the sprite art tree", true);
+    ini.SetValue(kSection, "SpriteRoot", s.sprite_root.c_str(),
+        "; Sprite art tree, layout as --dumpi3d writes it: <root>/<subdir>/<name>/texture_<NN>_frame_<NN>.png; empty = <overlay>/Sprites", true);
+    ini.SetLongValue(kSection, "SpriteMode", s.sprite_mode,
+        "; Which sprite art the game shows: 0 = retail, 1 = modern (the tree)", true);
 
     if (ini.SaveFile(path.string().c_str()) < 0)
     {

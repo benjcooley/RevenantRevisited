@@ -16,6 +16,7 @@
 #include "revisited_defaults.h"
 #include "revisited_settings.h"
 #include "runtimemode.h"
+#include "spritedebugtab.h"
 #include "time.h"
 
 #include <HandmadeMath.h>
@@ -74,7 +75,6 @@ void SetVisible(bool on)      { g_debugVisible = on; }
 void DrawFrame()
 {
     if (!g_debugVisible) return;
-    if (g_debugContributors.empty()) return;
 
     ImGui::SetNextWindowSize(ImVec2(460, 420), ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Debug", &g_debugVisible))
@@ -93,6 +93,14 @@ void DrawFrame()
                 contributor->DrawDebugTab();
                 ImGui::EndTabItem();
             }
+        }
+        // The sprite art switch is its own top-level tab, after the
+        // contributors (the Map tab is one of them). The panel stays usable
+        // even when nothing else contributes a tab.
+        if (ImGui::BeginTabItem("Sprites"))
+        {
+            DrawSpritesTab();
+            ImGui::EndTabItem();
         }
         ImGui::EndTabBar();
     }

@@ -29,25 +29,37 @@ struct vs_in  { float2 pos : POSITION; float2 uv : TEXCOORD0; };
 struct vs_out { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
 vs_out main_vs(vs_in i) {
     vs_out o;
-    float sx = i.uv.x * tile_sprite.z - tile_sprite.x;
-    float sy = i.uv.y * tile_sprite.w - tile_sprite.y;
-    float lz = (-2.0 * sy * 0.867) / 2.003378;
-    float su = 2.0 * (sy + lz * 0.867);
-    float wx = tile_root.x + 0.5 * (su + sx);
-    float wy = tile_root.y + 0.5 * (su - sx);
-    float wz = tile_root.z + lz;
-    float relx = wx - camera.x;
-    float rely = wy - camera.y;
-    float sum = relx + rely;
-    float S = relx - rely;
-    float T = 0.5 * sum - wz * 0.867;
-    float scene_z_wu = camera.z - 0.867 * sum - 0.5 * wz;
-    float zoom = max(zparams.w, 0.0001);
-    float persp_scale = ((camera.w > 0.5) ? (camera.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
-    float spx = rect.x + S * persp_scale;
-    float spy = rect.y + T * persp_scale;
-    o.pos = float4(2.0 * spx / max(rect.z, 1.0) - 1.0,
-                   1.0 - 2.0 * spy / max(rect.w, 1.0),
+    // Perspective (modern, opt-in) camera: project the tile's world-space
+    // corner. Mirrors tile.metal.h main_vs.
+    if (camera.w > 0.5 && raycast.w <= 0.5) {
+        float sx = i.uv.x * tile_sprite.z - tile_sprite.x;
+        float sy = i.uv.y * tile_sprite.w - tile_sprite.y;
+        float lz = (-2.0 * sy * 0.867) / 2.003378;
+        float su = 2.0 * (sy + lz * 0.867);
+        float wx = tile_root.x + 0.5 * (su + sx);
+        float wy = tile_root.y + 0.5 * (su - sx);
+        float wz = tile_root.z + lz;
+        float relx = wx - camera.x;
+        float rely = wy - camera.y;
+        float sum = relx + rely;
+        float S = relx - rely;
+        float T = 0.5 * sum - wz * 0.867;
+        float scene_z_wu = camera.z - 0.867 * sum - 0.5 * wz;
+        float zoom = max(zparams.w, 0.0001);
+        float persp_scale = camera.z * zoom / max(scene_z_wu, 1.0);
+        float spx = proj.x + S * persp_scale;
+        float spy = proj.y + T * persp_scale;
+        o.pos = float4(2.0 * spx / max(proj.z, 1.0) - 1.0,
+                       1.0 - 2.0 * spy / max(proj.w, 1.0),
+                       0.0, 1.0);
+        o.uv  = i.uv;
+        return o;
+    }
+    // Retail (orthographic) path: the CPU already computed the tile's
+    // on-screen rect in NDC, so the unit quad lands directly on it. The FS's
+    // SV_Depth carries the tile depth. (Same path as tile.metal.h.)
+    o.pos = float4(rect.x + i.pos.x * rect.z,
+                   rect.y + i.pos.y * rect.w,
                    0.0, 1.0);
     o.uv  = i.uv;
     return o;
@@ -110,10 +122,6 @@ fs_out main_ps(vs_out in_) {
         in_.pos.x >= albedo_pad && in_.pos.x < (gbuf_size.x - albedo_pad) &&
         in_.pos.y >= albedo_pad && in_.pos.y < (gbuf_size.y - albedo_pad);
     if (c.a < 0.01) discard;
-    if (!tile_depth_valid(in_.uv)) discard;
-    float zraw = tile_depth_read(in_.uv);
-    float d    = zparams.x + zraw * zparams.y;
-    if (d < 0.0 || d > 1.0) discard;
     float nr  = max(filter_.x, 0.5);
     float thr = max(filter_.y, 0.0);
     float tw, th; depth_tex.GetDimensions(tw, th);
@@ -124,6 +132,24 @@ fs_out main_ps(vs_out in_) {
     float zrs = tile_depth_read(in_.uv + float2(tex.x, 0.0));
     float zt  = tile_depth_read(in_.uv - float2(0.0, tex.y));
     float zb  = tile_depth_read(in_.uv + float2(0.0, tex.y));
+    float zraw = tile_depth_read(in_.uv);
+    // The depth map's own empty texels are not "the highest surface" -- they
+    // are where the map has no data, and the tile's shape comes from the
+    // art (clipped to the coverage), not from the map's holes. Take the
+    // height from the closest neighbour that has one, so the map's black
+    // border neither covers what stands on the tile nor tilts its edge.
+    if (abs(zraw) <= 0.0001)
+    {
+        float sum = 0.0, cnt = 0.0;
+        if (abs(zl)  > 0.0001) { sum += zl;  cnt += 1.0; }
+        if (abs(zrs) > 0.0001) { sum += zrs; cnt += 1.0; }
+        if (abs(zt)  > 0.0001) { sum += zt;  cnt += 1.0; }
+        if (abs(zb)  > 0.0001) { sum += zb;  cnt += 1.0; }
+        if (cnt > 0.5) zraw = sum / cnt;
+        else discard;   // no depth anywhere near: the tile carries no relief
+    }
+    float d    = zparams.x + zraw * zparams.y;
+    if (d < 0.0 || d > 1.0) discard;
     if (abs(zl  - zraw) > thr + EDGE_EPS) zl  = zraw;
     if (abs(zrs - zraw) > thr + EDGE_EPS) zrs = zraw;
     if (abs(zt  - zraw) > thr + EDGE_EPS) zt  = zraw;

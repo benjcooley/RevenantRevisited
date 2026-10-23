@@ -1030,6 +1030,14 @@ const char* BlockedByName(TCharacter::EBlockedBy why)
 // offline.
 uint32_t TCharacter::Move()
 {
+    // The tick's starting position: the renderer interpolates between it and
+    // the position the movement reaches, so the character glides instead of
+    // stepping once per tick. TCharacter::Move overrides
+    // TObjectInstance::Move, which records the same thing, so it has to
+    // record it here -- without it prevpos stays at the spawn point and the
+    // renderer reads the distance from the spawn as the tick's step.
+    prevpos = pos;
+
     uint32_t bits;
     int32_t steps = kMaxMoveSteps;
     do

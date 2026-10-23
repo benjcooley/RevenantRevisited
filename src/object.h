@@ -666,6 +666,12 @@ class SObjectDef
     uint16_t    level;      // Level of object
 
     S3DPoint    pos;        // Position of object relative in the map (pos is the exact center of the object)
+    // The position the object had when the tick started. The game moves in
+    // whole pixels at the legacy 24 Hz tick, so the renderer draws the
+    // object at this position advanced by the fraction of the tick that has
+    // passed -- otherwise the sprites step 1-2 px per tick and the motion
+    // reads as 24 fps on a 144 Hz display.
+    S3DPoint    prevpos;
     S3DPoint    vel;        // Movement velocity vector (divide by 0x100 to get world position units)
     S3DPoint    accum;      // Accumulator for movement
     
@@ -758,6 +764,8 @@ class TObjectInstance : public TNodeInst, protected SObjectDef
     void GetPos(S3DPoint& getpos) const { getpos = Pos(); }
         // Gets current object position (world space).
     S3DPoint Pos() const;
+    // The position the object had when the tick started (see prevpos).
+    [[nodiscard]] S3DPoint PrevPos() const { return prevpos; }
         // World-space position. Reads from the transform's global
         // matrix, so the cost is at worst a parent-chain recompute
         // (cached afterwards). Returns by value -- the const-ref

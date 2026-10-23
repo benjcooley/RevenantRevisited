@@ -33,6 +33,7 @@
 #include "mapmanager.h"
 #include "dls.h"
 #include "revisited_settings.h"
+#include "tiletexoverride.h"
 #include "mappane.h"
 #include "playscreen.h"
 #include "math3d.h"
@@ -48,6 +49,7 @@
 #include "testconfig.h"
 #include "sceneviewport.h"
 #include "time.h"
+#include "subtick.h"
 
 #include <algorithm>
 #include <chrono>
@@ -62,6 +64,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -450,6 +453,17 @@ inline void ProjectWorldPointToScreen(const SMapRenderContext& ctx,
         world.z
     };
     ProjectCameraRelToScreen(ctx, rel, sx, sy);
+    if (!ctx.perspective_camera)
+    {
+        // The picture is drawn against the camera plus the part of the
+        // camera's step that has passed, so a projected point has to move
+        // with it (the mouse pick would miss by that much otherwise).
+        float scroll_sx = 0.0f, scroll_sy = 0.0f;
+        CameraScrollPixels(ctx.cameraScrollX, ctx.cameraScrollY,
+                           (std::max)(ctx.camera_zoom, 0.0001f), scroll_sx, scroll_sy);
+        sx += scroll_sx;
+        sy += scroll_sy;
+    }
     const float scene_z = CameraDepth(rel, ctx.cam_forward);
     if (scene_z_out)
         *scene_z_out = scene_z;
@@ -590,6 +604,13 @@ static bool TileCameraVolumeVisible(const SMapRenderContext& ctx,
     else
     {
         ProjectCameraRelToScreen(ctx, rel, anchor_x, anchor_y);
+        // The picture scrolls with the camera: a tile the scroll brings into
+        // view must not be culled, or the edge of the screen shows a gap.
+        float scroll_sx = 0.0f, scroll_sy = 0.0f;
+        CameraScrollPixels(ctx.cameraScrollX, ctx.cameraScrollY,
+                           (std::max)(ctx.camera_zoom, 0.0001f), scroll_sx, scroll_sy);
+        anchor_x += scroll_sx;
+        anchor_y += scroll_sy;
     }
 
     const float scale = ctx.perspective_camera
@@ -698,95 +719,123 @@ static void ComputeAuthoredLocalDepthRange(int32_t wwidth, int32_t wlength, int3
     }
 }
 
-static bool UploadTileBitmap(PTBitmap bm,
-                             RendererImagePairHandle* out_image_pair,
-                             uint64_t* out_key,
-                             int32_t* out_w, int32_t* out_h,
-                             float* out_z_local_min = nullptr,
-                             float* out_z_local_max = nullptr,
-                             SSectorTileTex::SDepthDump* out_z_dump = nullptr,
-                             bool* out_has_alpha = nullptr,
-                             uint32_t* out_bm_flags = nullptr,
-                             std::vector<float>* out_cpu_depth_local = nullptr,
-                             std::vector<uint8_t>* out_cpu_opaque = nullptr)
+// The art never leaks outside the tile's coverage: the upscaled PNG carries a
+// wide, soft, half-transparent band around the shape (the upscaler's edge),
+// and those texels have no height in the depth map -- they would be drawn at
+// the tile's base plane, which the iso projection puts in front of whatever
+// stands there. The coverage is sampled nearest (the retail 1x alpha).
+//
+// Not static: the art reload path (tiletreload.cpp) clips the same way, so
+// an edited PNG gets the same silhouette it had at load time.
+// (Defined below, outside this file's anonymous namespace.)
+
+// The retail tile bitmap's planes, decoded: the palette indices (or the
+// 15/16-bit colours), the depth and the alpha. The colour conversion and
+// the depth map both read these, and the art reload path decodes them again
+// (see MapDecodeTileBitmapRGBA).
+struct STileBitmapPlanes
 {
-    if (!Renderer || !out_image_pair || !bm || bm->width <= 0 || bm->height <= 0) return false;
+    int32_t w = 0, h = 0;
+    bool    is_8bit = false;
+    bool    has_zbuffer = false;
+    bool    has_alpha = false;
+    uint8_t  key8 = 0;
+    uint16_t key16 = 0;
+    std::vector<uint8_t>  idx;     // palette indices (8-bit bitmaps)
+    std::vector<uint16_t> rgb16;  // 15/16-bit colours
+    std::vector<uint16_t> z;      // depth
+    std::vector<uint8_t>  alpha;  // alpha plane
+};
+
+static bool LoadTileBitmapPlanes(PTBitmap bm, STileBitmapPlanes& out)
+{
+    if (!bm || bm->width <= 0 || bm->height <= 0)
+        return false;
     const bool is_8bit = (bm->flags & BM_8BIT) != 0;
     const bool is_16bit = (bm->flags & (BM_15BIT | BM_16BIT)) != 0;
-    const bool has_zbuffer = (bm->flags & BM_ZBUFFER) != 0;
-    const bool has_alpha = (bm->flags & BM_ALPHA) != 0;
-    if (!is_8bit && !is_16bit) return false;
-    SPalette* pal = (SPalette*)bm->palette.ptr();
-    if (is_8bit && !pal) return false;
-    const int32_t w = bm->width, h = bm->height;
-    const size_t npx = size_t(w) * size_t(h);
-    const uint8_t key8 = (uint8_t)bm->keycolor;
-    const uint16_t key16 = (uint16_t)bm->keycolor;
-    std::unique_ptr<uint8_t[]> idxplane;
-    std::unique_ptr<uint16_t[]> rgbplane16;
-    if (is_8bit) idxplane.reset(new uint8_t[npx]); else rgbplane16.reset(new uint16_t[npx]);
-    std::unique_ptr<uint16_t[]> zplane;
-    if (has_zbuffer) zplane.reset(new uint16_t[npx]);
-    std::unique_ptr<uint8_t[]> alphaplane;
-    if (has_alpha) alphaplane.reset(new uint8_t[npx]);
+    if (!is_8bit && !is_16bit)
+        return false;
+
+    out.w = bm->width;
+    out.h = bm->height;
+    out.is_8bit = is_8bit;
+    out.has_zbuffer = (bm->flags & BM_ZBUFFER) != 0;
+    out.has_alpha = (bm->flags & BM_ALPHA) != 0;
+    out.key8 = (uint8_t)bm->keycolor;
+    out.key16 = (uint16_t)bm->keycolor;
+
+    const size_t npx = size_t(out.w) * size_t(out.h);
+    if (is_8bit) out.idx.assign(npx, 0); else out.rgb16.assign(npx, 0);
+    if (out.has_zbuffer) out.z.assign(npx, 0);
+    if (out.has_alpha) out.alpha.assign(npx, 0);
+
     if (bm->flags & BM_CHUNKED)
     {
         if (!bm->CacheChunks()) return false;
         SChunkHeader* hdr = (SChunkHeader*)(void*)bm->data8;
-        SChunkHeader* zhdr = has_zbuffer ? (SChunkHeader*)bm->zbuffer.ptr() : nullptr;
-        if (!hdr || (has_zbuffer && !zhdr)) return false;
+        SChunkHeader* zhdr = out.has_zbuffer ? (SChunkHeader*)bm->zbuffer.ptr() : nullptr;
+        if (!hdr || (out.has_zbuffer && !zhdr)) return false;
         const int32_t cw = hdr->width, ch = hdr->height;
-        if (is_8bit) std::memset(idxplane.get(), key8, npx);
-        else std::fill_n(rgbplane16.get(), npx, key16);
-        if (has_zbuffer) for (size_t i = 0; i < npx; ++i) zplane[i] = 0x7F7F;
-        if (has_alpha) std::fill_n(alphaplane.get(), npx, uint8_t(31));
+        if (is_8bit) std::memset(out.idx.data(), out.key8, npx);
+        else std::fill_n(out.rgb16.data(), npx, out.key16);
+        if (out.has_zbuffer) for (size_t i = 0; i < npx; ++i) out.z[i] = 0x7F7F;
+        if (out.has_alpha) std::fill_n(out.alpha.data(), npx, uint8_t(31));
         for (int32_t by = 0; by < ch; ++by)
         for (int32_t bx = 0; bx < cw; ++bx)
         {
             void* cptr = hdr->block[by * cw + bx].ptr();
-            void* zptr = zhdr->block[by * cw + bx].ptr();
+            void* zptr = zhdr ? zhdr->block[by * cw + bx].ptr() : nullptr;
             const uint8_t*  c8  = (is_8bit && cptr) ? (const uint8_t*)ChunkCache.AddChunk(cptr, 1) : nullptr;
             const uint16_t* c16 = (is_16bit && cptr) ? (const uint16_t*)ChunkCache.AddChunk16(cptr, 1) : nullptr;
-            const uint16_t* z16 = (has_zbuffer && zptr) ? (const uint16_t*)ChunkCache.AddChunkZ(zptr, 2) : nullptr;
+            const uint16_t* z16 = (out.has_zbuffer && zptr) ? (const uint16_t*)ChunkCache.AddChunkZ(zptr, 2) : nullptr;
             const int32_t x0 = bx * CHUNKWIDTH, y0 = by * CHUNKHEIGHT;
-            const int32_t cxmax = (w - x0 < CHUNKWIDTH) ? (w - x0) : CHUNKWIDTH;
-            const int32_t cymax = (h - y0 < CHUNKHEIGHT) ? (h - y0) : CHUNKHEIGHT;
+            const int32_t cxmax = (out.w - x0 < CHUNKWIDTH) ? (out.w - x0) : CHUNKWIDTH;
+            const int32_t cymax = (out.h - y0 < CHUNKHEIGHT) ? (out.h - y0) : CHUNKHEIGHT;
             if (cxmax <= 0 || cymax <= 0) continue;
             for (int32_t y = 0; y < cymax; ++y)
             {
-                if (c8) std::memcpy(&idxplane[(y0 + y) * w + x0], &c8[y * CHUNKWIDTH], cxmax);
-                if (c16) std::memcpy(&rgbplane16[(y0 + y) * w + x0], &c16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
-                if (z16) std::memcpy(&zplane[(y0 + y) * w + x0], &z16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
+                if (c8) std::memcpy(&out.idx[(y0 + y) * out.w + x0], &c8[y * CHUNKWIDTH], cxmax);
+                if (c16) std::memcpy(&out.rgb16[(y0 + y) * out.w + x0], &c16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
+                if (z16) std::memcpy(&out.z[(y0 + y) * out.w + x0], &z16[y * CHUNKWIDTH], cxmax * sizeof(uint16_t));
             }
         }
     }
     else
     {
-        uint16_t* zbuf = has_zbuffer ? (uint16_t*)bm->zbuffer.ptr() : nullptr;
-        uint8_t* abuf = has_alpha ? (uint8_t*)bm->alpha.ptr() : nullptr;
-        if (is_8bit) std::memcpy(idxplane.get(), bm->data8, npx);
-        else std::memcpy(rgbplane16.get(), bm->data16, npx * sizeof(uint16_t));
-        if (has_zbuffer && zbuf) std::memcpy(zplane.get(), zbuf, npx * sizeof(uint16_t));
-        if (has_alpha && abuf) std::memcpy(alphaplane.get(), abuf, npx);
+        uint16_t* zbuf = out.has_zbuffer ? (uint16_t*)bm->zbuffer.ptr() : nullptr;
+        uint8_t* abuf = out.has_alpha ? (uint8_t*)bm->alpha.ptr() : nullptr;
+        if (is_8bit) std::memcpy(out.idx.data(), bm->data8, npx);
+        else std::memcpy(out.rgb16.data(), bm->data16, npx * sizeof(uint16_t));
+        if (out.has_zbuffer && zbuf) std::memcpy(out.z.data(), zbuf, npx * sizeof(uint16_t));
+        if (out.has_alpha && abuf) std::memcpy(out.alpha.data(), abuf, npx);
     }
-    std::unique_ptr<uint8_t[]> rgba(new uint8_t[npx * 4]);
-    std::unique_ptr<float[]> dflt(new float[npx]);
-    float z_local_min = FLT_MAX, z_local_max = -FLT_MAX;
-    SSectorTileTex::SDepthDump z_dump = {};
+    return true;
+}
+
+// The retail tile bitmap's pixels as RGBA8: the palette's colours, the
+// alpha the bitmap carries, and zero where the tile is transparent (the
+// key colour, or a depth of 0 / 0x7F7F when the tile has a depth map).
+static bool TilePlanesToRGBA(const STileBitmapPlanes& p, SPalette* pal,
+                              std::vector<uint8_t>& rgba, bool* out_any_alpha)
+{
+    const size_t npx = size_t(p.w) * size_t(p.h);
+    if (npx == 0)
+        return false;
+    if (p.is_8bit && !pal)
+        return false;
+
+    rgba.assign(npx * 4, 0);
     bool any_alpha = false;
     for (size_t i = 0; i < npx; ++i)
     {
-        const uint8_t idx8 = is_8bit ? idxplane[i] : 0;
-        const uint16_t px16 = is_16bit ? rgbplane16[i] : 0;
-        const uint16_t z = has_zbuffer ? zplane[i] : 0;
-        const bool transparent = has_zbuffer ? (z == 0 || z == 0x7F7F)
-                                             : (is_8bit ? (idx8 == key8) : (px16 == key16));
-        if (transparent) {
-            rgba[i*4+0]=rgba[i*4+1]=rgba[i*4+2]=rgba[i*4+3]=0;
-            dflt[i] = 0.0f;
-            continue;
-        }
-        if (is_8bit)
+        const uint8_t idx8 = p.is_8bit ? p.idx[i] : 0;
+        const uint16_t px16 = p.is_8bit ? 0 : p.rgb16[i];
+        const uint16_t z = p.has_zbuffer ? p.z[i] : 0;
+        const bool transparent = p.has_zbuffer ? (z == 0 || z == 0x7F7F)
+                                              : (p.is_8bit ? (idx8 == p.key8) : (px16 == p.key16));
+        if (transparent)
+            continue;   // the RGBA stays zero: the tile is not there
+        if (p.is_8bit)
         {
             const uint32_t c = pal->rgbcolors[idx8];
             rgba[i*4+0] = (uint8_t)( c        & 0xFF);
@@ -800,14 +849,73 @@ static bool UploadTileBitmap(PTBitmap bm,
             rgba[i*4+2] = (uint8_t)(( px16        & 0x1F) << 3);
         }
         uint8_t alpha_u8 = 255;
-        if (has_alpha && alphaplane)
+        if (p.has_alpha)
         {
-            const uint8_t a31 = alphaplane[i] > 31 ? 31 : alphaplane[i];
+            const uint8_t a31 = p.alpha[i] > 31 ? 31 : p.alpha[i];
             alpha_u8 = uint8_t((uint32_t(a31) * 255u) / 31u);
             any_alpha |= (a31 < 31);
         }
         rgba[i*4+3] = alpha_u8;
-        if (!has_zbuffer) { dflt[i] = 0.0f; continue; }
+    }
+    if (out_any_alpha)
+        *out_any_alpha = any_alpha;
+    return true;
+}
+
+// The retail tile bitmap's pixels as RGBA8. The art reload path uses it to
+// put the retail pixels back into a tile (the retail mode) and to clip the
+// high-res art to the retail coverage (the modern mode).
+// (Defined below, outside this file's anonymous namespace.)
+
+static bool UploadTileBitmap(PTBitmap bm,
+                             RendererImagePairHandle* out_image_pair,
+                             uint64_t* out_key,
+                             int32_t* out_w, int32_t* out_h,
+                             float* out_z_local_min = nullptr,
+                             float* out_z_local_max = nullptr,
+                             SSectorTileTex::SDepthDump* out_z_dump = nullptr,
+                             bool* out_has_alpha = nullptr,
+                             uint32_t* out_bm_flags = nullptr,
+                             std::vector<float>* out_cpu_depth_local = nullptr,
+                             std::vector<uint8_t>* out_cpu_opaque = nullptr,
+                             int32_t override_objtype = -1,
+                             const char* override_name = nullptr,
+                             bool* out_modern = nullptr)
+{
+    if (!Renderer || !out_image_pair || !bm || bm->width <= 0 || bm->height <= 0) return false;
+    STileBitmapPlanes planes;
+    if (!LoadTileBitmapPlanes(bm, planes))
+    {
+        static bool once = false;
+        if (!once) { once = true; log_error("[triage] UploadTileBitmap: neither 8-bit nor 16-bit (flags=0x%x %dx%d)", bm->flags, bm->width, bm->height); }
+        return false;
+    }
+    SPalette* pal = (SPalette*)bm->palette.ptr();
+    if (planes.is_8bit && !pal)
+    {
+        static bool once = false;
+        if (!once) { once = true; log_error("[triage] UploadTileBitmap: 8-bit tile without palette (flags=0x%x)", bm->flags); }
+        return false;
+    }
+    const int32_t w = planes.w, h = planes.h;
+    const size_t npx = size_t(w) * size_t(h);
+    std::vector<uint8_t> rgba;
+    bool any_alpha = false;
+    if (!TilePlanesToRGBA(planes, pal, rgba, &any_alpha))
+        return false;
+
+    std::vector<float> dflt(npx, 0.0f);
+    float z_local_min = FLT_MAX, z_local_max = -FLT_MAX;
+    SSectorTileTex::SDepthDump z_dump = {};
+    for (size_t i = 0; i < npx; ++i)
+    {
+        const uint8_t idx8 = planes.is_8bit ? planes.idx[i] : 0;
+        const uint16_t px16 = planes.is_8bit ? 0 : planes.rgb16[i];
+        const uint16_t z = planes.has_zbuffer ? planes.z[i] : 0;
+        const bool transparent = planes.has_zbuffer ? (z == 0 || z == 0x7F7F)
+                                                  : (planes.is_8bit ? (idx8 == planes.key8) : (px16 == planes.key16));
+        if (transparent) { dflt[i] = 0.0f; continue; }
+        if (!planes.has_zbuffer) { dflt[i] = 0.0f; continue; }
         ++z_dump.sample_count;
         if (z & 0x8000) ++z_dump.high_bit_count;
         if (z < z_dump.u16_min) z_dump.u16_min = z;
@@ -832,13 +940,55 @@ static bool UploadTileBitmap(PTBitmap bm,
         z_dump.bbox_x1 = z_dump.bbox_y1 = 0;
     }
     const uint64_t key = RendererSourcePointerKey(1u, bm);
-    const uint64_t gpu_bytes = uint64_t(npx) * (4u + uint64_t(sizeof(float)));
+
+    // High-res tile art (see tiletexoverride.h). The colour is swapped for the
+    // matching upscaled PNG; depth, coverage and every derived value below
+    // stay retail's. The art is clipped to the retail coverage (the depth
+    // map's shape), so the tile's shape is the coverage and the art only
+    // fills it.
+    //
+    // The tile art mode ([Revisited] HighResTileMode) decides what a tile
+    // starts with: 0 = the retail pixels, 1 = the tree's art. The mode can
+    // be switched while the game runs (the "reloadtiles" command, the debug
+    // panel); the already loaded tiles are then re-coloured in place (see
+    // tiletreload.h).
+    const uint8_t* color_pixels = rgba.data();
+    size_t color_size = rgba.size();
+    int32_t color_w = w, color_h = h;
+    const float* depth_pixels = dflt.data();
+    size_t depth_size = npx * sizeof(float);
+    TileTexOverride::SImage override_image;
+    bool override_used = false;
+    if (override_name && override_objtype >= 0 && Renderer->ImagePairForKey(key) == 0 &&
+        RevisitedSettings.high_res_tile_mode == 1 &&
+        TileTexOverride::Load(override_objtype, override_name, override_image) &&
+        override_image.width > 0 && override_image.height > 0)
+    {
+        MapClipArtToCoverage(override_image.rgba, override_image.width, override_image.height,
+                              rgba.data(), w, h);
+        log_info("[tiletex] %s %dx%d -> %dx%d (%.2fx)%s", override_name, w, h,
+                 override_image.width, override_image.height,
+                 float(override_image.width) / float(w),
+                 override_image.has_alpha ? " (own alpha)" : "");
+        color_pixels = override_image.rgba.data();
+        color_size = override_image.rgba.size();
+        color_w = override_image.width;
+        color_h = override_image.height;
+        override_used = true;
+    }
+
+    const uint64_t gpu_bytes = uint64_t(color_size) + uint64_t(depth_size);
     *out_image_pair = Renderer->RegisterImagePairAsset(key,
-                                                       rgba.get(), npx * 4,
-                                                       dflt.get(), npx * sizeof(float),
-                                                       w, h, gpu_bytes);
+                                                       color_pixels, color_size,
+                                                       depth_pixels, depth_size,
+                                                       w, h, gpu_bytes,
+                                                       color_w, color_h);
     if (!*out_image_pair)
+    {
+        static bool once = false;
+        if (!once) { once = true; log_error("[triage] UploadTileBitmap: RegisterImagePairAsset failed (%dx%d)", w, h); }
         return false;
+    }
     if (out_key) *out_key = key;
     *out_w = w; *out_h = h;
     if (out_z_local_min) *out_z_local_min = z_local_min;
@@ -846,13 +996,16 @@ static bool UploadTileBitmap(PTBitmap bm,
     if (out_z_dump) *out_z_dump = z_dump;
     if (out_has_alpha) *out_has_alpha = any_alpha;
     if (out_bm_flags) *out_bm_flags = bm->flags;
-    if (out_cpu_depth_local) out_cpu_depth_local->assign(dflt.get(), dflt.get() + npx);
+    if (out_cpu_depth_local) out_cpu_depth_local->assign(dflt.begin(), dflt.end());
     if (out_cpu_opaque)
     {
         out_cpu_opaque->resize(npx);
         for (size_t i = 0; i < npx; ++i)
             (*out_cpu_opaque)[i] = rgba[i * 4 + 3] ? 1 : 0;
     }
+    // Whether the tree's art is in the colour image now: the art reload
+    // needs to know which tiles have something to put back.
+    if (out_modern) *out_modern = override_used;
     return true;
 }
 
@@ -898,6 +1051,7 @@ static int32_t FindSectorBitmap(const std::vector<SSectorTileTex>& cache, const 
 
 static int32_t CacheSectorBitmap(std::vector<SSectorTileTex>& cache,
                                  std::unordered_map<PTBitmap, int32_t>& by_bitmap,
+                                 std::vector<STileArtEntry>* art_registry,
                                  PTBitmap bm,
                                  TObjectInstance* oi,
                                  TObjectImagery* img,
@@ -922,10 +1076,14 @@ static int32_t CacheSectorBitmap(std::vector<SSectorTileTex>& cache,
     tex.debug_regz = img ? img->GetRegZ(state) : 0;
     uint32_t bm_flags = 0;
     uint64_t renderer_key = 0;
+    bool modern = false;
     if (!UploadTileBitmap(bm, &tex.image_pair, &renderer_key, &tex.w, &tex.h,
                           &tex.z_local_min, &tex.z_local_max,
                           &tex.z_dump, &tex.has_alpha, &bm_flags,
-                          &tex.cpu_depth_local, &tex.cpu_opaque))
+                          &tex.cpu_depth_local, &tex.cpu_opaque,
+                          (state == 0 && oi) ? oi->ObjType() : -1,
+                          (state == 0 && oi) ? oi->GetTypeName() : nullptr,
+                          &modern))
         return -1;
     AddRendererImagePairSourceRef(img, renderer_key, tex.image_pair);
     tex.pixel_count = tex.w * tex.h;
@@ -935,6 +1093,15 @@ static int32_t CacheSectorBitmap(std::vector<SSectorTileTex>& cache,
     const int32_t idx = int32_t(cache.size());
     cache.push_back(std::move(tex));
     by_bitmap[bm] = idx;
+    // The art reload needs the tile: its image pair, the retail bitmap and
+    // the type the art tree's files are named after.
+    if (art_registry)
+    {
+        NoteTileArt(*art_registry, cache[size_t(idx)].image_pair, bm,
+                    (state == 0 && oi) ? oi->ObjType() : -1,
+                    (state == 0 && oi) ? oi->GetTypeName() : nullptr,
+                    cache[size_t(idx)].w, cache[size_t(idx)].h, modern);
+    }
     return idx;
 }
 
@@ -1030,6 +1197,90 @@ void LoadObjectMaterial(T3DImagery* img, int32_t objnum, SHelperMeshSubmit& m)
 }
 
 } // namespace
+
+// The art never leaks outside the tile's coverage: the upscaled PNG carries a
+// wide, soft, half-transparent band around the shape (the upscaler's edge),
+// and those texels have no height in the depth map -- they would be drawn at
+// the tile's base plane, which the iso projection puts in front of whatever
+// stands there. The coverage is sampled nearest (the retail 1x alpha).
+void MapClipArtToCoverage(std::vector<uint8_t>& art, int32_t aw, int32_t ah,
+                           const uint8_t* retail_rgba, int32_t rw, int32_t rh)
+{
+    if (aw <= 0 || ah <= 0 || rw <= 0 || rh <= 0)
+        return;
+    std::vector<int32_t> column(static_cast<size_t>(aw), 0);
+    for (int32_t x = 0; x < aw; ++x)
+        column[size_t(x)] = int32_t((int64_t(x) * rw) / aw);
+    for (int32_t y = 0; y < ah; ++y)
+    {
+        const int32_t sy = int32_t((int64_t(y) * rh) / ah);
+        const uint8_t* src = retail_rgba + (size_t(sy) * size_t(rw)) * 4 + 3;
+        uint8_t* dst = art.data() + (size_t(y) * size_t(aw)) * 4 + 3;
+        for (int32_t x = 0; x < aw; ++x)
+        {
+            if (!src[size_t(column[size_t(x)]) * 4])
+                dst[size_t(x) * 4] = 0;
+        }
+    }
+}
+
+// The retail tile bitmap's pixels as RGBA8: the palette's colours, the
+// bitmap's own alpha, zero where the tile is transparent. The art reload
+// path uses it to put the retail pixels back into a tile and to clip the
+// tree's art to the retail coverage.
+bool MapDecodeTileBitmapRGBA(PTBitmap bm, std::vector<uint8_t>& out_rgba,
+                             int32_t* out_w, int32_t* out_h)
+{
+    STileBitmapPlanes planes;
+    if (!LoadTileBitmapPlanes(bm, planes))
+        return false;
+    SPalette* pal = (SPalette*)bm->palette.ptr();
+    if (!TilePlanesToRGBA(planes, pal, out_rgba, nullptr))
+        return false;
+    if (out_w) *out_w = planes.w;
+    if (out_h) *out_h = planes.h;
+    return true;
+}
+
+// Remember a loaded tile so the art reload can re-colour it. One entry per
+// image pair: the same bitmap uploaded twice (two map renderers, the same
+// tile in two sectors) is one GPU image and one entry.
+void NoteTileArt(std::vector<STileArtEntry>& registry,
+                 RendererImagePairHandle image_pair,
+                 void* bm, int32_t objtype, const char* type_name,
+                 int32_t w, int32_t h, bool modern)
+{
+    if (!image_pair) return;
+    for (STileArtEntry& e : registry)
+    {
+        if (e.image_pair != image_pair)
+            continue;
+        e.modern = e.modern || modern;
+        // One GPU image is one entry. The pair can be first noted from a
+        // state other than 0 (no type known yet); the state-0 upload knows
+        // the type, so fill what the entry lacks instead of keeping holes.
+        if (e.objtype < 0 && objtype >= 0)
+        {
+            e.objtype = objtype;
+            e.type_name = type_name ? type_name : "";
+        }
+        if (e.w == 0 && w > 0)
+        {
+            e.w = w;
+            e.h = h;
+        }
+        return;
+    }
+    STileArtEntry e;
+    e.image_pair = image_pair;
+    e.bm = bm;
+    e.objtype = objtype;
+    e.type_name = type_name ? type_name : "";
+    e.w = w;
+    e.h = h;
+    e.modern = modern;
+    registry.push_back(std::move(e));
+}
 
 void SSectorDrawableInst::UpdateFromInstance()
 {
@@ -1153,10 +1404,22 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         float spx = 0.0f, spy = 0.0f;
         ProjectCameraRelToScreen(ctx, rel, spx, spy);
         const float sprite_scale = (std::max)(ctx.camera_zoom, 0.0001f);
+        // The camera's step since the tick began: the world is drawn against
+        // the camera's position at the tick's start, and the part of the step
+        // that has passed scrolls the picture (the iso projection of the world
+        // delta, scaled by the zoom). The tile then lands between pixels and
+        // the view moves smoothly instead of jumping once a tick. The meshes
+        // are drawn from the same camera (MeshCameraUniforms).
+        float scroll_sx = 0.0f, scroll_sy = 0.0f;
+        CameraScrollPixels(ctx.cameraScrollX, ctx.cameraScrollY, sprite_scale, scroll_sx, scroll_sy);
+        const float fx = spx - float(regx) * sprite_scale + scroll_sx;
+        const float fy = spy - float(regy) * sprite_scale + scroll_sy;
+        const int32_t dx = int32_t(std::lround(fx)) + ctx.cam_ox;
+        const int32_t dy = int32_t(std::lround(fy)) + ctx.cam_oy;
+        const float frac_x = fx - float(std::lround(fx));
+        const float frac_y = fy - float(std::lround(fy));
         const float anchor_scene = CameraDepth(rel, ctx.cam_forward) - ctx.depth_mul * float(regz);
         const float anchor_scene_norm = std::fabs(ctx.zspan) > 1e-6f ? (anchor_scene - ctx.z_near) / ctx.zspan : 0.5f;
-        const int32_t dx = int32_t(std::lround(spx - float(regx) * sprite_scale)) + ctx.cam_ox;
-        const int32_t dy = int32_t(std::lround(spy - float(regy) * sprite_scale)) + ctx.cam_oy;
         const int32_t dst_w = ScalePixel(sprite_scale, float(tex.w));
         const int32_t dst_h = ScalePixel(sprite_scale, float(tex.h));
         if (!image_pair) { ++stats.draw_invalid_img; return; }
@@ -1200,6 +1463,14 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                 const float focal_zoom = (std::max)(ctx.cam_forward * ctx.camera_zoom, 1.0f);
                 overlay_scale = focal_zoom / z;
             }
+            else
+            {
+                // The overlay scrolls with the camera like the ground does,
+                // or it sits a whole camera step away from the world it
+                // belongs to and jumps once a tick.
+                light_sx += scroll_sx;
+                light_sy += scroll_sy;
+            }
             SOverlaySubmit sub = {};
             sub.image_pair = tex.image_pair;
             sub.dst_x = int32_t(std::lround(light_sx - float(regx) * overlay_scale)) + ctx.cam_ox;
@@ -1215,6 +1486,8 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
         sub.dst_y       = dy;
         sub.dst_w       = dst_w;
         sub.dst_h       = dst_h;
+        sub.frac_x      = frac_x;
+        sub.frac_y      = frac_y;
         sub.src_w       = tex.w;
         sub.src_h       = tex.h;
         sub.anchor_z    = anchor_scene_norm;
@@ -1383,6 +1656,29 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
                 }
             }
         }
+        float sub_x = 0.0f, sub_y = 0.0f, sub_z = 0.0f;
+        if (used_bone_xform)
+        {
+            // Sub-tick motion. The world position is a whole pixel and only
+            // changes at the legacy 24 Hz tick, so the mesh is drawn where
+            // the tick started, advanced by the fraction of the tick that
+            // has passed: the sprite glides instead of stepping 1-2 px six
+            // times a second. The renderer matrix is column-vector after
+            // the transpose, so the translation is the last column.
+            const S3DPoint prev = oi->PrevPos();
+            const float frac = float(TTime::LegacyFrameFraction());
+            // A jump (a teleport, a script that placed the object) is not
+            // a step of a tick: the object is drawn where it is.
+            const int32_t step_x = world_pos.x - prev.x;
+            const int32_t step_y = world_pos.y - prev.y;
+            const int32_t step_z = world_pos.z - prev.z;
+            if (SubTickOffset(step_x, step_y, step_z, frac, sub_x, sub_y, sub_z))
+            {
+                world_renderer[12] += sub_x;
+                world_renderer[13] += sub_y;
+                world_renderer[14] += sub_z;
+            }
+        }
         if (!used_bone_xform)
         {
             if (!ctx.force_mesh_preview_pose)
@@ -1416,6 +1712,24 @@ void SSectorDrawableInst::Submit(const SMapRenderContext& ctx, SMapRenderStats& 
             MatrixScale16(ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z, world_scale);
             MatrixMul16(world_scale, world_renderer, scaled_world);
             std::memcpy(world_renderer, scaled_world, sizeof(world_renderer));
+        }
+        // Snap the mesh onto the pixel grid: the fractional camera drew the
+        // character between two pixels, so its pixels crawled and blurred
+        // while it moved. The shift is a world translation -- the ortho
+        // projection is affine, so every vertex moves by the same pixel
+        // amount and the mesh keeps its shape -- and the character lands
+        // whole-pixel steps, as retail drew it.
+        if (!ctx.perspective_camera)
+        {
+            const float cam_wx = float(ctx.sectorCameraWorld.x) + ctx.cameraScrollX;
+            const float cam_wy = float(ctx.sectorCameraWorld.y) + ctx.cameraScrollY;
+            float snap_x = 0.0f, snap_y = 0.0f;
+            MeshPixelSnapDelta(float(world_pos.x) + sub_x - cam_wx,
+                               float(world_pos.y) + sub_y - cam_wy,
+                               float(world_pos.z) + sub_z,
+                               ctx.camera_zoom, snap_x, snap_y);
+            world_renderer[12] += snap_x;
+            world_renderer[13] += snap_y;
         }
 
         uint32_t authored_blend = 0;
@@ -1618,6 +1932,25 @@ void TMapRenderer::Impl::submitEquipment(const SMapRenderContext& ctx, SMapRende
         return;
 
     const float sort_depth = CameraDepth(MeshCameraRel(ctx, world_pos), ctx.cam_forward);
+    // The body glides between the ticks; the equipment has to glide with it,
+    // or the sword leaves the hand for the rest of the tick.
+    const S3DPoint prev = oi.PrevPos();
+    const float frac = float(TTime::LegacyFrameFraction());
+    float sub_x = 0.0f, sub_y = 0.0f, sub_z = 0.0f;
+    const bool sub_tick = SubTickOffset(world_pos.x - prev.x, world_pos.y - prev.y,
+                                        world_pos.z - prev.z, frac, sub_x, sub_y, sub_z);
+    // The body is snapped onto the pixel grid; the equipment must carry the
+    // same shift, or the sword sits a pixel off the hand as the body moves.
+    float snap_x = 0.0f, snap_y = 0.0f;
+    if (!ctx.perspective_camera)
+    {
+        const float cam_wx = float(ctx.sectorCameraWorld.x) + ctx.cameraScrollX;
+        const float cam_wy = float(ctx.sectorCameraWorld.y) + ctx.cameraScrollY;
+        MeshPixelSnapDelta(float(world_pos.x) + (sub_tick ? sub_x : 0.0f) - cam_wx,
+                           float(world_pos.y) + (sub_tick ? sub_y : 0.0f) - cam_wy,
+                           float(world_pos.z) + (sub_tick ? sub_z : 0.0f),
+                           ctx.camera_zoom, snap_x, snap_y);
+    }
     float scale[16];
     MatrixScale16(ctx.mesh_scale_x, ctx.mesh_scale_y, ctx.mesh_scale_z, scale);
     for (const TCharAnimator::SEquipAttachment& attachment : animator->EquipAttachments())
@@ -1632,6 +1965,14 @@ void TMapRenderer::Impl::submitEquipment(const SMapRenderContext& ctx, SMapRende
         float world[16];
         TransposeSourceToRenderer(bone->transform.Matrix(), bone_world);
         MatrixMul16(scale, bone_world, world);
+        if (sub_tick)
+        {
+            world[12] += sub_x;
+            world[13] += sub_y;
+            world[14] += sub_z;
+        }
+        world[12] += snap_x;
+        world[13] += snap_y;
         for (const SSectorMeshAsset& asset : equipObjectMeshes(*mesh, attachment.object))
         {
             SMeshSubmit m = {};
@@ -1684,7 +2025,37 @@ const std::vector<SSectorMeshAsset>& TMapRenderer::Impl::equipObjectMeshes(T3DIm
     return meshes;
 }
 
-TMapRenderer::TMapRenderer() : impl(std::make_unique<Impl>()) {}
+// Every live map renderer. The tile art reload walks them all: the GPU
+// images belong to the one TRenderer, so a tile uploaded by any of them can
+// be re-coloured (see tiletreload.h).
+namespace {
+// The list is deliberately never destroyed: a map renderer can outlive the
+// statics at exit, and a static destructor order crash would be a silly way
+// to end the game.
+std::vector<TMapRenderer*>& MapRendererList()
+{
+    static std::vector<TMapRenderer*>* list = new std::vector<TMapRenderer*>();
+    return *list;
+}
+} // namespace
+
+int32_t MapRendererInstanceCount()
+{
+    return int32_t(MapRendererList().size());
+}
+
+TMapRenderer* MapRendererInstanceAt(int32_t index)
+{
+    const std::vector<TMapRenderer*>& list = MapRendererList();
+    if (index < 0 || index >= int32_t(list.size()))
+        return nullptr;
+    return list[size_t(index)];
+}
+
+TMapRenderer::TMapRenderer() : impl(std::make_unique<Impl>())
+{
+    MapRendererList().push_back(this);
+}
 TMapRenderer::~TMapRenderer()
 {
   // Defensive: unregister our map listener even if Shutdown() wasn't
@@ -1697,6 +2068,15 @@ TMapRenderer::~TMapRenderer()
         {
             m->RemoveListener(impl->mapListenerId);
             impl->mapListenerId = 0;
+        }
+    }
+    std::vector<TMapRenderer*>& list = MapRendererList();
+    for (size_t i = 0; i < list.size(); ++i)
+    {
+        if (list[i] == this)
+        {
+            list.erase(list.begin() + std::ptrdiff_t(i));
+            break;
         }
     }
 }
@@ -1807,8 +2187,10 @@ void TMapRenderer::ScreenToWorld(int32_t screen_x, int32_t screen_y,
     ::ScreenToWorld(int32_t(std::lround(float(screen_x - v.cam_ox) / v.zoom)),
                     int32_t(std::lround(float(screen_y - v.cam_oy) / v.zoom)),
                     wp_rel, z_floor);
-    out.x = wp_rel.x + s.sectorCameraWorld.x;
-    out.y = wp_rel.y + s.sectorCameraWorld.y;
+    // The picture is drawn against the camera plus the part of the camera's
+    // step that has passed, so the inverse has to start from the same camera.
+    out.x = wp_rel.x + s.sectorCameraWorld.x + int32_t(std::lround(s.cameraScrollX));
+    out.y = wp_rel.y + s.sectorCameraWorld.y + int32_t(std::lround(s.cameraScrollY));
     out.z = z_floor;
 }
 
@@ -1823,7 +2205,9 @@ bool TMapRenderer::ScreenToMapScreen(int32_t screen_x, int32_t screen_y,
     const Impl& s = *impl;
     const SViewUnwrap v = ComputeViewUnwrap(s);
     int32_t cam_sx = 0, cam_sy = 0;
-    ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x, s.sectorCameraWorld.y, 0), cam_sx, cam_sy);
+    ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x + int32_t(std::lround(s.cameraScrollX)),
+                             s.sectorCameraWorld.y + int32_t(std::lround(s.cameraScrollY)), 0),
+                    cam_sx, cam_sy);
     map_x = cam_sx + int32_t(std::lround(float(screen_x - v.cam_ox) / v.zoom));
     map_y = cam_sy + int32_t(std::lround(float(screen_y - v.cam_oy) / v.zoom));
     return screen_x >= 0 && screen_y >= 0 && screen_x < v.vw && screen_y < v.vh;
@@ -1836,7 +2220,9 @@ bool TMapRenderer::MapScreenToScreen(float map_x, float map_y, float& screen_x, 
     const Impl& s = *impl;
     const SViewUnwrap v = ComputeViewUnwrap(s);
     int32_t cam_sx = 0, cam_sy = 0;
-    ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x, s.sectorCameraWorld.y, 0), cam_sx, cam_sy);
+    ::WorldToScreen(S3DPoint(s.sectorCameraWorld.x + int32_t(std::lround(s.cameraScrollX)),
+                             s.sectorCameraWorld.y + int32_t(std::lround(s.cameraScrollY)), 0),
+                    cam_sx, cam_sy);
     screen_x = float(v.cam_ox) + (map_x - float(cam_sx)) * v.zoom;
     screen_y = float(v.cam_oy) + (map_y - float(cam_sy)) * v.zoom;
     return true;
@@ -1963,6 +2349,18 @@ TSector* TMapRenderer::FindLoadedSector(int32_t level, int32_t sector_x, int32_t
     return m->FindSector(sector_x, sector_y);
 }
 
+int32_t TMapRenderer::TileArtCount() const
+{
+    return impl ? int32_t(impl->tileArt.size()) : 0;
+}
+
+STileArtEntry* TMapRenderer::TileArtAt(int32_t index) const
+{
+    if (!impl || index < 0 || index >= int32_t(impl->tileArt.size()))
+        return nullptr;
+    return &impl->tileArt[size_t(index)];
+}
+
 void TMapRenderer::SyncContentsCache()
 {
     if (!impl) return;
@@ -1995,6 +2393,16 @@ void TMapRenderer::SetCameraWorld(int32_t level, int32_t world_x, int32_t world_
     Impl& s = *impl;
     s.cameraLevel        = level;
     s.sectorCameraWorld  = S3DPoint{ world_x, world_y, world_z };
+}
+
+// The camera's step since the tick began: the world is drawn against the
+// camera's position at the tick's start, and this scrolls the picture by the
+// part of the step that has passed (see TMapPane::CameraScrollStep).
+void TMapRenderer::SetCameraScroll(float world_dx, float world_dy)
+{
+    if (!impl) return;
+    impl->cameraScrollX = world_dx;
+    impl->cameraScrollY = world_dy;
 }
 
 void TMapRenderer::SetOutputViewport(int32_t width, int32_t height)
@@ -2151,8 +2559,8 @@ void TMapRenderer::GetViewProj(float view_out[16], float proj_out[16],
     // matrix built with target.z=0 disagreed with the actual scene
     // pixels whenever Locke was off sea level, and ImGuizmo / overlays
     // drifted accordingly.
-    const hmm_vec3 target = HMM_Vec3(float(s.sectorCameraWorld.x),
-                                     float(s.sectorCameraWorld.y),
+    const hmm_vec3 target = HMM_Vec3(float(s.sectorCameraWorld.x) + s.cameraScrollX,
+                                     float(s.sectorCameraWorld.y) + s.cameraScrollY,
                                      float(s.sectorCameraWorld.z));
     const hmm_vec3 eye    = HMM_Vec3(target.X + kOffX * D,
                                      target.Y + kOffY * D,
@@ -2401,6 +2809,16 @@ bool TMapRenderer::InitializeFromStartupArgs(std::function<void(int32_t, int32_t
 void TMapRenderer::Initialize()
 {
     DebugUI::RegisterContributor(this);
+
+    // The camera knobs live in the debug panel's state; the [Revisited]
+    // settings carry them between runs (the panel writes them when its
+    // "Save Revisited Settings" is pressed), so apply them here -- the
+    // ini's CameraZoom and ParallaxMode did nothing until now.
+    Impl& s = *impl;
+    const SRevisitedSettings& rs = RevisitedSettings;
+    if (rs.camera_zoom > 0.0f)
+        s.sectorCameraZoom = (float)rs.camera_zoom;
+    s.sectorPerspectiveCamera = rs.parallax_enable;
 }
 
 void TMapRenderer::SetMap(TGameMap* m, bool use_level_origin,
@@ -2853,7 +3271,7 @@ void TMapRenderer::RebuildForCurrentMap()
             {
                 PTBitmap bm = StateAnimationBitmap(img, st, oi->GetFrame());
                 const int32_t tex_idx = bm
-                    ? CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st)
+                    ? CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, &s.tileArt, bm, oi, img, st)
                     : -1;
                 // Keep an empty animation record for ordinary objects, so a
                 // state change can supply frames without replacing the still.
@@ -2911,10 +3329,14 @@ void TMapRenderer::RebuildForCurrentMap()
                 t.debug_regz = img->GetRegZ(st);
                 uint32_t bm_flags = 0;
                 uint64_t renderer_key = 0;
+                bool modern = false;
                 if (!UploadTileBitmap(bm, &t.image_pair, &renderer_key, &t.w, &t.h,
                                       &t.z_local_min, &t.z_local_max,
                                       &t.z_dump, &t.has_alpha, &bm_flags,
-                                      &t.cpu_depth_local, &t.cpu_opaque))
+                                      &t.cpu_depth_local, &t.cpu_opaque,
+                                      st == 0 ? oi->ObjType() : -1,
+                                      st == 0 ? oi->GetTypeName() : nullptr,
+                                      &modern))
                 { ++upload_fail; continue; }
                 AddRendererImagePairSourceRef(img, renderer_key, t.image_pair);
                 t.pixel_count = t.w * t.h;
@@ -2923,6 +3345,13 @@ void TMapRenderer::RebuildForCurrentMap()
                 tex_idx = (int32_t)s.sectorTileTex.size();
                 t.bm_flags = bm_flags;
                 s.sectorTileTex.push_back(std::move(t));
+                // The art reload needs the tile: its image pair, the retail
+                // bitmap and the type the art tree's files are named after.
+                NoteTileArt(s.tileArt, s.sectorTileTex[size_t(tex_idx)].image_pair, bm,
+                            st == 0 ? oi->ObjType() : -1,
+                            st == 0 ? oi->GetTypeName() : nullptr,
+                            s.sectorTileTex[size_t(tex_idx)].w,
+                            s.sectorTileTex[size_t(tex_idx)].h, modern);
             }
             SSectorDrawableInst winst = {};
             winst.kind = ESectorDrawableKind::Tile;
@@ -3268,7 +3697,7 @@ void TMapRenderer::RenderFrame()
             TObjectImagery* img = oi->GetImagery();
             const int32_t st = oi->GetState();
             PTBitmap bm = StateAnimationBitmap(img, st, oi->GetFrame());
-            const int32_t tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st);
+            const int32_t tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, &s.tileArt, bm, oi, img, st);
             inst.asset_idx = tex_idx;
             if (tex_idx >= 0)
             {
@@ -3292,7 +3721,7 @@ void TMapRenderer::RenderFrame()
                     TBitmap* bm = StateStillBitmap(img, st);
                     int32_t tex_idx = bm ? FindSectorBitmap(s.sectorTileTex, bm) : -1;
                     if (bm && tex_idx < 0)
-                        tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, bm, oi, img, st);
+                        tex_idx = CacheSectorBitmap(s.sectorTileTex, s.sectorTileTexByBitmap, &s.tileArt, bm, oi, img, st);
                     inst.asset_idx = tex_idx;
                 }
                 inst.regx = img->GetRegX(st);
@@ -3325,6 +3754,19 @@ void TMapRenderer::RenderFrame()
     projectctx.vh = vh;
     projectctx.cam_forward = camera_forward;
     projectctx.camera_zoom = effective_camera_zoom;
+    // Snap the camera's step to whole screen pixels and carry it back in
+    // world units, so every path (the ground tiles, the meshes, the
+    // overlays, the effects) sees the same quantized camera: the fractional
+    // scroll drew everything between two pixels, and the resampled pixels
+    // crawled while the camera eased after the hero.
+    {
+        float snap_wx = 0.0f, snap_wy = 0.0f;
+        SnapCameraScroll(s.cameraScrollX, s.cameraScrollY, effective_camera_zoom, snap_wx, snap_wy);
+        s.cameraScrollX = snap_wx;
+        s.cameraScrollY = snap_wy;
+    }
+    projectctx.cameraScrollX = s.cameraScrollX;
+    projectctx.cameraScrollY = s.cameraScrollY;
     projectctx.tile_scale = s.sectorPerspectiveTileScale;
     projectctx.z_near = s.z_near;
     projectctx.z_far = s.z_far;
@@ -3562,13 +4004,21 @@ void TMapRenderer::RenderFrame()
     Renderer->SetPerspectiveProjectionMode(s.sectorPerspectiveCamera ? s.sectorPerspectiveProjectionMode : 0);
     Renderer->SetPerspectiveProxyRasterScale(s.sectorPerspectiveCamera ? s.sectorPerspectiveProxyRasterScale : 1.0f);
     Renderer->SetPerspectiveRaycastParams(s.sectorPerspectiveSteps, s.sectorPerspectiveRefine);
+    // The world is drawn against the tick's camera plus the part of the
+    // camera's step that has already passed (the tiles take that fraction
+    // in their screen position, so the picture scrolls smoothly instead of
+    // jumping once a tick). The meshes have to be drawn from the same
+    // camera: left on the whole one, every character drifts off the ground
+    // by up to a whole camera step and snaps back, 24 times a second.
     Renderer->SetReconstructionParams(float(cam_ox), float(cam_oy), s.z_near, s.z_far,
-                                      float(s.sectorCameraWorld.x), float(s.sectorCameraWorld.y),
+                                      float(s.sectorCameraWorld.x),
+                                      float(s.sectorCameraWorld.y),
                                       camera_forward, s.sectorPerspectiveCamera ? 1.0f : 0.0f,
                                       effective_camera_zoom,
                                       s.sectorPerspectiveZOffset,
                                       s.sectorPerspectiveZScale,
-                                      s.sectorPerspectiveTileScale);
+                                      s.sectorPerspectiveTileScale,
+                                      s.cameraScrollX, s.cameraScrollY);
     mark_phase(timings.render_state_ms);
 
     SMapRenderStats stats = {};
@@ -3654,6 +4104,8 @@ void TMapRenderer::RenderFrame()
     drawctx.mesh_assets = &s.sectorMeshAsset;
     drawctx.debug_green_texture = s.debugGreenTexture;
     drawctx.sectorCameraWorld = s.sectorCameraWorld;
+    drawctx.cameraScrollX = s.cameraScrollX;
+    drawctx.cameraScrollY = s.cameraScrollY;
     drawctx.cam_ox = cam_ox;
     drawctx.cam_oy = cam_oy;
     drawctx.vw = vw;
@@ -3843,6 +4295,8 @@ void TMapRenderer::HandleMouseClick(int32_t button, int32_t x, int32_t y)
             pickctx.vh = vh;
             pickctx.cam_forward = s.sectorCameraForward(HEIGHT);
             pickctx.camera_zoom = s.sectorCameraZoom * camera_view.scale;
+            pickctx.cameraScrollX = s.cameraScrollX;
+            pickctx.cameraScrollY = s.cameraScrollY;
             pickctx.tile_scale = s.sectorPerspectiveTileScale;
             pickctx.perspective_camera = s.sectorPerspectiveCamera;
             float best_d2 = 24.0f * 24.0f;

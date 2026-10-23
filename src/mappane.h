@@ -225,6 +225,11 @@ class TMapPane : public TPane
       // is true, in which case the value is set immediately.
     int32_t GetAmbientLight() { return ambient; }
       // Gets the ambient light intensity 
+    void ReapplyAmbientGamma();
+      // Re-applies the current GammaLevel offset to the ambient in effect.
+      // The offset the value already carries comes off first, so pressing
+      // the Options pane's OK repeatedly leaves the map where it is (retail
+      // stacked it: OPTIONS.md, question 93).
     void SetAmbientColor(SColor &color, bool stopfade = true);
       // Sets ambient light color.  If fading, sets target to new value unless stopfade
       // is true, in which case the value is set immediately.
@@ -404,6 +409,12 @@ class TMapPane : public TPane
       // The camera follows the player
     [[nodiscard]] S3DPoint CameraPos(double fraction) const;
       // Where the camera looks: the last tick's center, `fraction` of the way to this tick's
+    void CameraScrollStep(double fraction, float& out_dx, float& out_dy) const;
+      // The camera's step since the tick began, scaled by the fraction of the
+      // tick that has passed, in world units. The world is drawn against the
+      // camera's position at the tick's start; this is the rest of its step,
+      // which scrolls the picture by a fraction of a pixel. Zero when the
+      // camera jumped (a teleport, a level change).
     void CenterOnPos(const S3DPoint& pos, int32_t level, uint32_t flags = 0);
       // Center on a point. REVSYNC: SetCameraPos @ 0x00453940 (flags as above)
     void GetCenterOnPos(S3DPoint& pos, int32_t &level) { pos = centeron.pos; level = centeron.level; }
@@ -653,6 +664,20 @@ class TMapPane : public TPane
     void SetNotify( uint32_t newflags) { notifyflags |= newflags; }
     void Notify(uint32_t notify, void *ptr);
 
+    void KeepAlive(TObjectInstance* inst);
+    // True while a script of that level is still running (the level is held).
+    [[nodiscard]] bool HasKeptAlive(int32_t level) const;
+        // Keep an object alive outside the map: a door script waits for the
+        // screen fade before its "control on", and the object it stands in
+        // is in the level the level change releases. The object leaves its
+        // sector (the release would free it with the sector) and is pulsed
+        // here until its script is done.
+    void PulseKeptAlive();
+        // Pulse the objects kept alive, and free the ones whose script ended
+    void FreeKeptAlive(int32_t level);
+        // Free the objects kept alive for a script of that level: their
+        // imagery goes with the level
+
   private:
 
   // Private functions
@@ -702,6 +727,7 @@ class TMapPane : public TPane
     TSafeRef<TGameMap> windowmap;                        // Map the sector window borrows from
     std::vector<TSafeRef<>> lightidholders;              // Lights given a light-table id (GetDrawLights)
     TGameMap::EventListenerId windowlistener = 0;        // Our Unloaded listener on windowmap
+    std::vector<TObjectInstance*> keptalive;             // Objects kept alive outside the map (KeepAlive)
     int32_t oldsectorx, oldsectory;                 // Position of sector in last frame
     int32_t sectorx, sectory;                       // Position of sector in current frame
     int32_t newsectorx, newsectory;                 // Position of sector in next frame
@@ -712,6 +738,7 @@ class TMapPane : public TPane
     int32_t scrollx, scrolly;                       // Scroll position of current frame
     S3DPoint center;                                // World coordinates of pane center (current pos)
     S3DPoint prevcenter;                            // The center at the previous tick (camera interpolation)
+    bool     cameraJumped = false;                   // The camera jumped this tick: no smooth scroll to follow
     S3DPoint scrollvel{};                           // Smooth-scroll velocity (retail 0x00658468..70)
     int32_t  lastcamz = 0;                          // The target z last update (retail 0x00658320)
     SCenterOnState centeron;                        // Pane will attempt to scroll to this object or point
@@ -759,6 +786,8 @@ class TMapPane : public TPane
   // so even uncovered levels (no area.def entry hitting the player's
   // current level) get a usable retail-default tint instead of black.
     int32_t ambient = 30;                           // Ambient light value
+    int32_t ambient_gamma_offset = 0;               // GammaLevel offset the fade
+                                                    // target (or ambient) carries
     SColor ambcolor = {255, 255, 255};              // Ambient light color
     bool ambientchanged = true;                     // true when ambient needs to be reset
     int32_t oldambient = 30, newambient = 30;       // Ambient fade old and new values

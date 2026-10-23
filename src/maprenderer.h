@@ -15,6 +15,7 @@
 
 struct S3DPoint;
 struct SRevisitedSettings;
+struct STileArtEntry;   // maprenderer_internal.h: a loaded tile's art entry
 class TGameMap;
 
 // How a pick reads the frame's ids (TMapRenderer::Pick). Exact: at the point,
@@ -95,6 +96,10 @@ class TMapRenderer
     // the editor's Frame Selection command (and anything else that wants
     // to teleport the view).
     void SetCameraWorld(int32_t level, int32_t world_x, int32_t world_y, int32_t world_z);
+    // The camera's step since the tick began, in world units: the picture
+    // scrolls by this much, so the view moves smoothly between the ticks
+    // instead of jumping once a tick.
+    void SetCameraScroll(float world_dx, float world_dy);
 
     // Limit the live game render to an on-screen viewport. The reconstructed
     // HUD reserves the right sidebar and bottom bar just like retail, so the
@@ -270,9 +275,26 @@ class TMapRenderer
                                                   int32_t sector_x,
                                                   int32_t sector_y) const;
 
+    // ---- The loaded tiles whose colour the art reload can replace -----
+    // The tile art reload (tiletreload.h) puts an edited PNG into the
+    // image the game already draws, so an edited tile shows up without
+    // leaving the game. The entries live in the renderer's implementation
+    // (maprenderer_internal.h): the image pair's handle, the retail
+    // bitmap, the tile's type and whether the tree's art is in the image.
+    [[nodiscard]] int32_t TileArtCount() const;
+    // Non-const: the reload keeps the entry's own state (which art the
+    // colour image holds) in sync without re-noting.
+    [[nodiscard]] STileArtEntry* TileArtAt(int32_t index) const;
+
   private:
     std::function<void()> review_before_world_;
     std::function<void()> review_inside_world_;
     struct Impl;
     std::unique_ptr<Impl> impl;
 };
+
+// Every live map renderer: the game screen's, the test modes', the VFX
+// review's. The tile art reload walks them all -- the GPU images belong to
+// the one TRenderer, so a tile uploaded by any of them can be re-coloured.
+int32_t     MapRendererInstanceCount();
+TMapRenderer* MapRendererInstanceAt(int32_t index);

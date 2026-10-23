@@ -230,7 +230,8 @@ REVSYNC-QUESTIONs surfaced for the user.
 | [x] | The loading bar fills per sector during the world load (staged `TGameMap` load) | 2026-10-05 |
 | [x] | A level's first visit loads a slice per frame under the text bar's retail loading line (`SetHealthDisplay`/`SetLevels`/`ClearHealthDisplay`), the world held | 2026-10-05 |
 | [ ] | First visit to level 0 stalls ~7 s in `TMapRenderer::SetMap` after the sectors load (renderer track; the strip is already full) | 2026-10-05 |
-| [x] | Name lookups search the loaded sectors as retail's do (`FindClosestObject` `0x00451de0`: the caller's level within ~2,896 units; `FindObject` `0x00451d70`: every level), not the pane's 3x3 window; Hruthford's `GOTO HRUWAY01` with the camera at Cronus now works. Pulses still walk the window; retail's pulse loop's iterator flags aren't checked yet | 2026-10-05 |
+| [x] | Name lookups search the loaded sectors as retail's do (`FindClosestObject` `0x00451de0`: the caller's level within ~2,896 units; `FindObject` `0x00451d70`: every level), not the pane's 3x3 window; Hruthford's `GOTO HRUWAY01` with the camera at Cronus now works. Pulses walked the window then; the tick loops' retail iterator flags were checked and fixed on 2026-10-19 (next row) | 2026-10-05 |
+| [x] | The tick's loops walk the loaded map, not the pane's 3x3 window: `PulseObjects` opens its iterator with retail's flags `0xa0` ([gameplay/forensics/COMBAT_MOTION.md](../gameplay/forensics/COMBAT_MOTION.md) §2), and `MoveObjects`/`NextFrameObjects` follow it. A door's script that teleported the player out of the window keeps pulsing to its `control on`; before the fix the door stopped pulsing at `FADESCREENIN` and Locke stayed frozen with control off (forensics/EXITS.md §5, §7) | 2026-10-19 |
 
 **Exit:** Walking through a door swaps sectors; walking back restores the changed state.
 
