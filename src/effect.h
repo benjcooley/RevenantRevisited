@@ -4710,6 +4710,9 @@ class TPixieEffect_Bespoke : public TEffect
 
   private:
     SPixieParticle pix_[kPixieBespokeNumParts] {};
+    // Sub-tick motion: the state of the previous tick, copied before the
+    // tick integrates, so Submit can ease between the two authored states.
+    SPixieParticle pix_prev_[kPixieBespokeNumParts] {};
     int32_t        charnear_     = 100;          // 100 = 1.0x scale (no nearby char)
     TTextureHandle textures_[2]  = {kInvalidTexture, kInvalidTexture};
     std::vector<SMeshVertex> vertices_[2];
@@ -4845,6 +4848,10 @@ class TFlyEffect_Bespoke : public TEffect
 
   private:
     SFlyParticleBespoke flies_[kFlyBespokeCount] {};
+    // Sub-tick motion: the state of the previous tick, copied before the
+    // tick integrates. The per-tick velocity is a local draw, so the
+    // previous position cannot be reconstructed and must be kept.
+    SFlyParticleBespoke flies_prev_[kFlyBespokeCount] {};
     TTextureHandle      texture_      = kInvalidTexture;
     float               uv_rect_[4]   = {0.0f, 0.0f, 1.0f, 1.0f};
     float               size_wu_      = kFlyBespokeBaseSizeWu;

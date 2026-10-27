@@ -33,6 +33,7 @@ static inline char *strlwr(char *s)
 #include "dls.h"
 #include "chunkcache.h"
 #include "playscreen.h"
+#include "debugui.h"
 #include "automap.h"
 #include "inventory.h"
 #include "multictrl.h"
@@ -53,6 +54,9 @@ static inline char *strlwr(char *s)
 #include "file.h"
 #include "3dimage.h"
 #include "sound.h"
+#include "spritetexoverride.h"
+#include "tiletreload.h"
+#include "revisited_settings.h"
 #include "audio_backend.h"
 #include "dialog.h"
 #include "effect.h"
@@ -73,6 +77,7 @@ COMMAND(CmdSelect);
 COMMAND(CmdDeselect);
 COMMAND(CmdAdd);
 COMMAND(CmdAddInv);
+COMMAND(CmdDebugUI);
 COMMAND(CmdGive);
 COMMAND(CmdUndo);
 COMMAND(CmdMove);
@@ -255,7 +260,9 @@ COMMAND(CmdPivotObject);
 COMMAND(CmdPlayerLevel);
 COMMAND(CmdPlayMovie);
 COMMAND(CmdRandom);
+COMMAND(CmdReloadSprites);
 COMMAND(CmdReloadStates);
+COMMAND(CmdReloadTiles);
 COMMAND(CmdStopAutoMapGen);
 COMMAND(CmdSaveGame);
 COMMAND(CmdSaveLevelSectors);
@@ -448,6 +455,9 @@ SCommand Commands[] =
   { "random", CmdRandom, -1, -1, true, false, "usage: random <max>\n" },
   { "reg", CmdRegistration, 0, 0, false, true, "usage: <object>.registration <deltax> <deltay>\n" },
   { "reloadstates", CmdReloadStates, -1, -1, false, false, "usage: reloadstates\n" },
+  { "reloadsprites", CmdReloadSprites, -1, -1, false, false, "usage: reloadsprites [retail|modern]\n" },
+  { "reloadtiles", CmdReloadTiles, -1, -1, false, false, "usage: reloadtiles [retail|modern]\n" },
+  { "debugui", CmdDebugUI, -1, -1, false, false, "usage: debugui (toggle the debug panel) [port-only]\n" },
   { "replace", CmdReplace, 0, 0, true, false, "usage: <object>.replace [<class>] [<newobjtype>]\n" },
   { "restore", CmdRestore, OBJCLASS_CHARACTER, OBJCLASS_PLAYER, false, false, "usage: <character>.restore\n" },
   { "reveal", CmdReveal, 0, -1, false, false, "usage: reveal\n" },
@@ -4381,6 +4391,85 @@ COMMAND(CmdRandom) { return CmdNotPorted("random", 0x00427d40, t); }
 COMMAND(CmdReloadStates) { return CmdNotPorted("reloadstates", 0x00428a20, t); }
 COMMAND(CmdSetCurrent) { return CmdNotPorted("setcurrent", 0x00428e50, t); }
 COMMAND(CmdTimeLimit) { return CmdNotPorted("timelimit", 0x00429820, t); }
+
+// Port-only: the console twin of the debug menu's "Reload sprites" button.
+// Re-reads the sprite art and puts it into the textures the game already
+// uses, so an edited sprite shows up without leaving the game.
+//
+// "reloadsprites [retail|modern]" also switches the art mode first (the
+// same switch the debug panel's radio buttons drive), so the retail art can
+// be restored and the modern art can be applied again without the panel.
+COMMAND(CmdReloadSprites)
+{
+    int32_t mode = RevisitedSettings.sprite_mode;
+    if (t.Type() == TKN_IDENT)
+    {
+        const char* arg = t.Text();
+        if (stricmp(arg, "retail") == 0)
+            mode = 0;
+        else if (stricmp(arg, "modern") == 0)
+            mode = 1;
+        else
+        {
+            Output("usage: reloadsprites [retail|modern]\n");
+            return CMD_BADPARAMS;
+        }
+        t.WhiteGet();
+    }
+
+    int32_t images = 0;
+    // ApplyMode re-indexes the tree first (files may have been added since
+    // the last index) and then puts the wanted art into the textures the
+    // game already uses -- the same path the debug panel's radio buttons
+    // take.
+    const int32_t frames = SpriteReload::ApplyMode(mode, &images);
+    Output("Reloaded %d sprite texture frame(s) in %d image(s).\n", frames, images);
+    return 0;
+}
+
+// Port-only: the console twin of the debug panel's "Reload tiles" button.
+// Re-reads the tile art and puts it into the tile images the game already
+// uses, so an edited tile PNG shows up without leaving the game.
+//
+// "reloadtiles [retail|modern]" also switches the art mode first (the same
+// switch the debug panel's radio buttons drive), so the retail pixels can be
+// restored and the tree's art can be applied again without the panel.
+COMMAND(CmdReloadTiles)
+{
+    int32_t mode = RevisitedSettings.high_res_tile_mode;
+    if (t.Type() == TKN_IDENT)
+    {
+        const char* arg = t.Text();
+        if (stricmp(arg, "retail") == 0)
+            mode = 0;
+        else if (stricmp(arg, "modern") == 0)
+            mode = 1;
+        else
+        {
+            Output("usage: reloadtiles [retail|modern]\n");
+            return CMD_BADPARAMS;
+        }
+        t.WhiteGet();
+    }
+
+    RevisitedSettings.high_res_tile_mode = mode;
+    // ReloadAll re-indexes the art tree first (files may have been added
+    // since the last index), sets the tile art mode (so a tile loaded
+    // later starts in the wanted mode) and then puts the wanted pixels
+    // into the tiles the game already uses.
+    const int32_t updated = TileArtReload::ReloadAll(mode);
+    Output("Reloaded %d tile(s).\n", updated);
+    return 0;
+}
+
+// Port-only: open/close the debug panel the way F10 does. The console twin
+// of the F10 key: scripts and the headless test runs can't press keys, and
+// the panel is otherwise reachable only through the keyboard / editor menu.
+COMMAND(CmdDebugUI)
+{
+    DebugUI::SetVisible(!DebugUI::IsVisible());
+    return 0;
+}
 
 // ----- owner: dialog (speech, messages, responses) -----
 

@@ -133,7 +133,7 @@ fs_out main_ps(vs_out in_) {
         uint width, height;
         albedo_tex.GetDimensions(width, height);
         int2 size = int2(width, height);
-        int2 xy = min(int2(floor(frac(in_.uv) * float2(size))), size - int2(1, 1));
+        int2 xy = min(int2(floor(frac(in_.uv) * (float2)size)), size - int2(1, 1));
         texel = albedo_tex.Load(int3(xy, 0));
         if (in_.retail_mode > 2.5) {
             // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
@@ -180,7 +180,7 @@ void main_ps(vs_out in_) {
         uint width, height;
         albedo_tex.GetDimensions(width, height);
         int2 size = int2(width, height);
-        int2 xy = min(int2(floor(frac(in_.uv) * float2(size))), size - int2(1, 1));
+        int2 xy = min(int2(floor(frac(in_.uv) * (float2)size)), size - int2(1, 1));
         texel = albedo_tex.Load(int3(xy, 0));
         if (in_.retail_mode > 2.5) {
             // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.
@@ -216,7 +216,7 @@ float4 main_ps(vs_out in_) : SV_Target0 {
         uint width, height;
         albedo_tex.GetDimensions(width, height);
         int2 size = int2(width, height);
-        int2 xy = min(int2(floor(frac(in_.uv) * float2(size))), size - int2(1, 1));
+        int2 xy = min(int2(floor(frac(in_.uv) * (float2)size)), size - int2(1, 1));
         texel = albedo_tex.Load(int3(xy, 0));
         if (in_.retail_mode > 2.5) {
             // Native 56ca90 RGB565 table; 54fbf2 alpha nibble plus one.

@@ -27,6 +27,7 @@ prelude=r'''
 #include <vector>
 #include <cstdio>
 #include "effects/warp_atlas.h"
+#include "camerascroll.h"
 using MeshHandle=uint32_t;using TTextureHandle=uint32_t;
 constexpr uint32_t kInvalidTexture=0;
 enum class EHelperMeshShade:uint8_t{Material=0,Texture=1,TextureLit=2};
@@ -49,7 +50,7 @@ struct TRenderer{
  struct SMeshEntry{Resource vbuf,ibuf;uint32_t albedo=77;int num_indices=9;};
  std::vector<SMeshEntry>meshes{SMeshEntry{}};
  struct{float ox=320,oy=170,z_near=0,zspan=1024,kcam_forward=1925,reserved=0,
- center_wx=0,center_wy=0,zoom=1;}recon;
+ center_wx=0,center_wy=0,zoom=1,cam_scroll_x=0,cam_scroll_y=0;}recon;
  struct{float dir[3]{0,0,1},intensity=1,color[3]{1,1,1},ambient=1;}light;
  int width=640,height=340;static constexpr int kGBufPad=16;
  float retail_mesh_ambient[3]{1,1,1},retail_mesh_directional[3]{};
@@ -114,6 +115,14 @@ int main(){
  draw.retail_opaque=true;draw.retail_source_alpha=true;renderer.software_lighting=true;draw.retail_lighting=3;draws=0;
  renderer.EmitTransparentHelper(draw);assert(draws==1&&pipeline==7);
  draw.retail_source_alpha=false;draw.additive_blend=true;draws=0;renderer.EmitTransparentHelper(draw);assert(draws==2&&pipeline==4);
+ // the meshes are drawn from the same fractional camera as the ground: camw.xy
+ // follow the camera scroll and camz.z is compensated so the depth stays
+ renderer.recon.cam_scroll_x=1.0f;renderer.recon.cam_scroll_y=2.0f;
+ draw=SHelperMeshSubmit{};draw.mesh=1;draw.world[0]=draw.world[5]=draw.world[10]=draw.world[15]=1;
+ renderer.EmitTransparentHelper(draw);
+ assert(vertex_uniforms[24]==1&&vertex_uniforms[25]==2);
+ assert(std::fabs(vertex_uniforms[22]-(1925-0.867f*3))<1e-3f);
+ renderer.recon.cam_scroll_x=0;renderer.recon.cam_scroll_y=0;
  std::puts("PASS: actual helper UV uniform ABI, alpha path, all9 indices and immutable albedo");
 }
 '''

@@ -198,10 +198,13 @@ void TOptionsPane::OnActivate(const SDefWidget& widget, int32_t buttonIndex)
 
 // REVSYNC: 0x0053aa90 event 3000 "ok" -- retail's order. Retail sets the
 // display gamma ramp (0x004a98f0) here; the port has none (OPTIONS.md §9).
-// It then re-sets the map ambient through SetAmbientLight (0x00453640),
-// which adds the gamma offset to an ambient that already carries it, so
-// each OK brightens the map until the area ambient is next set (question 93,
-// kept as retail).
+// It then re-sets the map ambient through SetAmbientLight (0x00453640).
+// REVSYNC-DIVERGENCE: it handed the value it had just read back in, and that
+// value already carries the gamma offset, so each OK pressed the offset on
+// again and the map crept brighter until the next area ambient (question 93,
+// reproduced in the shipped game). ReapplyAmbientGamma takes the old offset
+// off first: OK is idempotent and a GammaLevel change still reaches the map,
+// which is what retail's re-set was for.
 void TOptionsPane::Apply()
 {
     RealTimeLight    = values.realTimeLight;
@@ -215,7 +218,7 @@ void TOptionsPane::Apply()
     ApplyMusicVolume(MusicVolume);
     EffectsVolume    = values.effects;
     GammaLevel       = values.gamma;
-    MapPane.SetAmbientLight(MapPane.GetAmbientLight());
+    MapPane.ReapplyAmbientGamma();
     ApplyEffectsVolume(EffectsVolume);
     CombatFace       = values.combatFace;
     SaveOptions();
@@ -233,10 +236,10 @@ void TOptionsPane::Apply()
     ControlMap.Save(const_cast<char*>("Controls"));
 
     log_info("[options] applied: realtime=%d auto=%d speech=%d face=%d enhanced=%d limit=%d "
-             "nocombatres=%d violence=%d music=%d effects=%d gamma=%d",
+             "nocombatres=%d violence=%d music=%d effects=%d gamma=%d ambient=%d",
              RealTimeLight, AutoBeginCombat, PlaySpeech, CombatFace, EnhancedLighting,
              !NoGameSpeedLimit, NoCombatResults, ViolenceLevel, MusicVolume, EffectsVolume,
-             GammaLevel);
+             GammaLevel, MapPane.GetAmbientLight());
 }
 
 int32_t TOptionsPane::Controls() const

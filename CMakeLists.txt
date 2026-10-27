@@ -56,6 +56,9 @@ endif()
 # original codebase relies on (std:c++20 turns /permissive- on).
 if(MSVC)
   add_compile_options(/utf-8 /bigobj /permissive)
+  # Crash triage: map + PDB let a faulting RVA be resolved to a symbol.
+  add_link_options($<$<CONFIG:Release>:/MAP> $<$<CONFIG:Release>:/MAPINFO:EXPORTS> $<$<CONFIG:Release>:/DEBUG>)
+  add_compile_options($<$<CONFIG:Release>:/Zi>)
 endif()
 
 # clang-cl parses templates late for MSVC compatibility, which C++20
@@ -89,6 +92,11 @@ endif()
 # ----------------------------------------------------------------------------
 option(REVENANT_ASAN "Build with AddressSanitizer + UndefinedBehaviorSanitizer" OFF)
 if(REVENANT_ASAN)
+  if(MSVC)
+    message(STATUS "Sanitizers: AddressSanitizer (MSVC /fsanitize=address)")
+    add_compile_options(/fsanitize=address /Zi)
+    add_link_options(/INCREMENTAL:NO /DEBUG)
+  else()
   message(STATUS "Sanitizers: AddressSanitizer + UndefinedBehaviorSanitizer enabled")
 
   # Check that the sanitizer runtime can start on this OS before building
@@ -125,6 +133,7 @@ if(REVENANT_ASAN)
                       -fsanitize-recover=address
                       -fno-omit-frame-pointer -fno-optimize-sibling-calls -g -O1)
   add_link_options(-fsanitize=address -fsanitize=undefined -fno-sanitize=vptr)
+  endif()
 endif()
 
 # ----------------------------------------------------------------------------
@@ -407,6 +416,24 @@ target_include_directories(test_classiclighting PRIVATE
 target_compile_definitions(test_classiclighting PRIVATE SOKOL_${SOKOL_BACKEND})
 target_link_libraries(test_classiclighting PRIVATE GTest::gtest_main)
 
+# The ground and the meshes have to be drawn from the same camera, or the
+# characters drift off the ground by a whole camera step, 24 times a second.
+# The camera helpers live in camerascroll.h (header only), no engine code needed.
+add_executable(test_camerascroll
+  tools/test_camerascroll.cpp)
+target_include_directories(test_camerascroll PRIVATE
+  ${SOKOL_DIR}
+  ${HANDMADE_MATH_DIR}
+  ${SIMPLEINI_DIR}
+  ${MINIZ_DIR}
+  ${LOG_DIR}
+  ${ARGH_DIR}
+  ${STB_DIR}
+  ${IMGUI_DIR}
+)
+target_compile_definitions(test_camerascroll PRIVATE SOKOL_${SOKOL_BACKEND})
+target_link_libraries(test_camerascroll PRIVATE GTest::gtest_main)
+
 # Player-stat rules (maxima, STATLEVEL, kill experience, STATLINE).
 # playerstats.cpp needs only the tokenizer; the test stubs parse.cpp's
 # engine hooks like test_parse does.
@@ -527,6 +554,7 @@ endforeach()
 # <executable>.<Suite>.<Case>.
 foreach(test IN ITEMS
     test_audio_decode
+    test_camerascroll
     test_classiclighting
     test_defio
     test_defwidget

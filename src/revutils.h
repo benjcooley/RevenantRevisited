@@ -78,6 +78,12 @@ void rev_resolve_program_paths(char *RunPath, char *SavePath, int32_t buflen);
 // See revisited/README.md for the convention.
 const char *rev_resolve_revisited_overlay();
 
+// Same folders, but resolved with or without --revisited and without logging,
+// mounting or writing. For player-side extras stored beside the overlay (the
+// high-res tile art keys in its Revenant.ini). Empty when nothing is found;
+// an .rvr archive resolves to the archive path, which has no loose INI.
+const char *rev_revisited_overlay_readonly();
+
 // Makes a file path given the current settings of RunPath and SavePath
 char *makepath(char *name, char *buf, int32_t buflen);
 

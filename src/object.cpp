@@ -516,6 +516,7 @@ void TObjectInstance::ClearObject()
     // Init transform_ from the zeroed pos. Single setter path keeps
     // transform_ and the legacy `pos` field in lockstep.
     WriteTransformPos(transform_, pos, S3DPoint{0, 0, 0});
+    prevpos = pos;
 
     // World Z-stretch baked into the instance's transform. The
     // engine's mesh authoring is at "model Z"; world rendering and
@@ -923,6 +924,9 @@ int32_t TObjectInstance::SetPos(const S3DPoint& newpos, int32_t newlevel, bool o
 
             S3DPoint spos;
             s->GetPos(spos);
+            // The shadow rides on the owner, so its tick step is the owner's
+            // step: the renderer glides the shadow with the owner.
+            s->prevpos = spos;
             spos += delta;
             s->SetPos(spos);
         }
@@ -1656,6 +1660,11 @@ void TObjectInstance::Pulse()
 
 uint32_t TObjectInstance::Move()
 {
+    // The tick's starting position: the renderer interpolates between it and
+    // the position the movement reaches, so the object glides instead of
+    // stepping once per tick.
+    prevpos = pos;
+
     if (flags & OF_IMMOBILE || IsInInventory() || objclass == OBJCLASS_TILE || objclass == OBJCLASS_EXIT || objclass == OBJCLASS_SHADOW)
         return MOVE_NOTHING;
 

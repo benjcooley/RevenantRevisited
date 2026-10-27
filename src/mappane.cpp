@@ -8,6 +8,7 @@
 #include "dialog.h"
 
 #include "gamemap.h"
+#include "gameflow.h"
 #include "graphics.h"
 #include "mapmanager.h"
 #include "maprenderer.h"
@@ -2012,8 +2013,14 @@ TObjectInstance* TMapPane::OnObject(int32_t screenx, int32_t screeny, TObjectIns
             continue;
         if (!Editor && inst->ObjClass() == OBJCLASS_TILE)
             continue;
+        // The 3D scenery is not picked by the pointer (retail: the 3D
+        // scene's probe returns it as is). The characters are 3D meshes in
+        // the port, though -- they are drawn as meshes, not as the sprites
+        // retail picked them as -- so they are not dropped here; their own
+        // cursor type decides (the player has none, so he is not picked).
         if (const TObjectImagery* img = inst->GetImagery())
-            if (img->GetHeader() && img->GetHeader()->imageryid == OBJIMAGE_MESH3D)
+            if (img->GetHeader() && img->GetHeader()->imageryid == OBJIMAGE_MESH3D &&
+                !inst->IsCharacter())
                 continue;
         if (on && !inst->AlwaysOnTop() && (priority || !inst->GetZ(pick.frontmost)))
             continue;
@@ -2505,7 +2512,8 @@ void TMapPane::DrawDLight()
 // (0x00453720) stores its target without it, as retail.
 void TMapPane::SetAmbientLight(int32_t light, bool stopfade)
 {
-    light = (std::max)(0, light + GammaAmbientOffset(GammaLevel));
+    ambient_gamma_offset = GammaAmbientOffset(GammaLevel);
+    light = (std::max)(0, light + ambient_gamma_offset);
 
     if (stopfade)
         totambfadeframes = totambfadesteps = 0; // Stop fading
@@ -2522,6 +2530,33 @@ void TMapPane::SetAmbientLight(int32_t light, bool stopfade)
         ambientchanged = true;  // Causes ambient to be reset in next call to DrawBackground()
     }
 }   
+
+// REVSYNC-DIVERGENCE: The Options pane's OK re-sets the ambient so the
+// GammaLevel in effect reaches the map (retail 0x0053afbc hands
+// GetAmbientLight() straight back to SetAmbientLight 0x00453640, which adds
+// the offset to a value that already carries it: every OK pressed it on
+// again, +10 a press at level 3, so the map crept brighter until the next
+// area ambient -- OPTIONS.md §9, question 93, reproduced in the shipped
+// game). Taking the old offset off first makes the call idempotent; the
+// current level's offset still lands, which is what the re-set is for.
+void TMapPane::ReapplyAmbientGamma()
+{
+    const int32_t offset   = GammaAmbientOffset(GammaLevel);
+    const int32_t previous = ambient_gamma_offset;
+    ambient_gamma_offset = offset;
+
+    if (totambfadeframes > 0)   // fading: only the target carries an offset
+    {
+        newambient = (std::max)(0, newambient - previous + offset);
+        return;
+    }
+
+    const int32_t light = (std::max)(0, ambient - previous + offset);
+    if (ambient == light)
+        return;
+    ambient = light;
+    ambientchanged = true;
+}
 
 void TMapPane::SetAmbientColor(SColor &color, bool stopfade)
 {
@@ -2570,6 +2605,7 @@ void TMapPane::FadeAmbient(int32_t light, SColor &color, int32_t frames, int32_t
     oldambcolor = ambcolor;
     newambient = light;
     newambcolor = color;
+    ambient_gamma_offset = GammaAmbientOffset(GammaLevel);
     totambfadeframes = frames;
     totambfadesteps = steps;
     ambfadeframes = 0;
@@ -2728,6 +2764,9 @@ void TMapPane::UpdateMapPos()
         if (jump)
             scrollvel = S3DPoint(0, 0, 0);
         lastcamz = target.z;
+        // A camera that jumped has no smooth step to follow between the ticks
+        // (the picture is not scrolled, it moves in one step).
+        cameraJumped = jump;
 
         if (gridscroll)
         {
@@ -2776,6 +2815,9 @@ void TMapPane::Pulse()
 
   // Pulse objects (does object AI)
     PulseObjects();
+
+  // Pulse the objects kept alive outside the map: their scripts still run
+    PulseKeptAlive();
 
   // Moves all objects
     MoveObjects();
@@ -3975,8 +4017,88 @@ void TMapPane::ForEachTickObject(int32_t objset, Visit&& visit)
             visit(inst, nullptr);
         return;
     }
-    for (TMapIterator i(nullptr, CHECK_NOINVENT, objset); i; i++)
+
+    // Retail's loops walk the loaded sectors (PulseObjects 0x4580f0 opens
+    // its iterator with flags 0xa0: loaded + no inventory; the port keeps
+    // its 3x3 window), so an object that leaves the window -- a door that
+    // just teleported the player nine sectors away -- still pulses to its
+    // script's `control on` and its animation still finishes.
+    for (TMapIterator i(GetMapLevel(), nullptr, CHECK_NOINVENT, objset); i; i++)
         visit(i.Item(), &i);
+}
+
+// A door script waits for the screen fade before it gives the control back
+// (the mod's door script does its "control on" after the fade-in), and the
+// object it stands in is in the level the level change releases. The level
+// stays while the script runs, so the object stays in its sector and the
+// door is still drawn and still answers the pointer; the level is released
+// once the script ends.
+void TMapPane::KeepAlive(TObjectInstance* inst)
+{
+    if (!inst)
+        return;
+    keptalive.push_back(inst);
+}
+
+// A level with a script still running in it is not released: the door's
+// object, its imagery and its script live in that level.
+bool TMapPane::HasKeptAlive(int32_t level) const
+{
+    for (TObjectInstance* inst : keptalive)
+        if (inst && inst->GetLevel() == level)
+            return true;
+    return false;
+}
+
+void TMapPane::FreeKeptAlive(int32_t level)
+{
+    for (size_t i = 0; i < keptalive.size();)
+    {
+        TObjectInstance* inst = keptalive[i];
+        if (inst && inst->GetLevel() == level)
+        {
+            delete inst;
+            keptalive.erase(keptalive.begin() + i);
+            continue;
+        }
+        ++i;
+    }
+}
+
+void TMapPane::PulseKeptAlive()
+{
+    for (size_t i = 0; i < keptalive.size();)
+    {
+        TObjectInstance* inst = keptalive[i];
+        if (!inst)
+        {
+            keptalive.erase(keptalive.begin() + i);
+            continue;
+        }
+        // A held object lives in a level the world has left: its sector is
+        // not updated, so the tick that drives its script comes from here.
+        // Once the player is back in that level the sector drives it again,
+        // and pulsing it twice would run the script at double speed.
+        if (inst->GetLevel() != GetMapLevel())
+        {
+            inst->Pulse();
+            // The animation has to advance too: a script waits for its owner's
+            // action to finish, and the door's action is its closing animation.
+            inst->NextFrame();
+        }
+        TScript* script = inst->GetScript();
+        if (!script || !script->Running())
+        {
+            // The script is over, so the object stops being held: it stays
+            // where it is, an ordinary object in its sector again. It is NOT
+            // deleted here -- the door the player walked through lives in the
+            // level they are about to come back to, and retail keeps it until
+            // the level itself is unloaded.
+            keptalive.erase(keptalive.begin() + i);
+            continue;
+        }
+        ++i;
+    }
 }
 
 // REVSYNC: TMapPane::NextFrameObjects @ 0x00457ef0 -- the animate set's
@@ -4194,6 +4316,25 @@ S3DPoint TMapPane::CameraPos(double fraction) const
     return S3DPoint(prevcenter.x + (int32_t)std::lround((center.x - prevcenter.x) * f),
                     prevcenter.y + (int32_t)std::lround((center.y - prevcenter.y) * f),
                     prevcenter.z + (int32_t)std::lround((center.z - prevcenter.z) * f));
+}
+
+// The camera's step since the tick began, scaled by the fraction of the tick
+// that has passed. The world is drawn against the camera's position at the
+// tick's start (CameraPos(0)), so this is the rest of the camera's step: the
+// picture scrolls by it, and the view moves smoothly between the ticks
+// instead of jumping once a tick.
+//
+// A camera that jumped (a teleport, a level change, a snap) has no smooth
+// step to follow: nothing scrolls.
+void TMapPane::CameraScrollStep(double fraction, float& out_dx, float& out_dy) const
+{
+    out_dx = 0.0f;
+    out_dy = 0.0f;
+    if (cameraJumped)
+        return;
+    const double f = std::clamp(fraction, 0.0, 1.0);
+    out_dx = float(center.x - prevcenter.x) * float(f);
+    out_dy = float(center.y - prevcenter.y) * float(f);
 }
 
 void TMapPane::BindWindow(TGameMap* map)

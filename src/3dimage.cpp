@@ -18,14 +18,18 @@
 #include "firelegacykeys.h"
 #include "i3dtexturealpha.h"
 #include "3dimage.h"
+#include "spritetexoverride.h"
+#include "retailmeshlighting.h"
 #include "retailsoftwaretransform.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <cctype>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "3dscene.h"
@@ -1748,6 +1752,7 @@ bool T3DImagery::InitializeMesh(S3DImageryBody* mesh)
     // ---- textures ----
     hastextures = mesh->numtextures != 0;
     textures.Clear();
+    sprite_override_frames = 0;
     if (UseTextures)
     {
         for (c = 0; c < mesh->numtextures; c++)
@@ -1759,6 +1764,9 @@ bool T3DImagery::InitializeMesh(S3DImageryBody* mesh)
                 (void*)mesh->textures[c].pals);
         }
     }
+    if (sprite_override_frames > 0)
+        log_info("[spriteart] %s: %d texture frame(s) from the sprite tree",
+                 GetResFilename() ? GetResFilename() : "?", sprite_override_frames);
 
     // ---- materials ----
     materials.Clear();
@@ -3068,6 +3076,90 @@ void T3DImagery::ClearMaterials()
 // * Texture Functions *
 // *********************
 
+// The modern sprite art (spritetexoverride.h) replaces the retail pixels of a
+// texture frame. The art has to have the retail texture's size: the model's
+// own dimensions come from it (flipbook cells, the effect billboards' atlas
+// grid), so a differently sized replacement is skipped.
+//
+// The lighting slot of the texture decides what the alpha of the art means:
+//   1 - the retail format has no alpha: the retail silhouette was a black
+//       key, so the art is keyed the same way unless it brings its own
+//       alpha channel;
+//   2 - the format has an alpha channel (8 bit): the art's alpha is the
+//       coverage;
+//   3 - ARGB4444 (the effect billboards): the shader takes the alpha from
+//       the 4 bit nibble, so an opaque art turns the effect into an opaque
+//       quad.
+static bool ApplySpriteArtOverride(const char* imagery_filename, int32_t texture_index,
+                                   int32_t frame_index, int32_t width, int32_t height,
+                                   std::vector<uint8_t>& rgba, bool* out_has_alpha = nullptr)
+{
+    if (!SpriteTexOverride::Active())
+        return false;
+
+    SpriteTexOverride::SImage art;
+    if (!SpriteTexOverride::Load(imagery_filename, texture_index, frame_index, art))
+        return false;
+
+    if (art.width != width || art.height != height)
+    {
+        static std::unordered_set<std::string> reported;
+        char key[320];
+        std::snprintf(key, sizeof(key), "%s|%d|%d",
+                      imagery_filename ? imagery_filename : "", texture_index, frame_index);
+        if (reported.insert(key).second)
+            log_warn("[spriteart] %s: art is %dx%d, the retail texture is %dx%d -- skipped",
+                     imagery_filename ? imagery_filename : "?", art.width, art.height, width, height);
+        return false;
+    }
+
+    if (out_has_alpha)
+        *out_has_alpha = art.has_alpha;
+    rgba = std::move(art.rgba);
+    // Without an alpha channel of its own the art is keyed like the retail
+    // one: black becomes transparent.
+    if (!art.has_alpha)
+        ApplyI3DBlackKey(rgba, false);
+    return true;
+}
+
+// The lighting slot of a texture slot: 1 = no alpha in the retail format
+// (the silhouette came from the black key), 2 = 8 bit alpha, 3 = ARGB4444
+// (the effect billboards). The mesh shader reads the alpha differently in
+// each of them (shaders/mesh.hlsl.h), so the sprite art has to know which
+// slot it lands in.
+static int32_t SpriteArtLightingSlot(const SPixelFormat& format)
+{
+    return RetailMeshTextureLighting(format);
+}
+
+// The alpha of the art in an ARGB4444 slot: the shader reads the coverage
+// from the 4 bit alpha nibble of the texel, so an art with an opaque
+// background turns the effect into an opaque quad. Warn once per texture so
+// the reason is in the log.
+static void WarnAboutArgb4444Art(const char* imagery_filename, int32_t texture_index,
+                                 int32_t frame_index, const SpriteTexOverride::SImage& art)
+{
+    static std::unordered_set<std::string> reported;
+    char key[320];
+    std::snprintf(key, sizeof(key), "%s|%d|%d",
+                  imagery_filename ? imagery_filename : "", texture_index, frame_index);
+    if (!reported.insert(key).second)
+        return;
+    if (art.has_alpha)
+    {
+        log_warn("[spriteart] %s: texture %d frame %d is an ARGB4444 slot -- the art's alpha "
+                 "replaces the 4 bit coverage nibble, an opaque background makes the effect a solid quad",
+                 imagery_filename ? imagery_filename : "?", texture_index, frame_index);
+    }
+    else
+    {
+        log_warn("[spriteart] %s: texture %d frame %d is an ARGB4444 slot -- the art is black keyed, "
+                 "so the effect keeps retail's coverage only where the art is not black",
+                 imagery_filename ? imagery_filename : "?", texture_index, frame_index);
+    }
+}
+
 int32_t T3DImagery::AddTexture(SSurfaceDesc* srcsd,
     OFFSET* pixels, int32_t frames, void* palette)
 {
@@ -3135,6 +3227,10 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
         // write them out as PNG. Stored on T3DImagery (NOT S3DTex) because
         // S3DTex lives inside a TVirtualArray which copies via memcpy and
         // would corrupt any std::vector member.
+        //
+        // The capture happens BEFORE the sprite art override: the dump has to
+        // show the retail pixels, otherwise the tree would feed itself (the
+        // dump of a .I3D would be the art that was dumped from it).
         if (T3DImagery::g_retain_decoded_rgba && !rgba.empty())
         {
             if (int32_t(dump_textures.size()) <= texture_index)
@@ -3142,6 +3238,24 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
             if (int32_t(dump_textures[texture_index].size()) < frames)
                 dump_textures[texture_index].resize(frames);
             dump_textures[texture_index][f] = rgba;
+        }
+
+        // The modern sprite art replaces the retail pixels when the tree has
+        // art for this frame.
+        bool used_art = false;
+        bool art_has_alpha = false;
+        if (ApplySpriteArtOverride(GetResFilename(), texture_index, f,
+                                   int32_t(srcsd->width), int32_t(srcsd->height), rgba,
+                                   &art_has_alpha))
+        {
+            ++sprite_override_frames;
+            used_art = true;
+            if (SpriteArtLightingSlot(dstsd.pixelFormat) == 3)
+            {
+                SpriteTexOverride::SImage probe;
+                probe.has_alpha = art_has_alpha;
+                WarnAboutArgb4444Art(GetResFilename(), texture_index, f, probe);
+            }
         }
 
         // Texture coordinates wrap. Retail never sets a texture address mode
@@ -3163,7 +3277,8 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
                                                        ERendererTextureFormat::RGBA8,
                                                        uint64_t(rgba.size()),
                                                        ERendererTextureFilter::Linear,
-                                                       /*repeat*/ true);
+                                                       /*repeat*/ true,
+                                                       /*updatable*/ true);
             if (htexture != kInvalidTexture)
             {
                 Renderer->AddTextureAssetRef(htexture);
@@ -3183,6 +3298,12 @@ bool T3DImagery::LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
             tex->framehtexs[f] = htexture;
         else
             tex->htexture = htexture;
+
+        if (used_art)
+            log_info("[spriteart] %s: texture %d frame %d uses the modern art (lighting slot %d, handle %u)",
+                     GetResFilename() ? GetResFilename() : "?", texture_index, f,
+                     SpriteArtLightingSlot(dstsd.pixelFormat),
+                     (unsigned)htexture);
     }
 
     if (frames > 1)
@@ -3278,6 +3399,241 @@ void T3DImagery::RestoreSurfaces()
     if (!SurfacesLost())
         return;
     Restore();
+}
+
+// Put a texture frame's pixels into the GPU texture the frame already uses.
+// The handle stays, so the animator snapshots (S3DAnimObj::htextures) and the
+// flipbook components keep pointing at the texture that changed.
+bool T3DImagery::UploadTextureFrame(int32_t texnum, int32_t framenum,
+                                    const std::vector<uint8_t>& rgba)
+{
+    if (!Renderer || rgba.empty())
+        return false;
+    if (texnum < 0 || texnum >= textures.NumItems() || !textures.Used(texnum))
+        return false;
+
+    S3DTex tex = {};
+    GetTexture(texnum, &tex);
+
+    TTextureHandle handle = kInvalidTexture;
+    if (tex.numframes > 1)
+    {
+        // Every frame owns its own texture; an out-of-range frame would read
+        // past the array.
+        if (!tex.framehtexs || framenum < 0 || framenum >= tex.numframes)
+            return false;
+        handle = tex.framehtexs[framenum];
+    }
+    else
+    {
+        handle = tex.htexture;
+    }
+    if (handle == kInvalidTexture)
+        return false;
+
+    const int32_t width = int32_t(tex.desc.width);
+    const int32_t height = int32_t(tex.desc.height);
+    if (width <= 0 || height <= 0)
+        return false;
+
+    return Renderer->UpdateTextureAsset(handle, rgba.data(), rgba.size(), width, height);
+}
+
+// The retail pixels of one texture frame, read from the imagery body. The
+// current body layout keeps an array of textures; the old one keeps the
+// descriptions, the frame offsets and the palettes in parallel arrays --
+// reading the wrong one gives garbage, so the layout is checked first.
+struct SRetailFrameSource
+{
+    const SSurfaceDesc* desc    = nullptr;
+    const void*         pixels  = nullptr;
+    const void*         palette = nullptr;
+    int32_t             frames  = 0;
+};
+
+static bool RetailFrameSource(SImageryBody* body, int32_t tex, int32_t frame,
+                              SRetailFrameSource& out)
+{
+    if (!body)
+        return false;
+    auto* mesh = static_cast<S3DImageryBody*>(body);
+    if (!(mesh->flags & I3D_3DIMAGEBODY2))
+    {
+        // Old body: parallel arrays instead of a texture array.
+        auto* old = static_cast<SOld3DImageryBody*>(body);
+        if (tex < 0 || tex >= old->numtextures)
+            return false;
+        out.desc    = &old->texturedesc[tex];
+        out.palette = (void*)old->texturepals[tex];
+        out.frames  = old->textureframes[tex];
+        OFFSET* frames = (OFFSET*)((void*)old->texturebits[tex]);
+        if (!frames || frame < 0 || frame >= out.frames)
+            return false;
+        out.pixels = frames[frame].ptr();
+    }
+    else
+    {
+        if (tex < 0 || tex >= mesh->numtextures)
+            return false;
+        out.desc    = &mesh->textures[tex].desc;
+        out.palette = (void*)mesh->textures[tex].pals;
+        out.frames  = mesh->textures[tex].frames;
+        OFFSET* frames = (OFFSET*)((void*)mesh->textures[tex].bits);
+        if (!frames || frame < 0 || frame >= out.frames)
+            return false;
+        out.pixels = frames[frame].ptr();
+    }
+    return out.pixels != nullptr;
+}
+
+int32_t T3DImagery::ReloadTextures()
+{
+    if (!Renderer)
+        return 0;
+
+    const char* filename = GetResFilename();
+    const bool modern = SpriteTexOverride::Active();
+
+    // Only the frames the sprite tree has art for can differ from what the
+    // GPU holds; the rest keep the pixels they were loaded with. A retail
+    // reload without the tree is the safety net for art that was loaded
+    // from a tree that is gone or now unlisted: every frame it still holds
+    // re-reads its retail pixels.
+    struct SFrame { int32_t tex; int32_t frame; };
+    std::vector<SFrame> targets;
+    const bool retail_all = !modern && !SpriteTexOverride::Enabled();
+    for (int32_t c = 0; c < textures.NumItems(); ++c)
+    {
+        if (!textures.Used(c))
+            continue;
+        S3DTex tex = {};
+        GetTexture(c, &tex);
+        const int32_t frames = tex.numframes > 1 ? tex.numframes : 1;
+        for (int32_t f = 0; f < frames; ++f)
+        {
+            if (retail_all || SpriteTexOverride::Has(filename, c, f))
+                targets.push_back(SFrame{c, f});
+        }
+    }
+
+    if (targets.empty())
+    {
+        // Most of the registry has no art in the tree; that is the normal
+        // case and stays out of the log (the summary counts it).
+        return 0;
+    }
+
+    log_info("[spriteart] reload %s: mode=%s, %d texture(s), %d frame(s) in the tree",
+             filename ? filename : "?", modern ? "modern" : "retail",
+             textures.NumItems(), int32_t(targets.size()));
+
+    int32_t updated = 0;
+    int32_t skipped = 0;
+    std::vector<uint8_t> rgba;
+
+    if (modern)
+    {
+        // Modern art: the PNG is the source, the retail .I3D stays as it is.
+        for (const SFrame& target : targets)
+        {
+            S3DTex tex = {};
+            GetTexture(target.tex, &tex);
+            rgba.clear();
+            bool art_has_alpha = false;
+            if (!ApplySpriteArtOverride(filename, target.tex, target.frame,
+                                        int32_t(tex.desc.width), int32_t(tex.desc.height), rgba,
+                                        &art_has_alpha))
+            {
+                ++skipped;
+                log_warn("[spriteart] %s: no modern art for texture %d frame %d -- skipped",
+                         filename ? filename : "?", target.tex, target.frame);
+                continue;
+            }
+            if (SpriteArtLightingSlot(tex.desc.pixelFormat) == 3)
+            {
+                SpriteTexOverride::SImage probe;
+                probe.has_alpha = art_has_alpha;
+                WarnAboutArgb4444Art(filename, target.tex, target.frame, probe);
+            }
+            if (UploadTextureFrame(target.tex, target.frame, rgba))
+            {
+                ++updated;
+                S3DTex slot = {};
+                GetTexture(target.tex, &slot);
+                // The per-frame handle is what the model draws with; the
+                // log must not show frame 0's handle for every frame.
+                TTextureHandle shown = slot.htexture;
+                if (slot.numframes > 1 && slot.framehtexs && target.frame < slot.numframes)
+                    shown = slot.framehtexs[target.frame];
+                log_info("[spriteart] %s: texture %d frame %d now shows '%s' (lighting slot %d, handle %u)",
+                         filename ? filename : "?", target.tex, target.frame,
+                         SpriteTexOverride::ArtPath(filename, target.tex, target.frame),
+                         SpriteArtLightingSlot(tex.desc.pixelFormat),
+                         (unsigned)shown);
+            }
+            else
+            {
+                ++skipped;
+                log_warn("[spriteart] %s: texture %d frame %d could not be updated on the GPU",
+                         filename ? filename : "?", target.tex, target.frame);
+            }
+        }
+        log_info("[spriteart] reload %s: modern art, %d frame(s) updated, %d skipped",
+                 filename ? filename : "?", updated, skipped);
+        return updated;
+    }
+
+    // Retail art: read the source file again and decode it the way the
+    // loader does. The body the loader left resident stays resident; only a
+    // body this call pulled in is freed again.
+    if (!filename || !*filename)
+    {
+        log_info("[spriteart] reload %s: in-memory imagery has no file to read the retail art from",
+                 filename ? filename : "?");
+        return 0;
+    }
+    const bool had_body = (entry && entry->body);
+    SImageryBody* body = GetBody();
+    if (!body)
+    {
+        log_warn("[spriteart] %s: the imagery body could not be loaded -- the retail art is not restored",
+                 filename);
+        return 0;
+    }
+    const bool old_body = !(static_cast<S3DImageryBody*>(body)->flags & I3D_3DIMAGEBODY2);
+    for (const SFrame& target : targets)
+    {
+        SRetailFrameSource src;
+        if (!RetailFrameSource(body, target.tex, target.frame, src))
+        {
+            ++skipped;
+            log_warn("[spriteart] %s: the retail pixels of texture %d frame %d are not available -- skipped",
+                     filename, target.tex, target.frame);
+            continue;
+        }
+        rgba.clear();
+        if (!DecodeTextureFrameRGBA(src.desc, src.pixels, src.palette, rgba))
+        {
+            ++skipped;
+            log_warn("[spriteart] %s: the retail pixels of texture %d frame %d could not be decoded -- skipped",
+                     filename, target.tex, target.frame);
+            continue;
+        }
+        ApplyI3DBlackKey(rgba, src.desc->pixelFormat.dwRGBAlphaBitMask != 0);
+        if (UploadTextureFrame(target.tex, target.frame, rgba))
+            ++updated;
+        else
+        {
+            ++skipped;
+            log_warn("[spriteart] %s: texture %d frame %d could not be updated on the GPU",
+                     filename, target.tex, target.frame);
+        }
+    }
+    if (!had_body)
+        FreeBody();
+    log_info("[spriteart] reload %s: retail art (%s body), %d frame(s) updated, %d skipped",
+             filename, old_body ? "old" : "new", updated, skipped);
+    return updated;
 }
 
 // *****************************

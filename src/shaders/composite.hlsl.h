@@ -29,6 +29,12 @@ vs_out main_vs(vs_in i) {
 )HLSL";
 
 inline constexpr const char* kCompositeFsHlsl = R"HLSL(
+cbuffer params : register(b0) {
+    float4 rect;
+    float4 uv_rect;
+    float4 chroma_key;
+    float4 color_tint;
+};
 Texture2D    tex : register(t0);
 SamplerState smp : register(s0);
 struct vs_out { float4 pos : SV_Position; float2 uv : TEXCOORD0; };

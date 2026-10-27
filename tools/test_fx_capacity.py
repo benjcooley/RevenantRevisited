@@ -19,6 +19,7 @@ prelude=r'''
 #include <utility>
 #include <cmath>
 #include <algorithm>
+#include "camerascroll.h"
 enum class EFxDebugMode:uint8_t{Normal};enum class EFxLightMode:uint8_t{Unlit};
 struct SFxBatchKey{uint16_t pipeline_id{};uint8_t blend{},depth_mode{};uint32_t texture{};};
 struct SStripSegment{float world_a[3]{},world_b[3]{1,0,0};float width_a_wu=1,width_b_wu=1;
@@ -29,7 +30,9 @@ struct SQuadDrawItem{bool per_corner_color=false;float corner_color_rgba[4][4]{}
 constexpr int kFxStripVertexFloats=18,kMaxFxStripVerts=8192;
 void log_warn(const char*,...){}
 bool software=false;bool UsesRetailSoftwareMeshLighting(){return software;}
-struct{float center_wx=0,center_wy=0,kcam_forward=2750;}recon;
+struct recon_stub_t{float center_wx=0,center_wy=0,kcam_forward=2750,zoom=2;};
+recon_stub_t recon;
+bool fx_ortho=false;float fx_camw_x=0,fx_camw_y=0;   // the real drain's camera; zoom 0 here = no snap
 struct Result{int vertices,spans,drawn,dropped;std::vector<float> packed;};
 '''
 body=r'''
@@ -80,7 +83,7 @@ with tempfile.TemporaryDirectory(prefix='revenant-fx-capacity-')as tmp:
  path=Path(tmp)/'regression.cpp';binary=Path(tmp)/'regression'
  def compile_run(packing_text):
   path.write_text(prelude+body.replace('PACKING',packing_text).replace('UPLOAD',upload_condition))
-  subprocess.run(['clang++','-std=c++17',str(path),'-o',str(binary)],check=True)
+  subprocess.run(['clang++','-std=c++17','-iquote',str(root/'src'),str(path),'-o',str(binary)],check=True)
   return subprocess.run([str(binary)],capture_output=True)
  fixed=compile_run(packing);assert fixed.returncode==0,fixed.stderr.decode()
  before=compile_run(packing.replace(strip_guard,'').replace(quad_guard,''));assert before.returncode!=0,'Pre-fix all-frame overflow unexpectedly passed'

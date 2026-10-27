@@ -262,7 +262,7 @@ retail's keys and format.
 | control map Load `0x00439ba0` at boot | `InitDefaultControlMap()` reads `[Controls]` after building the table (it never did, so OK used to overwrite the player's `[Controls]` with the port's table). The port's table is retail's `0x005d5500` since 2026-10-13 (its 69 controls in order, `g_defaultGameControls`). A control the INI names gets the INI's keys; the others keep the table's, and the port-only ones are added to `[Controls]` on first read |
 | CD SetVolume `0x0049a5c0` | `ApplyMusicVolume(level)` (`sound.cpp`): 0..`0x60`, the music group's gain `level / 0x60` |
 | SetAmbientLight `0x00453640` | `TMapPane::SetAmbientLight` adds `GammaAmbientOffset(GammaLevel)` (`gameoptions.h`), floored at 0; FadeAmbient doesn't (2026-10-07) |
-| OK's `SetAmbientLight(MapPane.ambient, 1)` `0x0053afbc` | `TOptionsPane::Apply` re-sets `MapPane`'s ambient, adding the offset again as retail (question 93) |
+| OK's `SetAmbientLight(MapPane.ambient, 1)` `0x0053afbc` | `TOptionsPane::Apply` calls `MapPane.ReapplyAmbientGamma()`: the offset the value already carries comes off first and the current `GammaLevel`'s goes on, so a GammaLevel change still reaches the map and repeated OK is idempotent. Retail added the offset again on every OK (question 93); the port diverges here since 2026-10-19 |
 | per-sample `EffectsVolume` | `ApplyEffectsVolume(level)`: the sfx group's gain `level / 0x7f`; game sounds and movie audio both play through the sfx group |
 
 Live in the port: Auto, Dialog, Enhanced (the light model reads it every

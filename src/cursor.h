@@ -26,6 +26,12 @@ void SetMouseBitmap(PTBitmap cursor);
 void SetHardwareCursorEnabled(bool enabled);
 bool HardwareCursorEnabled();
 
+// Show the OS pointer even though the game draws its own cursor in-frame.
+// The debug panel (F10) is an immediate-mode UI and needs a pointer the
+// user can aim at widgets with; while it is forced the in-frame cursor
+// bitmap is not drawn (the OS pointer takes its place).
+void ForceOSPointer(bool forced);
+
 void RefreshOSCursor();
   // Re-push the current MouseCursor to the OS pointer. Used after
   // resetting to the OS arrow (e.g. while ImGui captures the mouse)

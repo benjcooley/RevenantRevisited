@@ -1001,20 +1001,16 @@ std::string rev_engine_asset(const char *relpath)
     return (s_dir / relpath).string();
 }
 
-const char *rev_resolve_revisited_overlay()
+namespace {
+
+// Overlay detection, independent of --revisited: the high-res tile art keys
+// live in the overlay's Revenant.ini and a plain launch reads them too (the
+// art is player-side, not a Revisited tunable). log_hit asks for the mount's
+// "[overlay] revisited: ..." line; the read-only probe stays quiet.
+std::string find_revisited_overlay(bool log_hit)
 {
     namespace fs = std::filesystem;
-    static std::string s_resolved;
-    static bool s_done = false;
-    if (s_done) return s_resolved.c_str();
-    s_done = true;
-
-    // Strict opt-in: the Revisited overlay only applies when the user
-    // launches with --revisited. Without the flag, return empty even if
-    // a revisited/ folder or RevenantRevisited.rvr sits next to the exe,
-    // so the game runs pure vanilla retail by default.
-    if (!RevisitedEnabled)
-        return "";
+    std::string s_resolved;
 
     auto looks_like_overlay = [](const fs::path &p) -> bool {
         // For now: anything that exists. The overlay can be empty (no
@@ -1031,8 +1027,8 @@ const char *rev_resolve_revisited_overlay()
         if (looks_like_overlay(p))
         {
             s_resolved = (p.string() + "/");
-            log_info("[overlay] revisited: %s (env)", s_resolved.c_str());
-            return s_resolved.c_str();
+            if (log_hit) log_info("[overlay] revisited: %s (env)", s_resolved.c_str());
+            return s_resolved;
         }
     }
 
@@ -1049,8 +1045,8 @@ const char *rev_resolve_revisited_overlay()
         if (fs::exists(cand, ec))
         {
             s_resolved = cand.string();
-            log_info("[overlay] revisited: %s (rvr archive)", s_resolved.c_str());
-            return s_resolved.c_str();
+            if (log_hit) log_info("[overlay] revisited: %s (rvr archive)", s_resolved.c_str());
+            return s_resolved;
         }
     }
 
@@ -1064,12 +1060,36 @@ const char *rev_resolve_revisited_overlay()
             if (looks_like_overlay(p))
             {
                 s_resolved = (p.string() + "/");
-                log_info("[overlay] revisited: %s (loose dev folder)",
-                         s_resolved.c_str());
-                return s_resolved.c_str();
+                if (log_hit)
+                    log_info("[overlay] revisited: %s (loose dev folder)",
+                             s_resolved.c_str());
+                return s_resolved;
             }
         }
     }
+
+    return {};
+}
+
+} // namespace
+
+const char *rev_resolve_revisited_overlay()
+{
+    static std::string s_resolved;
+    static bool s_done = false;
+    if (s_done) return s_resolved.c_str();
+    s_done = true;
+
+    // Strict opt-in: the Revisited overlay only applies when the user
+    // launches with --revisited. Without the flag, return empty even if
+    // a revisited/ folder or RevenantRevisited.rvr sits next to the exe,
+    // so the game runs pure vanilla retail by default.
+    if (!RevisitedEnabled)
+        return "";
+
+    s_resolved = find_revisited_overlay(true);
+    if (!s_resolved.empty())
+        return s_resolved.c_str();
 
     // --revisited was requested but no overlay is reachable. Hard fail —
     // the user explicitly asked for Revisited features and silently
@@ -1082,6 +1102,16 @@ const char *rev_resolve_revisited_overlay()
     log_error("  4) <repo-root>/revisited/resources/ (dev layout)");
     FatalError("--revisited specified but no overlay found (see log for search paths)", nullptr);
     return "";
+}
+
+// Path-only probe for player-side extras that live next to the overlay (the
+// high-res tile art keys in its Revenant.ini). It resolves the same folders
+// with or without --revisited and never mounts or writes; an .rvr archive has
+// no loose INI, so the reader then just finds no file.
+const char *rev_revisited_overlay_readonly()
+{
+    static const std::string s_resolved = find_revisited_overlay(false);
+    return s_resolved.c_str();
 }
 
 // Resolve the platform-conventional per-user data directory:
@@ -1358,8 +1388,16 @@ std::filesystem::path vfs_resolve_data_root()
     namespace fs = std::filesystem;
     auto looks_like_revenant = [](const fs::path &cand) -> bool {
         std::error_code ec;
-        return fs::exists(cand / "imagery.rvi", ec) ||
-               fs::exists(cand / "resources.rvr", ec) ||
+        // Git-LFS pointer stubs (a repo without LFS objects pulled) are ~134
+        // bytes; a real pack is megabytes. Require a plausible pack size so a
+        // stub tree never shadows a real install.
+        auto has_real_pack = [&](const char *name) {
+            std::error_code ec2;
+            if (!fs::exists(cand / name, ec2) || ec2) return false;
+            return fs::file_size(cand / name, ec2) > 4096;
+        };
+        return has_real_pack("imagery.rvi") ||
+               has_real_pack("resources.rvr") ||
                fs::exists(cand / "Modules", ec);
     };
 
@@ -1368,6 +1406,17 @@ std::filesystem::path vfs_resolve_data_root()
         fs::path p(env);
         if (fs::exists(p) && looks_like_revenant(p))
             return p;
+    }
+
+    // Local dev fallback: this machine's Revenant install (user-requested).
+    // Checked before the repo's data/ stubs, still validated by
+    // looks_like_revenant so a moved/removed install degrades gracefully.
+    for (const char *local : {"D:/Games/Revenant"})
+    {
+        fs::path p(local);
+        std::error_code ec;
+        if (fs::exists(p, ec) && !ec && looks_like_revenant(p))
+            return fs::canonical(p, ec);
     }
 
     const fs::path cwd = fs::current_path();

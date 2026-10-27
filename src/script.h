@@ -328,6 +328,10 @@ class TScript
     void WaitSay(TObjectInstance* object)    { if (object) SetWait(EScriptWait::Say, object); }      // 0x00492d10
     void WaitDeath(TObjectInstance* object)  { if (object) SetWait(EScriptWait::Death, object); }    // 0x00492d30
     [[nodiscard]] bool IsWaiting() const     { return wait != EScriptWait::None; }
+    // What the script waits for (retail +0xb4): a screen-fade wait has to
+    // outlive the level the object stands in -- a door script's "control
+    // on" comes after the fade-in.
+    [[nodiscard]] EScriptWait WaitType() const { return wait; }
 
     // REVSYNC: User @ 0x00492ac0 — the player this script deals with: the
     // running trigger's "user" when that is a player, else the main player.

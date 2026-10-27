@@ -36,6 +36,12 @@ uniform sampler2D albedo_tex;
 uniform sampler2D normal_tex;
 uniform sampler2D depth_tex;
 layout(location = 0) out float out_ao;
+// Hoskins' hash12: float32-safe per-pixel noise.
+float hash12(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
 vec3 reconstruct_world(vec2 uv, float d, float fbw, float fbh) {
     // Framebuffer pixels are scaled by the active camera zoom/resolution.
     // Undo that first so the iso inverse sees the same units as WorldToScreen.
@@ -60,7 +66,14 @@ void main() {
     if (alb.a < 0.01) { out_ao = 1.0; return; }
     float strength = max(ao_settings.y, 0.0);
     if (strength <= 0.0) { out_ao = 1.0; return; }
-    float radius_px = max(ao_settings.x, 1.0);
+    // The ring's radius is in world units, so it scales with the camera
+    // zoom: a fixed pixel radius shrinks in world terms as the camera comes
+    // closer, and then the ring lands inside a single height-map texel,
+    // where the tiny steps of the quantized height tilt it -- the AO's
+    // response broke into horizontal bands over the whole surface. With
+    // the radius in world units the ring always spans several texels and
+    // the AO looks the same at every zoom.
+    float radius_px = max(ao_settings.x, 1.0) * max(camera.x, 1.0);
     float bias = ao_settings.z;
     float max_dist = max(ao_settings.w, 1.0);
     float d = texture(depth_tex, v_uv).r;
@@ -68,7 +81,12 @@ void main() {
     vec2  ts = vec2(textureSize(albedo_tex, 0));
     float fbw = ts.x, fbh = ts.y;
     vec3  W = reconstruct_world(v_uv, d, fbw, fbh);
-    float h = fract(sin(dot(v_uv, vec2(12.9898, 78.233))) * 43758.5453);
+    // Per-pixel noise for the sample ring. The classic fract(sin(dot(...)) *
+    // 43758.0) hash degenerates in float32: sin of a big argument loses its
+    // low bits, so the value barely changes along x and the AO's noise came
+    // out as horizontal bands over the whole surface. This one keeps its
+    // bits (Hoskins' hash12).
+    float h = hash12(v_uv * vec2(fbw, fbh));
     const int kSamples = 8;
     float occ = 0.0;
     float wsum = 0.0;

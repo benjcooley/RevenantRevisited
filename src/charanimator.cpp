@@ -17,6 +17,7 @@
 #include "render3d_types.h"
 #include "renderer.h"
 #include "time.h"
+#include "subtick.h"
 
 namespace
 {
@@ -608,7 +609,21 @@ void TCharAnimator::SubmitFx(TRenderer& renderer) const
         return;
     TWeaponSwipe::SStrip strip;
     TWeaponSwipe::BuildStrip(ring, swipe.Color(), strip);
-    SubmitSwipeStrip(renderer, strip, inst->Transform().Matrix());
+    // The swipe hangs on the hand, so it glides between the ticks with the
+    // body it belongs to.
+    hmm_mat4 model_to_world = inst->Transform().Matrix();
+    const S3DPoint prev = inst->PrevPos();
+    const float frac = float(TTime::LegacyFrameFraction());
+    float sub_x = 0.0f, sub_y = 0.0f, sub_z = 0.0f;
+    if (SubTickOffset(inst->Pos().x - prev.x, inst->Pos().y - prev.y,
+                      inst->Pos().z - prev.z, frac, sub_x, sub_y, sub_z))
+    {
+        // hmm_mat4 is float[4][4]: the translation is the last row.
+        model_to_world.Elements[3][0] += sub_x;
+        model_to_world.Elements[3][1] += sub_y;
+        model_to_world.Elements[3][2] += sub_z;
+    }
+    SubmitSwipeStrip(renderer, strip, model_to_world);
 }
 
 void TCharAnimator::SubmitSwipeStrip(TRenderer& renderer, const TWeaponSwipe::SStrip& strip,

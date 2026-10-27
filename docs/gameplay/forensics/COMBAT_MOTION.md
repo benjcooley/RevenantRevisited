@@ -713,6 +713,16 @@ Port lines are the working tree of 2026-10-08.
 | 29 | game time (playscreen.cpp:243) | frames × 100 / 24 | frames × 100 / 30 |
 | 30 | ConvertToVector (object.cpp:174) | angle not masked | masks `& 255` (only matters for out-of-range callers) |
 
+The tick's three loops (PulseObjects, MoveObjects, NextFrameObjects) walk
+the loaded map (`TMapIterator` flag `0x80`), which matches PulseObjects'
+retail flags `0xa0` (§2; the other two loops' flags aren't read yet, and the
+port keeps them on the same walk). With the pane's 3x3 window walk an object
+outside the window stopped pulsing: `use ressexit` on the unlocked Keep door
+ran DOOR1's block to `FADESCREENIN` and then hung -- `ACTIVATE` had put
+Locke nine sectors away, the door's closing animation never finished and
+its `control on` never ran, so the player stayed frozen
+(forensics/EXITS.md §5, §7).
+
 Equal on read: AdvanceAngles, NextFrame, ResetState, GetMotion /
 SetObjectMotion arithmetic (3dimage.cpp:2764 / :2787; the port skips the
 lazy mesh init and halts instead), base TObjectInstance::Move

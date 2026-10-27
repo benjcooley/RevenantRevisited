@@ -752,6 +752,13 @@ Verified (headless, `--quickstart`, `--exec`):
   Children), stepping onto the pad at (10312, 15816) after 6+ frames off
   any strip sends Locke to `Lv41Tel5`'s target (9928, 15912); the list's
   z (272) becomes the floor's (12) as he lands.
+- `use ressexit`, unlocked (2026-10-19): DOOR1's block runs its tail --
+  `nowait STATE "CLOSED"` twice, `ACTIVATE`, `FADESCREENIN`, `CONTROL
+  ON`, `trigger 7 ends`. The window-walk tick loops used to cut the block
+  off at `FADESCREENIN`: `ACTIVATE` put Locke nine sectors away, the door
+  left the pane's 3x3 window, stopped pulsing, and never gave control
+  back (the player stayed frozen). Fixed by walking the loaded map like
+  retail's `PulseObjects` flags `0xa0` do (COMBAT_MOTION.md §2, §6).
 
 **IsOutside reads past the sine table.** Retail passes the Facing stat
 plus the object's facing byte (and that plus 0x7f) to `0x0046db20`

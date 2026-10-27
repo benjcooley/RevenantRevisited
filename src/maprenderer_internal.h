@@ -2,6 +2,7 @@
 
 #include "maprenderer.h"
 
+#include "bitmap.h"
 #include "classiclighting.h"
 #include "gamemap.h"
 #include "object.h"
@@ -11,6 +12,7 @@
 
 #include <cstdint>
 #include <map>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -18,14 +20,73 @@
 
 class T3DImagery;
 
+namespace TileTexOverride { struct SImage; }
+
+// A loaded tile whose COLOUR image can be replaced at runtime.
+//
+// The tile art reload (tiletreload.h) puts an edited PNG into the image the
+// game already draws, so the art can be edited while the game runs: the
+// image pair's handle (the GPU image the tile pass binds), the retail bitmap
+// the retail pixels come from, the tile's type (the art tree's key) and
+// whether the tree's art is in the image now.
+struct STileArtEntry {
+    RendererImagePairHandle image_pair = 0;
+    void*    bm = nullptr;        // the retail bitmap (PTBitmap)
+    int32_t  objtype = -1;        // the tile's object type (state 0 only)
+    std::string type_name;        // its type name, e.g. "KInWallN"
+    int32_t  w = 0, h = 0;        // the retail bitmap's size
+    bool     modern = false;      // the tree's art is in the colour image now
+    // (The depth state is not mirrored here: the image pair itself knows
+    // whether its depth image holds the tree's _depth map -- see
+    // SRendererImagePairInfo::depth_is_art. One shared truth beats a copy
+    // that only the first uploading renderer sets correctly.)
+};
+
+// Remember a loaded tile so the art reload can re-colour it. One entry per
+// image pair: the same bitmap uploaded twice (two map renderers, the same
+// tile in two sectors) is one GPU image and one entry.
+void NoteTileArt(std::vector<STileArtEntry>& registry,
+                  RendererImagePairHandle image_pair,
+                  void* bm, int32_t objtype, const char* type_name,
+                  int32_t w, int32_t h, bool modern);
+
+// The retail tile bitmap's pixels as RGBA8: the palette's colours, the
+// bitmap's own alpha, zero where the tile is transparent (the key colour, or
+// a depth of 0 / 0x7F7F when the tile has a depth map). The art reload
+// path uses it to put the retail pixels back into a tile and to clip the
+// tree's art to the retail coverage.
+bool MapDecodeTileBitmapRGBA(PTBitmap bm, std::vector<uint8_t>& out_rgba,
+                             int32_t* out_w, int32_t* out_h);
+
+// The art never leaks outside the tile's coverage: the upscaled PNG carries
+// a wide, soft, half-transparent band around the shape (the upscaler's
+// edge), and those texels have no height in the depth map -- they would be
+// drawn at the tile's base plane, which the iso projection puts in front of
+// whatever stands there. The coverage is sampled nearest (the retail 1x
+// alpha).
+void MapClipArtToCoverage(std::vector<uint8_t>& art, int32_t aw, int32_t ah,
+                           const uint8_t* retail_rgba, int32_t rw, int32_t rh);
+
+// The coverage the tree's art is clipped to, in one call: the tile's own
+// _alpha map when the tree carries one ("opaque and not black" -- the dump
+// writes the mask into the colour with a fully opaque alpha), the retail
+// silhouette otherwise. Returns whether the tree's mask was used.
+bool MapApplyTileArtCoverage(TileTexOverride::SImage& art,
+                             int32_t objtype, const char* type_name,
+                             const uint8_t* retail_rgba, int32_t rw, int32_t rh);
+
+// The retail tile bitmap's z-buffer range (the z of the valid texels), for
+// scaling the tree's _depth map into the tile's own z range. False when the
+// bitmap has no depth at all.
+bool MapDecodeTileDepthRange(PTBitmap bm, float& out_zmin, float& out_zmax);
+
 struct SSectorTileTex {
+    // The depth map's summary, the shape the render reads: the count of
+    // valid (non-transparent) texels and their pixel bbox -- the coverage
+    // the tile's sprites are clipped to. (The raw min/max diagnostics went
+    // to the log at build time; nothing read them from here.)
     struct SDepthDump {
-        uint16_t u16_min = 0xFFFF;
-        uint16_t u16_max = 0;
-        int32_t  i16_min =  32767;
-        int32_t  i16_max = -32768;
         int32_t  sample_count = 0;
-        int32_t  high_bit_count = 0;
         int32_t  bbox_x0 =  0x7FFFFFFF;
         int32_t  bbox_y0 =  0x7FFFFFFF;
         int32_t  bbox_x1 = -0x7FFFFFFF;
@@ -54,6 +115,27 @@ struct SSectorTileTex {
     int32_t     debug_regy = 0;
     int32_t     debug_regz = 0;
 };
+
+// The tree's _depth PNG (the dump's encoding: R = 255*t, G = 128+127*t,
+// B = 255*(1-t), black = transparent; "opaque and not black" carries the
+// mask) resampled nearest to the tile's retail size as local-z floats:
+// z = zmin + t*(zmax - zmin), 0 where transparent. The shape becomes the
+// art's while the tile keeps its retail z range, so the neighbours still
+// meet. Fills the depth-dump diagnostics too. False when the image is empty.
+bool MapDecodeTileDepthFromArt(const TileTexOverride::SImage& png,
+                               int32_t w, int32_t h,
+                               float zmin, float zmax,
+                               std::vector<float>& out_depth,
+                               SSectorTileTex::SDepthDump* out_dump,
+                               float* out_zmin, float* out_zmax);
+
+// The retail z-buffer as the renderer's local-z floats (the map the tile
+// upload registers), with min/max and the depth-dump diagnostics. The retail
+// reload uses it to put the retail relief back into a pair whose depth the
+// tree had replaced. False when the bitmap has no depth at all.
+bool MapDecodeTileDepthLocal(PTBitmap bm, std::vector<float>& out_depth,
+                             SSectorTileTex::SDepthDump* out_dump,
+                             float* out_zmin, float* out_zmax);
 
 struct SSectorTileInst {
     int32_t  tex_idx = -1;
@@ -139,6 +221,10 @@ struct SMapRenderContext {
     const std::vector<SSectorMeshAsset>* mesh_assets = nullptr;
     TTextureHandle debug_green_texture = kInvalidTexture;
     S3DPoint sectorCameraWorld = {0,0,0};
+    // The camera's step since the tick began, in world units. The world is
+    // drawn against the camera's position at the tick's start; the part of
+    // the step that has passed scrolls the picture by a fraction of a pixel.
+    float cameraScrollX = 0.0f, cameraScrollY = 0.0f;
     int32_t cam_ox = 0, cam_oy = 0;
     int32_t vw = 0, vh = 0;
     float cam_forward = 2750.0f;
@@ -258,6 +344,9 @@ struct TMapRenderer::Impl
     // Local ref_counts are source-usage diagnostics from loaded maps/sectors.
     std::vector<SSectorTileTex>  sectorTileTex;
     std::vector<SSectorMeshAsset> sectorMeshAsset;
+    // The loaded tiles whose colour image the art reload can replace (see
+    // STileArtEntry and tiletreload.h). One entry per uploaded image pair.
+    std::vector<STileArtEntry>   tileArt;
     // Bitmap pointer -> sectorTileTex index. Animated effects refresh their
     // frame texture every render frame, so this lookup must stay O(1) against
     // resident asset count. Draw items still do not own renderer assets.
@@ -360,6 +449,9 @@ struct TMapRenderer::Impl
     int32_t sectorCenterOy = 0;
     S3DPoint sectorWorldCenter = {0,0,0};
     S3DPoint sectorCameraWorld = {0,0,0};
+    // The camera's step since the tick began, in world units (see
+    // SMapRenderContext::cameraScrollX).
+    float cameraScrollX = 0.0f, cameraScrollY = 0.0f;
     int32_t  cameraLevel = 0;
     int32_t  drawRecordLevel = -1;
     int32_t  drawRangeMinSx = 0;
@@ -566,6 +658,7 @@ struct TMapRenderer::Impl
     {
         sectorTileTex.clear();
         sectorTileTexByBitmap.clear();
+        tileArt.clear();
         // GPU resources are owned by TRenderer's asset registries and are
         // destroyed by TRenderer::Shutdown. These records are renderer-facing
         // metadata and non-owning handles.

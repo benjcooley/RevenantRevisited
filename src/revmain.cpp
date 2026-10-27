@@ -6,6 +6,34 @@
 
 #include <stdarg.h>
 
+// Crash triage: debug CRT reports (heap DAMAGE etc.) go to stderr so an
+// unattended run captures them; REV_BREAK_ALLOC=<n> breaks (int3 -> WER dump)
+// right after allocation #n is made, for post-mortem stack analysis.
+#if defined(_DEBUG) && defined(_MSC_VER)
+#include <crtdbg.h>
+#include <stdlib.h>
+namespace {
+struct SForceHeapCheckAlways {
+    SForceHeapCheckAlways()
+    {
+        _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+        _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
+        _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+        // sokol's default SOKOL_LOG is puts() -> line-buffered console /
+        // fully-buffered file; make it drip so a blocked-on-dialog process
+        // still leaves the message on disk.
+        setvbuf(stdout, nullptr, _IONBF, 0);
+        if (const char *ba = getenv("REV_BREAK_ALLOC"))
+            _CrtSetBreakAlloc((long)atol(ba));
+    }
+};
+static SForceHeapCheckAlways g_force_heap_check_always;
+}
+#endif
+
 // For multimonitor support
 #define COMPILE_MULTIMON_STUBS
 #include <algorithm>
@@ -46,6 +74,8 @@
 #include "shadow/shadowrun.h"
 #include "revisited_defaults.h"
 #include "revisited_settings.h"
+#include "spritetexoverride.h"
+#include "tiletexoverride.h"
 #include "testscreen.h"
 #include "cinematicscreen.h"
 #include "death.h"
@@ -2666,12 +2696,14 @@ sapp_desc sokol_main(int argc, char* argv[])
     // the script drains, the process eventually exits on its own.
     bool cli_headless = false;
     bool cli_lockstep = false;          // --control / --replay: the session is serviced from frames
+    bool cli_fullscreen = false;        // --fullscreen: ask sokol for a real fullscreen canvas
     for (int i = 1; i < argc; ++i)
     {
         const char* a = argv[i];
         if (!a) continue;
         while (*a == '-' || *a == '/') ++a;
         if (std::strcmp(a, "headless") == 0) { cli_headless = true; }
+        else if (std::strcmp(a, "fullscreen") == 0) { cli_fullscreen = true; }
         else if (std::strncmp(a, "control=", 8) == 0 || std::strncmp(a, "replay=", 7) == 0) { cli_lockstep = true; }
         else if (std::strncmp(a, "max-runtime=", 12) == 0)
         {
@@ -2692,6 +2724,10 @@ sapp_desc sokol_main(int argc, char* argv[])
     desc.window_title = "Revenant";
     desc.high_dpi = false;
     desc.sample_count = 1;
+    // --fullscreen: sokol creates a borderless canvas at the monitor's size
+    // and sapp_width/height report it, which is the size the game then adopts
+    // (see BootGame's video-size sync). Windowed is the default.
+    desc.fullscreen = cli_fullscreen;
     // Enable OS clipboard. Required for the editor's Cut/Copy/Paste
     // commands -- sokol_imgui's clipboard handlers route through
     // sapp_get/set_clipboard_string which silently no-op when this
@@ -2773,6 +2809,25 @@ static bool BootGame()
     GetParameters(g_argc, g_argv);
     Playtest.ApplyStart();
 
+    // The window is not always the size that was asked for. A windowed
+    // 1920x1080 request on a 1080p desktop loses the title bar's height from
+    // the client area (and a smaller desktop clamps the width too), while a
+    // --fullscreen canvas is the monitor's size. The game lays every pane out
+    // against GameScreenWidth/Height and presents into the window sokol
+    // actually opened, so the two must agree: otherwise the right and bottom
+    // of the HUD -- and every dialogue answer, which sits at the bottom of the
+    // playfield -- are drawn past the visible area and the UI text lands in
+    // two different coordinate spaces. Adopt the window we got, as retail did
+    // with its own display surface.
+    if (sapp_width() > 0 && sapp_height() > 0 &&
+        (sapp_width() != GameScreenWidth || sapp_height() != GameScreenHeight))
+    {
+        log_info("[video] window is %dx%d (asked for %dx%d); using the window size",
+                 sapp_width(), sapp_height(), GameScreenWidth, GameScreenHeight);
+        GameScreenWidth  = sapp_width();
+        GameScreenHeight = sapp_height();
+    }
+
     // Headless snap / filmstrip flags. Parsed once after GetParameters so
     // the args[] argh consumed are still around (we read argv ourselves).
     {
@@ -2840,6 +2895,17 @@ static bool BootGame()
     // of Apply fires from there.
     GetBakedRevisitedDefaults(RevisitedSettings);
     LoadRevisitedSettings();
+    // Without --revisited the art trees are still a player-side extra: read
+    // their ini keys once here. The session's own changes -- the debug
+    // panel's folders and modes -- must survive every later re-init (this
+    // is why the Init calls below and the art reloads never touch the ini).
+    if (!RevisitedEnabled)
+    {
+        LoadTileArtOverrideSettings();
+        LoadSpriteArtOverrideSettings();
+    }
+    TileTexOverride::Init();
+    SpriteTexOverride::Init();
     ApplyRevisitedSettingsToRenderer(Renderer);
 
     if (StartupTestMode[0])
@@ -3043,6 +3109,10 @@ static void AppFrame()
 
     // The cursor's corner picture starts over each frame (cursor.h).
     BeginCursorFrame();
+    // The immediate-mode UIs own the OS pointer while open. Sync every frame
+    // instead of only at the F10/F12 toggles, so the editor's Window > Debug
+    // menu item brings the pointer back too.
+    ForceOSPointer(DebugUI::IsVisible() || Editor);
 
     // The frame's simulation: one step, or under Shadow Smoke's turbo as
     // many as fit its budget, each a whole frame's worth -- the time step,
@@ -3255,6 +3325,8 @@ static void AppEvent(const sapp_event* ev)
         if (down && vk == VK_F10)
         {
             DebugUI::SetVisible(!DebugUI::IsVisible());
+            // The OS pointer follows state every frame in AppFrame; nothing
+            // else to do here.
             break;
         }
 
