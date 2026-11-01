@@ -46,6 +46,9 @@
 #include "game/object/tile.h"
 #include "game/ui/uidragstate.h"
 #include "game/ui/uidemoplayer.h"
+#include "game/save/savegame.h"
+#include "game/object/legacystream.h"
+#include "game/object/player.h"
 #include "game/world/gamemap.h"
 #include "game/world/mapmanager.h"
 #include "game/world/sector.h"
@@ -3551,6 +3554,36 @@ static bool DumpLevelSectors()
 }
 
 
+// --test=player-dump --dump-out=FILE: the active module's newgame.sav
+// loaded, then the player written back as the save writes it, into FILE.
+// The byte-for-byte gate for the player's codec: dump before, dump after,
+// diff.
+static bool DumpPlayerRecord()
+{
+    if (!StartupDumpOut[0])
+    {
+        log_error("[player-dump] needs --dump-out=FILE");
+        return false;
+    }
+    if (!SaveGame.LoadNewGame() || !Player)
+    {
+        log_error("[player-dump] the new game didn't load");
+        return false;
+    }
+    TOutputStream os(0x8000, 0x3f9c);
+    TLegacySerialize::WriteObject(Player, os);
+    FILE* f = std::fopen(StartupDumpOut, "wb");
+    if (!f)
+    {
+        log_error("[player-dump] cannot write %s", StartupDumpOut);
+        return false;
+    }
+    std::fwrite(os.Buffer(), 1, size_t(os.DataSize()), f);
+    std::fclose(f);
+    log_info("[player-dump] %d bytes -> %s", os.DataSize(), StartupDumpOut);
+    return true;
+}
+
 bool Initialize(const char* mode)
 {
     if (UsesDemoPlayer(mode) && !UIDemoPlayer::Install())
@@ -3563,6 +3596,12 @@ bool Initialize(const char* mode)
     if (strcmp(mode, "sector-dump") == 0)
     {
         const bool result = DumpLevelSectors();
+        sapp_request_quit();
+        return result;
+    }
+    if (strcmp(mode, "player-dump") == 0)
+    {
+        const bool result = DumpPlayerRecord();
         sapp_request_quit();
         return result;
     }
