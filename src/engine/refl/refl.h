@@ -117,9 +117,11 @@ enum class EPropType : uint8_t
     Enum,       // int payload; the table names the options
     Uid,        // the object's own persistent 64-bit identity (TUid)
     Ref,        // a 64-bit uid naming another node or an asset (SProp::ref_kind)
+    Bytes,      // a byte blob (std::vector<uint8_t>); DEF text writes it as base64
     Trigger,    // write 1 to fire; reads as 0
     Struct,     // one nested annotated object  (DEF: `key { ... }`)
-    List,       // std::vector of nested annotated objects (DEF: repeated `key [name] { ... }`)
+    List,       // std::vector of nested annotated objects (DEF: repeated `key [name] { ... }`),
+                // or of int32_t / std::string (SProp::elem_scalar; DEF: `key = [a, b, c]`)
 };
 
 // What a Ref names, for the inspector's picker and the prefab remap.
@@ -164,6 +166,7 @@ struct SPropValue
     static constexpr SPropValue Ref(uint64_t uid)          { SPropValue p; p.type = EPropType::Ref;     p.u = uid; return p; }
     static constexpr SPropValue Trigger()                  { SPropValue p; p.type = EPropType::Trigger; p.b = true; return p; }
     static constexpr SPropValue String(std::string_view s) { SPropValue p; p.type = EPropType::String;  p.str = s; return p; }
+    static constexpr SPropValue Bytes(std::string_view b)  { SPropValue p; p.type = EPropType::Bytes;   p.str = b; return p; }
     static constexpr SPropValue Vec3(float x, float y, float z)
         { SPropValue p; p.type = EPropType::Vec3; p.v3[0] = x; p.v3[1] = y; p.v3[2] = z; return p; }
     static constexpr SPropValue Color(float r, float g, float b, float a)
@@ -183,6 +186,7 @@ struct SPropValue
             case EPropType::Uid:
             case EPropType::Ref:
             case EPropType::String:
+            case EPropType::Bytes:
             case EPropType::Struct:
             case EPropType::List:    return 0.0f;
         }
@@ -199,6 +203,7 @@ struct SPropValue
         case EPropType::Uid:
         case EPropType::Ref:
         case EPropType::String:
+        case EPropType::Bytes:
         case EPropType::Struct:
         case EPropType::List:   return 0;
         default:                return 1;
@@ -242,6 +247,7 @@ inline void PropSetLane(SPropValue& v, int32_t lane, float x)
         case EPropType::Uid:
         case EPropType::Ref:
         case EPropType::String:
+        case EPropType::Bytes:
         case EPropType::Struct:
         case EPropType::List:    break;
     }
@@ -293,6 +299,8 @@ struct SProp
     int32_t            option_count      = 0;
     const char*        elem_type_name    = "";        // Struct / List: the nested class
     ERefKind           ref_kind          = ERefKind::None;   // Ref only: what it names
+    EPropType          elem_scalar       = EPropType::Struct; // List only: Int / String for a list of
+                                                              // scalars, Struct for a list of records
 };
 
 // One per annotated class, emitted by the generator and registered at

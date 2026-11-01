@@ -67,6 +67,9 @@ TYPE_MAP = {
     "std::string": ("String", "str", "{m}.assign(v.str.data(), v.str.size());",       "out = SPropValue::String({m});"),
     "hmm_vec3":    ("Vec3",   "v3",  "{m} = hmm_vec3{{{{v.v3[0], v.v3[1], v.v3[2]}}}};", "out = SPropValue::Vec3({m}.X, {m}.Y, {m}.Z);"),
     "SRgba":       ("Color",  "c4",  "{m} = SRgba{{v.c4[0], v.c4[1], v.c4[2], v.c4[3]}};", "out = SPropValue::Color({m}.r, {m}.g, {m}.b, {m}.a);"),
+    # A byte blob; DEF text writes it as base64.
+    "std::vector<uint8_t>": ("Bytes", "str", "{m}.assign(v.str.begin(), v.str.end());",
+                             "out = SPropValue::Bytes(std::string_view(reinterpret_cast<const char*>({m}.data()), {m}.size()));"),
     # Identity and links: 64-bit uids (engine/core/uid.h). TAssetRef<T> is
     # looked up by its template name; {t} is the member's full type.
     "TUid":        ("Uid",    "u",   "{m} = TUid(v.u);",                             "out = SPropValue::Uid({m}.value);"),
@@ -98,6 +101,8 @@ def snake(name: str) -> str:
 
 
 REF_KIND = {"TNodeRef": "Node", "TAssetRef": "Asset"}
+# Lists of scalars: the List machinery with a scalar element.
+SCALAR_LISTS = {"std::vector<int32_t>": "Int", "std::vector<std::string>": "String"}
 
 
 def base_ctype(ctype):
@@ -391,6 +396,10 @@ def default_expr(m, ptype, path):
         if init is not None:
             fail(path, m.line_no, "a uid or ref has no literal default")
         return "SPropValue::%s(0)" % ptype
+    if ptype == "Bytes":
+        if init is not None:
+            fail(path, m.line_no, "a byte blob has no literal default")
+        return "SPropValue::Bytes(std::string_view())"
     if ptype in ("Vec3", "Color"):
         lanes = 3 if ptype == "Vec3" else 4
         if init is None:
@@ -461,6 +470,8 @@ def emit(path: Path, out: Path, include: str):
         """-> (ptype, elem_class or None)"""
         if base_ctype(m.ctype) in TYPE_MAP:
             return TYPE_MAP[base_ctype(m.ctype)][0], None
+        if m.ctype in SCALAR_LISTS:
+            return "List", None
         if m.ctype in enums:
             return "Enum", None
         mv = RE_VECTOR.match(m.ctype)
@@ -469,8 +480,8 @@ def emit(path: Path, out: Path, include: str):
         if m.ctype in annotated:
             return "Struct", m.ctype
         fail(path, m.line_no, f"unsupported PROP type `{m.ctype}` (closed list: "
-             + ", ".join(TYPE_MAP) + ", an enum class, an annotated class, or std::vector of one, "
-             "all declared in this header)")
+             + ", ".join(TYPE_MAP) + ", " + ", ".join(SCALAR_LISTS)
+             + ", an enum class, an annotated class, or std::vector of one, all declared in this header)")
 
     for k in targets:
         if not k.members:
@@ -484,13 +495,14 @@ def emit(path: Path, out: Path, include: str):
                 opts, nopts = "nullptr", "0"
             if ptype in ("List", "Struct") and m.getter:
                 fail(path, m.line_no, "nested records cannot be accessor-backed (PROP_FN)")
-            o.append('    { %d, "%s", %s, EPropType::%s, %s, %s, %s, %s, %s, %s, "%s", ERefKind::%s },\n'
+            o.append('    { %d, "%s", %s, EPropType::%s, %s, %s, %s, %s, %s, %s, "%s", ERefKind::%s, EPropType::%s },\n'
                      % (m.id, m.name, m.desc, ptype,
                         "true" if m.serialized else "false",
                         "true" if m.visible else "false",
                         "true" if m.read_only else "false",
                         default_expr(m, ptype, path), opts, nopts, elem or "",
-                        REF_KIND.get(base_ctype(m.ctype), "None")))
+                        REF_KIND.get(base_ctype(m.ctype), "None"),
+                        SCALAR_LISTS.get(m.ctype, "Struct")))
         o.append("};\n\n")
 
         o.append("} // namespace\n\n")

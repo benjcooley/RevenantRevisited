@@ -16,6 +16,54 @@ namespace defio {
 
 namespace {
 
+// ---- base64, for byte blobs in text ---------------------------------------
+
+constexpr const char* kBase64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+std::string Base64Encode(std::string_view bytes)
+{
+    std::string out;
+    out.reserve((bytes.size() + 2) / 3 * 4);
+    size_t i = 0;
+    for (; i + 2 < bytes.size(); i += 3)
+    {
+        const uint32_t n = (uint8_t(bytes[i]) << 16) | (uint8_t(bytes[i + 1]) << 8) | uint8_t(bytes[i + 2]);
+        out += kBase64[(n >> 18) & 63]; out += kBase64[(n >> 12) & 63];
+        out += kBase64[(n >> 6) & 63];  out += kBase64[n & 63];
+    }
+    if (i < bytes.size())
+    {
+        const uint32_t n = (uint8_t(bytes[i]) << 16) | (i + 1 < bytes.size() ? uint8_t(bytes[i + 1]) << 8 : 0);
+        out += kBase64[(n >> 18) & 63]; out += kBase64[(n >> 12) & 63];
+        out += i + 1 < bytes.size() ? kBase64[(n >> 6) & 63] : '=';
+        out += '=';
+    }
+    return out;
+}
+
+bool Base64Decode(std::string_view text, std::string& out)
+{
+    out.clear();
+    uint32_t acc = 0;
+    int32_t bits = 0;
+    for (const char c : text)
+    {
+        if (c == '=' || c == '\n' || c == '\r' || c == ' ')
+            continue;
+        const char* at = std::strchr(kBase64, c);
+        if (!at || !c)
+            return false;
+        acc = (acc << 6) | uint32_t(at - kBase64);
+        bits += 6;
+        if (bits >= 8)
+        {
+            bits -= 8;
+            out += char((acc >> bits) & 0xFF);
+        }
+    }
+    return true;
+}
+
 // ---- leaf value conversion ------------------------------------------------
 
 bool ArrayToFloats(const defdoc::Node& n, float* out, int32_t count)
@@ -98,6 +146,11 @@ bool NodeToValue(const refl::SProp& p, const defdoc::Node& n, SPropValue& v,
             if (ArrayToFloats(n, v.c4, 3)) { v.c4[3] = 1.0f; return true; }
             why = "expected [r, g, b] or [r, g, b, a]";
             return false;
+        case EPropType::Bytes:
+            if (!n.is_string()) { why = "expected a base64 string"; return false; }
+            if (!Base64Decode(n.as_string(), tmp)) { why = "bad base64"; return false; }
+            v = SPropValue::Bytes(tmp);
+            return true;
         case EPropType::Trigger:
             why = "trigger properties cannot be set from a DEF";
             return false;
@@ -140,6 +193,26 @@ class TReaderSink : public defdoc::Sink
         if (p->read_only)
         {
             Fail(line, "property '" + key + "' is read-only");
+            return;
+        }
+        if (p->type == EPropType::List && p->elem_scalar != EPropType::Struct)
+        {
+            // A list of scalars: `key = [a, b, c]` replaces the list
+            if (!value.is_array())
+            {
+                Fail(line, "property '" + key + "': expected [ ... ]");
+                return;
+            }
+            refl::ListClear(*f.type, f.obj, p->id);
+            for (const defdoc::Node& e : value.as_array())
+            {
+                void* elem = refl::ListAdd(*f.type, f.obj, p->id);
+                if (!elem) break;
+                if (p->elem_scalar == EPropType::Int)
+                    *static_cast<int32_t*>(elem) = int32_t(e.as_int());
+                else
+                    *static_cast<std::string*>(elem) = e.as_string();
+            }
             return;
         }
         SPropValue v;
@@ -497,6 +570,7 @@ std::string FormatValue(const refl::SProp& p, const SPropValue& v)
         case EPropType::Color:
             return "[" + Fmt("%g", double(v.c4[0])) + ", " + Fmt("%g", double(v.c4[1])) + ", "
                        + Fmt("%g", double(v.c4[2])) + ", " + Fmt("%g", double(v.c4[3])) + "]";
+        case EPropType::Bytes:   return defdoc::detail::quote(Base64Encode(v.str));
         case EPropType::Trigger:
         case EPropType::Struct:
         case EPropType::List:    return "";
@@ -556,9 +630,35 @@ void WriteObject(const refl::SType& type, const void* obj, std::string& out, int
                 continue;
             if (p.type == EPropType::Trigger)
                 continue;
-            const bool nested = p.type == EPropType::Struct || p.type == EPropType::List;
+            const bool scalar_list = p.type == EPropType::List && p.elem_scalar != EPropType::Struct;
+            const bool nested = p.type == EPropType::Struct || (p.type == EPropType::List && !scalar_list);
             if (nested != (pass == 1))
                 continue;
+            if (scalar_list)
+            {
+                // `key = [a, b, c]`; an empty list is implicit
+                const int32_t n = refl::ListCount(type, obj, p.id);
+                if (n == 0)
+                    continue;
+                Indent(out, indent);
+                out += p.name;
+                out += " = [";
+                for (int32_t k = 0; k < n; ++k)
+                {
+                    const void* e = refl::ListAt(type, const_cast<void*>(obj), p.id, k);
+                    if (k) out += ", ";
+                    if (!e) continue;
+                    if (p.elem_scalar == EPropType::Int)
+                        out += std::to_string(*static_cast<const int32_t*>(e));
+                    else
+                    {
+                        const std::string& str = *static_cast<const std::string*>(e);
+                        out += defdoc::detail::needs_quotes(str) ? defdoc::detail::quote(str) : str;
+                    }
+                }
+                out += "]\n";
+                continue;
+            }
             if (nested)
             {
                 const refl::SType* et = refl::ElemType(p);

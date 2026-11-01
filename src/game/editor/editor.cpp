@@ -778,6 +778,10 @@ void DrawPropertyRow(TNode* node, void* obj, const refl::SType& type, const refl
             if (ImGui::DragInt("##v", &n, 1.0f)) commit(SPropValue::Int(n));
             break;
         }
+        case EPropType::Bytes: {
+            ImGui::TextDisabled("%zu bytes", v.str.size());
+            break;
+        }
         case EPropType::Uid:
         case EPropType::Ref: {
             // Hex, as the DEF text writes it. A picker for node and asset

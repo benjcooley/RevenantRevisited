@@ -124,7 +124,8 @@ bool Equals(const SPropValue& a, const SPropValue& b)
         case EPropType::Uid:
         case EPropType::Ref:     return a.u == b.u;
         case EPropType::Float:   return a.f == b.f;
-        case EPropType::String:  return a.str == b.str;
+        case EPropType::String:
+        case EPropType::Bytes:   return a.str == b.str;
         case EPropType::Vec3:    return a.v3[0] == b.v3[0] && a.v3[1] == b.v3[1] && a.v3[2] == b.v3[2];
         case EPropType::Color:   return a.c4[0] == b.c4[0] && a.c4[1] == b.c4[1] && a.c4[2] == b.c4[2] && a.c4[3] == b.c4[3];
     }
@@ -292,9 +293,24 @@ void Pack(const SType& type, const void* obj, TPackedWriter& w)
                 continue;
             if (p.type == EPropType::List)
             {
-                const SType* et = ElemType(p);
-                if (!et || !t->list_count || !t->list_at) continue;
+                if (!t->list_count || !t->list_at) continue;
                 const int32_t n = t->list_count(obj, p.id);
+                if (p.elem_scalar != EPropType::Struct)
+                {
+                    // A list of scalars: the field repeated, one per element
+                    for (int32_t k = 0; k < n; ++k)
+                    {
+                        const void* e = t->list_at(const_cast<void*>(obj), p.id, k);
+                        if (!e) continue;
+                        if (p.elem_scalar == EPropType::Int)
+                            w.Int(p.id, *static_cast<const int32_t*>(e));
+                        else if (p.elem_scalar == EPropType::String)
+                            w.String(p.id, *static_cast<const std::string*>(e));
+                    }
+                    continue;
+                }
+                const SType* et = ElemType(p);
+                if (!et) continue;
                 for (int32_t k = 0; k < n; ++k)
                 {
                     TPackedWriter sub;
@@ -324,6 +340,7 @@ void Pack(const SType& type, const void* obj, TPackedWriter& w)
                 case EPropType::Ref:     w.Uid(p.id, v.u);       break;
                 case EPropType::Float:   w.Float(p.id, v.f);     break;
                 case EPropType::String:  w.String(p.id, v.str);  break;
+                case EPropType::Bytes:   w.Bytes(p.id, v.str.data(), uint32_t(v.str.size())); break;
                 case EPropType::Vec3:    w.Vec3(p.id, v.v3);     break;
                 case EPropType::Color:   w.Color(p.id, v.c4);    break;
                 case EPropType::Trigger:
@@ -341,6 +358,17 @@ void ApplyPacked(const SType& type, void* obj, const SPackedField& f)
     const SProp* p = FindProp(type, f.id);
     if (!p)
         return;     // retired or unknown id: already skipped by wire kind
+    if (p->type == EPropType::List && p->elem_scalar != EPropType::Struct)
+    {
+        // A list of scalars: each field appends one element
+        void* e = ListAdd(type, obj, p->id);
+        if (!e) return;
+        if (p->elem_scalar == EPropType::Int)
+            *static_cast<int32_t*>(e) = TPackedReader::Int(f);
+        else if (p->elem_scalar == EPropType::String)
+            *static_cast<std::string*>(e) = std::string(TPackedReader::String(f));
+        return;
+    }
     if (p->type == EPropType::List || p->type == EPropType::Struct)
     {
         const SType* et = ElemType(*p);
@@ -362,6 +390,7 @@ void ApplyPacked(const SType& type, void* obj, const SPackedField& f)
         case EPropType::Ref:     v = SPropValue::Ref(TPackedReader::Uid(f));       break;
         case EPropType::Float:   v = SPropValue::Float(TPackedReader::Float(f));   break;
         case EPropType::String:  v = SPropValue::String(TPackedReader::String(f)); break;
+        case EPropType::Bytes:   v = SPropValue::Bytes(TPackedReader::String(f));  break;
         case EPropType::Vec3:    v.type = EPropType::Vec3;  if (!TPackedReader::Vec3(f, v.v3))  return; break;
         case EPropType::Color:   v.type = EPropType::Color; if (!TPackedReader::Color(f, v.c4)) return; break;
         case EPropType::Trigger:

@@ -9,6 +9,7 @@
 #include <HandmadeMath.h>
 
 #include <string>
+#include <vector>
 
 enum class ETestBlend : uint8_t
 {
@@ -41,6 +42,15 @@ struct STestLinks
     PROP(2, "What it points at") TNodeRef          target;
     PROP(3)                      TAssetRef<TAsset> image;
     PROP(4)                      int32_t           after = 5;
+};
+
+// Lists of scalars and a byte blob.
+struct STestArrays
+{
+    PROP(1) std::vector<int32_t>     ints;
+    PROP(2) std::vector<std::string> names;
+    PROP(3) std::vector<uint8_t>     blob;
+    PROP(4) int32_t                  after = 1;
 };
 
 // A class with no annotations is simply not in the registry.

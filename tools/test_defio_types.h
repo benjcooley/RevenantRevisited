@@ -57,6 +57,9 @@ struct STestKey
 // with a nested record (`range { }`) and a list of records (`key x { }`).
 struct STestSettings
 {
+    PROP(20) std::vector<int32_t>     picks;
+    PROP(21) std::vector<std::string> tags;
+    PROP(22) std::vector<uint8_t>     blob;
     PROP(1) bool    enabled = true;
     PROP(2) int32_t count   = 4;
     PROP(3) float   rate    = 0.5f;

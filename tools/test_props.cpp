@@ -307,3 +307,43 @@ TEST(Props, UidsAndRefsRoundTrip)
     EXPECT_EQ(seen, 4);
     EXPECT_TRUE(r2.AtEnd());
 }
+
+TEST(Props, ScalarListsAndBytesRoundTrip)
+{
+    const refl::SType* tp = refl::Of<STestArrays>();
+    ASSERT_NE(tp, nullptr);
+    EXPECT_EQ(tp->props[0].type, EPropType::List);
+    EXPECT_EQ(tp->props[0].elem_scalar, EPropType::Int);
+    EXPECT_EQ(tp->props[1].elem_scalar, EPropType::String);
+    EXPECT_EQ(tp->props[2].type, EPropType::Bytes);
+
+    STestArrays a;
+    a.ints  = {3, -1, 70000};
+    a.names = {"locke", "", "the keep"};
+    a.blob  = {0, 1, 2, 255, 0};
+    a.after = 9;
+
+    TPackedWriter w;
+    refl::Pack(*tp, &a, w);
+    STestArrays b;
+    TPackedReader r(w.Buffer());
+    refl::Unpack(*tp, &b, r);
+    EXPECT_EQ(b.ints, a.ints);
+    EXPECT_EQ(b.names, a.names);
+    EXPECT_EQ(b.blob, a.blob);
+    EXPECT_EQ(b.after, 9);
+
+    // Equality through Get: the blob reads as bytes
+    SPropValue v;
+    ASSERT_TRUE(refl::Get(*tp, &a, 3, v));
+    EXPECT_EQ(v.type, EPropType::Bytes);
+    EXPECT_EQ(v.str.size(), 5u);
+    EXPECT_EQ(uint8_t(v.str[3]), 255u);
+
+    // Reset clears the lists and the blob
+    refl::Reset(*tp, &b);
+    EXPECT_TRUE(b.ints.empty());
+    EXPECT_TRUE(b.names.empty());
+    EXPECT_TRUE(b.blob.empty());
+    EXPECT_EQ(b.after, 1);
+}

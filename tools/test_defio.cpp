@@ -363,3 +363,27 @@ TEST(DefIo, UidsAndLinksFollowAStamp)
     EXPECT_EQ(glow2->target.Get(), anchor2);
     EXPECT_EQ(glow->target.Get(), anchor);                       // and the original's didn't move
 }
+
+TEST(DefIo, ScalarListsAndBytes)
+{
+    STestSettings s;
+    std::string err;
+    ASSERT_TRUE(defio::ReadObject("picks = [4, 5, 6]\ntags = [walk, \"the keep\"]\nblob = \"AAH/\"\n", s, &err)) << err;
+    EXPECT_EQ(s.picks, (std::vector<int32_t>{4, 5, 6}));
+    EXPECT_EQ(s.tags, (std::vector<std::string>{"walk", "the keep"}));
+    EXPECT_EQ(s.blob, (std::vector<uint8_t>{0, 1, 255}));
+
+    std::string out;
+    defio::WriteObject(s, out);
+    EXPECT_EQ(out, "picks = [4, 5, 6]\ntags = [walk, \"the keep\"]\nblob = \"AAH/\"\n") << out;
+
+    // A second read of the written text gives the same values; an empty
+    // list is implicit in the text and clears on read.
+    STestSettings t;
+    ASSERT_TRUE(defio::ReadObject(out, t, &err)) << err;
+    EXPECT_EQ(t.picks, s.picks);
+    EXPECT_EQ(t.tags, s.tags);
+    EXPECT_EQ(t.blob, s.blob);
+    ASSERT_TRUE(defio::ReadObject("picks = []\n", t, &err)) << err;
+    EXPECT_TRUE(t.picks.empty());
+}
