@@ -632,12 +632,8 @@ struct TMapRenderer::Impl
         // render uses cam_ox/cam_oy (this value) as a screen-space
         // shift for tiles, meshes, and the deferred ortho projection
         // (maprenderer.cpp:418/990/1031/1165/546-549), so overlays must
-        // include the same term to land on the same pixels.
-        //
-        // NOTE: GetViewProj() pins its LookAt target Z to 0, but that
-        // path is *only* used by editor.cpp for ImGuizmo matrices, not
-        // for the actual scene render -- don't be tempted to drop the
-        // cam.z term here.
+        // include the same term to land on the same pixels; GetViewProj
+        // builds the editor's matrices from this origin and the zoom.
         WorldToScreen(sectorWorldCenter, sx, sy);
         sx += sectorCenterOx;
         sy += sectorCenterOy;

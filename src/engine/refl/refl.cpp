@@ -32,6 +32,8 @@ std::vector<SType*>& Types()
     return *v;
 }
 
+// Links the whole chain: a lookup of the most derived type is what the
+// callers do, and they walk `base` from there.
 void LinkBase(SType& t)
 {
     if (t.base || !t.base_name || !*t.base_name)
@@ -40,6 +42,7 @@ void LinkBase(SType& t)
         if (other != &t && IEquals(t.base_name, other->name))
         {
             t.base = other;
+            LinkBase(*other);
             return;
         }
 }

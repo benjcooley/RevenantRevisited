@@ -1885,35 +1885,25 @@ void TMapRenderer::GetWorldToPixel(int32_t dst_x, int32_t dst_y,
     hmm_mat4 m = HMM_Mat4d(1.0f);
     if (impl && dst_w > 0 && dst_h > 0 && Display.IsActive())
     {
-        // The scene renders into a (Display.Width x Display.Height)
-        // image with the overscan-fit scale ComputeMapCameraViewport
-        // returns (scale = max(sx, sy), so the wider axis crops the
-        // narrower). The visible logical-world rect is therefore
-        // (Display.Width / scale) x (Display.Height / scale) -- this
-        // is the rectangle of the scene that actually ends up inside
-        // the destination image. We project into THAT, not dst_w/h
-        // directly, so the matrix is in true scene-world units.
-        // The viewport step then stretches that region into dst_w x
-        // dst_h, picking up the panel's non-uniform stretch when the
-        // window aspect doesn't match the panel aspect.
-        const int32_t lit_w = EffectiveViewportW(*impl);
-        const int32_t lit_h = EffectiveViewportH(*impl);
-        const SMapCameraViewport vp = ComputeMapCameraViewport(lit_w, lit_h);
-        const float scene_scale = (vp.scale > 1e-4f) ? vp.scale : 1.0f;
-        const int32_t vis_w = int32_t(std::lround(float(lit_w) / scene_scale));
-        const int32_t vis_h = int32_t(std::lround(float(lit_h) / scene_scale));
-
+        // GetViewProj's clip space spans the map viewport, which sits at
+        // the top-left of the (Display.Width x Display.Height) image the
+        // scene renders into; `dst` is where that image is shown. The
+        // viewport step maps NDC onto the viewport's footprint in dst,
+        // picking up the panel's stretch when its aspect differs.
         float view_m[16], proj_m[16];
-        GetViewProj(view_m, proj_m, vis_w, vis_h);
+        GetViewProj(view_m, proj_m);
         const hmm_mat4 view = *reinterpret_cast<const hmm_mat4*>(view_m);
         const hmm_mat4 proj = *reinterpret_cast<const hmm_mat4*>(proj_m);
 
+        const float fx = float(EffectiveViewportW(*impl)) / float((std::max)(Display.Width(),  1));
+        const float fy = float(EffectiveViewportH(*impl)) / float((std::max)(Display.Height(), 1));
+        const float fw = float(dst_w) * fx, fh = float(dst_h) * fy;
         // NDC ([-1,+1]^2, y-up) -> pixel rect (top-left dst_x/y, y-down).
         hmm_mat4 viewport = HMM_Mat4d(1.0f);
-        viewport.Elements[0][0] =  float(dst_w) * 0.5f;
-        viewport.Elements[1][1] = -float(dst_h) * 0.5f;
-        viewport.Elements[3][0] =  float(dst_x) + float(dst_w) * 0.5f;
-        viewport.Elements[3][1] =  float(dst_y) + float(dst_h) * 0.5f;
+        viewport.Elements[0][0] =  fw * 0.5f;
+        viewport.Elements[1][1] = -fh * 0.5f;
+        viewport.Elements[3][0] =  float(dst_x) + fw * 0.5f;
+        viewport.Elements[3][1] =  float(dst_y) + fh * 0.5f;
         m = HMM_MultiplyMat4(viewport, HMM_MultiplyMat4(proj, view));
     }
     std::memcpy(out_mat44, &m, sizeof(float) * 16);
@@ -2085,10 +2075,9 @@ bool TMapRenderer::IsMapIndexSelected(int32_t mapindex) const
 // We solve the camera-position offset so HMM_LookAt produces those basis
 // vectors when handed an up-hint of world +Z.
 // ---------------------------------------------------------------------------
-void TMapRenderer::GetViewProj(float view_out[16], float proj_out[16],
-                               int32_t vp_w, int32_t vp_h) const
+void TMapRenderer::GetViewProj(float view_out[16], float proj_out[16]) const
 {
-    if (!impl || vp_w <= 0 || vp_h <= 0) return;
+    if (!impl) return;
     const Impl& s = *impl;
 
     // Camera offset direction such that HMM_LookAt with world-Z up gives
@@ -2128,20 +2117,36 @@ void TMapRenderer::GetViewProj(float view_out[16], float proj_out[16],
     // After the orthonormal view, screen X = view_x * sqrt(2),
     //                              screen Y = view_y * 1/0.8944 (=1.1180).
     // To get NDC ∈ [-1,1] across the full pixel viewport:
-    //   ortho.left/right = ±(vp_w/2) / sqrt(2)
-    //   ortho.bot/top    = ±(vp_h/2) * 0.8944
+    //   ortho.left/right = ±(vw/2) / sqrt(2)
+    //   ortho.bot/top    = ±(vh/2) * 0.8944
     constexpr float kInvSqrt2  = 0.7071068f;
     constexpr float kIsoUpNorm = 0.8944272f;  // 1 / 1.118
-    // Mirror the renderer's `zoom` so editor overlays (bbox / axis /
-    // ImGuizmo) project to the same pixels as the rendered scene. The
-    // shader path multiplies S/T by zoom; in matrix form that's a 1/zoom
-    // shrink of the ortho half-extents.
-    const float zoom = (s.sectorCameraZoom > 1e-4f) ? s.sectorCameraZoom : 1.0f;
-    const float half_w = (float(vp_w) * 0.5f * kInvSqrt2) / zoom;
-    const float half_h = (float(vp_h) * 0.5f * kIsoUpNorm) / zoom;
-    const hmm_mat4 proj = HMM_Orthographic(-half_w, half_w,
-                                           -half_h, half_h,
-                                           -D * 2.0f, D * 2.0f);
+    // The scene's own view: the pixel a world point lands on is
+    //   cam_o + zoom * (WorldToScreen(world) - WorldToScreen(camera ground))
+    // (SSectorDrawableInst::Submit, ScreenToWorld), with cam_o the camera
+    // origin sectorCameraOriginScreen gives -- retail's scroll origin, not
+    // the viewport's centre -- and zoom the camera's times the display's.
+    // The matrices reproduce that exactly: the ortho half-extents shrink by
+    // the zoom over the effective viewport, and the clip space shifts so
+    // the LookAt target (the camera point, at its height) lands where the
+    // scene puts it. The clip space spans the map viewport (GetViewportSize),
+    // which is where a caller must place it.
+    const SViewUnwrap unwrap = ComputeViewUnwrap(s);
+    const float zoom = (unwrap.zoom > 1e-4f) ? unwrap.zoom : 1.0f;
+    const float vw = float(unwrap.vw), vh = float(unwrap.vh);
+    const float half_w = (vw * 0.5f * kInvSqrt2) / zoom;
+    const float half_h = (vh * 0.5f * kIsoUpNorm) / zoom;
+    const hmm_mat4 ortho = HMM_Orthographic(-half_w, half_w,
+                                            -half_h, half_h,
+                                            -D * 2.0f, D * 2.0f);
+    int32_t cam_sx = 0, cam_sy = 0, ground_sx = 0, ground_sy = 0;
+    WorldToScreen(s.sectorCameraWorld, cam_sx, cam_sy);
+    WorldToScreen(S3DPoint(s.sectorCameraWorld.x, s.sectorCameraWorld.y, 0), ground_sx, ground_sy);
+    const float cam_px = float(unwrap.cam_ox) + float(cam_sx - ground_sx) * zoom;
+    const float cam_py = float(unwrap.cam_oy) + float(cam_sy - ground_sy) * zoom;
+    const hmm_mat4 shift = HMM_Translate(HMM_Vec3(2.0f * cam_px / vw - 1.0f,
+                                                  1.0f - 2.0f * cam_py / vh, 0.0f));
+    const hmm_mat4 proj = HMM_MultiplyMat4(shift, ortho);
     // TODO: when sectorPerspectiveCamera is on, build a true perspective
     // matrix so ImGuizmo lands on the same pixels. Ortho path covers the
     // common case for now.

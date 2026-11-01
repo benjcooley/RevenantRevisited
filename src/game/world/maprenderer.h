@@ -169,12 +169,13 @@ class TMapRenderer
     [[nodiscard]] bool IsMapIndexSelected(int32_t mapindex) const;
 
     // Iso view + orthographic projection matrices that match the rendered
-    // image pixel-for-pixel. Used by ImGuizmo (which wants view and proj
-    // separately). Most overlays should prefer GetWorldToPixel() below
-    // which composes the whole world->screen chain into one matrix.
-    // Both outputs are 16-float column-major (OpenGL/HMM convention).
-    void GetViewProj(float view_out[16], float proj_out[16],
-                     int32_t vp_w, int32_t vp_h) const;
+    // image pixel-for-pixel: the clip space spans the map viewport
+    // (GetViewportSize), with the scene's own origin and zoom. Used by
+    // ImGuizmo (which wants view and proj separately). Most overlays should
+    // prefer GetWorldToPixel() below which composes the whole world->screen
+    // chain into one matrix. Both outputs are 16-float column-major
+    // (OpenGL/HMM convention).
+    void GetViewProj(float view_out[16], float proj_out[16]) const;
 
     // Combined world-to-pixel transform for the destination rect that
     // the rendered scene image lands in (editor: Game View ImGui::Image

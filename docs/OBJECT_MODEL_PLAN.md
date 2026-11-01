@@ -477,7 +477,12 @@ object.
    `SAmmoState`, `SMoneyState`, `SFoodState`, `SScrollState`,
    `SWeaponState`, `SDripState`, `SMonsterGenState`, each from its legacy
    read.
-7. The seal: `docs/OBJECT_SYSTEM.md` states the rule (landed 2026-11-01:
+7. The editor (landed 2026-11-01): the inspector shows a root object's
+   record first (captured each frame, edited through the archetype's
+   `Apply`, identity rows locked), then the node, then the components but
+   the object itself, then its child nodes; a derived object class without
+   annotations of its own draws as the base object.
+8. The seal: `docs/OBJECT_SYSTEM.md` states the rule (landed 2026-11-01:
    "Object State and Serialization", the archetype, the component table);
    `--test=state-roundtrip
    --level=L` (tools/state_gate.sh over every level) puts every object and

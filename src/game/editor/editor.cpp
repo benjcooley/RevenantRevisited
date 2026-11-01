@@ -43,6 +43,7 @@
 #include "game/world/maprenderer.h"
 #include "game/object/player.h"
 #include "game/object/object.h"
+#include "game/object/objectdef.h"
 #include "game/ui/playscreen.h"
 #include "engine/render/renderer.h"
 #include "engine/core/revdefs.h"
@@ -54,6 +55,8 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
+#include <memory>
 #include <unordered_map>
 #include <IconsMaterialSymbols.h>
 // Revenant's legacy revdefs.h defines `COLOR` as a numeric macro, which
@@ -739,11 +742,18 @@ void DrawScenePanel()
 // edited (unless the property is read-only).
 // `obj` is the node itself or one of its components; `node` is the node
 // the undo system snapshots either way.
-void DrawPropertyRow(TNode* node, void* obj, const refl::SType& type, const refl::SProp& p)
+// `after_commit`, when given, runs after a value lands on `obj`: the
+// record's rows apply the record to the object through its archetype.
+// `locked` shows the row but refuses edits, for what is the object's
+// identity rather than its state.
+void DrawPropertyRow(TNode* node, void* obj, const refl::SType& type, const refl::SProp& p,
+                     const std::function<void()>& after_commit = {}, bool locked = false)
 {
     if (!p.visible_in_editor) return;
 
-    const bool read_only = p.read_only;
+    const bool read_only = p.read_only || locked;
+    const ImGuiInputTextFlags kNumberFlags = ImGuiInputTextFlags_EnterReturnsTrue |
+                                             (read_only ? ImGuiInputTextFlags_ReadOnly : 0);
     SPropValue v;
     refl::Get(type, obj, p.id, v);
 
@@ -763,6 +773,7 @@ void DrawPropertyRow(TNode* node, void* obj, const refl::SType& type, const refl
     auto commit = [&](const SPropValue& nv) {
         if (read_only) return;
         refl::Set(type, obj, p.id, nv);
+        if (after_commit) after_commit();
         EditorMarkDirty();
     };
 
@@ -773,9 +784,12 @@ void DrawPropertyRow(TNode* node, void* obj, const refl::SType& type, const refl
             if (ImGui::Checkbox("##v", &b)) commit(SPropValue::Bool(b));
             break;
         }
+        // Numbers are text fields, left-justified like the strings (the
+        // drag widgets centre their text), committed on Enter so a value
+        // typed in lands once, not per keystroke.
         case EPropType::Int: {
             int n = v.i;
-            if (ImGui::DragInt("##v", &n, 1.0f)) commit(SPropValue::Int(n));
+            if (ImGui::InputInt("##v", &n, 0, 0, kNumberFlags)) commit(SPropValue::Int(n));
             break;
         }
         case EPropType::Bytes: {
@@ -799,7 +813,7 @@ void DrawPropertyRow(TNode* node, void* obj, const refl::SType& type, const refl
         }
         case EPropType::Float: {
             float f = v.f;
-            if (ImGui::DragFloat("##v", &f, 0.1f)) commit(SPropValue::Float(f));
+            if (ImGui::InputFloat("##v", &f, 0.0f, 0.0f, "%.3f", kNumberFlags)) commit(SPropValue::Float(f));
             break;
         }
         case EPropType::String: {
@@ -812,7 +826,7 @@ void DrawPropertyRow(TNode* node, void* obj, const refl::SType& type, const refl
         }
         case EPropType::Vec3: {
             float xyz[3] = { v.v3[0], v.v3[1], v.v3[2] };
-            if (ImGui::DragFloat3("##v", xyz, 1.0f)) commit(SPropValue::Vec3(xyz[0], xyz[1], xyz[2]));
+            if (ImGui::InputFloat3("##v", xyz, "%.3f", kNumberFlags)) commit(SPropValue::Vec3(xyz[0], xyz[1], xyz[2]));
             break;
         }
         case EPropType::Color: {
@@ -866,7 +880,11 @@ void DrawPropertiesPanel()
 {
     if (ImGui::Begin("Properties")) {
         TObjectInstance* primary = SelectionPrimary();
+        // The reflection lookup is by exact type; a derived object class
+        // without annotations of its own (a tile, a container) draws as
+        // the base object.
         const refl::SType* type = primary ? refl::Of(*primary) : nullptr;
+        if (primary && !type) type = refl::Of<TObjectInstance>();
         if (!primary || !type) {
             ImGui::TextDisabled("(no selection)");
         } else {
@@ -879,14 +897,29 @@ void DrawPropertiesPanel()
             }
             ImGui::BeginGroup();
             ImGui::TextUnformatted(primary->GetName());
-            ImGui::TextDisabled("[%s]", type->name);
+            ImGui::TextDisabled("%s / %s", primary->GetClassName(), primary->GetTypeName());
             ImGui::EndGroup();
             ImGui::Separator();
 
-            // The node first (transform), then each component, the object
-            // among them; a component's base chain draws base first.
+            // A root object's record first (docs/OBJECT_SYSTEM.md, "Object
+            // State and Serialization": the record is the state; an edit
+            // goes through the archetype's Apply), then the node, then each
+            // component but the object itself, whose state the record shows,
+            // then its child nodes. A component's base chain draws base first.
             TNode* node = primary->Node();
-            auto draw_target = [&](const char* title, void* obj, const refl::SType* t_obj) {
+            std::unique_ptr<SObjectState> record;
+            if (node->IsRoot() && primary->Archetype())
+            {
+                record = primary->Archetype()->DefaultState().Clone();
+                primary->CaptureState(*record);
+                // The runtime map index, as the node shows it (the record
+                // captures the file's, which a retail duplicate may differ
+                // from), so applying the record leaves the index alone.
+                record->mapindex = primary->GetMapIndex();
+            }
+            auto draw_target = [&](const char* title, void* obj, const refl::SType* t_obj,
+                                   const std::function<void()>& after_commit = {},
+                                   const std::function<bool(const refl::SProp&)>& locked = {}) {
                 if (!t_obj) return;
                 std::vector<const refl::SType*> chain;
                 for (const refl::SType* t = t_obj; t; t = t->base) chain.push_back(t);
@@ -904,19 +937,50 @@ void DrawPropertiesPanel()
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.60f);
                     for (auto it = chain.rbegin(); it != chain.rend(); ++it)
                         for (int32_t i = 0; i < (*it)->prop_count; ++i)
-                            DrawPropertyRow(node, obj, *t_obj, (*it)->props[i]);
+                            DrawPropertyRow(node, obj, *t_obj, (*it)->props[i], after_commit,
+                                            locked && locked((*it)->props[i]));
                     ImGui::EndTable();
                 }
                 ImGui::PopID();
             };
+            if (record)
+            {
+                const refl::SType* t_rec = refl::Of(*record);
+                std::string title = std::string("Object [") + (t_rec ? t_rec->name : "?") + "]";
+                // The class, the type, the uid and the map index are the
+                // object's identity, not state to edit here.
+                draw_target(title.c_str(), record.get(), t_rec,
+                            [&] { primary->Archetype()->Apply(*record, *primary); },
+                            [](const refl::SProp& p) { return p.id == 1 || p.id == 2 || p.id == 13 || p.id == 18; });
+            }
             draw_target("Node", node, refl::Of(*node));
             for (int32_t slot = 0; slot < node->NumComponents(); ++slot)
             {
                 TComponent* c = node->GetComponent(slot);
-                if (!c) continue;
+                if (!c || (record && c == primary)) continue;
                 std::string title = c->ComponentName();
                 if (!c->Label().empty()) title += " " + c->Label();
-                draw_target(title.c_str(), c, refl::Of(*c));
+                draw_target(title.c_str(), c, c == primary ? type : refl::Of(*c));
+            }
+            if (node->GetChildCount() > 0 && ImGui::CollapsingHeader("Children", ImGuiTreeNodeFlags_DefaultOpen))
+            {
+                for (int32_t i = 0; i < node->GetChildCount(); ++i)
+                {
+                    TNode* child = node->GetChildAt(i);
+                    if (!child) continue;
+                    const TObjectInstance* co = child->Object();
+                    const char* label = co ? co->GetName() : child->GetName();
+                    ImGui::PushID(child);
+                    if (ImGui::Selectable(label && *label ? label : "(unnamed)") && co)
+                    {
+                        g_selection        = { co->GetMapIndex() };
+                        g_selection_anchor = co->GetMapIndex();
+                        g_selection_reveal = true;
+                    }
+                    if (co && ImGui::IsItemHovered())
+                        ImGui::SetTooltip("%s", co->GetTypeName());
+                    ImGui::PopID();
+                }
             }
         }
     }
@@ -1057,11 +1121,18 @@ void DrawGameViewPanel()
         // ----- Selection / gizmo overlay over the game image ---------
         if (TMapRenderer* mr = PlayScreen.MapRenderer()) {
             float view[16], proj[16];
-            mr->GetViewProj(view, proj, kGameViewW, kGameViewH);
+            mr->GetViewProj(view, proj);
+            // The clip space spans the map viewport (retail's play field,
+            // at the target's top-left), not the whole image: place the
+            // gizmo and the overlays on its footprint in the image.
+            int32_t map_vw = kGameViewW, map_vh = kGameViewH;
+            mr->GetViewportSize(map_vw, map_vh);
+            const float rw = gw * float(map_vw) / float(Renderer ? Renderer->Width()  : kGameViewW);
+            const float rh = gh * float(map_vh) / float(Renderer ? Renderer->Height() : kGameViewH);
 
             ImGuizmo::SetOrthographic(true);
             ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
-            ImGuizmo::SetRect(img_min.x, img_min.y, gw, gh);
+            ImGuizmo::SetRect(img_min.x, img_min.y, rw, rh);
 
             // ----- Pan: tool==Pan, OR Alt-drag in any tool ------------
             const ImGuiIO& mio = ImGui::GetIO();
@@ -1237,8 +1308,8 @@ void DrawGameViewPanel()
                     float cx,cy,cz,cw; mul(proj,  vx,vy,vz,vw, cx,cy,cz,cw);
                     if (cw == 0.0f) cw = 1.0f;
                     cx /= cw; cy /= cw;
-                    return ImVec2(img_min.x + (cx * 0.5f + 0.5f) * gw,
-                                  img_min.y + (1.0f - (cy * 0.5f + 0.5f)) * gh);
+                    return ImVec2(img_min.x + (cx * 0.5f + 0.5f) * rw,
+                                  img_min.y + (1.0f - (cy * 0.5f + 0.5f)) * rh);
                 };
 
                 ImDrawList* dl = ImGui::GetWindowDrawList();
