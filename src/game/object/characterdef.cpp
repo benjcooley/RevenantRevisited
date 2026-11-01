@@ -8,6 +8,7 @@
 
 #include "game/object/character.h"
 #include "game/object/vitalscomponent.h"
+#include "game/object/fadecomponent.h"
 #include "game/object/complexobj.h"
 #include "game/object/player.h"
 #include "game/imagery/imagery.h"
@@ -123,10 +124,10 @@ void TCharacterDef::Apply(const SObjectState& state, TObjectInstance& inst) cons
     }
     if (o.Health() < 1)
         o.ResetFlags(o.flags | OF_KILL);
-    o.fade = 100;
-    o.fade_step = 0;
-    o.fade_limit = 100;
-    o.fade_direction = 0;
+    o.Fader().fade = 100;
+    o.Fader().fade_step = 0;
+    o.Fader().fade_limit = 100;
+    o.Fader().fade_direction = 0;
 }
 
 void TCharacterDef::Capture(const TObjectInstance& inst, SObjectState& state) const

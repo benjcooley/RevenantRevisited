@@ -70,6 +70,7 @@ _CLASSDEF(TCharacter)
 class TVitalsComponent;
 class TAIComponent;
 class TCombatComponent;
+class TFadeComponent;
 
 class TCharacter : public TComplexObject
 {
@@ -594,12 +595,12 @@ class TCharacter : public TComplexObject
       // `fadecharacterin/out`: +1 back to fully visible (living characters only), else out to 0
     void SetFade(int32_t amt, int32_t amt2 = 5, int32_t amt3 = -1);
       // Start a fade from 'amt' (kept when < 0) by 'amt2' per pulse to 'amt3' (-1: no limit)
-    int32_t GetFade() const { return fade; }
+    int32_t GetFade() const;
     void UpdateFade();
       // One pulse of the fade
 
   // Invisible Spell Functions
-    bool IsInvisibleSpell(){return invisible_spell;}
+    bool IsInvisibleSpell() const;
     void SetInvisibleSpell(bool on);
       // Fades to 30 while the spell lasts and back afterwards
 
@@ -611,6 +612,8 @@ class TCharacter : public TComplexObject
       // What the fight keeps between ticks: the last attack, the chain,
       // the bow, the flash, the invoke delay (combatcomponent.h)
     [[nodiscard]] TCombatComponent& Combat() const { return *combat_; }
+      // The fade and the invisibility it draws with (fadecomponent.h)
+    [[nodiscard]] TFadeComponent& Fader() const { return *fader_; }
         // Recovery clocks, poison, the teleport point
     void SetTeleportLevel(int32_t new_level);
     void SetTeleportPosition(S3DPoint new_pos);
@@ -894,7 +897,6 @@ class TCharacter : public TComplexObject
     uint32_t charflags = 0;        // Character flags (retail +0x110; retail's allocator zeroed it)
 
     int32_t exittimestamp;          // Frame the character was last on an exit; OF_ONEXIT clears 5 frames on
-    bool is_invisible;          // is our character affected by invisibility
 
   // Move stuff
     int32_t shovedir;               // Last choice (left/right) for going around an obstacle
@@ -914,14 +916,10 @@ class TCharacter : public TComplexObject
   // spells stuff
     TSpellManager SpellManager;  // handles the spells the character casts
 
-    // Visibility
-    int32_t fade = 100;             // retail +0x194, 0..100
-    int32_t fade_step = 0;          // retail +0x198, subtracted from fade each pulse
-    int32_t fade_limit = 100;       // retail +0x19c, where the fade stops (-1: at 0 or 100)
-    int32_t fade_direction = 0;     // retail +0x1a0, -1 out / 1 in / 0 still (a corpse fades once it is 0)
+  // The fade and the invisibility: the fade component (fadecomponent.h),
+  // every character's from construction
+    TFadeComponent* fader_ = nullptr;
 
-  // Invisible Spell Addition
-    bool invisible_spell = false;   // retail +0x1a4
     int32_t voice = -1;             // retail +0x260: the sound id of the line being spoken, -1 none
 
   // Teleport Coordinates

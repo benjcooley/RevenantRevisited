@@ -440,7 +440,8 @@ record, codec and gate):
 | `TSpellbookComponent` (player, landed) | known talisman codes, the quick spells, the change count | `knownspells`, `quickspells` |
 | `TAutomapComponent` (player, landed) | the explored automap record | `automap` |
 | `TStatEffectsComponent` (player, landed, annotated) | stat effects in force, their expiry, the modified stats | `stateffects`, `modstats` |
-| `TExitComponent` (exit) | destination as a node ref, level | `TExit::name` |
+| `TFadeComponent` (character, landed, annotated) | the fade 0-100, its step, limit and direction, the invisibility spell, MakeInvisible's flag; `Fader()` | `TCharacter` +0x194..+0x1a4; none in the record, as in retail |
+| `TExitComponent` (exit) | not made: an exit's own state is the one flags word `SExitState` carries, and its destination is the exit list's entry by name (exit.def, session data), which a node ref can't be since the target is on another level and not loaded | |
 
 Not components: a scroll's open UI (`TScroll` pointers to a multi and a
 font are screen state), the seams the test fixtures hook, the editor's

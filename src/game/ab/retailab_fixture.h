@@ -20,6 +20,7 @@
 #include "game/object/vitalscomponent.h"
 #include "game/object/aicomponent.h"
 #include "game/object/combatcomponent.h"
+#include "game/object/fadecomponent.h"
 #include "game/imagery/imagery.h"
 #include "engine/assets/imageres.h"
 #include "game/object/player.h"
@@ -458,7 +459,7 @@ class TFixtureChar : public Base, public IFixtureChar
         this->Brain().noise = (int32_t)spec["noise"].Int();
         // Perception (kata M9b): the invisibility spell, a player's team
         // (the memory, naming others, is the world's: SetMemory).
-        this->invisible_spell = spec["invisiblespell"].Bool();
+        this->Fader().invisible_spell = spec["invisiblespell"].Bool();
         if constexpr (std::is_base_of_v<TPlayer, Base>)
         {
             SPlayerTeamRecord team;
@@ -762,8 +763,8 @@ class TFixtureChar : public Base, public IFixtureChar
         j.Field("accumhealth", this->Vitals().healthaccum).Field("accumfatigue", this->Vitals().fatigueaccum);
         j.Field("accummana", this->Vitals().manaaccum).Field("accumrun", this->Vitals().runaccum);
         j.Field("accumpoison", this->Vitals().poisonaccum).Field("lastpoison", this->Vitals().lastpoisondamage);
-        j.Field("invokedelay", this->Combat().invokedelay).Field("fade", this->fade).Field("fadestep", this->fade_step);
-        j.Field("fadelimit", this->fade_limit).Field("fadedir", this->fade_direction);
+        j.Field("invokedelay", this->Combat().invokedelay).Field("fade", this->Fader().fade).Field("fadestep", this->Fader().fade_step);
+        j.Field("fadelimit", this->Fader().fade_limit).Field("fadedir", this->Fader().fade_direction);
         j.Field("burnticks", this->burnticks).Field("deadticks", this->deadticks);
         j.Field("exittimestamp", this->exittimestamp).Field("forcecommanddone", this->forcecommanddone ? 1 : 0);
         if constexpr (std::is_base_of_v<TPlayer, Base>)
@@ -959,10 +960,10 @@ class TFixtureChar : public Base, public IFixtureChar
         this->Vitals().poisonaccum = (int32_t)p["accumpoison"].Int();
         this->Vitals().lastpoisondamage = (int32_t)p["lastpoison"].Int();
         this->Combat().invokedelay = (int32_t)p["invokedelay"].Int();
-        this->fade = (int32_t)p["fade"].Int();
-        this->fade_step = (int32_t)p["fadestep"].Int();
-        this->fade_limit = (int32_t)p["fadelimit"].Int();
-        this->fade_direction = (int32_t)p["fadedir"].Int();
+        this->Fader().fade = (int32_t)p["fade"].Int();
+        this->Fader().fade_step = (int32_t)p["fadestep"].Int();
+        this->Fader().fade_limit = (int32_t)p["fadelimit"].Int();
+        this->Fader().fade_direction = (int32_t)p["fadedir"].Int();
         this->burnticks = (int32_t)p["burnticks"].Int();
         this->deadticks = (int32_t)p["deadticks"].Int();
         this->exittimestamp = (int32_t)p["exittimestamp"].Int();

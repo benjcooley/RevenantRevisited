@@ -8,6 +8,7 @@
 #include "game/object/vitalscomponent.h"
 #include "game/object/aicomponent.h"
 #include "game/object/combatcomponent.h"
+#include "game/object/fadecomponent.h"
 #include "game/ui/ctrlmap.h"
 
 #include "game/script/rules.h"
@@ -274,6 +275,8 @@ void TCharacter::SetMagicResistance(float pct) { Combat().magic_resistance = pct
 float TCharacter::GetMagicResistance() const { return Combat().magic_resistance; }
 int32_t TCharacter::LastBowShot() const { return Combat().lastbowshot; }
 int32_t TCharacter::BowShots() const { return Combat().bowshots; }
+int32_t TCharacter::GetFade() const { return Fader().fade; }
+bool TCharacter::IsInvisibleSpell() const { return Fader().invisible_spell; }
 int32_t TCharacter::LastGlimpse() { return Brain().glimpse; }
 int32_t TCharacter::LastNoise() { return Brain().noise; }
 bool TCharacter::GetAutoCombat() const { return Brain().autocombat; }
@@ -300,13 +303,19 @@ void TCharacter::ClearChar()
         combat_ = owned.get();
         AddComponent(std::move(owned));
     }
+    if (!fader_)
+    {
+        auto owned = std::make_unique<TFadeComponent>();
+        fader_ = owned.get();
+        AddComponent(std::move(owned));
+    }
     flags |= OF_MOVING | OF_PULSE | OF_ANIMATE | OF_AI; // Is moving object, pulse, animate, and has AI
 
     Brain().autocombat = AutoBeginCombat;
     
     forcecommanddone = false;
     forcenomove = false;
-    is_invisible = false;
+    Fader().is_invisible = false;
     Combat().magic_resistance = 0.0f;
 
     // When character loaded or created, make exit timestamp current..
@@ -386,13 +395,13 @@ void TCharacter::ClearChar()
 
   // Clear Fade (retail ClearChar 0x004c18a0): fully visible. The step of 5
   // toward a limit of 100 settles to still on the first pulse.
-    fade = 100;
-    fade_step = 5;
-    fade_limit = 100;
-    fade_direction = 0;
+    Fader().fade = 100;
+    Fader().fade_step = 5;
+    Fader().fade_limit = 100;
+    Fader().fade_direction = 0;
 
   // Clear the Invisible Spell
-    invisible_spell = false;
+    Fader().invisible_spell = false;
 
   // Clear the poison
     SetPoisoned(false);
@@ -628,14 +637,14 @@ void TCharacter::PulseCorpse()
   // (In a network game a player's corpse stays.)
     if (++deadticks >= 240)
     {
-        if (fade <= 0)
+        if (Fader().fade <= 0)
             SetFlag(OF_KILL);
-        else if (fade_direction == 0)
+        else if (Fader().fade_direction == 0)
         {
-            fade = 100;
-            fade_step = 1;
-            fade_limit = 0;
-            fade_direction = -1;
+            Fader().fade = 100;
+            Fader().fade_step = 1;
+            Fader().fade_limit = 0;
+            Fader().fade_direction = -1;
         }
     }
 }
@@ -1817,7 +1826,7 @@ void TCharacter::SetHasSeenAutoCombat(bool on)
 // dropped that.
 int32_t TCharacter::Transparency()
 {
-    return std::clamp(fade, 0, 100);
+    return std::clamp(Fader().fade, 0, 100);
 }
 
 // REVSYNC: Visibility @ 0x004c5aa0 -- the map's ambient light, capped at
@@ -2361,7 +2370,7 @@ int32_t TCharacter::ResolveAttack(TActionBlock* ab, int32_t bits)
         return COM_DONE;        // REVSYNC-DIVERGENCE: retail reads through the null record
     if (targ && !(attack->flags & (CA_INTERACTIVE | CA_NOPUSH)) && !(GetAniFlags() & AF_FLY) &&
         !(targ->GetAniFlags() & AF_FLY) && !(impact && impact->snapdist > 0) && targ->Health() > 0 &&
-        !targ->invisible_spell && dist <= 10 && GetFrame() < attack->impacttime)
+        !targ->Fader().invisible_spell && dist <= 10 && GetFrame() < attack->impacttime)
     {
       // Close in: hold still until the blow lands.
         S3DPoint next;
@@ -6142,7 +6151,7 @@ TCharacter* TCharacter::CharBlocking(TObjectInstance* inst, const S3DPoint& pos,
 // make a character visible
 void TCharacter::MakeVisible()
 {
-    is_invisible = false;
+    Fader().is_invisible = false;
 
     TCharAnimator* animator = (TCharAnimator*)GetAnimator();
 
@@ -6164,7 +6173,7 @@ void TCharacter::MakeVisible()
 // make a character invisible
 void TCharacter::MakeInvisible()
 {
-    is_invisible = true;
+    Fader().is_invisible = true;
 
     TCharAnimator* animator = (TCharAnimator*)GetAnimator();
 
@@ -6187,20 +6196,20 @@ void TCharacter::MakeInvisible()
 // else fades out to 0. 5 a pulse either way.
 void TCharacter::Fade(int32_t direction)
 {
-    fade_direction = direction;
+    Fader().fade_direction = direction;
     if (direction == 1)
     {
         if (Health() > 0)
         {
-            fade_step = -5;
-            fade_limit = 100;
+            Fader().fade_step = -5;
+            Fader().fade_limit = 100;
         }
         return;
     }
 
-    fade_step = 5;
-    fade_limit = 0;
-    fade_direction = -1;
+    Fader().fade_step = 5;
+    Fader().fade_limit = 0;
+    Fader().fade_direction = -1;
 }
 
 // REVSYNC: TCharacter::SetFade @ 0x004d5730 -- a dead character can only
@@ -6211,10 +6220,10 @@ void TCharacter::SetFade(int32_t amt, int32_t amt2, int32_t amt3)
         return;
 
     if (amt >= 0)
-        fade = amt;
-    fade_step = amt2;
-    fade_limit = amt3;
-    fade_direction = (amt2 > 0) ? -1 : 1;
+        Fader().fade = amt;
+    Fader().fade_step = amt2;
+    Fader().fade_limit = amt3;
+    Fader().fade_direction = (amt2 > 0) ? -1 : 1;
 }
 
 // REVSYNC: TCharacter::UpdateFade @ 0x004d57a0 -- one pulse of the fade.
@@ -6222,45 +6231,45 @@ void TCharacter::SetFade(int32_t amt, int32_t amt2, int32_t amt3)
 // fade stops (step and direction 0) at its limit, at 0, or at 100.
 void TCharacter::UpdateFade()
 {
-    if (fade_step == 0)
+    if (Fader().fade_step == 0)
         return;
 
-    fade -= fade_step;
-    if (fade > 0 && fade_step < 0 && (flags & OF_INVISIBLE))
+    Fader().fade -= Fader().fade_step;
+    if (Fader().fade > 0 && Fader().fade_step < 0 && (flags & OF_INVISIBLE))
         SetFlag(OF_INVISIBLE, false);
 
-    if (fade_limit == -1)
+    if (Fader().fade_limit == -1)
     {
-        if (fade < 0)
+        if (Fader().fade < 0)
         {
-            fade = 0;
-            fade_step = fade_direction = 0;
+            Fader().fade = 0;
+            Fader().fade_step = Fader().fade_direction = 0;
         }
     }
-    else if (fade_step < 0)
+    else if (Fader().fade_step < 0)
     {
-        if (fade > fade_limit)
+        if (Fader().fade > Fader().fade_limit)
         {
-            fade = fade_limit;
-            fade_step = fade_direction = 0;
+            Fader().fade = Fader().fade_limit;
+            Fader().fade_step = Fader().fade_direction = 0;
         }
-        if (fade < 0)
+        if (Fader().fade < 0)
         {
-            fade = 0;
-            fade_step = fade_direction = 0;
+            Fader().fade = 0;
+            Fader().fade_step = Fader().fade_direction = 0;
         }
         return;     // retail skips the 100 cap on the way in
     }
-    else if (fade < fade_limit)
+    else if (Fader().fade < Fader().fade_limit)
     {
-        fade = fade_limit;
-        fade_step = fade_direction = 0;
+        Fader().fade = Fader().fade_limit;
+        Fader().fade_step = Fader().fade_direction = 0;
     }
 
-    if (fade > 100)
+    if (Fader().fade > 100)
     {
-        fade = 100;
-        fade_step = fade_direction = 0;
+        Fader().fade = 100;
+        Fader().fade_step = Fader().fade_direction = 0;
     }
 }
 
@@ -6268,21 +6277,21 @@ void TCharacter::UpdateFade()
 // fades its target to 30; ending it fades a living character back to 100.
 void TCharacter::SetInvisibleSpell(bool on)
 {
-    if (invisible_spell == on)
+    if (Fader().invisible_spell == on)
         return;
 
-    invisible_spell = on;
+    Fader().invisible_spell = on;
     if (on)
     {
-        fade_step = 5;
-        fade_limit = 30;
-        fade_direction = -1;
+        Fader().fade_step = 5;
+        Fader().fade_limit = 30;
+        Fader().fade_direction = -1;
     }
     else if (Health() > 0)
     {
-        fade_step = -5;
-        fade_limit = 100;
-        fade_direction = 1;
+        Fader().fade_step = -5;
+        Fader().fade_limit = 100;
+        Fader().fade_direction = 1;
     }
 }
 
