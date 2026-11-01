@@ -99,7 +99,6 @@ void TArrowWall::Pulse()
 
                 // generate a new arrow and fire it
                 SObjectState def;
-                memset(&def, 0, sizeof(SObjectState));
                 def.objclass = OBJCLASS_AMMO;
                 def.objtype = AmmoClass.FindObjType("Arrow3D");
                 def.flags = OF_WEIGHTLESS;

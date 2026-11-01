@@ -9,6 +9,7 @@
 #include "engine/core/logging.h"
 #include "engine/scene/intworld.h"
 #include "game/object/object.h"
+#include "game/world/lightcomponent.h"
 
 #include <cstdlib>
 #include <cstring>
@@ -56,9 +57,20 @@ std::unique_ptr<TObjectDef> TObjectDef::Make(const char* name)
     return nullptr;
 }
 
+namespace {
+
+// Stats 3-5 (health, fatigue, mana) are an object's own; an object untouched
+// since it was placed (OF_VIRGIN) takes its type's current values for the
+// rest (TObjectInstance::Load, 0x0046f0b0).
+constexpr int32_t kFirstKeptStat = 3;
+constexpr int32_t kLastKeptStat  = 5;
+
+} // namespace
+
 // REVSYNC: the record half of TObjectInstance::TObjectInstance(SObjectState*,
-// ...) @ 0x0046e1f0. Flags go on wholesale; the constructor and Reset add
-// the class-derived bits after.
+// ...) @ 0x0046e1f0 and of TObjectInstance::Load @ 0x0046f0b0. Flags go on
+// wholesale (the legacy codec applies retail's fixed-flag rule before
+// calling); the constructor and Reset add the class-derived bits after.
 void TObjectDef::Apply(const SObjectState& state, TObjectInstance& inst) const
 {
     inst.flags = state.flags;
@@ -73,8 +85,52 @@ void TObjectDef::Apply(const SObjectState& state, TObjectInstance& inst) const
     SetIntFacing(inst, state.rotatez);
     if (state.uid.IsValid())
         inst.Node()->SetUid(state.uid);
+    if (!state.name.empty())
+        inst.SetName(const_cast<char*>(state.name.c_str()));
+    inst.inventnum = short(state.inventnum);
+    inst.invindex  = short(state.invindex);
+    inst.shadow    = state.shadow;
+    if (state.mapindex >= 0)
+        inst.SetMapIndex(state.mapindex);
+    inst.frame     = short(state.frame);
+    inst.framerate = short(state.framerate);
+
+    // Stats: each saved stat is matched to the class's by unique id (the
+    // fast path expects the class's order; the slow path searches), so a
+    // record survives a reordered class.def. An empty list keeps what the
+    // object has (the type's values a spawn starts with).
+    if (!state.stats.empty() && inst.cl)
+    {
+        const int32_t numstats = inst.cl->NumObjStats();
+        if (numstats > 0)
+            inst.stats.SetNumItems(numstats);
+        int32_t statid = 0;
+        for (const SObjectStatState& saved : state.stats)
+        {
+            if (statid >= inst.stats.NumItems())
+                break;
+            if (saved.id == inst.cl->ObjStatUniqueId(statid))
+                inst.stats[statid++] = saved.value;
+            else
+                for (int32_t c = 0; c < numstats; c++)
+                    if (saved.id == inst.cl->ObjStatUniqueId(c))
+                        inst.stats[c] = saved.value;
+        }
+        if (inst.flags & OF_VIRGIN)
+            for (int32_t c = 0; c < numstats; c++)
+                if (c < kFirstKeptStat || c > kLastKeptStat)
+                    inst.ResetObjStat(c);
+    }
+
     if (inst.flags & OF_LIGHT)
-        inst.EnsureLight();
+    {
+        TLightComponent& light = inst.EnsureLight();
+        light.flags_      = uint8_t(state.light.flags);
+        light.offset_     = state.light.offset;
+        light.color_      = SColor{ uint8_t(state.light.red), uint8_t(state.light.green), uint8_t(state.light.blue) };
+        light.intensity_  = uint8_t(state.light.intensity);
+        light.multiplier_ = short(state.light.multiplier);
+    }
 }
 
 void TObjectDef::Capture(const TObjectInstance& inst, SObjectState& state) const
@@ -92,4 +148,30 @@ void TObjectDef::Capture(const TObjectInstance& inst, SObjectState& state) const
     state.rotatez  = uint8_t(IntFacing(inst));
     state.group    = inst.group;
     state.uid      = inst.Node()->Uid();
+    // Only a renamed object carries a name; the type's is implicit
+    const bool renamed = inst.name && inst.inf && inst.inf->name && strcmp(inst.name, inst.inf->name) != 0;
+    state.name     = renamed ? inst.name : "";
+    state.inventnum = inst.inventnum;
+    state.invindex  = inst.invindex;
+    state.shadow    = inst.shadow;
+    state.mapindex  = inst.FileMapIndex();
+    state.frame     = inst.frame;
+    state.framerate = inst.framerate;
+
+    state.stats.clear();
+    if (inst.cl)
+        for (int32_t c = 0; c < inst.cl->NumObjStats(); c++)
+            state.stats.push_back({ inst.cl->ObjStatUniqueId(c), c < inst.stats.NumItems() ? inst.stats[c] : 0 });
+
+    state.light = SLightState{};
+    if (const TLightComponent* light = inst.Light())
+    {
+        state.light.flags      = light->flags_;
+        state.light.offset     = light->offset_;
+        state.light.red        = light->color_.red;
+        state.light.green      = light->color_.green;
+        state.light.blue       = light->color_.blue;
+        state.light.intensity  = light->intensity_;
+        state.light.multiplier = light->multiplier_;
+    }
 }

@@ -313,172 +313,141 @@ void TLegacyDeserialize::Read(TObjectInstance& o, TInputStream& is, int32_t vers
     else                                                  ReadObjectInstance(o, is, version, objversion);
 }
 
-// REVSYNC: TObjectInstance::Load @ 0x00472430 (vtable slot 0x160). Fields:
-// SAVE_GAME.md §11.2 (the older-version branches follow the 1998 source and
-// retail).
+// REVSYNC: TObjectInstance::Load @ 0x0046f0b0. The bytes go into the
+// object's record (SObjectState), the record goes onto the object through
+// its archetype (Apply), and what retail settled after the read follows.
 void TLegacyDeserialize::ReadObjectInstance(TObjectInstance& o, TInputStream& is, int32_t version, int32_t objversion)
 {
     (void)objversion;
+
+    SObjectState st;
+    st.objclass = o.objclass;
+    st.objtype  = o.objtype;
 
     // Names are stored with bit 7 set on every byte; length 0 means "the
     // type's name", which the constructor already set.
     uint8_t len;
     is >> len;
-    if (len > 0)
+    st.name.resize(len);
+    for (int32_t i = 0; i < len; i++)
     {
-        o.name = (char *)malloc(len + 1);
-        for (int32_t i = 0; i < len; i++)
-        {
-            uint8_t encoded;
-            is >> encoded;
-            o.name[i] = (char)(encoded & kNameByteMask);
-        }
-        o.name[len] = 0;
+        uint8_t encoded;
+        is >> encoded;
+        st.name[i] = (char)(encoded & kNameByteMask);
     }
 
     uint32_t newflags;
-    {
-        S3DPoint loaded;
-        is >> newflags >> loaded.x >> loaded.y >> loaded.z;
-        SetIntPos(o, loaded);
-    }
+    is >> newflags >> st.pos.x >> st.pos.y >> st.pos.z;
 
   // The constructor's fixed flags stay; everything else comes from the file
-    o.flags = (o.flags & OF_FIXEDFLAGS) | (newflags & ~OF_FIXEDFLAGS);
+    st.flags = (o.flags & OF_FIXEDFLAGS) | (newflags & ~OF_FIXEDFLAGS);
 
   // Don't load velocity vectors if not mobile
-    if (version < 6 || !(o.flags & OF_IMMOBILE))
-        is >> o.vel.x >> o.vel.y >> o.vel.z;
+    if (version < 6 || !(st.flags & OF_IMMOBILE))
+        is >> st.vel.x >> st.vel.y >> st.vel.z;
 
     if (version < 9)
     {
         uint8_t statebyte;
         is >> statebyte;
-        o.state = statebyte;
+        st.state = statebyte;
     }
     else
-        is >> o.state;
+        is >> st.state;
 
   // Non map objects (i.e. players) store their level: they come from the
   // save, not a sector, so the level says where to put them.
-    if (version >= 6 && (o.flags & OF_NONMAP))
+    st.level = 0;
+    if (version >= 6 && (st.flags & OF_NONMAP))
     {
         if (version < 9)
         {
             uint8_t levelbyte;
             is >> levelbyte;
-            o.ForceLevel(levelbyte);
+            st.level = levelbyte;
         }
         else
-        {
-            uint16_t level;
-            is >> level;
-            o.ForceLevel(level);
-        }
+            is >> st.level;
     }
-    else
-        o.ForceLevel(0);
 
     uint8_t health = 0;
     if (version < 5)
         is >> health; // Now an object stat
 
-    uint8_t rotatex = 0, rotatey = 0, rotatez = 0;
+    bool clearmapindex = false;
     if (version < 3)
     {
         uint8_t dummy8;
-        short dummy16;
-        is >> rotatez >> dummy16 >> o.inventnum >> dummy16 >> o.shadow >> dummy8;
-
-        o.inventnum = -1;   // ignore inventories in old versions
-        o.Node()->SetMapIndex(-1);    // the sector sets old-style indexes after the load
+        short dummy16, inventnum;
+        int32_t shadow;
+        is >> st.rotatez >> dummy16 >> inventnum >> dummy16 >> shadow >> dummy8;
+        st.inventnum = -1;      // ignore inventories in old versions
+        st.shadow = shadow;
+        clearmapindex = true;   // the sector sets old-style indexes after the load
     }
     else
     {
-        int32_t loaded_mapindex = -1;
-        is >> o.inventnum >> o.invindex >> o.shadow >> rotatex >> rotatey >> rotatez >> loaded_mapindex;
-        // Through SetMapIndex so the mapindex registry sees every streamed-in
-        // instance; TSafeRef<T>::Get() relies on it.
-        o.SetMapIndex(loaded_mapindex);
+        short inventnum, invindex;
+        is >> inventnum >> invindex >> st.shadow >> st.rotatex >> st.rotatey >> st.rotatez >> st.mapindex;
+        st.inventnum = inventnum;
+        st.invindex  = invindex;
     }
-    SetIntRotateX(o, rotatex);
-    SetIntRotateY(o, rotatey);
-    SetIntFacing(o, rotatez);
-    o.moveangle = rotatez;
 
     if (version < 5)  // Empty stat array with health stuck in it
     {
-        o.frame = 0;
-        o.framerate = 1;
-        o.group = 0;
-
-        if (o.cl->NumObjStats() > 0)
-        {
-            o.stats.SetNumItems(o.cl->NumObjStats());
-            for (int32_t c = 0; c < o.cl->NumObjStats(); c++)
-                o.ResetObjStat(c);
-        }
-
-        o.SetHealth(health);
+        st.frame = 0;
+        st.framerate = 1;
+        st.group = 0;
     }
     else
     {
-        if (version < 6 || (o.flags & OF_ANIMATE))
-            is >> o.frame >> o.framerate;
+        if (version < 6 || (st.flags & OF_ANIMATE))
+        {
+            short frame, framerate;
+            is >> frame >> framerate;
+            st.frame = frame;
+            st.framerate = framerate;
+        }
 
-        is >> o.group;
+        is >> st.group;
 
-        if (o.cl->NumObjStats() > 0)
-            o.stats.SetNumItems(o.cl->NumObjStats());
-
-        // Each saved stat is matched to the class's stats by unique id (the
-        // saved id carries bit 7 in every byte); the slow path searches every
-        // class stat, so stats survive a reordered class.def.
+        // Each saved stat carries its unique id (bit 7 in every byte); the
+        // record keeps the pairs and Apply matches them to the class's stats.
         uint8_t numstats;
         is >> numstats;
-        int32_t statid = 0;
-        for (int32_t st = 0; st < numstats && statid < o.stats.NumItems(); st++)
+        for (int32_t n = 0; n < numstats; n++)
         {
-            int32_t stat;
-            uint32_t uniqueid;
-            is >> stat >> uniqueid;
-            uniqueid &= kStatIdMask;
-
-            if (uniqueid == o.cl->ObjStatUniqueId(statid))
-            {
-                o.stats[statid] = stat;
-                statid++;
-            }
-            else
-            {
-                for (int32_t c = 0; c < o.cl->NumObjStats(); c++)
-                {
-                    if (uniqueid == o.cl->ObjStatUniqueId(c))
-                        o.stats[c] = stat;
-                }
-            }
-        }
-
-        // An object untouched since it was placed takes its type's current
-        // stats; only its health, fatigue and mana (stats 3-5) are its own.
-        if (o.flags & OF_VIRGIN)
-        {
-            for (int32_t c = 0; c < o.cl->NumObjStats(); c++)
-            {
-                if (c < kFirstKeptStat || c > kLastKeptStat)
-                    o.ResetObjStat(c);
-            }
+            SObjectStatState saved;
+            is >> saved.value >> saved.id;
+            saved.id &= kStatIdMask;
+            st.stats.push_back(saved);
         }
     }
 
-    if (o.flags & OF_LIGHT)
+    if (st.flags & OF_LIGHT)
     {
-        TLightComponent& light = o.EnsureLight();
-        is >> light.flags_ >> light.offset_.x >> light.offset_.y >> light.offset_.z >>
-            light.color_.red >> light.color_.green >> light.color_.blue >>
-            light.intensity_ >> light.multiplier_;
-        o.flags |= OF_LIGHT | OF_ANIMATE;
+        uint8_t flags, red, green, blue, intensity;
+        short multiplier;
+        is >> flags >> st.light.offset.x >> st.light.offset.y >> st.light.offset.z >>
+            red >> green >> blue >> intensity >> multiplier;
+        st.light.flags = flags;
+        st.light.red = red; st.light.green = green; st.light.blue = blue;
+        st.light.intensity = intensity;
+        st.light.multiplier = multiplier;
+        st.flags |= OF_LIGHT | OF_ANIMATE;
     }
+
+  // Through the archetype: the record onto the object (through SetMapIndex,
+  // so the mapindex registry sees every streamed-in instance)
+    o.Archetype()->Apply(st, o);
+
+  // What retail derived at load: the move angle starts as the facing; an
+  // old map's health lands in the stat it became; old indexes are cleared
+    o.moveangle = st.rotatez;
+    if (version < 5)
+        o.SetHealth(health);
+    if (clearmapindex)
+        o.Node()->SetMapIndex(-1);
 
   // Set Object info pointer
     o.cl = TObjectClass::GetClass(o.objclass);
@@ -1006,50 +975,48 @@ void TLegacySerialize::Write(TObjectInstance& o, TOutputStream& os)
     else                                                  WriteObjectInstance(o, os);
 }
 
-// REVSYNC: TObjectInstance::Save @ 0x00472980 (vtable slot 0x164).
-// Byte-symmetric with ReadObjectInstance above (SAVE_GAME.md §11.2).
+// REVSYNC: TObjectInstance::Save @ 0x0046f8a0. The object's record (Capture
+// through its archetype) goes to the bytes in retail's order.
 void TLegacySerialize::WriteObjectInstance(TObjectInstance& o, TOutputStream& os)
 {
     if (o.flags & OF_LIGHT)
         o.flags |= OF_PULSE | OF_ANIMATE;
 
+    SObjectState st;
+    o.Archetype()->Capture(o, st);
+
     // Only a renamed instance stores its name, each byte with bit 7 set.
-    const bool renamed = o.name && o.inf && o.inf->name && strcmp(o.name, o.inf->name) != 0;
-    const uint8_t len = renamed ? (uint8_t)std::min<size_t>(strlen(o.name), 255) : 0;
+    const uint8_t len = (uint8_t)std::min<size_t>(st.name.size(), 255);
     os << len;
     for (int32_t i = 0; i < len; i++)
-        os << (uint8_t)(o.name[i] | kNameByteFlag);
+        os << (uint8_t)(st.name[i] | kNameByteFlag);
 
-    const S3DPoint pos = IntPos(o);
-    os << o.flags << pos.x << pos.y << pos.z;
+    os << st.flags << st.pos.x << st.pos.y << st.pos.z;
 
-    if (!(o.flags & OF_IMMOBILE))
-        os << o.vel.x << o.vel.y << o.vel.z;
+    if (!(st.flags & OF_IMMOBILE))
+        os << st.vel.x << st.vel.y << st.vel.z;
 
-    os << o.state;
+    os << st.state;
 
-    if (o.flags & OF_NONMAP)
-        os << (uint16_t)o.GetLevel();
+    if (st.flags & OF_NONMAP)
+        os << st.level;
 
-    os << o.inventnum << o.invindex << o.shadow <<
-        (uint8_t)IntRotateX(o) << (uint8_t)IntRotateY(o) << (uint8_t)IntFacing(o) << o.FileMapIndex();
+    os << (short)st.inventnum << (short)st.invindex << st.shadow <<
+        st.rotatex << st.rotatey << st.rotatez << st.mapindex;
 
-    if (o.flags & OF_ANIMATE)
-        os << o.frame << o.framerate;
+    if (st.flags & OF_ANIMATE)
+        os << (short)st.frame << (short)st.framerate;
 
-    os << o.group;
+    os << st.group;
 
-    os << (uint8_t)(o.cl->NumObjStats());
-    for (int32_t c = 0; c < o.cl->NumObjStats(); c++)
-        os << o.stats[c] << (uint32_t)(o.cl->ObjStatUniqueId(c) | kStatIdFlag);
+    os << (uint8_t)st.stats.size();
+    for (const SObjectStatState& stat : st.stats)
+        os << stat.value << (uint32_t)(stat.id | kStatIdFlag);
 
-    if (o.flags & OF_LIGHT)
-    {
-        const TLightComponent& light = o.EnsureLight();
-        os << light.flags_ << light.offset_.x << light.offset_.y << light.offset_.z <<
-            light.color_.red << light.color_.green << light.color_.blue <<
-            light.intensity_ << light.multiplier_;
-    }
+    if (st.flags & OF_LIGHT)
+        os << (uint8_t)st.light.flags << st.light.offset.x << st.light.offset.y << st.light.offset.z <<
+            (uint8_t)st.light.red << (uint8_t)st.light.green << (uint8_t)st.light.blue <<
+            (uint8_t)st.light.intensity << (short)st.light.multiplier;
 }
 
 // REVSYNC: TComplexObject::Save @ 0x004dbb80.

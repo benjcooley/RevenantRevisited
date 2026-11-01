@@ -198,7 +198,6 @@ void TTerrainTemplate::ApplyTemplate(TObjectInstance* inst, TSector* sect, int32
             continue;
 
         SObjectState def;
-        memset(&def, 0, sizeof(SObjectState));
 
         def.objclass = OBJCLASS_TILE;
         def.objtype = TileClass.FindObjType(templates[t].objects[i].name);

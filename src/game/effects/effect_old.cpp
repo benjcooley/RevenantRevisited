@@ -999,7 +999,6 @@ void TCreateFoodEffect::Pulse()
             int32_t num = cl->NumTypes();
 
             SObjectState def;
-            memset(&def, 0, sizeof(SObjectState));
             def.objclass = OBJCLASS_FOOD;
             def.objtype = random(0, num - 1);
             def.level = MapPane.GetMapLevel();
@@ -6903,7 +6902,6 @@ void TPulpAnimator::Animate(bool draw)
                 SObjectState def;
                 S3DPoint pos;
 
-                memset(&def, 0, sizeof(SObjectState));
                 def.level = MapPane.GetMapLevel();
                 pos.z = height + 1;
                 pos.x = (int32_t)body_part->pos.x + 5;
@@ -8042,7 +8040,6 @@ void TIceBoltAnimator::Initialize()
     /*if (subspell > 2)
     {
         SObjectState def;
-        memset(&def, 0, sizeof(SObjectState));
         def.objclass = OBJCLASS_EFFECT;
 
         def.objtype = EffectClass.FindObjType("snow");
@@ -8420,7 +8417,6 @@ void TIceBoltAnimator::Animate(bool draw)
             {
                 // create the iced effect
                 SObjectState def;
-                memset(&def, 0, sizeof(SObjectState));
                 def.objclass = OBJCLASS_EFFECT;
                 def.level = MapPane.GetMapLevel();
                 S3DPoint putpos;
@@ -9470,7 +9466,6 @@ void TSandswirlAnimator::Initialize()
     angle = ((PTEffect)inst)->GetAngle();
 
     SObjectState def;
-    memset(&def, 0, sizeof(SObjectState));
     def.objclass = OBJCLASS_EFFECT;
 
     def.objtype = EffectClass.FindObjType("sand");
@@ -9581,7 +9576,6 @@ void TSandswirlAnimator::Animate(bool draw)
             {
                 // create the quicksand effect
                 SObjectState def;
-                memset(&def, 0, sizeof(SObjectState));
                 def.objclass = OBJCLASS_EFFECT;
                 def.level = MapPane.GetMapLevel();
                 S3DPoint putpos;
@@ -10725,7 +10719,6 @@ void TRippleAnimator::Initialize()
 void TRippleAnimator::AddNewRipple(int32_t x, int32_t y, int32_t z, int32_t len)
 {
     SObjectState def;
-    memset(&def, 0, sizeof(SObjectState));
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = -1;
     def.level = MapPane.GetMapLevel();
@@ -10997,7 +10990,6 @@ void TDripAnimator::Initialize()
 void TDripAnimator::AddNewRipple(int32_t x, int32_t y, int32_t z, int32_t len)
 {
     SObjectState def;
-    memset(&def, 0, sizeof(SObjectState));
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = -1;
     def.level = MapPane.GetMapLevel();
@@ -11392,7 +11384,6 @@ void TMistAnimator::Initialize()
 void TMistAnimator::AddNewRipple(int32_t x, int32_t y, int32_t z, int32_t len)
 {
     SObjectState def;
-    memset(&def, 0, sizeof(SObjectState));
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = -1;
     def.level = MapPane.GetMapLevel();

@@ -372,7 +372,6 @@ class TFixtureItem : public TArmor
     static std::unique_ptr<SObjectState> Def(const JsonValue& spec)
     {
         auto def = std::make_unique<SObjectState>();
-        memset(def.get(), 0, sizeof(SObjectState));
         def->objclass = (short)spec["class"].Int(OBJCLASS_ARMOR);
         if (!TObjectClass::GetClass(def->objclass))
             throw std::runtime_error("no class " + std::to_string(def->objclass) + " loaded");
@@ -520,7 +519,6 @@ class TFixtureChar : public Base, public IFixtureChar
     static std::unique_ptr<SObjectState> Def(const JsonValue& spec)
     {
         auto def = std::make_unique<SObjectState>();
-        memset(def.get(), 0, sizeof(SObjectState));
         def->objclass = (short)spec["class"].Int(OBJCLASS_CHARACTER);
         const std::string type = spec.Has("type") ? spec["type"].Str() : spec["name"].Str();
         TObjectClass* cl = TObjectClass::GetClass(def->objclass);

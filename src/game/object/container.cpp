@@ -463,7 +463,6 @@ bool TVialRack::Use(TObjectInstance* user, int32_t with)
             {
                 // generate a new vial
                 SObjectState def;
-                memset(&def, 0, sizeof(SObjectState));
                 def.objclass = OBJCLASS_CONTAINER;
                 def.objtype = ContainerClass.FindObjType("Empty Vial");
                 def.pos = IntPos(*this);

@@ -1000,7 +1000,6 @@ TObjectInstance* GenerateObj(TSector* sect, uint8_t *map, uint8_t *overmap, int3
     TObjectInstance* inst;
     SObjectState def;
 
-    memset(&def, 0, sizeof(SObjectState));
     def.objclass = OBJCLASS_TILE;
 
     int32_t tx = (x * PLATESPERSECTX) + px;
@@ -2186,7 +2185,6 @@ static void AddWhat(TToken& t, S3DPoint pos, int32_t number)
     {
         SObjectState def;
         constexpr int32_t intensity = 220, mult = 12;
-        memset(&def, 0, sizeof(SObjectState));
 
         def.objclass = OBJCLASS_TILE;
         def.objtype = TileClass.FindObjType("light");
@@ -2226,7 +2224,6 @@ static void AddWhat(TToken& t, S3DPoint pos, int32_t number)
     }
 
     SObjectState def;
-    memset(&def, 0, sizeof(SObjectState));
     def.objclass = cl->ClassId();
     def.objtype = objtype;
     def.flags = 0;
@@ -3898,7 +3895,6 @@ COMMAND(CmdReplace)
         else
         {
             SObjectState def;
-            memset(&def, 0, sizeof(SObjectState));
 
             def.objclass = cl->ClassId();
             def.objtype = objtype;

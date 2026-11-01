@@ -2944,7 +2944,6 @@ void TCharacter::EffectBurst(const char *name, int32_t height)
     extern TObjectClass EffectClass;
 
     SObjectState def;
-    memset(&def, 0, sizeof(SObjectState));
 
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = EffectClass.FindObjType(name);
@@ -5611,7 +5610,6 @@ bool TCharacter::Pulp(S3DPoint vel, int32_t piece_count, int32_t blood_count)
     Disable();
 
     SObjectState def;
-    memset(&def, 0, sizeof(SObjectState));
     def.objclass = OBJCLASS_EFFECT;
     def.level = MapPane.GetMapLevel();
     def.pos = IntPos(*this);
@@ -5644,7 +5642,6 @@ bool TCharacter::Burn()
     if (!burning)
     {
         SObjectState def;
-        memset(&def, 0, sizeof(SObjectState));
         def.objclass = OBJCLASS_EFFECT;
         def.level = MapPane.GetMapLevel();
         def.pos = IntPos(*this);
@@ -6364,7 +6361,6 @@ bool TCharacter::Flail()
     if (!burning)
     {
         SObjectState def;
-        memset(&def, 0, sizeof(SObjectState));
         def.objclass = OBJCLASS_EFFECT;
         def.level = MapPane.GetMapLevel();
         def.pos = IntPos(*this);

@@ -485,14 +485,13 @@ TObjectInstance::TObjectInstance(SObjectState* def, TObjectImagery* img)
     inf = cl->GetObjType(objtype);
     if (!inf)
         FatalError("Bad object type in class", cl->ClassName());
+    name = inf->name;               // the type's name unless the record names it
     initial_state_ = std::make_unique<SObjectState>(*def);
     inf->Apply(*def, *this);
 
   // Set imagery
     imagery = img;
     AttachVisual();
-
-    name = inf->name;
 
   // Setup stat array
     if (cl->NumObjStats() > 0)
@@ -1511,7 +1510,6 @@ bool TObjectInstance::Use(TObjectInstance* user, int32_t with)
         inst->SetFlags(OF_KILL);
 
         SObjectState def;
-        memset(&def, 0, sizeof(SObjectState));
 
         def.objclass = ObjClass();
         def.objtype = ObjType() > inst->ObjType() ? (ObjType() + 1) : (inst->ObjType() + 1);

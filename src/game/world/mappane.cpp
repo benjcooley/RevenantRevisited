@@ -1704,7 +1704,6 @@ int32_t TMapPane::AddShadow(TObjectInstance* oi)
     }
 
     SObjectState def;
-    memset(&def, 0, sizeof(SObjectState));
 
     char buf[80];
     sprintf(buf, "shadow_%s", oi->GetTypeName());

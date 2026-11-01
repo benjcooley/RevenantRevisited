@@ -35,6 +35,7 @@ class TLightComponent final : public TComponent
     REFL_FRIEND(TLightComponent)
     friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
     friend class TLegacySerialize;
+    friend class TObjectDef;            // Apply / Capture of the light record (objectdef.h)
 
   public:
     PROP_FN(1, S3DPoint, offset,     Offset,     SetOffset,     "Offset from the owner, world units");

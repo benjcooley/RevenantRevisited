@@ -39,14 +39,39 @@
 #include "engine/refl/refl.h"
 
 #include <memory>
+#include <string>
+#include <vector>
 
 _CLASSDEF(TObjectInstance)
 _CLASSDEF(TObjectImagery)
 
 typedef TSizableArray<int32_t, 0, 1> TStatisticList;
 
-// Instance state: the record of one object. Ids 1-99 are the base's; a
-// derived record takes its own hundred (REFL_IDS) so the base can grow.
+// One object stat as the stream stores it: the stat's unique id names it,
+// so a saved stat survives a reordered class.def.
+struct SObjectStatState
+{
+    REFL_IDS(1, 9)
+    PROP(1, "The stat's unique id")   uint32_t id    = 0;
+    PROP(2, "Its value")              int32_t  value = 0;
+};
+
+// The light's record, in retail's types (TLightComponent holds the same).
+struct SLightState
+{
+    REFL_IDS(1, 19)
+    PROP(1, "LIGHT_* bits")                          int32_t  flags      = 0;
+    PROP(2, "Offset from the object, world units")   S3DPoint offset     = {0, 0, 0};
+    PROP(3, "Red, 0-255")                            int32_t  red        = 0;
+    PROP(4, "Green, 0-255")                          int32_t  green      = 0;
+    PROP(5, "Blue, 0-255")                           int32_t  blue       = 0;
+    PROP(6, "Radius in world units")                 int32_t  intensity  = 0;
+    PROP(7, "Falloff multiplier, -1 the default")    int32_t  multiplier = -1;
+};
+
+// Instance state: the record of one object, everything the base stream
+// carries. Ids 1-99 are the base's; a derived record takes its own hundred
+// (REFL_IDS) so the base can grow.
 struct SObjectState
 {
     REFL_IDS(1, 99)
@@ -68,6 +93,15 @@ struct SObjectState
     };
     PROP(12, "Object group")                                   uint8_t  group = 0;
     PROP(13, "Persistent identity; 0 keeps the node's")       TUid     uid;
+    PROP(14, "Instance name; empty is the type's")             std::string name;
+    PROP(15, "Inventory slot in the container, -1 none")       int32_t  inventnum = -1;
+    PROP(16, "Index in the container's inventory, -1 none")    int32_t  invindex  = -1;
+    PROP(17, "Attached shadow object, -1 none")                int32_t  shadow    = -1;
+    PROP(18, "Map index the file gave it, -1 unassigned")      int32_t  mapindex  = -1;
+    PROP(19, "Animation frame")                                int32_t  frame     = 0;
+    PROP(20, "Animation direction and rate")                   int32_t  framerate = 1;
+    PROP(21, "Object stats by unique id; empty keeps the type's") std::vector<SObjectStatState> stats;
+    PROP(22, "The light, when OF_LIGHT is set")                SLightState light;
 };
 
 // The archetype.

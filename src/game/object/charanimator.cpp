@@ -700,7 +700,6 @@ void TCharAnimator::InitUtilityImagery()
     extern TObjectClass EffectClass;
 
     SObjectState def;
-    memset(&def, 0, sizeof(SObjectState));
 
     def.objclass = OBJCLASS_EFFECT;
     def.objtype = EffectClass.FindObjType("CharUtility");

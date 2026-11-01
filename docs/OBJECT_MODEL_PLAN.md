@@ -397,10 +397,91 @@ grown out of `SObjectInfo` and `TObjectBuilder` with `Create` / `Apply` /
 in place of the builder macros, the type table as the archetype registry,
 the retained initial state and `Reset()`; gated by the sector dump.
 
+### Phase 5: sealing the model: every state a component, every field in the codec
+
+The object model is sealed when two things are true and a test keeps
+them true:
+
+1. **Every per-instance field is in the serialization system.** Each
+   class has a state record (`SObjectState` and its derivations, one
+   hundred ids each) that carries everything the retail stream reads for
+   it, as reflected props. The legacy codec reads retail bytes into the
+   record and writes the record to retail bytes; `Apply` / `Capture` move
+   the record to and from the live object. No field is streamed by hand
+   from a live object any more. The gate is the sector byte dump: bytes ->
+   record -> `Create` -> `Capture` -> bytes is identical.
+2. **The object's optional state is components.** `TObjectInstance` keeps
+   identity (class, type, archetype), the OF_* flags, the name, the group,
+   the imagery, the animation state, the inventory membership (owner,
+   slot) and the initial record; the node keeps position, rotation, level,
+   sector and uid. Everything else is a component with annotated fields,
+   held through a soft ref and reached through one accessor, as the light
+   and the visual are. A component's state is a nested record in the
+   class's state record (`Struct` / `List` props), so `Capture` reads
+   components and `Apply` fills them, and the inspector shows them as
+   blocks.
+
+**The component set** (the maximal cut; each lands as one inch with its
+record, codec and gate):
+
+| Component | Holds | From |
+|---|---|---|
+| `TLightComponent` (landed) | offset, colour, radius, multiplier, flags | SLightDef |
+| `T2DVisualComponent` / `T3DVisualComponent` (landed) | nothing persisted: derived from the imagery | |
+| `TObjectAnimator` (exists) | the playhead: frame, framerate, previous frame; the animator's own data | `frame`, `framerate`, `prevframe` on the object |
+| `TStatsComponent` | the object stats (`TStatisticList`) and their ids | `stats` on the object, the stat block of the stream |
+| `TInventoryComponent` | the container's slots: items as child nodes, slot order | `inventory`; the nested item records of the stream |
+| `TScriptComponent` | the bound script, command state | `script`, `commanddone` |
+| `TMotionComponent` | velocity, accumulator, move angle; the integrator `Move` reads and writes | `vel`, `accum`, `moveangle` |
+| `TVitalsComponent` (character) | recovery timers, poison, burning, invisibility, teleport point | `TCharacter` fields the stream carries |
+| `TAIComponent` (character) | targets, has-seen, waypoints, retreat, boss state | `TCharacter` AI fields |
+| `TCombatComponent` (character) | action blocks, auto-combat, fighting mode | `TCharacter` combat fields |
+| `TEquipmentComponent` (player) | the equip slots | `equipment[]` |
+| `TSpellbookComponent` (player) | known spells, talisman codes | `knownspells` |
+| `TAutomapComponent` (player) | the explored automap | `automap` |
+| `TStatEffectsComponent` (player) | stat effects in force | `stateffects` |
+| `TExitComponent` (exit) | destination as a node ref, level | `TExit::name` |
+
+Not components: a scroll's open UI (`TScroll` pointers to a multi and a
+font are screen state), the seams the test fixtures hook, the editor's
+debug counters.
+
+**Order.** Base first, then the classes with state, biggest value first:
+
+1. The base record complete: `SObjectState` gains name, inventory slot,
+   shadow, file map index, frame, framerate, the stat list, the light
+   record. The 137 `memset` fill sites go (the record has initializers;
+   `memset` on a record with a string is undefined). `ReadObjectInstance`
+   / `WriteObjectInstance` retarget onto the record; `Apply` / `Capture`
+   cover every field. Gate: the sector dump.
+2. The playhead into the animator; `TStatsComponent`; `TScriptComponent`;
+   `TMotionComponent`; each with its nested record.
+3. `TInventoryComponent`: items as child nodes, `TInventoryIterator` over
+   the component, the stream's nested item records through `Create`.
+4. `SCharacterState` with `TVitalsComponent`, `TAIComponent`,
+   `TCombatComponent`; the character's legacy read onto the record.
+5. `SPlayerState` with the four player components; the player's legacy
+   read (objversion 15) onto the record.
+6. The small classes: `SExitState` + `TExitComponent`, `SContainerState`,
+   `SAmmoState`, `SMoneyState`, `SFoodState`, `SScrollState`,
+   `SWeaponState`, `SDripState`, `SMonsterGenState`, each from its legacy
+   read.
+7. The seal: `docs/OBJECT_SYSTEM.md` states the rule; a test walks every
+   registered class's record and asserts that `Capture` after `Apply`
+   reproduces it field for field, and the sector dump proves the bytes.
+
+**Decisions.** The animation `state` stays on the object: it is the
+object's state (a door open, a chest shut), not the playhead, and the
+record carries it. A component that exists only when a flag says so (the
+light under OF_LIGHT) keeps that rule; a component every object of a
+class has (stats, motion on a mobile) is added by `Create`. Items as child
+nodes make a container's inventory a node subtree, which is what the
+sector rules already allow (a contained object is in the map through its
+root).
+
 ## 5. Out of scope here
 
 - Prefab stamping in game (docs/vfx/PREFAB_SYSTEM.md §6).
-- Inventory/stats/script reflection beyond what phase 4 needs.
 - Changing retail semantics of flags/state/facing (combat divergence policy).
 
 ## 6. Decision log
