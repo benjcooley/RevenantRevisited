@@ -647,10 +647,11 @@ void TLegacyDeserialize::ReadPlayer(TPlayer& o, TInputStream& is, int32_t versio
 }
 
 // REVSYNC: TContainer::Load @ 0x004dd3e0 (SAVE_GAME.md §11.3).
-void TLegacyDeserialize::ReadContainer(TContainer& o, TInputStream& is, int32_t version, int32_t objversion)
+// REVSYNC: TContainer::Load. An old map (versions 2-4) carried the lock as
+// fields that became stats; a container in the world re-enters its saved
+// state (open or shut).
+void TLegacyDeserialize::FinishContainer(TContainer& o, TInputStream& is, int32_t version)
 {
-    ReadObjectInstance(o, is, version, objversion);
-
     if (version >= 2 && version < 5) // We're using object stats now
     {
         int32_t contflags, pickdifficulty;
@@ -658,8 +659,6 @@ void TLegacyDeserialize::ReadContainer(TContainer& o, TInputStream& is, int32_t 
         o.SetStat("Locked", contflags != 0);
         o.SetStat("PickDifficulty", pickdifficulty);
     }
-
-  // A container in the world re-enters its saved state (open or shut).
     if (!(o.flags & OF_INVENTORY))
     {
         o.SetCommandDone(true);
@@ -667,16 +666,40 @@ void TLegacyDeserialize::ReadContainer(TContainer& o, TInputStream& is, int32_t 
     }
 }
 
+void TLegacyDeserialize::ReadContainer(TContainer& o, TInputStream& is, int32_t version, int32_t objversion)
+{
+    ReadObjectInstance(o, is, version, objversion);
+    FinishContainer(o, is, version);
+}
+
 void TLegacyDeserialize::ReadExit(TExit& o, TInputStream& is, int32_t version, int32_t objversion)
 {
-    ReadContainer(o, is, version, objversion);
-    is >> o.exitflags;
+    (void)objversion;
+    SExitState st;
+    const SLoadDerived derived = ReadObjectInstanceState(st, o, is, version);
+    // The old-map lock fields sit between the base and the exit flags
+    int32_t oldlock[2] = {0, 0};
+    const bool oldmap = version >= 2 && version < 5;
+    if (oldmap)
+        is >> oldlock[0] >> oldlock[1];
+    is >> st.exitflags;
+    o.Archetype()->Apply(st, o);
+    FinishObjectInstance(o, version, derived);
+    if (oldmap)
+    {
+        o.SetStat("Locked", oldlock[0] != 0);
+        o.SetStat("PickDifficulty", oldlock[1]);
+    }
+    if (!(o.flags & OF_INVENTORY))
+    {
+        o.SetCommandDone(true);
+        o.SetState(o.state);
+    }
 }
 
 void TLegacyDeserialize::ReadAmmo(TAmmo& o, TInputStream& is, int32_t version, int32_t objversion)
 {
     ReadObjectInstance(o, is, version, objversion);
-
     if (version < 5)
     {
         int32_t amount;
@@ -692,7 +715,6 @@ void TLegacyDeserialize::ReadAmmo(TAmmo& o, TInputStream& is, int32_t version, i
 void TLegacyDeserialize::ReadMoney(TMoney& o, TInputStream& is, int32_t version, int32_t objversion)
 {
     ReadObjectInstance(o, is, version, objversion);
-
     if (version < 5)
     {
         int32_t amount;
@@ -712,69 +734,64 @@ void TLegacyDeserialize::ReadFood(TFood& o, TInputStream& is, int32_t version, i
 
 void TLegacyDeserialize::ReadScroll(TScroll& o, TInputStream& is, int32_t version, int32_t objversion)
 {
-    ReadObjectInstance(o, is, version, objversion);
-
+    (void)objversion;
+    SScrollState st;
+    const SLoadDerived derived = ReadObjectInstanceState(st, o, is, version);
     short len;
     is >> len;
-
-    if (len < 1)
-        o.text = nullptr;
-    else
+    if (len > 0)
     {
-        o.text = new char[len+1];
-
-        if (o.text)
-        {
-            int32_t i;
-            for (i = 0; i < len; i++)
-                is >> o.text[i];
-
-            o.text[i] = 0;
-        }
+        st.text.resize(size_t(len));
+        for (int32_t i = 0; i < len; i++)
+            is >> st.text[size_t(i)];
     }
+    o.Archetype()->Apply(st, o);
+    FinishObjectInstance(o, version, derived);
 }
 
 void TLegacyDeserialize::ReadWeapon(TWeapon& o, TInputStream& is, int32_t version, int32_t objversion)
 {
-    ReadObjectInstance(o, is, version, objversion);
-
-    is >> o.poison;
+    (void)objversion;
+    SWeaponState st;
+    const SLoadDerived derived = ReadObjectInstanceState(st, o, is, version);
+    is >> st.poison;
+    o.Archetype()->Apply(st, o);
+    FinishObjectInstance(o, version, derived);
 }
 
 void TLegacyDeserialize::ReadDripEffect(TDripEffect& o, TInputStream& is, int32_t version, int32_t objversion)
 {
-    ReadObjectInstance(o, is, version, objversion);
-    is >> o.ripplesize >> o.height >> o.period;
+    (void)objversion;
+    SDripState st;
+    const SLoadDerived derived = ReadObjectInstanceState(st, o, is, version);
+    is >> st.ripplesize >> st.height >> st.period;
+    o.Archetype()->Apply(st, o);
+    FinishObjectInstance(o, version, derived);
 }
 
 // REVSYNC: TMonsterGen::Load @ 0x00516e00 (vtable 0x160) -- base fields,
 // then uint8 slot count; per slot the type name (NUL-terminated), int32
 // treasure, int32 frequency, and from stream version 15 int32 clock start;
-// int32 cap.
+// int32 cap. Before version 15 a loaded clock starts at the load.
 void TLegacyDeserialize::ReadMonsterGen(TMonsterGen& o, TInputStream& is, int32_t version, int32_t objversion)
 {
-    ReadObjectInstance(o, is, version, objversion);
-
+    (void)objversion;
+    SMonsterGenState st;
+    const SLoadDerived derived = ReadObjectInstanceState(st, o, is, version);
     uint8_t count = 0;
     is >> count;
     for (int32_t i = 0; i < count; i++)
     {
-        const std::string type = ReadCString(is);
-        int32_t treasure = 0, frequency = 0;
-        is >> treasure >> frequency;
-        o.AddType(type.c_str(), frequency, treasure);
-
-        // Before version 15 a loaded clock starts at the load. Retail put the
-        // start in the i-th slot, which AddType has just filled.
+        SMonsterGenSlotState slot;
+        slot.type = ReadCString(is);
+        is >> slot.treasure >> slot.frequency;
         if (version >= 15)
-        {
-            int32_t start = 0;
-            is >> start;
-            if (i < TMonsterGen::kMaxTypes && o.slots[i])
-                o.slots[i]->start = start;
-        }
+            is >> slot.start;
+        st.slots.push_back(slot);
     }
-    is >> o.maxmonsters;
+    is >> st.maxmonsters;
+    o.Archetype()->Apply(st, o);
+    FinishObjectInstance(o, version, derived);
 }
 
 // REVSYNC: TObjectInstance::LoadInventory @ 0x00472310 (vtable slot 0x168).
@@ -1072,52 +1089,58 @@ void TLegacySerialize::WriteVialRack(TVialRack& o, TOutputStream& os)
 
 void TLegacySerialize::WriteExit(TExit& o, TOutputStream& os)
 {
-    WriteContainer(o, os);
-    os << o.exitflags;
+    SettleFlagsForSave(o);
+    SExitState st;
+    o.Archetype()->Capture(o, st);
+    WriteObjectInstanceState(st, os);
+    os << uint32_t(st.exitflags);
 }
 
 void TLegacySerialize::WriteScroll(TScroll& o, TOutputStream& os)
 {
-    WriteObjectInstance(o, os);
-
-    short len = o.text ? strlen(o.text) : 0;
+    SettleFlagsForSave(o);
+    SScrollState st;
+    o.Archetype()->Capture(o, st);
+    WriteObjectInstanceState(st, os);
+    const short len = (short)st.text.size();
     os << len;
-
-    if (len)
-    {
-        for (int32_t i = 0; i < len; i++)
-            os << o.text[i];
-    }
+    for (int32_t i = 0; i < len; i++)
+        os << st.text[size_t(i)];
 }
 
 void TLegacySerialize::WriteWeapon(TWeapon& o, TOutputStream& os)
 {
-    WriteObjectInstance(o, os);
-
-    os << o.poison;
+    SettleFlagsForSave(o);
+    SWeaponState st;
+    o.Archetype()->Capture(o, st);
+    WriteObjectInstanceState(st, os);
+    os << st.poison;
 }
 
 void TLegacySerialize::WriteDripEffect(TDripEffect& o, TOutputStream& os)
 {
-    WriteObjectInstance(o, os);
-    os << o.ripplesize << o.height << o.period;
+    SettleFlagsForSave(o);
+    SDripState st;
+    o.Archetype()->Capture(o, st);
+    WriteObjectInstanceState(st, os);
+    os << st.ripplesize << st.height << st.period;
 }
 
 // REVSYNC: TMonsterGen::Save @ 0x00516eb0 (vtable 0x164) -- the same, the
 // used slots only.
 void TLegacySerialize::WriteMonsterGen(TMonsterGen& o, TOutputStream& os)
 {
-    WriteObjectInstance(o, os);
-
-    os << uint8_t(o.NumTypes());
-    for (const auto& slot : o.slots)
+    SettleFlagsForSave(o);
+    SMonsterGenState st;
+    o.Archetype()->Capture(o, st);
+    WriteObjectInstanceState(st, os);
+    os << uint8_t(st.slots.size());
+    for (const SMonsterGenSlotState& slot : st.slots)
     {
-        if (!slot)
-            continue;
-        os.WriteBytes(slot->type.c_str(), int32_t(slot->type.size()) + 1);
-        os << slot->treasure << slot->frequency << slot->start;
+        os.WriteBytes(slot.type.c_str(), int32_t(slot.type.size()) + 1);
+        os << slot.treasure << slot.frequency << slot.start;
     }
-    os << o.maxmonsters;
+    os << st.maxmonsters;
 }
 
 // REVSYNC: TObjectInstance::SaveInventory @ 0x00472380 (vtable slot 0x16c):

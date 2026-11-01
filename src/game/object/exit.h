@@ -43,6 +43,7 @@ class TExit : public TContainer
 {
     friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
     friend class TLegacySerialize;
+    friend class TExitDef;              // Apply / Capture of the record (objectdefs.h)
   public:
     // REVSYNC: Build @ 0x0050e360 -- exits never move and always pulse.
     TExit(TObjectImagery* newim) : TContainer(newim) { flags |= OF_IMMOBILE | OF_PULSE; }
@@ -140,7 +141,7 @@ class TExit : public TContainer
     int32_t  wait      = 0;     // +0xe8, TLever's delay counter
 };
 
-DEFINE_OBJECT_DEF("EXIT", TExit)
+// The exit's def is hand-written: objectdefs.h (TExitDef)
 
 enum
 {
@@ -174,4 +175,4 @@ class TLever : public TExit
     int32_t  usedir = 3;    // +0x104, 0 = NE, SE, SW, NW
 };
 
-DEFINE_OBJECT_DEF("LEVER", TLever)
+// The lever's def: the exit's codec with a lever constructor (objectdefs.cpp)

@@ -9,7 +9,6 @@
 #include "game/world/mappane.h"
 #include "game/ui/textbar.h"
 
-REGISTER_OBJECT_DEF(TWeapon)
 TObjectClass WeaponClass("WEAPON", OBJCLASS_WEAPON, 0);
 
 DEFSTAT(Weapon, EqSlot,             EQSL, 0, 3, 0, 9)

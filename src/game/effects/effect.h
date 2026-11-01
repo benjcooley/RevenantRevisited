@@ -2333,6 +2333,7 @@ class TDripEffect : public TEffect
 {
     friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
     friend class TLegacySerialize;
+    friend class TDripDef;              // Apply / Capture of the record (objectdefs.h)
   public:
     TDripEffect(TObjectImagery* newim) : TEffect(newim) {}
     TDripEffect(SObjectState* def, TObjectImagery* newim) : TEffect(def, newim) {}

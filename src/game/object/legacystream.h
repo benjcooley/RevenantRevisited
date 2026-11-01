@@ -83,6 +83,9 @@ class TLegacyDeserialize
     static void ReadComplexObjectState(SComplexObjectState& st, TComplexObject& o, TInputStream& is,
                                        int32_t version, int32_t objversion, SLoadDerived& derived);
     static void FinishObjectInstance(TObjectInstance& o, int32_t version, const SLoadDerived& derived);
+    static void FinishContainer(TContainer& o, TInputStream& is, int32_t version);
+        // What retail settled after a container's load (the old-map stat
+        // conversion, re-entering the saved open or shut state)
     static void ReadComplexObject(TComplexObject& o, TInputStream& is, int32_t version, int32_t objversion);
     static void ReadCharacter(TCharacter& o, TInputStream& is, int32_t version, int32_t objversion);
     static void ReadPlayer(TPlayer& o, TInputStream& is, int32_t version, int32_t objversion);

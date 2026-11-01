@@ -24,7 +24,6 @@
 #include <algorithm>
 #include <iterator>
 
-REGISTER_OBJECT_DEF(TMonsterGen)
 
 namespace {
 

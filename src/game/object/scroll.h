@@ -17,6 +17,7 @@ class TScroll final : public TObjectInstance
 {
     friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
     friend class TLegacySerialize;
+    friend class TScrollDef;            // Apply / Capture of the record (objectdefs.h)
   public:
     TScroll(TObjectImagery* newim) : TObjectInstance(newim) { text = nullptr; }
     TScroll(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) { text = nullptr; }
@@ -38,7 +39,7 @@ class TScroll final : public TObjectInstance
     char *text;             // Text written on the scroll
 };
 
-DEFINE_OBJECT_DEF("SCROLL", TScroll)
+// The scroll's def is hand-written: objectdefs.h (TScrollDef)
 
 // ***************
 // * TScrollPane *

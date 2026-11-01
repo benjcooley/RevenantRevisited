@@ -44,6 +44,7 @@ class TMonsterGen : public THelper
 {
     friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
     friend class TLegacySerialize;
+    friend class TMonsterGenDef;        // Apply / Capture of the record (objectdefs.h)
   public:
     // REVSYNC: Build @ 0x005176a0 -- a generator is an editor object that
     // never moves and always pulses (flags 0x8101).
@@ -89,4 +90,4 @@ class TMonsterGen : public THelper
     bool    offscreen   = true;                             // +0xf0, OnScreen/OffScreen
 };
 
-DEFINE_OBJECT_DEF("MonsterGen", TMonsterGen)
+// The generator's def is hand-written: objectdefs.h (TMonsterGenDef)

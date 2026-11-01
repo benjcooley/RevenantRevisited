@@ -177,6 +177,23 @@ class TStateObjectDef : public TObjectDef
     [[nodiscard]] SObjectState& DefaultState() override { return defaultState; }
 };
 
+// A def for an object class whose codec is a base def's: TLever is an
+// exit with its own C++ class, so its def is the exit's codec with a
+// lever constructor. Registered with MakeObjectDef<Obj, BaseDef>.
+template <class Obj, class BaseDef = TStateObjectDef<SObjectState>>
+class TObjectDefFor final : public BaseDef
+{
+  public:
+    TObjectInstance* Create(SObjectState& state, TObjectImagery* img) const override { return new Obj(&state, img); }
+    TObjectInstance* Create(TObjectImagery* img) const override { return new Obj(img); }
+};
+
+template <class Obj, class BaseDef = TStateObjectDef<SObjectState>>
+std::unique_ptr<TObjectDef> MakeObjectDef()
+{
+    return std::make_unique<TObjectDefFor<Obj, BaseDef>>();
+}
+
 // A def class for an object class with no state of its own:
 // `DEFINE_OBJECT_DEF("Character", TCharacter)` in the header,
 // `REGISTER_OBJECT_DEF(TCharacter)` in one .cpp. A class with state, Apply

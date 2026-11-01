@@ -3936,7 +3936,7 @@ class TWaterReferenceDef final : public TStateObjectDef<SObjectState>
 template <typename Effect>
 static std::unique_ptr<TObjectDef> MakeWaterReferenceDef() { return std::make_unique<TWaterReferenceDef<Effect>>(); }
 static TObjectDef::SRegistrar g_ripple_reference_builder("Ripple", MakeWaterReferenceDef<TRippleEffect>);
-static TObjectDef::SRegistrar g_drip_reference_builder("Drip", MakeWaterReferenceDef<TDripEffect>);
+// "Drip" is registered by TDripDef (objectdefs.cpp): the drip has a record of its own.
 
 // Map render resolves imagery lazily. Revisit attachment there if a builder
 // ran before its texture assets were ready; Initialize is idempotent.

@@ -8,6 +8,7 @@
 // shipped game replaced are in attic-final:attic/src/exit_1998.cpp.
 
 #include "game/object/exit.h"
+#include "game/object/objectdefs.h"
 
 #include "game/imagery/3dimage.h"
 #include "game/script/dialog.h"
@@ -31,7 +32,6 @@
 extern short DistX[256];
 extern short DistY[256];
 
-REGISTER_OBJECT_DEF(TExit)
 TObjectClass ExitClass("EXIT", OBJCLASS_EXIT, 0);
 
 // Hard coded class stats
@@ -572,8 +572,7 @@ class TPressPlate : public TExit
     void Unactivate() override { SetState(0); }
 };
 
-DEFINE_OBJECT_DEF("PressPlate", TPressPlate)
-REGISTER_OBJECT_DEF(TPressPlate)
+static TObjectDef::SRegistrar g_pressplate_def("PressPlate", &MakeObjectDef<TPressPlate, TExitDef>);
 
 // ************
 // * TUpBlock *
@@ -595,8 +594,7 @@ class TUpBlock : public TExit
     void Pulse() override;
 };
 
-DEFINE_OBJECT_DEF("UpBlock", TUpBlock)
-REGISTER_OBJECT_DEF(TUpBlock)
+static TObjectDef::SRegistrar g_upblock_def("UpBlock", &MakeObjectDef<TUpBlock, TExitDef>);
 
 // A finished move settles (raw states).
 void TUpBlock::Pulse()
@@ -673,7 +671,6 @@ bool TDragonEntAnimator::Render()
 // * TLever      *
 // ***************
 
-REGISTER_OBJECT_DEF(TLever)
 
 bool TLever::Use(TObjectInstance* user, int32_t with)
 {

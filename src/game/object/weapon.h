@@ -38,6 +38,7 @@ class TWeapon : public TObjectInstance
 {
     friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
     friend class TLegacySerialize;
+    friend class TWeaponDef;            // Apply / Capture of the record (objectdefs.h)
   public:
     TWeapon(TObjectImagery* newim) : TObjectInstance(newim) { ClearWeapon(); }
     TWeapon(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) { ClearWeapon(); }
@@ -65,4 +66,4 @@ class TWeapon : public TObjectInstance
     int32_t poison;             // how much posion is currently on the blade
 };
 
-DEFINE_OBJECT_DEF("WEAPON", TWeapon)
+// The weapon's def is hand-written: objectdefs.h (TWeaponDef)
