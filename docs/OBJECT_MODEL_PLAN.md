@@ -428,8 +428,8 @@ record, codec and gate):
 |---|---|---|
 | `TLightComponent` (landed) | offset, colour, radius, multiplier, flags | SLightDef |
 | `T2DVisualComponent` / `T3DVisualComponent` (landed) | nothing persisted: derived from the imagery | |
-| `TObjectAnimator` (exists) | the playhead: frame, framerate, previous frame; the animator's own data | `frame`, `framerate`, `prevframe` on the object |
-| `TStatsComponent` | the object stats (`TStatisticList`) and their ids | `stats` on the object, the stat block of the stream |
+| `TObjectAnimator` (exists) | its own data; the playhead stays on the object (see decisions) | the animator's duplicate `frame` / `framerate` copies go |
+| `TStatsComponent` (landed) | the object stats by class stat id | `stats` on the object, the stat block of the stream |
 | `TInventoryComponent` | the container's slots: items as child nodes, slot order | `inventory`; the nested item records of the stream |
 | `TScriptComponent` | the bound script, command state | `script`, `commanddone` |
 | `TMotionComponent` | velocity, accumulator, move angle; the integrator `Move` reads and writes | `vel`, `accum`, `moveangle` |
@@ -454,8 +454,8 @@ debug counters.
    `memset` on a record with a string is undefined). `ReadObjectInstance`
    / `WriteObjectInstance` retarget onto the record; `Apply` / `Capture`
    cover every field. Gate: the sector dump.
-2. The playhead into the animator; `TStatsComponent`; `TScriptComponent`;
-   `TMotionComponent`; each with its nested record.
+2. `TStatsComponent` (landed); `TScriptComponent`; `TMotionComponent`;
+   the animator's mirrored playhead copies removed.
 3. `TInventoryComponent`: items as child nodes, `TInventoryIterator` over
    the component, the stream's nested item records through `Create`.
 4. `SCharacterState` with `TVitalsComponent`, `TAIComponent`,
@@ -472,7 +472,14 @@ debug counters.
 
 **Decisions.** The animation `state` stays on the object: it is the
 object's state (a door open, a chest shut), not the playhead, and the
-record carries it. A component that exists only when a flag says so (the
+record carries it. The playhead (`frame`, `framerate`) stays with it: an
+object without an animator still has a frame (the stream stores one for
+every animated object, and the animator is attached lazily on screen), so
+the object owns the one copy and the animator drives it; the animator's
+own mirrored copies are what goes. A stats component holds values by
+class stat id, as every call site addresses them, and the record names
+them by unique id; the component has no annotations of its own because
+the record is its view. A component that exists only when a flag says so (the
 light under OF_LIGHT) keeps that rule; a component every object of a
 class has (stats, motion on a mobile) is added by `Create`. Items as child
 nodes make a container's inventory a node subtree, which is what the

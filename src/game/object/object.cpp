@@ -8,6 +8,7 @@
 
 #include "engine/scene/intworld.h"
 #include "game/world/lightcomponent.h"
+#include "game/object/statscomponent.h"
 #include "engine/render/visualcomponent.h"
 
 #include "game/world/3dscene.h"
@@ -420,7 +421,7 @@ void TObjectInstance::ClearObject()
     moveangle = movevert = movedist = 0;
     movebits = 0;
 
-    stats.Clear();
+    stats_ = nullptr;
 
     // Origin, no rotation; oldpos differs so the first GetScreenPos projects.
     SetIntPos(*this, S3DPoint{0, 0, 0});
@@ -493,10 +494,10 @@ TObjectInstance::TObjectInstance(SObjectState* def, TObjectImagery* img)
     imagery = img;
     AttachVisual();
 
-  // Setup stat array
+  // The object's own statistics start as the type's
     if (cl->NumObjStats() > 0)
     {
-        stats.SetNumItems(cl->NumObjStats());
+        EnsureStats().Resize(cl->NumObjStats());
         for (int32_t c = 0; c < cl->NumObjStats(); c++)
             ResetObjStat(c);
     }
@@ -1999,6 +2000,41 @@ TLightComponent& TObjectInstance::EnsureLight()
     AddComponent(std::move(owned));
     light_.Set(light);
     return *light;
+}
+
+// ---- The object's statistics ---------------------------------------------
+
+int32_t TObjectInstance::GetObjStat(int32_t statid) const
+{
+    return stats_ ? stats_->Get(statid) : 0;
+}
+
+void TObjectInstance::SetObjStat(int32_t statid, int32_t value)
+{
+    if (stats_)
+        stats_->Set(statid, value);
+}
+
+void TObjectInstance::ResetObjStat(int32_t statid)
+{
+    EnsureStats().Set(statid, cl->GetObjStat(objtype, statid));
+}
+
+void TObjectInstance::DelStat(int32_t statid)
+{
+    if (stats_)
+        stats_->Remove(statid);
+}
+
+TStatsComponent& TObjectInstance::EnsureStats()
+{
+    if (!stats_)
+    {
+        auto owned = std::make_unique<TStatsComponent>();
+        stats_ = owned.get();
+        AddComponent(std::move(owned));
+    }
+    return *stats_;
 }
 
 TVisualComponent* TObjectInstance::Visual() const

@@ -55,6 +55,7 @@ uint32_t GenerateUniqueID();
 _CLASSDEF(TObjectAnimator)
 class TLightComponent;
 class TVisualComponent;
+class TStatsComponent;
 
 // Forward-declared free function used by TObjectInstance::SafeRefLookup
 // (and by TSafeRef<TObjectInstance>) to avoid pulling the mappane /
@@ -974,20 +975,20 @@ class TObjectInstance : public TComponent
         // Returns a statistic for an class
     int32_t NumObjStats() const { return cl->NumObjStats(); }
         // How many object statistics the class defines
-    virtual int32_t GetObjStat(int32_t statid) const { if ((uint32_t)statid < (uint32_t)stats.NumItems()) return stats[statid]; else return 0; }
+    virtual int32_t GetObjStat(int32_t statid) const;
         // Returns a statistic for an object (retail vtable +0xdc; a player
         // answers from its equipment- and spell-modified copy)
     int32_t FindObjStat(const char *statname) const { return cl->FindObjStat(statname); }
         // Finds a stat and returns its stat id or -1 if not found
     void SetStat(int32_t statid, int32_t value) { cl->SetStat(objtype, statid, value); }
         // Sets a class statistic
-    virtual void SetObjStat(int32_t statid, int32_t value) { if ((uint32_t)statid < (uint32_t)stats.NumItems()) stats[statid] = value; }
+    virtual void SetObjStat(int32_t statid, int32_t value);
         // Sets an object statistic (retail vtable +0xe8; a player sets its
         // modified copy too)
     void ResetStat(int32_t statid) { cl->ResetStat(objtype, statid); }
         // Resets class stat to default value
-    void ResetObjStat(int32_t statid) { stats[statid] = cl->GetObjStat(objtype, statid); }
-        // Resets object stat to default value
+    void ResetObjStat(int32_t statid);
+        // Resets object stat to the type's value
     virtual int32_t GetStat(const char *statname) const;
         // Returns a statistic given the statistic name (stat can be object or class stat).
         // REVSYNC: 0x00473600, virtual (slot 0xd4) as in retail
@@ -1000,8 +1001,10 @@ class TObjectInstance : public TComponent
     virtual bool GetFieldText(const char *field, char *buf, int32_t buflen);
         // Text of a named field as the stat sheet shows it (retail vtable +0xc8,
         // 0x00472f80); false when the object has no such field
-    void DelStat(int32_t statid) { stats.Collapse(statid); }
+    void DelStat(int32_t statid);
         // Deletes a stat in stat array (Used by classes DeleteStat(), don't call directly)
+    [[nodiscard]] TStatsComponent* Stats() const { return stats_; }
+        // The object's own statistics, or nullptr when its class defines none
 
   // Object drawing functions (Called by MapPane only.. don't call directly)
     virtual bool OnObject(SPoint &p)
@@ -1325,8 +1328,10 @@ class TObjectInstance : public TComponent
     void AttachVisual();
         // Adds the imagery's visual component, in the constructors
 
-  // Statistics
-    TStatisticList stats;       // Stats for object
+  // Statistics: a component the constructor adds when the class defines
+  // object stats, kept for life (the node destroys it after the object)
+    TStatsComponent* stats_ = nullptr;
+    TStatsComponent& EnsureStats();
 
   // Stream
     std::unique_ptr<std::vector<uint8_t>> unreadClassData;

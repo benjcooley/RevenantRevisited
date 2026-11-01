@@ -10,6 +10,7 @@
 #include "engine/scene/intworld.h"
 #include "game/object/object.h"
 #include "game/world/lightcomponent.h"
+#include "game/object/statscomponent.h"
 
 #include <cstdlib>
 #include <cstring>
@@ -102,19 +103,20 @@ void TObjectDef::Apply(const SObjectState& state, TObjectInstance& inst) const
     if (!state.stats.empty() && inst.cl)
     {
         const int32_t numstats = inst.cl->NumObjStats();
+        TStatsComponent& stats = inst.EnsureStats();
         if (numstats > 0)
-            inst.stats.SetNumItems(numstats);
+            stats.Resize(numstats);
         int32_t statid = 0;
         for (const SObjectStatState& saved : state.stats)
         {
-            if (statid >= inst.stats.NumItems())
+            if (statid >= stats.Count())
                 break;
             if (saved.id == inst.cl->ObjStatUniqueId(statid))
-                inst.stats[statid++] = saved.value;
+                stats.Set(statid++, saved.value);
             else
                 for (int32_t c = 0; c < numstats; c++)
                     if (saved.id == inst.cl->ObjStatUniqueId(c))
-                        inst.stats[c] = saved.value;
+                        stats.Set(c, saved.value);
         }
         if (inst.flags & OF_VIRGIN)
             for (int32_t c = 0; c < numstats; c++)
@@ -161,7 +163,7 @@ void TObjectDef::Capture(const TObjectInstance& inst, SObjectState& state) const
     state.stats.clear();
     if (inst.cl)
         for (int32_t c = 0; c < inst.cl->NumObjStats(); c++)
-            state.stats.push_back({ inst.cl->ObjStatUniqueId(c), c < inst.stats.NumItems() ? inst.stats[c] : 0 });
+            state.stats.push_back({ inst.cl->ObjStatUniqueId(c), inst.GetObjStat(c) });
 
     state.light = SLightState{};
     if (const TLightComponent* light = inst.Light())
