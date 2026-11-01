@@ -49,6 +49,8 @@
 #include "game/save/savegame.h"
 #include "game/object/legacystream.h"
 #include "game/object/player.h"
+#include "game/object/objectdef.h"
+#include "engine/refl/packed.h"
 #include "game/world/gamemap.h"
 #include "game/world/mapmanager.h"
 #include "game/world/sector.h"
@@ -3584,6 +3586,78 @@ static bool DumpPlayerRecord()
     return true;
 }
 
+// The seal's test for one object: Capture gives a record, Apply puts it
+// back, Capture again gives the same record. The records are compared as
+// packed bytes; on a mismatch the differing properties are named.
+static bool StateRoundTrip(TObjectInstance& o, int32_t& checked, int32_t& failed)
+{
+    const TObjectDef* def = o.Archetype();
+    if (!def)
+        return true;
+    std::unique_ptr<SObjectState> first = def->DefaultState().Clone();
+    def->Capture(o, *first);
+    def->Apply(*first, o);
+    std::unique_ptr<SObjectState> second = def->DefaultState().Clone();
+    def->Capture(o, *second);
+    ++checked;
+    const refl::SType* type = refl::Of(*first);
+    if (!type)
+    {
+        log_error("[state-roundtrip] %s '%s': record type not registered", o.GetClassName(), o.GetName());
+        ++failed;
+        return false;
+    }
+    TPackedWriter a, b;
+    refl::Pack(*type, first.get(), a);
+    refl::Pack(*type, second.get(), b);
+    if (a.Buffer() == b.Buffer())
+        return true;
+    ++failed;
+    for (const refl::SType* t = type; t; t = t->base)
+        for (int32_t i = 0; i < t->prop_count; ++i)
+        {
+            const refl::SProp& p = t->props[i];
+            SPropValue va, vb;
+            if (!refl::Get(*type, first.get(), p.id, va) || !refl::Get(*type, second.get(), p.id, vb))
+                continue;
+            if (!refl::Equals(va, vb))
+                log_error("[state-roundtrip] %s '%s' (map %d): '%s' differs after Apply",
+                          o.GetClassName(), o.GetName(), o.GetMapIndex(), p.name);
+        }
+    return false;
+}
+
+// --test=state-roundtrip --level=L: every object of level L, and the new
+// game's player, through Capture -> Apply -> Capture; the records must
+// match. The seal's test (docs/OBJECT_MODEL_PLAN.md phase 5).
+static bool RunStateRoundTrip()
+{
+    int32_t level = 0;
+    if (!StartupLevelId[0] || std::sscanf(StartupLevelId, "%d", &level) != 1)
+    {
+        log_error("[state-roundtrip] needs --level=L");
+        return false;
+    }
+    TGameMap* gmap = MapManager.SetCurrentLevel(level);
+    if (!gmap)
+    {
+        log_error("[state-roundtrip] level %d: no map", level);
+        return false;
+    }
+    int32_t checked = 0, failed = 0;
+    for (TSector* sec : gmap->Sectors())
+    {
+        if (!sec) continue;
+        for (int32_t i = 0; i < sec->NumItems(); ++i)
+            if (TObjectInstance* oi = sec->GetInstance(i))
+                StateRoundTrip(*oi, checked, failed);
+    }
+    if (SaveGame.LoadNewGame() && Player)
+        StateRoundTrip(*Player, checked, failed);
+    log_info("[state-roundtrip] level %d: %d objects checked, %d differ", level, checked, failed);
+    return failed == 0;
+}
+
 bool Initialize(const char* mode)
 {
     if (UsesDemoPlayer(mode) && !UIDemoPlayer::Install())
@@ -3602,6 +3676,12 @@ bool Initialize(const char* mode)
     if (strcmp(mode, "player-dump") == 0)
     {
         const bool result = DumpPlayerRecord();
+        sapp_request_quit();
+        return result;
+    }
+    if (strcmp(mode, "state-roundtrip") == 0)
+    {
+        const bool result = RunStateRoundTrip();
         sapp_request_quit();
         return result;
     }
