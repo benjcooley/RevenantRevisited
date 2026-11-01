@@ -7,6 +7,7 @@
 #include "game/object/characterdef.h"
 
 #include "game/object/character.h"
+#include "game/object/vitalscomponent.h"
 #include "game/object/complexobj.h"
 #include "game/object/player.h"
 #include "game/imagery/imagery.h"
@@ -97,12 +98,13 @@ void TCharacterDef::Apply(const SObjectState& state, TObjectInstance& inst) cons
         return;
     auto& o = static_cast<TCharacter&>(inst);
 
-    o.lasthealthrecov   = cs->lasthealthrecov;
-    o.lastfatiguerecov  = cs->lastfatiguerecov;
-    o.lastmanarecov     = cs->lastmanarecov;
-    o.lastpoisondamage  = cs->lastpoisondamage;
-    o.teleport_position = cs->teleport_position;
-    o.teleport_level    = cs->teleport_level;
+    TVitalsComponent& vitals = o.Vitals();
+    vitals.lasthealthrecov   = cs->lasthealthrecov;
+    vitals.lastfatiguerecov  = cs->lastfatiguerecov;
+    vitals.lastmanarecov     = cs->lastmanarecov;
+    vitals.lastpoisondamage  = cs->lastpoisondamage;
+    vitals.teleport_position = cs->teleport_position;
+    vitals.teleport_level    = cs->teleport_level;
 
     if (o.ObjClass() == OBJCLASS_CHARACTER && o.chardata)
     {
@@ -134,12 +136,13 @@ void TCharacterDef::Capture(const TObjectInstance& inst, SObjectState& state) co
     if (!cs)
         return;
     const auto& o = static_cast<const TCharacter&>(inst);
-    cs->lasthealthrecov   = o.lasthealthrecov;
-    cs->lastfatiguerecov  = o.lastfatiguerecov;
-    cs->lastmanarecov     = o.lastmanarecov;
-    cs->lastpoisondamage  = o.lastpoisondamage;
-    cs->teleport_position = o.teleport_position;
-    cs->teleport_level    = o.teleport_level;
+    const TVitalsComponent& vitals = o.Vitals();
+    cs->lasthealthrecov   = vitals.lasthealthrecov;
+    cs->lastfatiguerecov  = vitals.lastfatiguerecov;
+    cs->lastmanarecov     = vitals.lastmanarecov;
+    cs->lastpoisondamage  = vitals.lastpoisondamage;
+    cs->teleport_position = vitals.teleport_position;
+    cs->teleport_level    = vitals.teleport_level;
 }
 
 // ---- TPlayer ----------------------------------------------------------------

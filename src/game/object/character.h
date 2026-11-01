@@ -77,6 +77,8 @@ struct SBlowOutcome
 #define INVOKE_DELAY    20
 
 _CLASSDEF(TCharacter)
+class TVitalsComponent;
+
 class TCharacter : public TComplexObject
 {
     friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
@@ -610,11 +612,12 @@ class TCharacter : public TComplexObject
       // Fades to 30 while the spell lasts and back afterwards
 
   // Teleport functions
-    void SetTeleportLevel(int32_t new_level){teleport_level = new_level;}
-    void SetTeleportPosition(S3DPoint new_pos)
-        {teleport_position.x = new_pos.x; teleport_position.y = new_pos.y; teleport_position.z = new_pos.z;}
-    int32_t GetTeleportLevel(void){return teleport_level;}
-    S3DPoint GetTeleportPosition(void){return teleport_position;}
+    [[nodiscard]] TVitalsComponent& Vitals() const { return *vitals_; }
+        // Recovery clocks, poison, the teleport point
+    void SetTeleportLevel(int32_t new_level);
+    void SetTeleportPosition(S3DPoint new_pos);
+    int32_t GetTeleportLevel() const;
+    S3DPoint GetTeleportPosition() const;
 
   // Functions to remember if characters are seen or not
     bool HasSeenMe(TCharacter* me);
@@ -910,20 +913,9 @@ class TCharacter : public TComplexObject
     int32_t glimpse;                // Value from 1-100 indicating how visible last move was
     int32_t noise;                  // Value from 1-100 indicating how quiet last move was
 
-  // Recovery (TCharacter::Pulse): the Clock() time each vital last recovered,
-  // and what has gathered towards its next point, in 1/10000 points.
-    int32_t lasthealthrecov = 0;    // retail +0x138
-    int32_t lastfatiguerecov = 0;   // retail +0x13c
-    int32_t lastmanarecov = 0;      // retail +0x140
-    int32_t lastrunfatigue = 0;     // retail +0x144: last running charge, -1 while not running
-    int32_t healthaccum = 0;        // retail +0x148
-    int32_t fatigueaccum = 0;       // retail +0x14c
-    int32_t manaaccum = 0;          // retail +0x150
-    int32_t runaccum = 0;           // retail +0x154: fatigue the running costs
-    int32_t poisonaccum = 0;        // retail +0x158
-
-  // Poison damage stuff
-    int32_t lastpoisondamage = 0;   // retail +0x15c: last charge, -1 while not poisoned
+  // Recovery, poison and the teleport point: the vitals component
+  // (vitalscomponent.h), every character's from construction
+    TVitalsComponent* vitals_ = nullptr;
     int32_t deadticks = 0;          // retail +0x228: ticks a corpse has lain (it fades out at 240)
     int32_t burnticks = 0;          // retail +0x1bc: ticks the burning goes on (Burn sets 50)
 
@@ -953,8 +945,6 @@ class TCharacter : public TComplexObject
     int32_t voice = -1;             // retail +0x260: the sound id of the line being spoken, -1 none
 
   // Teleport Coordinates
-    int32_t teleport_level;
-    S3DPoint teleport_position;
 
   // burn stuff
     TObjectInstance* burning;

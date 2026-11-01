@@ -85,6 +85,9 @@ class TLegacyDeserialize
     static void ReadCharacterState(SCharacterState& st, TCharacter& o, TInputStream& is,
                                    int32_t version, int32_t objversion, SLoadDerived& derived);
     static void FinishObjectInstance(TObjectInstance& o, int32_t version, const SLoadDerived& derived);
+    static void ApplyLoaded(TObjectInstance& o, const SObjectState& st);
+        // The record onto the object through its archetype, and kept as
+        // the state it was loaded in (Reset)
     static void FinishContainer(TContainer& o, TInputStream& is, int32_t version);
         // What retail settled after a container's load (the old-map stat
         // conversion, re-entering the saved open or shut state)

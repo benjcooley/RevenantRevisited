@@ -5,6 +5,7 @@
 // *************************************************************************
 
 #include "game/object/character.h"
+#include "game/object/vitalscomponent.h"
 #include "game/ui/ctrlmap.h"
 
 #include "game/script/rules.h"
@@ -257,8 +258,20 @@ int32_t TakePoints(int32_t& accum)
 // *                          Character                        *
 // *************************************************************
 
+// The teleport point a spell set (the vitals component's)
+void TCharacter::SetTeleportLevel(int32_t new_level) { Vitals().teleport_level = new_level; }
+void TCharacter::SetTeleportPosition(S3DPoint new_pos) { Vitals().teleport_position = new_pos; }
+int32_t TCharacter::GetTeleportLevel() const { return Vitals().teleport_level; }
+S3DPoint TCharacter::GetTeleportPosition() const { return Vitals().teleport_position; }
+
 void TCharacter::ClearChar()
 {
+    if (!vitals_)
+    {
+        auto owned = std::make_unique<TVitalsComponent>();
+        vitals_ = owned.get();
+        AddComponent(std::move(owned));
+    }
     flags |= OF_MOVING | OF_PULSE | OF_ANIMATE | OF_AI; // Is moving object, pulse, animate, and has AI
 
     autocombat = AutoBeginCombat;
@@ -357,15 +370,13 @@ void TCharacter::ClearChar()
     SetPoisoned(false);
 
   // Clear Teleport Coordinates
-    teleport_position.x = -1;
-    teleport_position.y = -1;
-    teleport_position.z = -1;
-    teleport_level = -1;
+    Vitals().teleport_position = {-1, -1, -1};
+    Vitals().teleport_level = -1;
 
   // REVSYNC: 0x004c1a5d -- the recovery clocks start now, nothing gathered
   // (the poison stamp and accumulator are Pulse's to set).
-    lasthealthrecov = lastfatiguerecov = lastmanarecov = lastrunfatigue = Clock();
-    healthaccum = fatigueaccum = manaaccum = runaccum = 0;
+    Vitals().lasthealthrecov = Vitals().lastfatiguerecov = Vitals().lastmanarecov = Vitals().lastrunfatigue = Clock();
+    Vitals().healthaccum = Vitals().fatigueaccum = Vitals().manaaccum = Vitals().runaccum = 0;
 
   // Attach the animator component up front. Characters carry the
   // animator for the lifetime of the object (see IsAnimatorPermanent
@@ -671,7 +682,7 @@ void TCharacter::PulseImpaleRelease()
 void TCharacter::PulseRecovery()
 {
     const int32_t now = Clock();
-    for (int32_t* stamp : {&lasthealthrecov, &lastfatiguerecov, &lastmanarecov, &lastrunfatigue, &lastpoisondamage})
+    for (int32_t* stamp : {&Vitals().lasthealthrecov, &Vitals().lastfatiguerecov, &Vitals().lastmanarecov, &Vitals().lastrunfatigue, &Vitals().lastpoisondamage})
         if (*stamp > now || std::abs(int64_t(now) - *stamp) > 50000)
             *stamp = now;
 
@@ -689,55 +700,55 @@ void TCharacter::PulseRecovery()
 
     if (Health() < MaxHealth())
     {
-        healthaccum += Recovery(now - lasthealthrecov, Rules.healthrecovval, Rules.healthrecovrate);
-        healthaccum += RecoveryBonus(EVital::Health);
-        if (const int32_t points = TakePoints(healthaccum); points > 0)
+        Vitals().healthaccum += Recovery(now - Vitals().lasthealthrecov, Rules.healthrecovval, Rules.healthrecovrate);
+        Vitals().healthaccum += RecoveryBonus(EVital::Health);
+        if (const int32_t points = TakePoints(Vitals().healthaccum); points > 0)
             SetHealth((std::min)(Health() + points, MaxHealth()));
     }
-    lasthealthrecov = now;
+    Vitals().lasthealthrecov = now;
 
     if (Mana() < MaxMana())
     {
-        manaaccum += Recovery(now - lastmanarecov, Rules.manarecovval, Rules.manarecovrate);
-        manaaccum += RecoveryBonus(EVital::Mana);
-        if (const int32_t points = TakePoints(manaaccum); points > 0)
+        Vitals().manaaccum += Recovery(now - Vitals().lastmanarecov, Rules.manarecovval, Rules.manarecovrate);
+        Vitals().manaaccum += RecoveryBonus(EVital::Mana);
+        if (const int32_t points = TakePoints(Vitals().manaaccum); points > 0)
             SetMana((std::min)(Mana() + points, MaxMana()));
     }
-    lastmanarecov = now;
+    Vitals().lastmanarecov = now;
 
     if (IsRunMode() && doing != root)
     {
-        if (lastrunfatigue != -1 && Fatigue() > 0)
+        if (Vitals().lastrunfatigue != -1 && Fatigue() > 0)
         {
-            runaccum += Recovery(now - lastrunfatigue, chardata->runfatigue[0], chardata->runfatigue[1]);
-            if (const int32_t points = TakePoints(runaccum); points > 0)
+            Vitals().runaccum += Recovery(now - Vitals().lastrunfatigue, chardata->runfatigue[0], chardata->runfatigue[1]);
+            if (const int32_t points = TakePoints(Vitals().runaccum); points > 0)
                 SetFatigue((std::max)(Fatigue() - points, 0));
         }
-        lastrunfatigue = now;
+        Vitals().lastrunfatigue = now;
     }
     else
     {
-        lastrunfatigue = -1;
+        Vitals().lastrunfatigue = -1;
         if (Fatigue() < MaxFatigue())
         {
-            fatigueaccum += Recovery(now - lastfatiguerecov, Rules.fatiguerecovval, Rules.fatiguerecovrate);
-            fatigueaccum += RecoveryBonus(EVital::Fatigue);
-            if (const int32_t points = TakePoints(fatigueaccum); points > 0)
+            Vitals().fatigueaccum += Recovery(now - Vitals().lastfatiguerecov, Rules.fatiguerecovval, Rules.fatiguerecovrate);
+            Vitals().fatigueaccum += RecoveryBonus(EVital::Fatigue);
+            if (const int32_t points = TakePoints(Vitals().fatigueaccum); points > 0)
                 SetFatigue((std::min)(Fatigue() + points, MaxFatigue()));
         }
     }
-    lastfatiguerecov = now;
+    Vitals().lastfatiguerecov = now;
 
     if (Poisoned())
     {
-        if (lastpoisondamage != -1)
+        if (Vitals().lastpoisondamage != -1)
         {
             if (Health() > 1)
             {
-                const int32_t bite = Wrap32(int64_t(now - lastpoisondamage) * Rules.poisondamageval * 240000)
+                const int32_t bite = Wrap32(int64_t(now - Vitals().lastpoisondamage) * Rules.poisondamageval * 240000)
                                    / (Rules.poisondamagerate * 100);
-                poisonaccum += Wrap32(int64_t(100 - DamageModifier(DT_POISON)) * bite) / 100;
-                int32_t points = TakePoints(poisonaccum);
+                Vitals().poisonaccum += Wrap32(int64_t(100 - DamageModifier(DT_POISON)) * bite) / 100;
+                int32_t points = TakePoints(Vitals().poisonaccum);
                 if (points >= Health())
                     points = Health() - 1;
                 if (points > 0)
@@ -746,10 +757,10 @@ void TCharacter::PulseRecovery()
             else
                 SetPoisoned(false);
         }
-        lastpoisondamage = now;
+        Vitals().lastpoisondamage = now;
     }
     else
-        lastpoisondamage = -1;
+        Vitals().lastpoisondamage = -1;
 
     if (doing->action == ACTION_INVOKE && invokedelay > 0 && --invokedelay == 0)
     {

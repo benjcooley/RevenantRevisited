@@ -478,13 +478,19 @@ void TLegacyDeserialize::FinishObjectInstance(TObjectInstance& o, int32_t versio
         o.InitScript(ScriptManager.ObjectScript(&o));
 }
 
+void TLegacyDeserialize::ApplyLoaded(TObjectInstance& o, const SObjectState& st)
+{
+    o.Archetype()->Apply(st, o);
+    o.initial_state_ = st.Clone();
+}
+
 // REVSYNC: TObjectInstance::Load @ 0x0046f0b0: a base object, whole.
 void TLegacyDeserialize::ReadObjectInstance(TObjectInstance& o, TInputStream& is, int32_t version, int32_t objversion)
 {
     (void)objversion;
     SObjectState st;
     const SLoadDerived derived = ReadObjectInstanceState(st, o, is, version);
-    o.Archetype()->Apply(st, o);
+    ApplyLoaded(o, st);
     FinishObjectInstance(o, version, derived);
 }
 
@@ -513,7 +519,7 @@ void TLegacyDeserialize::ReadComplexObject(TComplexObject& o, TInputStream& is, 
     SComplexObjectState st;
     SLoadDerived derived;
     ReadComplexObjectState(st, o, is, version, objversion, derived);
-    o.Archetype()->Apply(st, o);
+    ApplyLoaded(o, st);
     FinishObjectInstance(o, version, derived);
 }
 
@@ -560,7 +566,7 @@ void TLegacyDeserialize::ReadCharacter(TCharacter& o, TInputStream& is, int32_t 
     SCharacterState st;
     SLoadDerived derived;
     ReadCharacterState(st, o, is, version, objversion, derived);
-    o.Archetype()->Apply(st, o);
+    ApplyLoaded(o, st);
     FinishObjectInstance(o, version, derived);
 }
 
@@ -654,7 +660,7 @@ void TLegacyDeserialize::ReadPlayer(TPlayer& o, TInputStream& is, int32_t versio
         ReadAutoMapRecord(record, is);
         st.automap = AutoMapToState(record);
     }
-    o.Archetype()->Apply(st, o);
+    ApplyLoaded(o, st);
     FinishObjectInstance(o, version, derived);
     o.LogStats("loaded");
 }
@@ -695,7 +701,7 @@ void TLegacyDeserialize::ReadExit(TExit& o, TInputStream& is, int32_t version, i
     if (oldmap)
         is >> oldlock[0] >> oldlock[1];
     is >> st.exitflags;
-    o.Archetype()->Apply(st, o);
+    ApplyLoaded(o, st);
     FinishObjectInstance(o, version, derived);
     if (oldmap)
     {
@@ -757,7 +763,7 @@ void TLegacyDeserialize::ReadScroll(TScroll& o, TInputStream& is, int32_t versio
         for (int32_t i = 0; i < len; i++)
             is >> st.text[size_t(i)];
     }
-    o.Archetype()->Apply(st, o);
+    ApplyLoaded(o, st);
     FinishObjectInstance(o, version, derived);
 }
 
@@ -767,7 +773,7 @@ void TLegacyDeserialize::ReadWeapon(TWeapon& o, TInputStream& is, int32_t versio
     SWeaponState st;
     const SLoadDerived derived = ReadObjectInstanceState(st, o, is, version);
     is >> st.poison;
-    o.Archetype()->Apply(st, o);
+    ApplyLoaded(o, st);
     FinishObjectInstance(o, version, derived);
 }
 
@@ -777,7 +783,7 @@ void TLegacyDeserialize::ReadDripEffect(TDripEffect& o, TInputStream& is, int32_
     SDripState st;
     const SLoadDerived derived = ReadObjectInstanceState(st, o, is, version);
     is >> st.ripplesize >> st.height >> st.period;
-    o.Archetype()->Apply(st, o);
+    ApplyLoaded(o, st);
     FinishObjectInstance(o, version, derived);
 }
 
@@ -802,7 +808,7 @@ void TLegacyDeserialize::ReadMonsterGen(TMonsterGen& o, TInputStream& is, int32_
         st.slots.push_back(slot);
     }
     is >> st.maxmonsters;
-    o.Archetype()->Apply(st, o);
+    ApplyLoaded(o, st);
     FinishObjectInstance(o, version, derived);
 }
 

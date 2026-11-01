@@ -17,6 +17,7 @@
 #include "game/imagery/3dimage.h"
 #include "game/object/armor.h"
 #include "game/object/character.h"
+#include "game/object/vitalscomponent.h"
 #include "game/imagery/imagery.h"
 #include "engine/assets/imageres.h"
 #include "game/object/player.h"
@@ -753,11 +754,11 @@ class TFixtureChar : public Base, public IFixtureChar
     void WritePulseState(JsonOut& j) override
     {
         j.Begin('{');
-        j.Field("lasthealth", this->lasthealthrecov).Field("lastfatigue", this->lastfatiguerecov);
-        j.Field("lastmana", this->lastmanarecov).Field("lastrun", this->lastrunfatigue);
-        j.Field("accumhealth", this->healthaccum).Field("accumfatigue", this->fatigueaccum);
-        j.Field("accummana", this->manaaccum).Field("accumrun", this->runaccum);
-        j.Field("accumpoison", this->poisonaccum).Field("lastpoison", this->lastpoisondamage);
+        j.Field("lasthealth", this->Vitals().lasthealthrecov).Field("lastfatigue", this->Vitals().lastfatiguerecov);
+        j.Field("lastmana", this->Vitals().lastmanarecov).Field("lastrun", this->Vitals().lastrunfatigue);
+        j.Field("accumhealth", this->Vitals().healthaccum).Field("accumfatigue", this->Vitals().fatigueaccum);
+        j.Field("accummana", this->Vitals().manaaccum).Field("accumrun", this->Vitals().runaccum);
+        j.Field("accumpoison", this->Vitals().poisonaccum).Field("lastpoison", this->Vitals().lastpoisondamage);
         j.Field("invokedelay", this->invokedelay).Field("fade", this->fade).Field("fadestep", this->fade_step);
         j.Field("fadelimit", this->fade_limit).Field("fadedir", this->fade_direction);
         j.Field("burnticks", this->burnticks).Field("deadticks", this->deadticks);
@@ -944,16 +945,16 @@ class TFixtureChar : public Base, public IFixtureChar
     // The tick's own state (melee_attack.py PULSESTATE; the case gives all of it).
     void ReadPulseState(const JsonValue& p)
     {
-        this->lasthealthrecov = (int32_t)p["lasthealth"].Int();
-        this->lastfatiguerecov = (int32_t)p["lastfatigue"].Int();
-        this->lastmanarecov = (int32_t)p["lastmana"].Int();
-        this->lastrunfatigue = (int32_t)p["lastrun"].Int();
-        this->healthaccum = (int32_t)p["accumhealth"].Int();
-        this->fatigueaccum = (int32_t)p["accumfatigue"].Int();
-        this->manaaccum = (int32_t)p["accummana"].Int();
-        this->runaccum = (int32_t)p["accumrun"].Int();
-        this->poisonaccum = (int32_t)p["accumpoison"].Int();
-        this->lastpoisondamage = (int32_t)p["lastpoison"].Int();
+        this->Vitals().lasthealthrecov = (int32_t)p["lasthealth"].Int();
+        this->Vitals().lastfatiguerecov = (int32_t)p["lastfatigue"].Int();
+        this->Vitals().lastmanarecov = (int32_t)p["lastmana"].Int();
+        this->Vitals().lastrunfatigue = (int32_t)p["lastrun"].Int();
+        this->Vitals().healthaccum = (int32_t)p["accumhealth"].Int();
+        this->Vitals().fatigueaccum = (int32_t)p["accumfatigue"].Int();
+        this->Vitals().manaaccum = (int32_t)p["accummana"].Int();
+        this->Vitals().runaccum = (int32_t)p["accumrun"].Int();
+        this->Vitals().poisonaccum = (int32_t)p["accumpoison"].Int();
+        this->Vitals().lastpoisondamage = (int32_t)p["lastpoison"].Int();
         this->invokedelay = (int32_t)p["invokedelay"].Int();
         this->fade = (int32_t)p["fade"].Int();
         this->fade_step = (int32_t)p["fadestep"].Int();
