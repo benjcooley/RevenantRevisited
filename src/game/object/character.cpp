@@ -7,6 +7,7 @@
 #include "game/object/character.h"
 #include "game/object/vitalscomponent.h"
 #include "game/object/aicomponent.h"
+#include "game/object/combatcomponent.h"
 #include "game/ui/ctrlmap.h"
 
 #include "game/script/rules.h"
@@ -264,6 +265,15 @@ void TCharacter::SetTeleportLevel(int32_t new_level) { Vitals().teleport_level =
 void TCharacter::SetTeleportPosition(S3DPoint new_pos) { Vitals().teleport_position = new_pos; }
 int32_t TCharacter::GetTeleportLevel() const { return Vitals().teleport_level; }
 int32_t TCharacter::NextAttack() const { return Brain().nextattack; }
+const SCharAttackData* TCharacter::LastAttack() const { return Combat().lastattack; }
+bool TCharacter::LastAttackHit() const { return Combat().lasthit != 0; }
+int32_t TCharacter::GetCombatFlashTicks() const { return Combat().combatflashticks; }
+int32_t TCharacter::InvokeDelay() const { return Combat().invokedelay; }
+bool TCharacter::IsMagicResistant() const { return Combat().magic_resistance > 0.0f; }
+void TCharacter::SetMagicResistance(float pct) { Combat().magic_resistance = pct; }
+float TCharacter::GetMagicResistance() const { return Combat().magic_resistance; }
+int32_t TCharacter::LastBowShot() const { return Combat().lastbowshot; }
+int32_t TCharacter::BowShots() const { return Combat().bowshots; }
 int32_t TCharacter::LastGlimpse() { return Brain().glimpse; }
 int32_t TCharacter::LastNoise() { return Brain().noise; }
 bool TCharacter::GetAutoCombat() const { return Brain().autocombat; }
@@ -284,6 +294,12 @@ void TCharacter::ClearChar()
         brain_ = owned.get();
         AddComponent(std::move(owned));
     }
+    if (!combat_)
+    {
+        auto owned = std::make_unique<TCombatComponent>();
+        combat_ = owned.get();
+        AddComponent(std::move(owned));
+    }
     flags |= OF_MOVING | OF_PULSE | OF_ANIMATE | OF_AI; // Is moving object, pulse, animate, and has AI
 
     Brain().autocombat = AutoBeginCombat;
@@ -291,7 +307,7 @@ void TCharacter::ClearChar()
     forcecommanddone = false;
     forcenomove = false;
     is_invisible = false;
-    magic_resistance = 0.0f;
+    Combat().magic_resistance = 0.0f;
 
     // When character loaded or created, make exit timestamp current..
     // Prevents ONEXIT flag from expiring when character is saved on top of a
@@ -336,10 +352,10 @@ void TCharacter::ClearChar()
     burnticks = 0;
 
   // invoke delay
-    invokedelay = 0;
+    Combat().invokedelay = 0;
 
   // combatflash
-    combatflashticks = 0;
+    Combat().combatflashticks = 0;
 
   // Set initial health/fatigue/mana values. If rules are missing chardata
   // (e.g. partial rules.ini parse), skip the stat init rather than deref null.
@@ -354,11 +370,11 @@ void TCharacter::ClearChar()
   // at 1 (the AI's first attack tick counts them down to 0).
     Brain().nextattack = 1;
     Brain().magictimer = 1;
-    chainhits = 0;
+    Combat().chainhits = 0;
     shovedir = -1;                // Block go around direction choice
     Brain().glimpse = Brain().noise = -1;         // Reset glimpse and noise values
-    snapticks = -1;               // No snapping
-    lastbowshot = 0;              // Reset bow shot time so we can shoot bow immediately
+    Combat().snapticks = -1;               // No snapping
+    Combat().lastbowshot = 0;              // Reset bow shot time so we can shoot bow immediately
   // REVSYNC: 0x004c1ab8 -- no boss kind yet (AI_PerMonster looks again),
   // no boss state, no materials saved.
     Brain().monsterkind = 0;
@@ -435,8 +451,8 @@ void TCharacter::Pulse()
         forcecommanddone = false;
     }
 
-    if (combatflashticks > 0)
-        combatflashticks--;
+    if (Combat().combatflashticks > 0)
+        Combat().combatflashticks--;
 
   // The action state's tick (UpdateAction with the move's bits).
     TComplexObject::Pulse();
@@ -514,27 +530,27 @@ void TCharacter::Pulse()
 
     // Is the character doing an autocombo or chain attack?
     if (
-        lastattack &&
-        PlayScreen.GameFrame() >= lastattackticks + lastattack->nextwait &&
-        ((lastattack->flags & CA_AUTOCOMBO) ||  // Is autocombo or..
-         ((lastattack->flags & CA_CHAIN) && chainhits > 0)) // Is chain attack..
+        Combat().lastattack &&
+        PlayScreen.GameFrame() >= Combat().lastattackticks + Combat().lastattack->nextwait &&
+        ((Combat().lastattack->flags & CA_AUTOCOMBO) ||  // Is autocombo or..
+         ((Combat().lastattack->flags & CA_CHAIN) && Combat().chainhits > 0)) // Is chain attack..
         )
     {
         bool foundchain = false;
 
       // Are we in time (note: AUTO's don't expire like chains)
-        if (!(lastattack->flags & CA_CHAIN) ||  // We're a chain
-            (PlayScreen.GameFrame() - lastattackticks < lastattack->chainexptime)) // We haven't expired
+        if (!(Combat().lastattack->flags & CA_CHAIN) ||  // We're a chain
+            (PlayScreen.GameFrame() - Combat().lastattackticks < Combat().lastattack->chainexptime)) // We haven't expired
         {
           // Get attack whose chainname matches last attack name
             for (int32_t c = 0; c < chardata->attacks.NumItems(); c++)
             {
                 SCharAttackData* ad = &(chardata->attacks[c]);
 
-                if (!stricmp(lastattack->attackname, ad->chainname))
+                if (!stricmp(Combat().lastattack->attackname, ad->chainname))
                 {
-                    if (lastattack->flags & CA_CHAIN)
-                        chainhits--; // Decrease key hits for attack
+                    if (Combat().lastattack->flags & CA_CHAIN)
+                        Combat().chainhits--; // Decrease key hits for attack
                     SpecificAttack(c); // Do the next attack boyz
                     foundchain = true;
                     break;
@@ -544,7 +560,7 @@ void TCharacter::Pulse()
 
       // Couldn't find another chain or auto so clear chainhits
         if (!foundchain)
-            chainhits = 0;
+            Combat().chainhits = 0;
     }
 
     if (ObjClass() == OBJCLASS_PLAYER)
@@ -774,7 +790,7 @@ void TCharacter::PulseRecovery()
     else
         Vitals().lastpoisondamage = -1;
 
-    if (doing->action == ACTION_INVOKE && invokedelay > 0 && --invokedelay == 0)
+    if (doing->action == ACTION_INVOKE && Combat().invokedelay > 0 && --Combat().invokedelay == 0)
     {
         root->interrupt = true;
         SetDesired(root);
@@ -1453,7 +1469,7 @@ void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
                                                : DamageImpact(action, owned.made, damage, dir, attacker);
         if (imp && imp->snapdist > 0 && attacker)
         {
-            snapticks = imp->snaptime;
+            Combat().snapticks = imp->snaptime;
             const int32_t away = (IntFacing(attacker) - 0x80) & 0xff;
             SetIntFacing(*this, away);
             SetMoveAngle(away);
@@ -2193,7 +2209,7 @@ bool TCharacter::ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAtta
             hitab->damage = dmg;
             targ->SetFighting(this);
         }
-        targ->combatflashticks = 5;
+        targ->Combat().combatflashticks = 5;
     }
     else
     {
@@ -2329,9 +2345,9 @@ int32_t TCharacter::ResolveAttack(TActionBlock* ab, int32_t bits)
     TCharacter* targ = (TCharacter*)ab->obj;
     if (ab->firsttime)
     {
-        lastattack = attack;
-        lasthit = 0;
-        lastattackticks = PlayScreen.GameFrame();
+        Combat().lastattack = attack;
+        Combat().lasthit = 0;
+        Combat().lastattackticks = PlayScreen.GameFrame();
     }
     int32_t dist = 0;
     if (targ)
@@ -2359,7 +2375,7 @@ int32_t TCharacter::ResolveAttack(TActionBlock* ab, int32_t bits)
         bool hit = false;
         if (targ)
             hit = ResolveHit(targ, ab->attack, ab->impact, ab->damage, ab->tohit, ab->roll);
-        lasthit = hit;
+        Combat().lasthit = hit;
         if (!(attack->flags & CA_ONETARGET))
         {
             TCharacter* chars[kMaxHitChars];
@@ -2454,19 +2470,19 @@ void TCharacter::SignalAttack(TObjectInstance* actor, TObjectInstance* target, i
     const SCharAttackData* a = attacker->GetDoing()->attack;
     if (a)
     {
-        if (a->button == lastbutton)
+        if (a->button == Combat().lastbutton)
         {
-            if (++buttonrepeat >= 3)
+            if (++Combat().buttonrepeat >= 3)
                 repeat = true;
         }
         else
-            buttonrepeat = 1;
-        lastbutton = a->button;
+            Combat().buttonrepeat = 1;
+        Combat().lastbutton = a->button;
     }
     else
     {
-        lastbutton = -1;
-        buttonrepeat = 0;
+        Combat().lastbutton = -1;
+        Combat().buttonrepeat = 0;
     }
     if (a && (a->flags & CA_FATIGUEATTACK))
     {
@@ -2501,7 +2517,7 @@ int32_t TCharacter::ResolveImpact(TActionBlock* ab, int32_t bits)
     if (ab->firsttime)
     {
         EffectCombatFlash();
-        combatflashticks = 5;
+        Combat().combatflashticks = 5;
     }
 
     if (commanddone)
@@ -2523,7 +2539,7 @@ int32_t TCharacter::ResolveImpact(TActionBlock* ab, int32_t bits)
           // that attack is a PLAYANIM); else it waits its turn.
           // REVSYNC-DIVERGENCE: retail reads the last attack unguarded; with
           // none the loop waits.
-            if (lastattack && ((lastattack->flags & CA_PLAYANIM) || !stricmp(lastattack->attackname, doing->name)))
+            if (Combat().lastattack && ((Combat().lastattack->flags & CA_PLAYANIM) || !stricmp(Combat().lastattack->attackname, doing->name)))
                 ForceCommand(loop);
             else
                 SetDesired(loop);
@@ -2570,7 +2586,7 @@ int32_t TCharacter::ResolveDead(TActionBlock* ab, int32_t bits)
     if (ab->firsttime)
     {
         EffectCombatFlash();
-        combatflashticks = 5;
+        Combat().combatflashticks = 5;
     }
     if (commanddone && ab->impact && ab->impact->loopname[0] && !ab->Is(ab->impact->loopname) &&
         FindState(ab->impact->loopname) >= 0)
@@ -2795,8 +2811,8 @@ int32_t TCharacter::ResolveBowShoot(TActionBlock* ab, int32_t bits)
     if (ObjClass() != OBJCLASS_PLAYER)
         return COM_DONE;
     auto* player = static_cast<TPlayer*>(this);
-    const bool due = PlayScreen.GameFrame() - lastbowshot > chardata->bowwait;
-    if (bowshots > 0 && due)
+    const bool due = PlayScreen.GameFrame() - Combat().lastbowshot > chardata->bowwait;
+    if (Combat().bowshots > 0 && due)
     {
         // Retail leaves a multiplayer client's arrow to the server; the
         // network game isn't ported, so this is always the one shooting.
@@ -2836,10 +2852,10 @@ int32_t TCharacter::ResolveBowShoot(TActionBlock* ab, int32_t bits)
                 PlayAt(sound, IntPos(*this));
             }
         }
-        lastbowshot = PlayScreen.GameFrame();
-        bowshots--;
+        Combat().lastbowshot = PlayScreen.GameFrame();
+        Combat().bowshots--;
     }
-    return bowshots <= 0 ? COM_DONE : COM_EXECUTING;
+    return Combat().bowshots <= 0 ? COM_DONE : COM_EXECUTING;
 }
 
 int32_t TCharacter::ResolveLeap(TActionBlock* ab, int32_t bits)
@@ -3197,15 +3213,15 @@ void TCharacter::AIAttack(TCharacter* target)
     if (Brain().nextattack == 0 || Brain().magictimer == 0 || (Brain().requestbits & kRequestAttackNow))
     {
         Brain().requestbits &= ~kRequestAttackNow;
-        if (lastattack && doing->Is(lastattack->attackname))
+        if (Combat().lastattack && doing->Is(Combat().lastattack->attackname))
         {
             // still making it
         }
         else if (Distance(target) > chardata->maxattackrange)
         {
             Go(AngleTo(target));
-            lastattack = nullptr;
-            lasthit = 0;
+            Combat().lastattack = nullptr;
+            Combat().lasthit = 0;
         }
         else
         {
@@ -3224,11 +3240,11 @@ void TCharacter::AIAttack(TCharacter* target)
                 Brain().attackcount--;
             else
             {
-                lastattack = nullptr;
-                lasthit = 0;
+                Combat().lastattack = nullptr;
+                Combat().lasthit = 0;
             }
         }
-        if (!lastattack || !(lastattack->flags & CA_PLAYANIM))
+        if (!Combat().lastattack || !(Combat().lastattack->flags & CA_PLAYANIM))
             Brain().nextattack--;
     }
     if (Brain().nextattack < 0)
@@ -3267,7 +3283,7 @@ void TCharacter::AIMove(TCharacter* target)
         Stop();
         return;
     }
-    if (lastattack && doing->Is(lastattack->attackname) && (lastattack->flags & CA_PLAYANIM))
+    if (Combat().lastattack && doing->Is(Combat().lastattack->attackname) && (Combat().lastattack->flags & CA_PLAYANIM))
         return;
 
     const auto heard = [&] {
@@ -4746,7 +4762,7 @@ bool TCharacter::ShootBow(int32_t angle)
     auto* ab = new TActionBlock("bowshoot", ACTION_BOWSHOOT);
     ab->angle = ab->moveangle = angle;
     SetDesired(ab);
-    bowshots++;
+    Combat().bowshots++;
     return true;
 }
 
@@ -5014,9 +5030,9 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
   // A chain link follows its attack in time.
     if ((ad->flags & (CA_CHAIN | CA_AUTOCOMBO)) && ad->chainname[0])
     {
-        if (!lastattack || stricmp(lastattack->attackname, ad->chainname) != 0)
+        if (!Combat().lastattack || stricmp(Combat().lastattack->attackname, ad->chainname) != 0)
             return false;
-        if (PlayScreen.GameFrame() - lastattackticks > lastattack->chainexptime)
+        if (PlayScreen.GameFrame() - Combat().lastattackticks > Combat().lastattack->chainexptime)
             return false;
     }
 
@@ -5314,23 +5330,23 @@ bool TCharacter::ButtonAttack(int32_t button)
             targ = found;
     }
 
-    if (lastattack && (lastattack->flags & CA_CHAIN) &&
-        PlayScreen.GameFrame() - lastattackticks <= lastattack->chainexptime && chainhits < MAXCHAINHITS)
+    if (Combat().lastattack && (Combat().lastattack->flags & CA_CHAIN) &&
+        PlayScreen.GameFrame() - Combat().lastattackticks <= Combat().lastattack->chainexptime && Combat().chainhits < MAXCHAINHITS)
     {
-        chainhits++;
+        Combat().chainhits++;
         return true;
     }
 
     if (objclass == OBJCLASS_PLAYER && targ && targ->ObjClass() != OBJCLASS_PLAYER)
     {
-        if (button == lastbutton)
+        if (button == Combat().lastbutton)
         {
-            if (++buttonrepeat >= 3)
+            if (++Combat().buttonrepeat >= 3)
                 repeat = true;
         }
         else
-            buttonrepeat = 1;
-        lastbutton = button;
+            Combat().buttonrepeat = 1;
+        Combat().lastbutton = button;
 
         if (repeat && random(0, 10) == 0)
         {
@@ -5383,7 +5399,7 @@ bool TCharacter::RandomAttack(int32_t pcnt)
     const int32_t dmgpcnt = RollDamagePercent();
     int32_t a = -1, imp = -1, dmg = -1, th = -1, rl = -1;
     bool found = false;
-    if (lastbutton >= 0 && (Brain().requestbits & kRequestInteractive))
+    if (Combat().lastbutton >= 0 && (Brain().requestbits & kRequestInteractive))
     {
         found = FindInteractiveAttack(pcnt, dmgpcnt, a, imp, dmg, th, rl);
         Brain().requestbits &= ~kRequestInteractive;
@@ -5711,7 +5727,7 @@ bool TCharacter::KnockBack(S3DPoint frompos, int32_t variant)
         return false;
     if (flags & OF_PARALIZE)
         return true;
-    combatflashticks = 5;
+    Combat().combatflashticks = 5;
 
     static constexpr const char* kImpacts[5] = {"impk", "imphh", "imph", "implh", "impl"};
     char name[RESNAMELEN];
@@ -5979,8 +5995,8 @@ bool TCharacter::SetFighting(TCharacter* newtarget)
     }
     if (ObjClass() == OBJCLASS_PLAYER)
     {
-        lastbutton = -1;
-        buttonrepeat = 0;
+        Combat().lastbutton = -1;
+        Combat().buttonrepeat = 0;
     }
     return true;
 }
@@ -6296,7 +6312,7 @@ bool TCharacter::SetCast(const char* ani, TObjectInstance* target, int32_t invok
 
     auto* ab = new TActionBlock(name, ACTION_INVOKE);
     ab->priority = false;
-    invokedelay = invoke_delay;
+    Combat().invokedelay = invoke_delay;
     ab->wait = invoke_delay;
     ab->obj = target;
     ForceCommand(ab, 0, 0);

@@ -236,6 +236,7 @@ rev_reflect(Revenant
   src/game/world/lightcomponent.h
   src/game/object/vitalscomponent.h
   src/game/object/aicomponent.h
+  src/game/object/combatcomponent.h
   src/game/object/stateffectscomponent.h)
 
 # buildinfo.h: the commit the binary is built from (the playtest recordings

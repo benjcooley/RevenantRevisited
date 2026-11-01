@@ -69,6 +69,7 @@ struct SBlowOutcome
 _CLASSDEF(TCharacter)
 class TVitalsComponent;
 class TAIComponent;
+class TCombatComponent;
 
 class TCharacter : public TComplexObject
 {
@@ -430,9 +431,9 @@ class TCharacter : public TComplexObject
         int32_t tohit, int32_t roll);
       // REVSYNC: 0x004c62b0 -- one character struck by an attack at its impact frame
       // (ResolveAttack calls it for the target and each character in reach)
-    [[nodiscard]] const SCharAttackData *LastAttack() const { return lastattack; }
+    [[nodiscard]] const SCharAttackData *LastAttack() const;
       // The attack last started (retail +0x160; ResolveAttack's first tick); null before any
-    [[nodiscard]] bool LastAttackHit() const { return lasthit != 0; }
+    [[nodiscard]] bool LastAttackHit() const;
       // Whether it struck its target at the impact frame (retail +0x168)
 
   // Info functions specific to characters
@@ -573,7 +574,7 @@ class TCharacter : public TComplexObject
       // Create a burst effect of the given name
     void EffectCombatFlash();
       // The flash of a blow (retail 0x004c8500)
-    int32_t GetCombatFlashTicks() { return combatflashticks; }
+    int32_t GetCombatFlashTicks() const;
       // Returns 0 if no flash, or positive number of ticks left if flash being drawn
     void MakeInvisible();
       // Makes character invisible
@@ -581,7 +582,7 @@ class TCharacter : public TComplexObject
       // Makes character visible
     PTSpellManager GetSpellManager() { return &SpellManager; }
     [[nodiscard]] uint32_t CharFlags() const { return charflags; }
-    [[nodiscard]] int32_t InvokeDelay() const { return invokedelay; }
+    [[nodiscard]] int32_t InvokeDelay() const;
       // Pulses the invoke animation holds the spell's effect back (retail +0x188, SetCast)
       // Get spell manager object
 
@@ -607,6 +608,9 @@ class TCharacter : public TComplexObject
       // What the AI remembers between ticks: timers, targets, waypoints,
       // the retreat, the boss, the characters seen (aicomponent.h)
     [[nodiscard]] TAIComponent& Brain() const { return *brain_; }
+      // What the fight keeps between ticks: the last attack, the chain,
+      // the bow, the flash, the invoke delay (combatcomponent.h)
+    [[nodiscard]] TCombatComponent& Combat() const { return *combat_; }
         // Recovery clocks, poison, the teleport point
     void SetTeleportLevel(int32_t new_level);
     void SetTeleportPosition(S3DPoint new_pos);
@@ -730,11 +734,11 @@ class TCharacter : public TComplexObject
       // player's carries a torch: TPlayer)
     bool CanSeeCharacter(TCharacter* chr, int32_t angle = -1);
       // Returns true if this character can 'see' the last glimpse of 'chr'
-    bool IsMagicResistant() { return (magic_resistance > 0.0f); }
+    bool IsMagicResistant() const;
       // gets the level of magic resistance
-    void SetMagicResistance(float pct) { magic_resistance = pct; }
+    void SetMagicResistance(float pct);
       // sets the level of magic resistance
-    float GetMagicResistance() { return magic_resistance; }
+    float GetMagicResistance() const;
       // gets the level of magic resistance
     bool GetAutoCombat() const;
       // returns the state of this characters autocombat setting
@@ -903,18 +907,12 @@ class TCharacter : public TComplexObject
     int32_t deadticks = 0;          // retail +0x228: ticks a corpse has lain (it fades out at 240)
     int32_t burnticks = 0;          // retail +0x1bc: ticks the burning goes on (Burn sets 50)
 
-  // Attack stuff
-    PSCharAttackData lastattack = nullptr; // retail +0x160: the attack last started (ResolveAttack)
-    int32_t lastattackticks = 0;     // retail +0x164: GameFrame it started on
-    int32_t lasthit = 0;             // retail +0x168: whether it hit its main target (ResolveAttack)
-    int32_t chainhits = 0;           // retail +0x16c: chain presses banked (ButtonAttack, at most 3)
+  // The fight between ticks: the combat component (combatcomponent.h),
+  // every character's from construction
+    TCombatComponent* combat_ = nullptr;
 
   // spells stuff
     TSpellManager SpellManager;  // handles the spells the character casts
-    int32_t invokedelay;
-    PTActionBlock oldab;
-
-    float magic_resistance;     // between 0.0 and 1.0... percentage of magic resistance
 
     // Visibility
     int32_t fade = 100;             // retail +0x194, 0..100
@@ -930,12 +928,6 @@ class TCharacter : public TComplexObject
 
   // burn stuff
     TObjectInstance* burning;
-
-  // Snap stuff
-    int32_t snapticks = -1;           // retail +0x220: Damage stores an impact's snaptime (nothing reads it)
-
-  // combatflash delay
-    int32_t combatflashticks = 0;     // retail +0x224 (a blow sets 5; Pulse counts it down)
 
   // The corpse
 
@@ -957,25 +949,15 @@ public:
     int32_t  DoingTargetX() const { return doing ? doing->target.x : 0; }
     int32_t  DoingTargetY() const { return doing ? doing->target.y : 0; }
     int32_t  NextAttack()   const;
-    int32_t  LastBowShot()  const { return lastbowshot; }
-    int32_t  BowShots()     const { return bowshots; }
+    int32_t  LastBowShot()  const;
+    int32_t  BowShots()     const;
 protected:
-
-  // Last bow shot ticks (so we don't shoot bow too fast)
-    int32_t lastbowshot = 0;    // +0x22c
-  // Shots ShootBow has queued for ResolveBowShoot
-    int32_t bowshots = 0;       // +0x230
 
   // The boss kinds AI_PerMonster 0x004c9b70 gives (Brain().monsterkind)
     static constexpr int32_t kMonsterBaez = 1, kMonsterSolifuge = 2, kMonsterJhaga = 3, kMonsterYhagoro = 4;
   // Retail +0x298 / +0x29c: what TintMaterials saved, each material's
   // diffuse then emissive red, green and blue; empty when nothing is.
     std::vector<std::array<float, 6>> savedmaterials;
-  // Retail +0x28c / +0x290: the player's last attack button and how many
-  // times running it was pressed (ButtonAttack 0x004d2480's same-button
-  // rule); SetFighting resets them.
-    int32_t lastbutton   = -1;
-    int32_t buttonrepeat = 0;
 };
 
 // The character's def is hand-written: characterdef.h (TCharacterDef)

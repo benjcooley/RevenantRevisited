@@ -19,6 +19,7 @@
 #include "game/object/character.h"
 #include "game/object/vitalscomponent.h"
 #include "game/object/aicomponent.h"
+#include "game/object/combatcomponent.h"
 #include "game/imagery/imagery.h"
 #include "engine/assets/imageres.h"
 #include "game/object/player.h"
@@ -375,6 +376,7 @@ class TFixtureItem : public TArmor
     {
         auto def = std::make_unique<SObjectState>();
         def->objclass = (short)spec["class"].Int(OBJCLASS_ARMOR);
+        def->objtype = 0;       // the class's first type (the record's default is none)
         if (!TObjectClass::GetClass(def->objclass))
             throw std::runtime_error("no class " + std::to_string(def->objclass) + " loaded");
         return def;
@@ -438,8 +440,8 @@ class TFixtureChar : public Base, public IFixtureChar
         this->shovedir = (int32_t)spec["shovedir"].Int(-1);
         this->Brain().retreatlatch = spec["retreat_latch"].Bool();
         this->Brain().retreatframes = (int32_t)spec["retreat_frames"].Int();
-        this->lastbowshot = (int32_t)spec["lastbowshot"].Int();
-        this->bowshots = (int32_t)spec["bowshots"].Int();
+        this->Combat().lastbowshot = (int32_t)spec["lastbowshot"].Int();
+        this->Combat().bowshots = (int32_t)spec["bowshots"].Int();
         if constexpr (std::is_same_v<Base, TPlayer>)
             this->TPlayer::SetPlayerState((int32_t)spec["playerstate"].Int(0));   // as the retail fixture's zeroed +0x36c
 
@@ -760,7 +762,7 @@ class TFixtureChar : public Base, public IFixtureChar
         j.Field("accumhealth", this->Vitals().healthaccum).Field("accumfatigue", this->Vitals().fatigueaccum);
         j.Field("accummana", this->Vitals().manaaccum).Field("accumrun", this->Vitals().runaccum);
         j.Field("accumpoison", this->Vitals().poisonaccum).Field("lastpoison", this->Vitals().lastpoisondamage);
-        j.Field("invokedelay", this->invokedelay).Field("fade", this->fade).Field("fadestep", this->fade_step);
+        j.Field("invokedelay", this->Combat().invokedelay).Field("fade", this->fade).Field("fadestep", this->fade_step);
         j.Field("fadelimit", this->fade_limit).Field("fadedir", this->fade_direction);
         j.Field("burnticks", this->burnticks).Field("deadticks", this->deadticks);
         j.Field("exittimestamp", this->exittimestamp).Field("forcecommanddone", this->forcecommanddone ? 1 : 0);
@@ -870,14 +872,14 @@ class TFixtureChar : public Base, public IFixtureChar
         j.Key("attackstate").Begin('{');
         j.Field("nextattack", this->Brain().nextattack).Field("magictimer", this->Brain().magictimer);
         j.Field("requestbits", this->Brain().requestbits).Field("attackcount", this->Brain().attackcount);
-        j.Field("lastbutton", this->lastbutton).Field("buttonrepeat", this->buttonrepeat);
-        j.Field("chainhits", this->chainhits).Field("lastattackticks", this->lastattackticks);
-        j.Field("lasthit", this->lasthit).Field("flashticks", this->combatflashticks);
+        j.Field("lastbutton", this->Combat().lastbutton).Field("buttonrepeat", this->Combat().buttonrepeat);
+        j.Field("chainhits", this->Combat().chainhits).Field("lastattackticks", this->Combat().lastattackticks);
+        j.Field("lasthit", this->Combat().lasthit).Field("flashticks", this->Combat().combatflashticks);
         j.Field("autocombat", this->Brain().autocombat ? 1 : 0).Field("movevert", this->GetMoveVert());
-        j.Field("snapticks", this->snapticks).Field("charflags", (int32_t)this->charflags);
+        j.Field("snapticks", this->Combat().snapticks).Field("charflags", (int32_t)this->charflags);
         j.Field("objflags", (int32_t)(this->flags & (OF_ICED | OF_PARALIZE)));
         j.Key("lastattack");
-        const int32_t last = AttackIndex(this->lastattack);
+        const int32_t last = AttackIndex(this->Combat().lastattack);
         if (last >= 0)
             j.Value(last);
         else
@@ -956,7 +958,7 @@ class TFixtureChar : public Base, public IFixtureChar
         this->Vitals().runaccum = (int32_t)p["accumrun"].Int();
         this->Vitals().poisonaccum = (int32_t)p["accumpoison"].Int();
         this->Vitals().lastpoisondamage = (int32_t)p["lastpoison"].Int();
-        this->invokedelay = (int32_t)p["invokedelay"].Int();
+        this->Combat().invokedelay = (int32_t)p["invokedelay"].Int();
         this->fade = (int32_t)p["fade"].Int();
         this->fade_step = (int32_t)p["fadestep"].Int();
         this->fade_limit = (int32_t)p["fadelimit"].Int();
@@ -977,16 +979,16 @@ class TFixtureChar : public Base, public IFixtureChar
         this->Brain().magictimer = (int32_t)a["magictimer"].Int(this->Brain().magictimer);
         this->Brain().requestbits = (uint32_t)a["requestbits"].Int(this->Brain().requestbits);
         this->Brain().attackcount = (int32_t)a["attackcount"].Int(this->Brain().attackcount);
-        this->lastbutton = (int32_t)a["lastbutton"].Int(this->lastbutton);
-        this->buttonrepeat = (int32_t)a["buttonrepeat"].Int(this->buttonrepeat);
-        this->chainhits = (int32_t)a["chainhits"].Int(this->chainhits);
-        this->lastattackticks = (int32_t)a["lastattackticks"].Int(this->lastattackticks);
-        this->lasthit = (int32_t)a["lasthit"].Int(this->lasthit);
-        this->combatflashticks = (int32_t)a["flashticks"].Int(0);
+        this->Combat().lastbutton = (int32_t)a["lastbutton"].Int(this->Combat().lastbutton);
+        this->Combat().buttonrepeat = (int32_t)a["buttonrepeat"].Int(this->Combat().buttonrepeat);
+        this->Combat().chainhits = (int32_t)a["chainhits"].Int(this->Combat().chainhits);
+        this->Combat().lastattackticks = (int32_t)a["lastattackticks"].Int(this->Combat().lastattackticks);
+        this->Combat().lasthit = (int32_t)a["lasthit"].Int(this->Combat().lasthit);
+        this->Combat().combatflashticks = (int32_t)a["flashticks"].Int(0);
         this->Brain().autocombat = a["autocombat"].Bool(true);
-        this->snapticks = (int32_t)a["snapticks"].Int(-1);
+        this->Combat().snapticks = (int32_t)a["snapticks"].Int(-1);
         if (a.Has("lastattack") && !a["lastattack"].IsNull())
-            this->lastattack = &cd->attacks[(int32_t)a["lastattack"].Int()];
+            this->Combat().lastattack = &cd->attacks[(int32_t)a["lastattack"].Int()];
     }
 
     bool weapon = false;
