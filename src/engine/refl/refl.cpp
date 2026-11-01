@@ -7,6 +7,7 @@
 #include "engine/refl/refl.h"
 #include "engine/refl/packed.h"
 
+#include <string>
 #include <vector>
 
 namespace refl {
