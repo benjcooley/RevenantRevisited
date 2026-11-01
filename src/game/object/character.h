@@ -38,16 +38,6 @@
 #define FINDCHAR_SEE       4    // Find only characters we can see
 
 
-// Maximum number of characters a character can remember seeing
-#define MAXHASSEEN 8
-_STRUCTDEF(SHasSeen)
-struct SHasSeen
-{
-    TCharacter* chr;            // Has seen this character
-    int32_t time;                   // Game ticks when last seen
-    bool noautocombat;          // Prevents player from toggling autocombat
-};
-
 // The dice of one blow (COMBAT_HIT.md §3.1), as TCharacter::RollAttack
 // throws them: the damage before its TOHITDAMAGE tier, the to-hit and the
 // roll. -1 is a die not thrown yet.
@@ -78,6 +68,7 @@ struct SBlowOutcome
 
 _CLASSDEF(TCharacter)
 class TVitalsComponent;
+class TAIComponent;
 
 class TCharacter : public TComplexObject
 {
@@ -613,6 +604,9 @@ class TCharacter : public TComplexObject
 
   // Teleport functions
     [[nodiscard]] TVitalsComponent& Vitals() const { return *vitals_; }
+      // What the AI remembers between ticks: timers, targets, waypoints,
+      // the retreat, the boss, the characters seen (aicomponent.h)
+    [[nodiscard]] TAIComponent& Brain() const { return *brain_; }
         // Recovery clocks, poison, the teleport point
     void SetTeleportLevel(int32_t new_level);
     void SetTeleportPosition(S3DPoint new_pos);
@@ -719,10 +713,10 @@ class TCharacter : public TComplexObject
       // or 1 within the sight range, 0 beyond it or asleep (character.cpp)
     virtual int32_t StealthMod() { return 0; }
       // Ordinary characters dont have stealth
-    virtual int32_t LastGlimpse() { return glimpse; }
+    virtual int32_t LastGlimpse();
       // What was the last visibility glimpse for the character.  1 is complete
       // and utter invisibility, 100 is plain as day visibility
-    virtual int32_t LastNoise() { return noise; }
+    virtual int32_t LastNoise();
       // What was the last noise value (1-100) for the character. 1 is pindrop,
       // 100 is pots and pans crashing.
     virtual char *BodyType() { return "na"; }
@@ -742,9 +736,9 @@ class TCharacter : public TComplexObject
       // sets the level of magic resistance
     float GetMagicResistance() { return magic_resistance; }
       // gets the level of magic resistance
-    bool GetAutoCombat() { return autocombat; }
+    bool GetAutoCombat() const;
       // returns the state of this characters autocombat setting
-    void SetAutoCombat(bool ac_state) { autocombat = ac_state; }
+    void SetAutoCombat(bool ac_state);
       // sets the state of this characters autocombat setting
 
   protected:
@@ -885,16 +879,10 @@ class TCharacter : public TComplexObject
       // Based on character position, lights, and stealth, sets noise and glimpse
 
     // -- Data members --
-    bool autocombat;            // this mimics the global, but works as a way to allow locke to flee in
-                                // the face of too many enemies.
-
     bool movetopos;             // Set to true if character needs to move to movepos
     S3DPoint movepos;           // The position character needs to move to (while walk checking)
 
     PSCharData chardata;        // Pointer to global character settings for this type of char
-
-    int32_t magictimer = 1;         // retail +0x124: frames until a MAGICATTACK may be tried
-                                    // (AI re-arms it from MAGICFREQ; IsValidAttack spends it)
 
     bool forcecommanddone;      // For skipping past animations
     bool forcenomove;           // For forcing end movement
@@ -907,15 +895,11 @@ class TCharacter : public TComplexObject
   // Move stuff
     int32_t shovedir;               // Last choice (left/right) for going around an obstacle
     
-  // Stealth Stuff
-    int32_t nextattack = 1;         // retail +0x120: frames until the AI may attack again
-                                    // (IsValidAttack refuses a monster's attack while non-zero)
-    int32_t glimpse;                // Value from 1-100 indicating how visible last move was
-    int32_t noise;                  // Value from 1-100 indicating how quiet last move was
-
   // Recovery, poison and the teleport point: the vitals component
-  // (vitalscomponent.h), every character's from construction
+  // (vitalscomponent.h), and what the AI keeps between ticks: the AI
+  // component (aicomponent.h); every character's from construction
     TVitalsComponent* vitals_ = nullptr;
+    TAIComponent* brain_ = nullptr;
     int32_t deadticks = 0;          // retail +0x228: ticks a corpse has lain (it fades out at 240)
     int32_t burnticks = 0;          // retail +0x1bc: ticks the burning goes on (Burn sets 50)
 
@@ -924,8 +908,6 @@ class TCharacter : public TComplexObject
     int32_t lastattackticks = 0;     // retail +0x164: GameFrame it started on
     int32_t lasthit = 0;             // retail +0x168: whether it hit its main target (ResolveAttack)
     int32_t chainhits = 0;           // retail +0x16c: chain presses banked (ButtonAttack, at most 3)
-    uint32_t requestbits = 0;        // retail +0x128: AI requests (kRequest*), set by OnAttacked
-    int32_t attackcount = 0;         // retail +0x12c: decremented by the AI per attack made (no reader found)
 
   // spells stuff
     TSpellManager SpellManager;  // handles the spells the character casts
@@ -948,9 +930,6 @@ class TCharacter : public TComplexObject
 
   // burn stuff
     TObjectInstance* burning;
-
-  // Has seen list  
-    SHasSeen hasseen[MAXHASSEEN]; // List of characters seen recently
 
   // Snap stuff
     int32_t snapticks = -1;           // retail +0x220: Damage stores an impact's snaptime (nothing reads it)
@@ -977,7 +956,7 @@ public:
     const char* DesiredName() const { return (desired && desired->name[0]) ? desired->name : "?"; }
     int32_t  DoingTargetX() const { return doing ? doing->target.x : 0; }
     int32_t  DoingTargetY() const { return doing ? doing->target.y : 0; }
-    int32_t  NextAttack()   const { return nextattack; }
+    int32_t  NextAttack()   const;
     int32_t  LastBowShot()  const { return lastbowshot; }
     int32_t  BowShots()     const { return bowshots; }
 protected:
@@ -987,51 +966,11 @@ protected:
   // Shots ShootBow has queued for ResolveBowShoot
     int32_t bowshots = 0;       // +0x230
 
-  // Retail +0x23c: where the AI last saw or heard its target (the centre of
-  // its waypoint search when it loses it).
-    S3DPoint target_last_position{};
-
-  // Retail +0x248: how many more ticks the AI keeps facing its waypoint
-  // (ai_lookat) while chasing; a new waypoint gives it 6.
-    int32_t  waypointticks = 0;
-
-  // retail +0x288: the item a Goto carries (the map pane's walk to an item
-  // out of reach, 0x004cedb0), picked up when that walk arrives (0x004c6155,
-  // 0x004c7fc3). Kept until then, or until a Goto carries another.
-    TSafeRef<TObjectInstance> gotoitem;
-
-  // Retail +0x254 / +0x258 / +0x25c: the retreat (COMBAT_ATTACK_CHOICE.md
-  // §3.10.6). The AI's tail, every tick it runs: retreating = latch =
-  // (Health <= RETREATAT || latch) && frames != 0, then frames counts down.
-  // Damage arms the frames with RETREATFOR when a hit leaves 1 <= Health <=
-  // RETREATAT; StartRetreat (0x004d5fc0) with 96 and sets both flags. A
-  // retreating character runs straight away from its target (and takes
-  // no new one); ResolveCombat doesn't face it; a blocked step (MoveStep)
-  // clears all three. (The 1998 AI body below reads them as "target out
-  // of sight" until its retail port, C3b.)
-    bool     retreating = false;
-    bool     retreatlatch = false;
-    int32_t  retreatframes = 0;
-  // Retail +0x234: an object the AI walks toward and ResolveCombat faces
-  // when no visible target overrides it: the waypoint AI 0x004c8b60 heads
-  // for, and the one Wander 0x004c9790 patrols to.
-    TObjectInstance* ai_lookat = nullptr;
-  // Retail +0x280: the boss kind AI_PerMonster 0x004c9b70 gives, once (1
-  // Baez, whom magic can't hurt, 2 Solifuge, 3 Jhaga, 4 Yhagoro, -1 any
-  // other); +0x284 the boss's own state (bossai.h).
+  // The boss kinds AI_PerMonster 0x004c9b70 gives (Brain().monsterkind)
     static constexpr int32_t kMonsterBaez = 1, kMonsterSolifuge = 2, kMonsterJhaga = 3, kMonsterYhagoro = 4;
-    int32_t monsterkind = 0;
-    TBossState bossstate;
   // Retail +0x298 / +0x29c: what TintMaterials saved, each material's
   // diffuse then emissive red, green and blue; empty when nothing is.
     std::vector<std::array<float, 6>> savedmaterials;
-  // Retail +0x238 / +0x24c / +0x250, Wander's: the waypoint before the
-  // current one (its pick passes over both; with none to pick it goes
-  // back; retail drops it when its object goes, 0x004c38a6), the ticks it
-  // still does nothing, the ticks a run has left.
-    TSafeRef<TObjectInstance> lastwaypoint;
-    int32_t wanderidle = 0;
-    int32_t runticks = 0;
   // Retail +0x28c / +0x290: the player's last attack button and how many
   // times running it was pressed (ButtonAttack 0x004d2480's same-button
   // rule); SetFighting resets them.

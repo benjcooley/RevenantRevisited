@@ -6,6 +6,7 @@
 
 #include "game/object/character.h"
 #include "game/object/vitalscomponent.h"
+#include "game/object/aicomponent.h"
 #include "game/ui/ctrlmap.h"
 
 #include "game/script/rules.h"
@@ -262,6 +263,11 @@ int32_t TakePoints(int32_t& accum)
 void TCharacter::SetTeleportLevel(int32_t new_level) { Vitals().teleport_level = new_level; }
 void TCharacter::SetTeleportPosition(S3DPoint new_pos) { Vitals().teleport_position = new_pos; }
 int32_t TCharacter::GetTeleportLevel() const { return Vitals().teleport_level; }
+int32_t TCharacter::NextAttack() const { return Brain().nextattack; }
+int32_t TCharacter::LastGlimpse() { return Brain().glimpse; }
+int32_t TCharacter::LastNoise() { return Brain().noise; }
+bool TCharacter::GetAutoCombat() const { return Brain().autocombat; }
+void TCharacter::SetAutoCombat(bool ac_state) { Brain().autocombat = ac_state; }
 S3DPoint TCharacter::GetTeleportPosition() const { return Vitals().teleport_position; }
 
 void TCharacter::ClearChar()
@@ -272,9 +278,15 @@ void TCharacter::ClearChar()
         vitals_ = owned.get();
         AddComponent(std::move(owned));
     }
+    if (!brain_)
+    {
+        auto owned = std::make_unique<TAIComponent>();
+        brain_ = owned.get();
+        AddComponent(std::move(owned));
+    }
     flags |= OF_MOVING | OF_PULSE | OF_ANIMATE | OF_AI; // Is moving object, pulse, animate, and has AI
 
-    autocombat = AutoBeginCombat;
+    Brain().autocombat = AutoBeginCombat;
     
     forcecommanddone = false;
     forcenomove = false;
@@ -340,21 +352,21 @@ void TCharacter::ClearChar()
 
   // Reset AI data. REVSYNC: ClearChar 0x004c18a0 starts both attack timers
   // at 1 (the AI's first attack tick counts them down to 0).
-    nextattack = 1;
-    magictimer = 1;
+    Brain().nextattack = 1;
+    Brain().magictimer = 1;
     chainhits = 0;
     shovedir = -1;                // Block go around direction choice
-    glimpse = noise = -1;         // Reset glimpse and noise values
+    Brain().glimpse = Brain().noise = -1;         // Reset glimpse and noise values
     snapticks = -1;               // No snapping
     lastbowshot = 0;              // Reset bow shot time so we can shoot bow immediately
   // REVSYNC: 0x004c1ab8 -- no boss kind yet (AI_PerMonster looks again),
   // no boss state, no materials saved.
-    monsterkind = 0;
-    bossstate = std::monostate{};
+    Brain().monsterkind = 0;
+    Brain().bossstate = std::monostate{};
     savedmaterials.clear();
 
   // Reset hasseen list
-    memset(&hasseen, 0, sizeof(SHasSeen) * MAXHASSEEN);
+    Brain().hasseen.fill({});
 
   // Clear Fade (retail ClearChar 0x004c18a0): fully visible. The step of 5
   // toward a limit of 100 settles to still on the first pulse.
@@ -471,7 +483,7 @@ void TCharacter::Pulse()
   // walks on at his next tick.
     if (doing->Is("atkimpale to walk") || (doing->Is("atkimpale") && ObjClass() == OBJCLASS_PLAYER))
         charflags &= ~kCharFlagNoKill;
-    if (monsterkind == kMonsterYhagoro && doing->Is("impimpale") && Player)
+    if (Brain().monsterkind == kMonsterYhagoro && doing->Is("impimpale") && Player)
         static_cast<TCharacter*>(Player)->charflags |= kCharFlagImpaleRelease;
 
   // One step of any fade, dead or alive (UpdateFade's only caller in retail).
@@ -627,7 +639,7 @@ void TCharacter::PulseAutoCombat()
     TCharacter* target = nullptr;
     if (FindCharacters(&target, 1, -1, IntFacing(*this), 0x20, 7) <= 0 || !target)
     {
-        autocombat = true;
+        Brain().autocombat = true;
         return;
     }
     if (!IsValidTarget(target) || IsCombat() || IsBowMode() || IsSneakMode())
@@ -636,7 +648,7 @@ void TCharacter::PulseAutoCombat()
   // allows player killing (a network game's); single player has no other.
     if (target->ObjClass() == OBJCLASS_PLAYER)
         return;
-    if (!AutoBeginCombat || !autocombat || !HasSeenAutoCombat(target))
+    if (!AutoBeginCombat || !Brain().autocombat || !HasSeenAutoCombat(target))
         return;
     if (Distance(target) >= chardata->combatrangemin || std::abs(AngleDiff(IntFacing(*this), AngleTo(target))) >= 0x30)
         return;
@@ -803,7 +815,7 @@ void TCharacter::UpdateAction(int32_t bits)
 {
   // ResetStealthValues @ 0x004cdbb0 off the 24-frame beat, and on it for a
   // finished non-root action or a negative glimpse / noise.
-    if (PlayScreen.GameFrame() % 24 != 0 || (commanddone && root != doing) || glimpse < 0 || noise < 0)
+    if (PlayScreen.GameFrame() % 24 != 0 || (commanddone && root != doing) || Brain().glimpse < 0 || Brain().noise < 0)
         ResetStealthValues();
 
     if (root->action != ACTION_SLEEP && Sleeping())
@@ -929,11 +941,11 @@ void TCharacter::Notify(int32_t notify, void *ptr)
     for (int32_t c = 0; c < MAXHASSEEN; c++)
     {
         
-        if (hasseen[c].chr && NOTIFY_DELETED(ptr, hasseen[c].chr))
+        if (Brain().hasseen[c].chr && NOTIFY_DELETED(ptr, Brain().hasseen[c].chr))
         {
-            hasseen[c].chr = nullptr;
-            hasseen[c].time = 0;
-            hasseen[c].noautocombat = false;
+            Brain().hasseen[c].chr = nullptr;
+            Brain().hasseen[c].time = 0;
+            Brain().hasseen[c].noautocombat = false;
         }
     }
 }
@@ -1240,11 +1252,11 @@ uint32_t TCharacter::MoveStep()
                     lastpos = IntPos(*this);
                     lastwhy = why;
                 }
-                if (retreating)
+                if (Brain().retreating)
                 {
-                    retreatframes = 0;
-                    retreating = false;
-                    retreatlatch = false;
+                    Brain().retreatframes = 0;
+                    Brain().retreating = false;
+                    Brain().retreatlatch = false;
                 }
             }
         }
@@ -1322,7 +1334,7 @@ int32_t TCharacter::CalculateDamage(int32_t damage, int32_t damagetype, int32_t 
     {
         if (charflags & kCharFlagHalfMagic)
             taken /= 2;
-        if (monsterkind == kMonsterBaez)
+        if (Brain().monsterkind == kMonsterBaez)
             taken = 0;
     }
     else if (charflags & kCharFlagHalfPhysical)
@@ -1452,7 +1464,7 @@ void TCharacter::Damage(int32_t damage, int32_t damagetype, int32_t modifier,
     }
 
     if (Health() <= chardata->retreatat && Health() >= 1)
-        retreatframes = chardata->retreatfor;
+        Brain().retreatframes = chardata->retreatfor;
 }
 
 // Damage's death (0x004c4d45): the given block when it is a death, or
@@ -1728,8 +1740,8 @@ bool TCharacter::HasSeenMe(TCharacter* me)
 {
     for (int32_t c = 0; c < MAXHASSEEN; c++)
     {
-        if (hasseen[c].chr == me &&
-            PlayScreen.GameFrame() - hasseen[c].time < kMaxSeenTime)
+        if (Brain().hasseen[c].chr == me &&
+            PlayScreen.GameFrame() - Brain().hasseen[c].time < kMaxSeenTime)
                 return true;
     }
 
@@ -1744,21 +1756,21 @@ void TCharacter::SetHasSeen(TCharacter* me)
 
     for (int32_t c = 0; c < MAXHASSEEN; c++)
     {
-        if (hasseen[c].chr == me)
+        if (Brain().hasseen[c].chr == me)
         {
-            hasseen[c].time = PlayScreen.GameFrame();
+            Brain().hasseen[c].time = PlayScreen.GameFrame();
             return;
         }
-        if (hasseen[c].time < lowest)
+        if (Brain().hasseen[c].time < lowest)
         {
-            lowest = hasseen[c].time;
+            lowest = Brain().hasseen[c].time;
             lowestnum = c;
         }
     }
 
-    hasseen[lowestnum].chr = me;
-    hasseen[lowestnum].time = PlayScreen.GameFrame();
-    hasseen[lowestnum].noautocombat = false;    // First time seen char.. set autocombat on
+    Brain().hasseen[lowestnum].chr = me;
+    Brain().hasseen[lowestnum].time = PlayScreen.GameFrame();
+    Brain().hasseen[lowestnum].noautocombat = false;    // First time seen char.. set autocombat on
 }
 
 // Returns true if character has seen 'me'
@@ -1766,8 +1778,8 @@ bool TCharacter::HasSeenAutoCombat(TCharacter* me)
 {
     for (int32_t c = 0; c < MAXHASSEEN; c++)
     {
-        if (hasseen[c].chr == me)
-            return !hasseen[c].noautocombat;
+        if (Brain().hasseen[c].chr == me)
+            return !Brain().hasseen[c].noautocombat;
     }
 
     return true;
@@ -1778,7 +1790,7 @@ void TCharacter::SetHasSeenAutoCombat(bool on)
 {
     for (int32_t c = 0; c < MAXHASSEEN; c++)
     {
-        hasseen[c].noautocombat = !on;
+        Brain().hasseen[c].noautocombat = !on;
     }
 }
 
@@ -2075,10 +2087,10 @@ int32_t TCharacter::ResolveMove(TActionBlock* ab, int32_t bits)
             MoveTo(ab->target);
             ab->nowaitdone = true;
             // A Goto's item is picked up on arrival (retail 0x004c6155).
-            if (TObjectInstance* item = gotoitem.Get())
+            if (TObjectInstance* item = Brain().gotoitem.Get())
             {
                 Pickup(item);
-                gotoitem = nullptr;
+                Brain().gotoitem = nullptr;
             }
             return COM_DONE;
         }
@@ -2185,7 +2197,7 @@ bool TCharacter::ResolveHit(TCharacter* targ, SCharAttackData* attack, SCharAtta
     }
     else
     {
-        if (hit && !targ->Fighting() && !autocombat && dist <= targ->chardata->combatrangemin)
+        if (hit && !targ->Fighting() && !Brain().autocombat && dist <= targ->chardata->combatrangemin)
             targ->BeginFighting(this, ACTION_COMBAT);
         if (impact)
         {
@@ -2458,7 +2470,7 @@ void TCharacter::SignalAttack(TObjectInstance* actor, TObjectInstance* target, i
     }
     if (a && (a->flags & CA_FATIGUEATTACK))
     {
-        requestbits |= kRequestAttackNow | kRequestNoPlayAnim | kRequestInteractive;
+        Brain().requestbits |= kRequestAttackNow | kRequestNoPlayAnim | kRequestInteractive;
         return;
     }
     if (!repeat)
@@ -2597,7 +2609,7 @@ int32_t TCharacter::ResolveCombat(TActionBlock* ab, int32_t bits)
             found = nullptr;
         SetFighting(found);
     }
-    if (!ai_lookat)
+    if (!Brain().ai_lookat)
     {
         if (cadence)
         {
@@ -2673,13 +2685,13 @@ int32_t TCharacter::ResolveCombat(TActionBlock* ab, int32_t bits)
     TObjectInstance* look = nullptr;
     if (obj)
     {
-        if (!CanSeeCharacter(static_cast<TCharacter*>(obj), -1) && ai_lookat)
+        if (!CanSeeCharacter(static_cast<TCharacter*>(obj), -1) && Brain().ai_lookat)
             face = false;
-        if (face && !retreating)
+        if (face && !Brain().retreating)
             look = obj;
     }
     if (!look)
-        look = ai_lookat;
+        look = Brain().ai_lookat;
     if (look)
         angle = angle8 = ConvertToFacing(IntPos(*this), IntPos(look));
 
@@ -2737,7 +2749,7 @@ int32_t TCharacter::ResolveCombatMove(TActionBlock* ab, int32_t bits)
     }
     if (desired == root)
         SetDesired(doing);
-    if (gotoitem.Get() && ab->walkto && (ab->target.x != 0 || ab->target.y != 0 || ab->target.z != 0))
+    if (Brain().gotoitem.Get() && ab->walkto && (ab->target.x != 0 || ab->target.y != 0 || ab->target.z != 0))
     {
         if (dist(IntPos(*this).x, IntPos(*this).y, ab->target.x, ab->target.y) < 8)
         {
@@ -2745,8 +2757,8 @@ int32_t TCharacter::ResolveCombatMove(TActionBlock* ab, int32_t bits)
             MoveTo(ab->target);
             ab->walkto = false;
             ab->nowaitdone = true;
-            Pickup(gotoitem.Get());
-            gotoitem = nullptr;
+            Pickup(Brain().gotoitem.Get());
+            Brain().gotoitem = nullptr;
             return 0;
         }
         ab->moveangle = ConvertToFacing(IntPos(*this), ab->target);
@@ -3148,17 +3160,17 @@ void TCharacter::AI()
             TCharacter* found = nullptr;
             if (FindCharacters(&found, 1, -1, -1, 0x20, FINDCHAR_ENEMY | FINDCHAR_HEAR | FINDCHAR_SEE) > 0)
                 target = found;
-            if (target && !retreating)
+            if (target && !Brain().retreating)
                 BeginFighting(target, ACTION_COMBAT);
         }
     }
 
     if (target && doing)
     {
-        const bool attacking = (doing->Is("walk") && !retreating && (charflags & kCharFlagWalkFighter)) ||
-                               (doing->action == ACTION_COMBAT && !retreating) ||
-                               ((requestbits & kRequestAttackNow) &&
-                                (requestbits & (kRequestNoPlayAnim | kRequestInteractive)));
+        const bool attacking = (doing->Is("walk") && !Brain().retreating && (charflags & kCharFlagWalkFighter)) ||
+                               (doing->action == ACTION_COMBAT && !Brain().retreating) ||
+                               ((Brain().requestbits & kRequestAttackNow) &&
+                                (Brain().requestbits & (kRequestNoPlayAnim | kRequestInteractive)));
         if (attacking)
             AIAttack(target);
         else
@@ -3167,9 +3179,9 @@ void TCharacter::AI()
 
   // The retreat: on while health is at RETREATAT or below (or it was on)
   // and its frames last, which count down.
-    retreating = retreatlatch = (Health() <= chardata->retreatat || retreatlatch) && retreatframes != 0;
-    if (retreatframes > 0)
-        retreatframes--;
+    Brain().retreating = Brain().retreatlatch = (Health() <= chardata->retreatat || Brain().retreatlatch) && Brain().retreatframes != 0;
+    if (Brain().retreatframes > 0)
+        Brain().retreatframes--;
 }
 
 // AI's attack branch (0x004c8cd9-0x004c8f5b; §3.10.2). The attack timer
@@ -3177,14 +3189,14 @@ void TCharacter::AI()
 // re-arms it from ATTACKFREQ the same tick, the magic timer from MAGICFREQ.
 void TCharacter::AIAttack(TCharacter* target)
 {
-    ai_lookat = nullptr;
-    if (nextattack > 0)
-        nextattack--;
-    if (magictimer > 0)
-        magictimer--;
-    if (nextattack == 0 || magictimer == 0 || (requestbits & kRequestAttackNow))
+    Brain().ai_lookat = nullptr;
+    if (Brain().nextattack > 0)
+        Brain().nextattack--;
+    if (Brain().magictimer > 0)
+        Brain().magictimer--;
+    if (Brain().nextattack == 0 || Brain().magictimer == 0 || (Brain().requestbits & kRequestAttackNow))
     {
-        requestbits &= ~kRequestAttackNow;
+        Brain().requestbits &= ~kRequestAttackNow;
         if (lastattack && doing->Is(lastattack->attackname))
         {
             // still making it
@@ -3209,7 +3221,7 @@ void TCharacter::AIAttack(TCharacter* target)
                     SideStep('r');
             }
             if (attacked)
-                attackcount--;
+                Brain().attackcount--;
             else
             {
                 lastattack = nullptr;
@@ -3217,20 +3229,20 @@ void TCharacter::AIAttack(TCharacter* target)
             }
         }
         if (!lastattack || !(lastattack->flags & CA_PLAYANIM))
-            nextattack--;
+            Brain().nextattack--;
     }
-    if (nextattack < 0)
-        nextattack = random(chardata->minattackfreq * FRAMERATE / 100, chardata->maxattackfreq * FRAMERATE / 100);
-    if (magictimer < 0)
-        magictimer = random(chardata->minmagicfreq * FRAMERATE / 100, chardata->maxmagicfreq * FRAMERATE / 100);
+    if (Brain().nextattack < 0)
+        Brain().nextattack = random(chardata->minattackfreq * FRAMERATE / 100, chardata->maxattackfreq * FRAMERATE / 100);
+    if (Brain().magictimer < 0)
+        Brain().magictimer = random(chardata->minmagicfreq * FRAMERATE / 100, chardata->maxmagicfreq * FRAMERATE / 100);
 }
 
 // AI's move branch (0x004c8f60-0x004c93c9; §3.10.3-3.10.5).
 void TCharacter::AIMove(TCharacter* target)
 {
-    if (retreating && !(charflags & kCharFlagNoTurn))
+    if (Brain().retreating && !(charflags & kCharFlagNoTurn))
     {
-        ai_lookat = nullptr;
+        Brain().ai_lookat = nullptr;
         Go((AngleTo(target) + 0x7f) & 0xff);       // straight away from it
         return;
     }
@@ -3250,7 +3262,7 @@ void TCharacter::AIMove(TCharacter* target)
         return;
     }
 
-    if (Distance(target) < chardata->maxattackrange && !ai_lookat)
+    if (Distance(target) < chardata->maxattackrange && !Brain().ai_lookat)
     {
         Stop();
         return;
@@ -3267,22 +3279,22 @@ void TCharacter::AIMove(TCharacter* target)
     if (CanSeeCharacter(target, -1) || heard())
     {
       // Chase: a committed waypoint holds a few ticks; face it, or the target.
-        if (ai_lookat)
+        if (Brain().ai_lookat)
         {
-            if (waypointticks == 0)
-                ai_lookat = nullptr;
+            if (Brain().waypointticks == 0)
+                Brain().ai_lookat = nullptr;
             else
-                waypointticks--;
+                Brain().waypointticks--;
         }
-        target_last_position = IntPos(target);
-        doing->angle = AngleTo(ai_lookat && waypointticks ? ai_lookat : target);
+        Brain().target_last_position = IntPos(target);
+        doing->angle = AngleTo(Brain().ai_lookat && Brain().waypointticks ? Brain().ai_lookat : target);
         return;
     }
 
   // Lost: if the target is fighting someone else in sight, both step
   // aside; then the waypoint nearest the target's last known place (or,
   // the committed one reached, its place now), or that place itself.
-    S3DPoint centre = target_last_position;
+    S3DPoint centre = Brain().target_last_position;
     TCharacter* other = target->Fighting();
     if (other && other != this && CanSeeCharacter(other, -1))
     {
@@ -3290,20 +3302,20 @@ void TCharacter::AIMove(TCharacter* target)
         SideStep(side);
         other->SideStep(side == 'l' ? 'r' : 'l');
     }
-    if (!ai_lookat || Distance(ai_lookat) < 5)
+    if (!Brain().ai_lookat || Distance(Brain().ai_lookat) < 5)
     {
-        if (ai_lookat)
+        if (Brain().ai_lookat)
             centre = IntPos(target);
         TObjectInstance* waypoint = NearestWaypoint(centre);
-        if (ai_lookat == waypoint)
-            ai_lookat = nullptr;
+        if (Brain().ai_lookat == waypoint)
+            Brain().ai_lookat = nullptr;
         else
         {
-            waypointticks = 6;
-            ai_lookat = waypoint;
+            Brain().waypointticks = 6;
+            Brain().ai_lookat = waypoint;
         }
     }
-    doing->angle = ai_lookat ? AngleTo(ai_lookat) : ConvertToFacing(IntPos(*this), centre);
+    doing->angle = Brain().ai_lookat ? AngleTo(Brain().ai_lookat) : ConvertToFacing(IntPos(*this), centre);
 }
 
 // AI's waypoint search (0x004c9158-0x004c9272): of the first ten helpers
@@ -3360,44 +3372,44 @@ TObjectInstance* TCharacter::NearestWaypoint(const S3DPoint& centre)
 // ignores what retail returns (1 for a boss).
 void TCharacter::AIPerMonster()
 {
-    if (monsterkind == 0)
+    if (Brain().monsterkind == 0)
     {
         const char* type = GetTypeName();
-        monsterkind = -1;
+        Brain().monsterkind = -1;
         if (!stricmp(type, "Baez"))
         {
-            monsterkind = kMonsterBaez;
-            bossstate.emplace<SBaezState>();
+            Brain().monsterkind = kMonsterBaez;
+            Brain().bossstate.emplace<SBaezState>();
         }
         else if (!stricmp(type, "Solifuge"))
         {
-            monsterkind = kMonsterSolifuge;
-            bossstate.emplace<SSolifugeState>();
+            Brain().monsterkind = kMonsterSolifuge;
+            Brain().bossstate.emplace<SSolifugeState>();
         }
         else if (!stricmp(type, "Jhaga"))
         {
-            monsterkind = kMonsterJhaga;
-            bossstate.emplace<SJhagaState>();
+            Brain().monsterkind = kMonsterJhaga;
+            Brain().bossstate.emplace<SJhagaState>();
         }
         else if (!stricmp(type, "Yhagoro"))
         {
-            monsterkind = kMonsterYhagoro;
-            bossstate.emplace<SYhagoroState>();
+            Brain().monsterkind = kMonsterYhagoro;
+            Brain().bossstate.emplace<SYhagoroState>();
         }
     }
-    switch (monsterkind)
+    switch (Brain().monsterkind)
     {
         case kMonsterBaez:
-            BossBaez(BossStateOf<SBaezState>(bossstate));
+            BossBaez(BossStateOf<SBaezState>(Brain().bossstate));
             break;
         case kMonsterSolifuge:
-            BossSolifuge(BossStateOf<SSolifugeState>(bossstate));
+            BossSolifuge(BossStateOf<SSolifugeState>(Brain().bossstate));
             break;
         case kMonsterJhaga:
-            BossJhaga(BossStateOf<SJhagaState>(bossstate));
+            BossJhaga(BossStateOf<SJhagaState>(Brain().bossstate));
             break;
         case kMonsterYhagoro:
-            BossYhagoro(BossStateOf<SYhagoroState>(bossstate));
+            BossYhagoro(BossStateOf<SYhagoroState>(Brain().bossstate));
             break;
         default:
             break;
@@ -3409,9 +3421,9 @@ void TCharacter::AIPerMonster()
 // retail's automatic network player, the port's --playerai.
 void TCharacter::Wander()
 {
-    if (wanderidle)
+    if (Brain().wanderidle)
     {
-        --wanderidle;
+        --Brain().wanderidle;
         return;
     }
 
@@ -3437,19 +3449,19 @@ void TCharacter::Wander()
         if (!root->obj)
         {
             EndFighting();
-            wanderidle = 100;
+            Brain().wanderidle = 100;
         }
-        else if (retreating)
+        else if (Brain().retreating)
         {
-            if (!runticks)
+            if (!Brain().runticks)
             {
                 if (random(1, 100) > 30)
                 {
-                    runticks = random(800, 2000);
+                    Brain().runticks = random(800, 2000);
                     SetRunMode();
                 }
             }
-            else if (!--runticks)
+            else if (!--Brain().runticks)
                 SetWalkMode();
         }
         return;
@@ -3464,23 +3476,23 @@ void TCharacter::Wander()
 // bow fight (the combat root was left above).
 void TCharacter::WanderRunning()
 {
-    if (!runticks)
+    if (!Brain().runticks)
     {
         const int32_t full = MaxFatigue();
         if (Fatigue() == full && random(1, 100) == 100)
         {
-            runticks = random(100, 800);
+            Brain().runticks = random(100, 800);
             SetRunMode();
         }
         return;
     }
-    --runticks;
+    --Brain().runticks;
     const int32_t half = MaxFatigue() / 2;
     if (Fatigue() < half && random(1, 100) > 50)
-        runticks = 0;
+        Brain().runticks = 0;
     else if (IsRoot(ACTION_BOW) && root->obj && random(1, 100) > 15)
-        runticks = 0;
-    if (!runticks)
+        Brain().runticks = 0;
+    if (!Brain().runticks)
         SetWalkMode();
 }
 
@@ -3490,22 +3502,22 @@ void TCharacter::WanderRunning()
 // reached becoming the previous.
 void TCharacter::WanderPatrol()
 {
-    if (!ai_lookat)
+    if (!Brain().ai_lookat)
     {
-        ai_lookat = PickWanderWaypoint();
-        if (ai_lookat)
-            Goto(IntPos(ai_lookat).x, IntPos(ai_lookat).y);
+        Brain().ai_lookat = PickWanderWaypoint();
+        if (Brain().ai_lookat)
+            Goto(IntPos(Brain().ai_lookat).x, IntPos(Brain().ai_lookat).y);
         else
-            wanderidle = 1000;
+            Brain().wanderidle = 1000;
         return;
     }
-    Goto(IntPos(ai_lookat).x, IntPos(ai_lookat).y);
-    const S3DPoint at = IntPos(ai_lookat);
+    Goto(IntPos(Brain().ai_lookat).x, IntPos(Brain().ai_lookat).y);
+    const S3DPoint at = IntPos(Brain().ai_lookat);
     if (dist(IntPos(*this).x, IntPos(*this).y, IntPos(*this).z, at.x, at.y, at.z) < 25)
     {
-        TObjectInstance* reached = ai_lookat;
-        ai_lookat = PickWanderWaypoint();       // passes over the one reached and the one before it
-        lastwaypoint = reached;
+        TObjectInstance* reached = Brain().ai_lookat;
+        Brain().ai_lookat = PickWanderWaypoint();       // passes over the one reached and the one before it
+        Brain().lastwaypoint = reached;
     }
 }
 
@@ -3520,13 +3532,13 @@ TObjectInstance* TCharacter::PickWanderWaypoint()
     int32_t index[kMaxFound];
     const int32_t n = (std::min)(MapPane.FindObjectsInRange(IntPos(*this), GetLevel(), index, 2000, 0, OBJCLASS_HELPER,
                                                             kMaxFound, OBJSET_ALL), kMaxFound);
-    TObjectInstance* const previous = lastwaypoint.Get();
+    TObjectInstance* const previous = Brain().lastwaypoint.Get();
     TObjectInstance* kept[kMaxFound];
     int32_t count = 0;
     for (int32_t i = 0; i < n; ++i)
     {
         TObjectInstance* o = MapPane.GetInstance(index[i]);
-        if (o && !stricmp(o->GetTypeName(), "waypoint") && o != previous && o != ai_lookat &&
+        if (o && !stricmp(o->GetTypeName(), "waypoint") && o != previous && o != Brain().ai_lookat &&
             WaypointReachable(o, this) && ProbeLedge(IntPos(o)))
             kept[count++] = o;
     }
@@ -3787,9 +3799,9 @@ void TCharacter::ResetStealthValues()
     if (root && root->Is("sneak"))
         loud /= 2;
     const int32_t r = random(1, 25);
-    noise = 2 * r * loud / 100;
+    Brain().noise = 2 * r * loud / 100;
     const int32_t seen = std::clamp(Visibility() + r, 10, 100);
-    glimpse = std::clamp(seen * loud / 100, 0, 100);
+    Brain().glimpse = std::clamp(seen * loud / 100, 0, 100);
 }
 
 void TCharacter::SignalMovement(TObjectInstance* actor)
@@ -3867,7 +3879,7 @@ bool TCharacter::Go(int32_t angle)
 
     TActionBlock* ab = nullptr;
 
-    if (retreating)
+    if (Brain().retreating)
     {
       // Retreating: turn toward the direction held at a speed scaled to
       // the turn (retail's float, 0x004ceb13).
@@ -3916,7 +3928,7 @@ bool TCharacter::Go(int32_t angle)
 
         int32_t face = angle;
         if (targ && IsValidTarget(targ) && (CombatFace || ObjClass() == OBJCLASS_CHARACTER) &&
-            !retreating)
+            !Brain().retreating)
             face = AngleTo(doing->obj);
         const int32_t face8 = (face + 15) & 0xe0;
 
@@ -3985,7 +3997,7 @@ bool TCharacter::Go(int32_t angle)
         ab->moveangle = ab->angle = angle;
     }
 
-    if (ab && !(retreating))
+    if (ab && !(Brain().retreating))
     {
         ab->interrupt = true;
         ab->noroot = true;
@@ -4030,7 +4042,7 @@ bool TCharacter::Goto(int32_t x, int32_t y, TObjectInstance* pickup)
     ab->target = S3DPoint(x, y, IntPos(*this).z);
     ab->walkto = true;
     if (pickup)
-        gotoitem = pickup;
+        Brain().gotoitem = pickup;
     return true;
 }
 
@@ -4897,7 +4909,7 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
         return false;
     SCharAttackData* ad = &chardata->attacks[attacknum];
 
-    if ((requestbits & kRequestNoPlayAnim) && (ad->flags & CA_PLAYANIM))
+    if ((Brain().requestbits & kRequestNoPlayAnim) && (ad->flags & CA_PLAYANIM))
         return false;
     if (!HasActionAni(ad->attackname))
         return false;
@@ -4961,7 +4973,7 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
   // A spell: its own timer and condition, nothing else.
     if (ad->flags & CA_MAGICATTACK)
     {
-        if (magictimer != 0)
+        if (Brain().magictimer != 0)
             return false;
         switch (ad->condition)
         {
@@ -4971,13 +4983,13 @@ bool TCharacter::IsValidAttack(int32_t attacknum, int32_t &impactnum, int32_t &d
           case MASTAT_MANAGT:   if (Mana() <= ad->conditionvalue) return false; break;
           default: break;
         }
-        magictimer--;
+        Brain().magictimer--;
         return true;
     }
 
   // A monster attacks only when the AI's timer has run out; the player's
   // presses aren't timed. Nobody starts one while the last is still early.
-    if (nextattack != 0 && objclass != OBJCLASS_PLAYER)
+    if (Brain().nextattack != 0 && objclass != OBJCLASS_PLAYER)
         return false;
     if (doing->action == ACTION_ATTACK && doing->attack && GetFrame() < doing->attack->nextwait)
         return false;   // REVSYNC-DIVERGENCE: retail doesn't test doing->attack (an ATTACK block always has one)
@@ -5261,9 +5273,9 @@ bool TCharacter::DoAttack(int32_t attacknum, int32_t impactnum, int32_t damage, 
     ab->priority = (ad->flags & CA_SPECIAL) != 0;
     ab->interrupt = !((ad->flags & CA_CHAIN) && ad->chainname[0]);
     if (ad->flags & CA_INTERACTIVE)
-        requestbits &= ~kRequestInteractive;
+        Brain().requestbits &= ~kRequestInteractive;
     if (!(ad->flags & CA_PLAYANIM))
-        requestbits &= ~kRequestNoPlayAnim;
+        Brain().requestbits &= ~kRequestNoPlayAnim;
 
   // The swing keeps the heading the character had; the root remembers it.
     root->angle = root->moveangle = doing->angle;
@@ -5324,7 +5336,7 @@ bool TCharacter::ButtonAttack(int32_t button)
         {
             const int32_t counter = random(1, 50) + 50;
             int32_t a = -1, imp = -1, dmg = -1, th = -1, rl = 100;
-            targ->nextattack = 0;
+            targ->Brain().nextattack = 0;
             targ->SetFatigue(targ->MaxFatigue());
             bool found = false;
             for (int32_t k = 0; k < 10; k++)
@@ -5371,10 +5383,10 @@ bool TCharacter::RandomAttack(int32_t pcnt)
     const int32_t dmgpcnt = RollDamagePercent();
     int32_t a = -1, imp = -1, dmg = -1, th = -1, rl = -1;
     bool found = false;
-    if (lastbutton >= 0 && (requestbits & kRequestInteractive))
+    if (lastbutton >= 0 && (Brain().requestbits & kRequestInteractive))
     {
         found = FindInteractiveAttack(pcnt, dmgpcnt, a, imp, dmg, th, rl);
-        requestbits &= ~kRequestInteractive;
+        Brain().requestbits &= ~kRequestInteractive;
     }
     if (!found && !FindPcntAttack(pcnt, dmgpcnt, a, imp, dmg, th, rl))
         return false;
@@ -5397,7 +5409,7 @@ bool TCharacter::SpecificAttack(int32_t attacknum)
     const int32_t tdist = targ ? Distance(targ) : 10000;
     const int32_t dmgpcnt = RollDamagePercent();
     int32_t imp = -1, dmg = -1, th = -1, rl = -1;
-    nextattack = 0;
+    Brain().nextattack = 0;
     if (!IsValidAttack(attacknum, imp, dmg, th, rl, tdist, -1, -1, dmgpcnt, 0, 0, targ))
         return false;
     return DoAttack(attacknum, imp, dmg, th, rl, targ);
@@ -5448,11 +5460,11 @@ bool TCharacter::Leap(int32_t angle)
 void TCharacter::StartRetreat()
 {
     SetFighting(nullptr);
-    if (!retreating)
+    if (!Brain().retreating)
         Stop();
-    retreatframes = 0x60;
-    retreating = true;
-    retreatlatch = true;
+    Brain().retreatframes = 0x60;
+    Brain().retreating = true;
+    Brain().retreatlatch = true;
 }
 
 // REVSYNC: TCharacter::Block @ 0x004d2e30 (COMBAT_HIT.md §3.9) -- raise a
@@ -5858,7 +5870,7 @@ bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
         (action == ACTION_COMBAT && doing->action == ACTION_BOW))
         doing->priority = false;
 
-    ab->angle = (target && !retreating) ? AngleTo(target) : IntFacing(*this);
+    ab->angle = (target && !Brain().retreating) ? AngleTo(target) : IntFacing(*this);
     ab->moveangle = stepping ? GetMoveAngle() : ab->angle;
 
     if (!SetDesired(ab))
@@ -5873,7 +5885,7 @@ bool TCharacter::BeginFighting(TCharacter* target, ACTION action)
             charflags |= kCharFlagNoIncidentals;
     }
 
-    nextattack = -1;
+    Brain().nextattack = -1;
 
     return true;
 }
@@ -5962,7 +5974,7 @@ bool TCharacter::SetFighting(TCharacter* newtarget)
     if (newtarget)
     {
         const int32_t angle = AngleTo(newtarget);
-        if (!retreating)
+        if (!Brain().retreating)
             doing->angle = desired->angle = root->angle = angle;
     }
     if (ObjClass() == OBJCLASS_PLAYER)

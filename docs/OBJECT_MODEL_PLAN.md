@@ -434,7 +434,7 @@ record, codec and gate):
 | `TScriptComponent` (landed) | the bound script; the command state stays on the object (the action's) | `script` |
 | `TMotionComponent` | velocity, accumulator, move angle; the integrator `Move` reads and writes | `vel`, `accum`, `moveangle` |
 | `TVitalsComponent` (character, landed) | recovery clocks and accumulators, poison, the teleport point | `TCharacter` fields the stream carries |
-| `TAIComponent` (character) | targets, has-seen, waypoints, retreat, boss state | `TCharacter` AI fields |
+| `TAIComponent` (character, landed, annotated) | the attack timers and requests, the target last seen, the waypoint and the wander, the retreat, the Goto item, the boss kind and state, the characters seen, auto-combat, the glimpse and noise given off; `Brain()` | `TCharacter` AI fields; none in the record, as in retail |
 | `TCombatComponent` (character) | action blocks, auto-combat, fighting mode | `TCharacter` combat fields |
 | `TEquipmentComponent` (player, landed) | the equip slots (rebuilt from the inventory on load; not a record field) | `equipment[]` |
 | `TSpellbookComponent` (player, landed) | known talisman codes, the quick spells, the change count | `knownspells`, `quickspells` |

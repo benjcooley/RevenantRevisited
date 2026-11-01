@@ -6,7 +6,7 @@
 // Baez, Solifuge, Jhaga and Yhagoro: the cases of retail's AI_PerMonster
 // (0x004c9b70), which AI runs for an aggressive character before its own
 // (TCharacter::AIPerMonster in character.cpp picks the case). Each boss
-// keeps its state in TCharacter::bossstate (bossai.h). Forensics, with
+// keeps its state in the AI component, Brain().bossstate (bossai.h). Forensics, with
 // every address: docs/gameplay/forensics/BOSS_AI.md; kata C3c (`melee-boss`)
 // holds this file to the original.
 
@@ -14,6 +14,7 @@
 
 #include "game/imagery/3dimage.h"
 #include "game/object/character.h"
+#include "game/object/aicomponent.h"
 #include "game/world/mappane.h"
 #include "game/object/player.h"
 #include "game/ui/playscreen.h"
@@ -258,7 +259,7 @@ bool TCharacter::BaezSetUpFall(SBaezState& s)
         }
     if (!table)
     {
-        monsterkind = -1;
+        Brain().monsterkind = -1;
         charflags &= ~(kCharFlagNoTurn | kCharFlagUnkillable);
         return false;
     }
@@ -792,7 +793,7 @@ bool TCharacter::JhagaSetUp(SJhagaState& s)
         }
     if (found < waypoints.size())
     {
-        monsterkind = -1;
+        Brain().monsterkind = -1;
         charflags &= ~kCharFlagNoTurn;
         return false;
     }

@@ -18,6 +18,7 @@
 #include "game/object/armor.h"
 #include "game/object/character.h"
 #include "game/object/vitalscomponent.h"
+#include "game/object/aicomponent.h"
 #include "game/imagery/imagery.h"
 #include "engine/assets/imageres.h"
 #include "game/object/player.h"
@@ -400,8 +401,8 @@ class TFixtureChar : public Base, public IFixtureChar
         this->SetMoveAngle((int32_t)spec["moveangle"].Int(spec["facing"].Int()));
         this->state = (uint16_t)spec["state"].Int(0);
         this->charflags = (uint32_t)spec["charflags"].Int();
-        this->retreating = spec["retreating"].Bool();
-        this->monsterkind = (int32_t)spec["monsterkind"].Int(0);
+        this->Brain().retreating = spec["retreating"].Bool();
+        this->Brain().monsterkind = (int32_t)spec["monsterkind"].Int(0);
         for (const auto& [k, v] : spec["stats"].Members())
             stats[k] = (int32_t)v.Int();
         for (const auto& [k, v] : spec["classstats"].Members())
@@ -435,8 +436,8 @@ class TFixtureChar : public Base, public IFixtureChar
         }
         this->forcenomove = spec["forcenomove"].Bool();
         this->shovedir = (int32_t)spec["shovedir"].Int(-1);
-        this->retreatlatch = spec["retreat_latch"].Bool();
-        this->retreatframes = (int32_t)spec["retreat_frames"].Int();
+        this->Brain().retreatlatch = spec["retreat_latch"].Bool();
+        this->Brain().retreatframes = (int32_t)spec["retreat_frames"].Int();
         this->lastbowshot = (int32_t)spec["lastbowshot"].Int();
         this->bowshots = (int32_t)spec["bowshots"].Int();
         if constexpr (std::is_same_v<Base, TPlayer>)
@@ -451,8 +452,8 @@ class TFixtureChar : public Base, public IFixtureChar
         this->frame = (short)spec["frame"].Int();
         this->framerate = (short)spec["framerate"].Int(1);
         this->prevstate = (short)spec["prevstate"].Int(spec["state"].Int(0));
-        this->glimpse = (int32_t)spec["glimpse"].Int();
-        this->noise = (int32_t)spec["noise"].Int();
+        this->Brain().glimpse = (int32_t)spec["glimpse"].Int();
+        this->Brain().noise = (int32_t)spec["noise"].Int();
         // Perception (kata M9b): the invisibility spell, a player's team
         // (the memory, naming others, is the world's: SetMemory).
         this->invisible_spell = spec["invisiblespell"].Bool();
@@ -550,7 +551,7 @@ class TFixtureChar : public Base, public IFixtureChar
     {
         return this->FindCharacters(chars, maxchars, range, angle, anglerange, flags);
     }
-    SHasSeen* Memory() override { return this->hasseen; }
+    SHasSeen* Memory() override { return this->Brain().hasseen.data(); }
 
     void WriteMotion(JsonOut& j) override
     {
@@ -559,11 +560,11 @@ class TFixtureChar : public Base, public IFixtureChar
         j.Key("accum").Begin('[').Value(this->accum.x).Value(this->accum.y).Value(this->accum.z).End(']');
         j.Field("movetopos", this->movetopos ? 1 : 0).Field("forcenomove", this->forcenomove ? 1 : 0);
         j.Field("shovedir", this->shovedir);
-        j.Field("retreating", this->retreating ? 1 : 0);
-        j.Field("retreat_latch", this->retreatlatch ? 1 : 0);
-        j.Field("retreat_frames", this->retreatframes);
+        j.Field("retreating", this->Brain().retreating ? 1 : 0);
+        j.Field("retreat_latch", this->Brain().retreatlatch ? 1 : 0);
+        j.Field("retreat_frames", this->Brain().retreatframes);
         j.Field("movedist", this->GetMoveDist()).Field("commanddone", this->commanddone ? 1 : 0);
-        j.Field("glimpse", this->glimpse).Field("noise", this->noise);
+        j.Field("glimpse", this->Brain().glimpse).Field("noise", this->Brain().noise);
         j.Field("framerate", (int32_t)this->framerate).Field("prevstate", (int32_t)this->prevstate);
         j.Field("prevframe", (int32_t)this->prevframe);
         j.Field("animate", (this->flags & OF_ANIMATE) ? 1 : 0).Field("animator", this->HasAnimator() ? 1 : 0);
@@ -777,8 +778,8 @@ class TFixtureChar : public Base, public IFixtureChar
     }
 
     void RunPerMonster() override { this->AIPerMonster(); }
-    int32_t& MonsterKind() override { return this->monsterkind; }
-    TBossState& Boss() override { return this->bossstate; }
+    int32_t& MonsterKind() override { return this->Brain().monsterkind; }
+    TBossState& Boss() override { return this->Brain().bossstate; }
     void WriteMoveTo(JsonOut& j) const override
     {
         j.Field("movetopos", this->movetopos ? 1 : 0);
@@ -822,24 +823,24 @@ class TFixtureChar : public Base, public IFixtureChar
 
     void ReadAIState(const JsonValue& a, TObjectInstance* lookat, TObjectInstance* previous) override
     {
-        this->ai_lookat = lookat;
+        this->Brain().ai_lookat = lookat;
         if (a.Has("lastpos"))
-            this->target_last_position = Point(a["lastpos"]);
-        this->waypointticks = (int32_t)a["waypointticks"].Int(0);
-        this->lastwaypoint = previous;
-        this->wanderidle = (int32_t)a["wanderidle"].Int(0);
-        this->runticks = (int32_t)a["runticks"].Int(0);
+            this->Brain().target_last_position = Point(a["lastpos"]);
+        this->Brain().waypointticks = (int32_t)a["waypointticks"].Int(0);
+        this->Brain().lastwaypoint = previous;
+        this->Brain().wanderidle = (int32_t)a["wanderidle"].Int(0);
+        this->Brain().runticks = (int32_t)a["runticks"].Int(0);
     }
 
-    TObjectInstance* AILookAt() const override { return this->ai_lookat; }
-    TObjectInstance* LastWaypoint() const override { return this->lastwaypoint.Get(); }
+    TObjectInstance* AILookAt() const override { return this->Brain().ai_lookat; }
+    TObjectInstance* LastWaypoint() const override { return this->Brain().lastwaypoint.Get(); }
 
     void WriteAIState(JsonOut& j) const override
     {
-        const S3DPoint& p = this->target_last_position;
+        const S3DPoint& p = this->Brain().target_last_position;
         j.Key("lastpos").Begin('[').Value(p.x).Value(p.y).Value(p.z).End(']');
-        j.Field("waypointticks", this->waypointticks).Field("monsterkind", this->monsterkind);
-        j.Field("wanderidle", this->wanderidle).Field("runticks", this->runticks);
+        j.Field("waypointticks", this->Brain().waypointticks).Field("monsterkind", this->Brain().monsterkind);
+        j.Field("wanderidle", this->Brain().wanderidle).Field("runticks", this->Brain().runticks);
     }
 
     // A player's MaxMana, when the case gives `maxmana` (retail's seam at
@@ -867,12 +868,12 @@ class TFixtureChar : public Base, public IFixtureChar
     void WriteAttackState(JsonOut& j) override
     {
         j.Key("attackstate").Begin('{');
-        j.Field("nextattack", this->nextattack).Field("magictimer", this->magictimer);
-        j.Field("requestbits", this->requestbits).Field("attackcount", this->attackcount);
+        j.Field("nextattack", this->Brain().nextattack).Field("magictimer", this->Brain().magictimer);
+        j.Field("requestbits", this->Brain().requestbits).Field("attackcount", this->Brain().attackcount);
         j.Field("lastbutton", this->lastbutton).Field("buttonrepeat", this->buttonrepeat);
         j.Field("chainhits", this->chainhits).Field("lastattackticks", this->lastattackticks);
         j.Field("lasthit", this->lasthit).Field("flashticks", this->combatflashticks);
-        j.Field("autocombat", this->autocombat ? 1 : 0).Field("movevert", this->GetMoveVert());
+        j.Field("autocombat", this->Brain().autocombat ? 1 : 0).Field("movevert", this->GetMoveVert());
         j.Field("snapticks", this->snapticks).Field("charflags", (int32_t)this->charflags);
         j.Field("objflags", (int32_t)(this->flags & (OF_ICED | OF_PARALIZE)));
         j.Key("lastattack");
@@ -972,17 +973,17 @@ class TFixtureChar : public Base, public IFixtureChar
     // The case's attack bookkeeping, where given (retail +0x120 ... +0x290).
     void ReadAttackState(const JsonValue& a)
     {
-        this->nextattack = (int32_t)a["nextattack"].Int(this->nextattack);
-        this->magictimer = (int32_t)a["magictimer"].Int(this->magictimer);
-        this->requestbits = (uint32_t)a["requestbits"].Int(this->requestbits);
-        this->attackcount = (int32_t)a["attackcount"].Int(this->attackcount);
+        this->Brain().nextattack = (int32_t)a["nextattack"].Int(this->Brain().nextattack);
+        this->Brain().magictimer = (int32_t)a["magictimer"].Int(this->Brain().magictimer);
+        this->Brain().requestbits = (uint32_t)a["requestbits"].Int(this->Brain().requestbits);
+        this->Brain().attackcount = (int32_t)a["attackcount"].Int(this->Brain().attackcount);
         this->lastbutton = (int32_t)a["lastbutton"].Int(this->lastbutton);
         this->buttonrepeat = (int32_t)a["buttonrepeat"].Int(this->buttonrepeat);
         this->chainhits = (int32_t)a["chainhits"].Int(this->chainhits);
         this->lastattackticks = (int32_t)a["lastattackticks"].Int(this->lastattackticks);
         this->lasthit = (int32_t)a["lasthit"].Int(this->lasthit);
         this->combatflashticks = (int32_t)a["flashticks"].Int(0);
-        this->autocombat = a["autocombat"].Bool(true);
+        this->Brain().autocombat = a["autocombat"].Bool(true);
         this->snapticks = (int32_t)a["snapticks"].Int(-1);
         if (a.Has("lastattack") && !a["lastattack"].IsNull())
             this->lastattack = &cd->attacks[(int32_t)a["lastattack"].Int()];
