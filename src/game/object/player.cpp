@@ -6,6 +6,8 @@
 
 #include "game/object/player.h"
 
+#include <type_traits>
+
 #include "game/object/armor.h"
 #include "game/world/automap.h"
 #include "game/script/dialog.h"
@@ -156,22 +158,38 @@ TPlayer::~TPlayer()
     PlayerManager.RemovePlayer(this);
 }
 
+void TPlayer::EnsurePlayerComponents()
+{
+    auto ensure = [this](auto*& slot) {
+        using T = std::remove_pointer_t<std::remove_reference_t<decltype(slot)>>;
+        if (slot) return;
+        auto owned = std::make_unique<T>();
+        slot = owned.get();
+        AddComponent(std::move(owned));
+    };
+    ensure(equipment_);
+    ensure(spellbook_);
+    ensure(effects_);
+    ensure(automap_);
+}
+
 void TPlayer::ClearPlayer()
 {
-    memset(equipment, 0, NUM_EQ_SLOTS * sizeof(TObjectInstance*));
+    EnsurePlayerComponents();
+    Equipment().slots.fill(nullptr);
 
     flags |= OF_NONMAP; // Allows us to insert object into the game map, and not
                         // worry about it getting deleted, saved, or whatnot
 
-    memset(quickspells, 0, QSPELL_NUM * MAXTALISMANLEN);
+    memset(Spellbook().quickspells, 0, sizeof(Spellbook().quickspells));
 
     OnTheHog = false;
 
   // REVSYNC: the record fields of TPlayer::ClearPlayer @ 0x00518750. A player
   // is never VIRGIN: its stats are its own.
     flags &= ~OF_VIRGIN;
-    knownspells.clear();
-    ++knownspellsversion;
+    Spellbook().known.clear();
+    ++Spellbook().version;
     hudwords = {};
     levelupstats = {};
     team = {};
@@ -181,7 +199,7 @@ void TPlayer::ClearPlayer()
     stateframes = PlayScreen.GameFrame();
     profile = {};
     frags = {};
-    automap = {};
+    Automap().record = {};
 
   // REVSYNC: the stats of TPlayer::ClearPlayer @ 0x00518750. 84 attribute
   // points: an attribute the class requires (STATREQS non-zero) is
@@ -218,9 +236,9 @@ void TPlayer::ClearPlayer()
 
   // The modified stats: one entry per PLAYER object stat, filled by
   // RefreshStats; no stat effects.
-    stateffects.clear();
-    stateffectexpires = -1;
-    modstats.assign(cl->NumObjStats(), 0);
+    Effects().effects.clear();
+    Effects().expires = -1;
+    Effects().modstats.assign(cl->NumObjStats(), 0);
     RefreshStats();
 }
 
@@ -325,8 +343,8 @@ void TPlayer::AddSkillExp(int32_t skillnum, int32_t exp)
 // its end.
 int32_t TPlayer::GetObjStat(int32_t statid) const
 {
-    if ((uint32_t)statid < (uint32_t)modstats.size())
-        return modstats[statid];
+    if ((uint32_t)statid < (uint32_t)Effects().modstats.size())
+        return Effects().modstats[statid];
     return 0;
 }
 
@@ -337,8 +355,8 @@ int32_t TPlayer::GetObjStat(int32_t statid) const
 void TPlayer::SetObjStat(int32_t statid, int32_t value)
 {
     TCharacter::SetObjStat(statid, value);
-    if ((uint32_t)statid < (uint32_t)modstats.size())
-        modstats[statid] = value;
+    if ((uint32_t)statid < (uint32_t)Effects().modstats.size())
+        Effects().modstats[statid] = value;
 }
 
 // REVSYNC: TPlayer::RefreshStats @ 0x0051c660. The modified copy starts as
@@ -355,10 +373,10 @@ void TPlayer::RefreshStats()
         refreshStatsSeam(this);
         return;
     }
-    for (int32_t id = 0; id < (int32_t)modstats.size(); id++)
-        modstats[id] = BaseObjStat(id);
+    for (int32_t id = 0; id < (int32_t)Effects().modstats.size(); id++)
+        Effects().modstats[id] = BaseObjStat(id);
 
-    for (TObjectInstance* item : equipment)
+    for (TObjectInstance* item : Equipment().slots)
     {
         if (!item)
             continue;
@@ -367,9 +385,9 @@ void TPlayer::RefreshStats()
             ApplyStatLine(data->statline.c_str(), -1);
     }
 
-    for (int32_t effect = 0; effect < (int32_t)stateffects.size(); effect++)
+    for (int32_t effect = 0; effect < (int32_t)Effects().effects.size(); effect++)
     {
-        const std::string statline = stateffects[effect].statline;  // the call may remove it
+        const std::string statline = Effects().effects[effect].statline;  // the call may remove it
         ApplyStatLine(statline.c_str(), effect);
     }
 
@@ -382,8 +400,8 @@ void TPlayer::RefreshStats()
 
     for (int32_t id = PLRSTAT_FIRST; id < SKE_FIRST; id++)
     {
-        if (id < (int32_t)modstats.size() && modstats[id] > PlayerStats::kStatCap)
-            modstats[id] = PlayerStats::kStatCap;
+        if (id < (int32_t)Effects().modstats.size() && Effects().modstats[id] > PlayerStats::kStatCap)
+            Effects().modstats[id] = PlayerStats::kStatCap;
     }
 
     RefreshEquip();
@@ -397,9 +415,9 @@ void TPlayer::RefreshStats()
 // player is told about bad values, and on the INITIALIZE pass what changed.
 void TPlayer::ApplyStatLine(const char *statline, int32_t effect)
 {
-    stateffectexpires = -1;
+    Effects().expires = -1;
 
-    const PlayerStats::SStatLineResult result = PlayerStats::ApplyStatLine(statline, modstats,
+    const PlayerStats::SStatLineResult result = PlayerStats::ApplyStatLine(statline, Effects().modstats,
         [this](const char *name) { return cl->FindObjStat(name); });
 
     const bool mainplayer = (this == Player);
@@ -422,10 +440,10 @@ void TPlayer::ApplyStatLine(const char *statline, int32_t effect)
 
   // The first pass drops INITIALIZE from the stored line (the blank before
   // it stays).
-    const bool live = (uint32_t)effect < (uint32_t)stateffects.size();
+    const bool live = (uint32_t)effect < (uint32_t)Effects().effects.size();
     if (result.initialize && live)
     {
-        std::string& line = stateffects[effect].statline;
+        std::string& line = Effects().effects[effect].statline;
         const size_t at = line.find("INITIALIZE");
         if (at != std::string::npos)
             line.erase(at);
@@ -436,7 +454,7 @@ void TPlayer::ApplyStatLine(const char *statline, int32_t effect)
 
     if (live)
     {
-        SStatEffect& entry = stateffects[effect];
+        SStatEffect& entry = Effects().effects[effect];
         if (result.duration == -1)
             entry.expires = -1;
         else
@@ -449,8 +467,8 @@ void TPlayer::ApplyStatLine(const char *statline, int32_t effect)
                 RefreshStats();
                 return;
             }
-            if (entry.expires < stateffectexpires || (entry.expires != -1 && stateffectexpires == -1))
-                stateffectexpires = entry.expires;
+            if (entry.expires < Effects().expires || (entry.expires != -1 && Effects().expires == -1))
+                Effects().expires = entry.expires;
         }
     }
 
@@ -484,9 +502,9 @@ void TPlayer::AddStatEffect(const char *statline)
     if (!statline)
         return;
 
-    for (int32_t effect = 0; effect < (int32_t)stateffects.size(); )
+    for (int32_t effect = 0; effect < (int32_t)Effects().effects.size(); )
     {
-        if (stateffects[effect].statline != statline)
+        if (Effects().effects[effect].statline != statline)
             RemoveStatEffect(effect);
         else
             effect++;
@@ -496,7 +514,7 @@ void TPlayer::AddStatEffect(const char *statline)
     entry.statline = statline;
     if (!strstr(statline, "INITIALIZE"))
         entry.statline += " INITIALIZE";
-    stateffects.push_back(std::move(entry));
+    Effects().effects.push_back(std::move(entry));
 
     RefreshStats();
 }
@@ -504,8 +522,8 @@ void TPlayer::AddStatEffect(const char *statline)
 // REVSYNC: 0x0051d4a0
 void TPlayer::RemoveStatEffect(int32_t effect)
 {
-    if ((uint32_t)effect < (uint32_t)stateffects.size())
-        stateffects.erase(stateffects.begin() + effect);
+    if ((uint32_t)effect < (uint32_t)Effects().effects.size())
+        Effects().effects.erase(Effects().effects.begin() + effect);
 }
 
 // REVSYNC: TPlayer::MaxHealth @ 0x00520630, from the modified stats.
@@ -539,7 +557,7 @@ int32_t TPlayer::ArmorValue()
     int32_t armor = ACBonus();
     for (int32_t slot = 0; slot < NUM_EQ_SLOTS; slot++)
     {
-        TObjectInstance* item = equipment[slot];
+        TObjectInstance* item = Equipment().slots[slot];
         if (slot != EQ_AMMO && item && item->ObjClass() == OBJCLASS_ARMOR)
             armor += static_cast<TArmor*>(item)->Protection();
     }
@@ -602,7 +620,7 @@ int32_t TPlayer::Defense()
 // REVSYNC: TPlayer::HoldsLight @ 0x00519970
 bool TPlayer::HoldsLight()
 {
-    TObjectInstance* item = equipment[EQ_L_ACCESSORY];
+    TObjectInstance* item = Equipment().slots[EQ_L_ACCESSORY];
     return item && item->ObjClass() == OBJCLASS_LIGHTSOURCE;
 }
 
@@ -759,11 +777,11 @@ void TPlayer::Pulse()
         ++stateframes;
         statetime = int32_t(int64_t(stateframes) * 100 / 24);
     }
-    if (stateffectexpires != -1)
+    if (Effects().expires != -1)
     {
-        if (std::abs(statetime - stateffectexpires) > 50000)
-            stateffectexpires = statetime - 1;
-        if (stateffectexpires < statetime)
+        if (std::abs(statetime - Effects().expires) > 50000)
+            Effects().expires = statetime - 1;
+        if (Effects().expires < statetime)
             RefreshStats();
     }
 
@@ -865,7 +883,7 @@ void TPlayer::Died(TCharacter* killer)
 int32_t TPlayer::DamageModifier(int32_t damagetype)
 {
     const int32_t id = CHRRESIST_FIRST + damagetype;
-    return (uint32_t)id < (uint32_t)modstats.size() ? modstats[id] : 0;
+    return (uint32_t)id < (uint32_t)Effects().modstats.size() ? Effects().modstats[id] : 0;
 }
 
 // REVSYNC: TPlayer::GetFieldText = retail 0x0051dfb0 (vtable +0xc8).
@@ -897,7 +915,7 @@ void TPlayer::RefreshEquip()
         const int32_t slot = item->InventNum() - kInvSlotEquipFirst;
         if ((uint32_t)slot < NUM_EQ_SLOTS)
         {
-            equipment[slot] = item;
+            Equipment().slots[slot] = item;
             Equip(CanEquip(item, slot) ? item : nullptr, slot);
         }
     }
@@ -959,9 +977,9 @@ bool TPlayer::CanEquip(TObjectInstance* oi, int32_t slot)
 void TPlayer::OnInventoryRemove(TObjectInstance* item)
 {
     const int32_t slot = item->InventNum() - kInvSlotEquipFirst;
-    if ((uint32_t)slot < NUM_EQ_SLOTS && equipment[slot] == item)
+    if ((uint32_t)slot < NUM_EQ_SLOTS && Equipment().slots[slot] == item)
     {
-        log_debug("[inv] %s: %s leaves equipment slot %d, unequipped", GetName(), item->GetName(), slot);
+        log_debug("[inv] %s: %s leaves Equipment().slots slot %d, unequipped", GetName(), item->GetName(), slot);
         Equip(nullptr, slot);
     }
 }
@@ -988,13 +1006,13 @@ bool TPlayer::Equip(TObjectInstance* oi, int32_t slot)
     }
     if ((uint32_t)slot >= NUM_EQ_SLOTS)
         return false;
-    if (equipment[slot] == oi)
+    if (Equipment().slots[slot] == oi)
         return true;
     if (oi && !CanEquip(oi, slot))
         return false;
 
   // Inventory bookkeeping
-    TObjectInstance* displaced = equipment[slot];
+    TObjectInstance* displaced = Equipment().slots[slot];
     TObjectInstance* container = (oi && oi->GetOwner()) ? oi->GetOwner() : this;
     int32_t place = (oi && oi->GetOwner()) ? oi->InventNum() : -1;
     if (place < 0 || (place >= kInvSlotEquipFirst && place < kInvSlotBeltFirst))
@@ -1030,7 +1048,7 @@ bool TPlayer::Equip(TObjectInstance* oi, int32_t slot)
         strcpy(old, GetBowRoot());
 
   // Change slot
-    equipment[slot] = oi;
+    Equipment().slots[slot] = oi;
     if (this == Player)
         EquipPane.SetDirty(true);
 
@@ -1231,7 +1249,7 @@ const char *TPlayer::GetQuickSpell(int32_t button) const
     if ((uint32_t)button >= QSPELL_NUM)
         return "";
 
-    return quickspells[button];
+    return Spellbook().quickspells[button];
 }
 
 // Sets the quickspell button
@@ -1240,7 +1258,7 @@ void TPlayer::SetQuickSpell(int32_t button, const char *talismans)
     if ((uint32_t)button >= QSPELL_NUM)
         return;
 
-    strncpyz(quickspells[button], talismans, MAXTALISMANLEN);
+    strncpyz(Spellbook().quickspells[button], talismans, MAXTALISMANLEN);
 
   // Update spell panes
     if (button == QSPELL_CONSTRUCT)
@@ -1268,7 +1286,7 @@ bool TPlayer::InvokeQuickSpell(int32_t button)
             return false;
     }
 
-    char *talismans = quickspells[button];
+    char *talismans = Spellbook().quickspells[button];
     const bool mainplayer = (this == Player);
     if (!talismans[0])
     {
@@ -1349,14 +1367,14 @@ bool TPlayer::LearnSpell(const char* talismans)
 {
     if (!talismans || !*talismans)
         return false;
-    for (const TSpellCode& code : knownspells)
+    for (const TSpellCode& code : Spellbook().known)
     {
         if (strncmp(code.data(), talismans, kSpellCodeBytes) == 0)
             return false;
     }
-    TSpellCode& code = knownspells.emplace_back();
+    TSpellCode& code = Spellbook().known.emplace_back();
     strncpy(code.data(), talismans, kSpellCodeBytes);
-    ++knownspellsversion;
+    ++Spellbook().version;
     return true;
 }
 
@@ -1364,8 +1382,8 @@ void TPlayer::ForgetSpell(int32_t i)
 {
     if (i >= 0 && i < NumKnownSpells())
     {
-        knownspells.erase(knownspells.begin() + i);
-        ++knownspellsversion;
+        Spellbook().known.erase(Spellbook().known.begin() + i);
+        ++Spellbook().version;
     }
 }
 

@@ -206,18 +206,18 @@ void TPlayerDef::Apply(const SObjectState& state, TObjectInstance& inst) const
     {
         const std::string& spell = size_t(i) < ps->quickspells.size() ? ps->quickspells[size_t(i)] : std::string();
         const size_t n = std::min<size_t>(spell.size(), MAXTALISMANLEN - 1);
-        memcpy(o.quickspells[i], spell.data(), n);
-        o.quickspells[i][n] = 0;
+        memcpy(o.Spellbook().quickspells[i], spell.data(), n);
+        o.Spellbook().quickspells[i][n] = 0;
     }
 
-    o.knownspells.clear();
+    o.Spellbook().known.clear();
     for (const std::string& code : ps->knownspells)
     {
-        TSpellCode& c = o.knownspells.emplace_back();
+        TSpellCode& c = o.Spellbook().known.emplace_back();
         c.fill(0);
         memcpy(c.data(), code.data(), std::min<size_t>(code.size(), kSpellCodeBytes));
     }
-    ++o.knownspellsversion;
+    ++o.Spellbook().version;
 
     o.hudwords.sidebarOpen = ps->sidebarOpen;
     o.hudwords.upperMode   = ps->upperMode;
@@ -247,7 +247,7 @@ void TPlayerDef::Apply(const SObjectState& state, TObjectInstance& inst) const
     for (size_t i = 0; i < o.frags.size() && i < ps->frags.size(); i++)
         o.frags[i] = ps->frags[i];
 
-    o.automap = AutoMapFromState(ps->automap);
+    o.Automap().record = AutoMapFromState(ps->automap);
     o.RefreshStats();
 }
 
@@ -260,10 +260,10 @@ void TPlayerDef::Capture(const TObjectInstance& inst, SObjectState& state) const
     const auto& o = static_cast<const TPlayer&>(inst);
 
     ps->quickspells.clear();
-    for (const char* spell : o.quickspells)
+    for (const char* spell : o.Spellbook().quickspells)
         ps->quickspells.emplace_back(spell);
     ps->knownspells.clear();
-    for (const TSpellCode& code : o.knownspells)
+    for (const TSpellCode& code : o.Spellbook().known)
         ps->knownspells.emplace_back(code.data(), strnlen(code.data(), kSpellCodeBytes));
 
     ps->sidebarOpen = o.hudwords.sidebarOpen;
@@ -281,7 +281,7 @@ void TPlayerDef::Capture(const TObjectInstance& inst, SObjectState& state) const
     ps->statetime   = o.statetime;
     ps->profile.assign(o.profile.begin(), o.profile.end());
     ps->frags.assign(o.frags.begin(), o.frags.end());
-    ps->automap     = AutoMapToState(o.automap);
+    ps->automap     = AutoMapToState(o.Automap().record);
 }
 
 // ---- Registration -----------------------------------------------------------

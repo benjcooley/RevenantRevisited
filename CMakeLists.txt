@@ -234,7 +234,8 @@ rev_reflect(Revenant
   src/engine/fx/particledef.h
   src/engine/fx/particlecomponent.h
   src/game/world/lightcomponent.h
-  src/game/object/vitalscomponent.h)
+  src/game/object/vitalscomponent.h
+  src/game/object/stateffectscomponent.h)
 
 # buildinfo.h: the commit the binary is built from (the playtest recordings
 # name it) and its version (the main menu shows it). Regenerated every

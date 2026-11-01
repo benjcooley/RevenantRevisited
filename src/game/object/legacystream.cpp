@@ -1072,7 +1072,7 @@ void TLegacySerialize::WritePlayer(TPlayer& o, TOutputStream& os)
     SettleFlagsForSave(o);
     // REVSYNC: 0x00529830 -- the level the automap shows goes into the
     // record first.
-    if (AutoMap.IsBoundTo(o.automap))
+    if (AutoMap.IsBoundTo(o.Automap().record))
         AutoMap.FlushGrid();
     SPlayerState st;
     o.Archetype()->Capture(o, st);

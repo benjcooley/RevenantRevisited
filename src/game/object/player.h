@@ -14,36 +14,21 @@
 #include "engine/assets/multi.h"
 #include "game/script/rules.h"
 #include "game/object/weapon.h"
+#include "game/object/equipmentcomponent.h"
+#include "game/object/spellbookcomponent.h"
+#include "game/object/stateffectscomponent.h"
+#include "game/object/automapcomponent.h"
 
 #include <array>
 #include <string>
 #include <vector>
 
-// Equipment slot defines
-#define NUM_EQ_SLOTS    11
-
-#define EQ_HEAD         0
-#define EQ_NECK         1
-#define EQ_BODY         2
-#define EQ_OFFHAND      3
-#define EQ_PRIMEHAND    4
-#define EQ_R_ACCESSORY  5
-#define EQ_L_ACCESSORY  6
-#define EQ_RANGEDWEAPON 7
-#define EQ_AMMO         8
-#define EQ_LEGS         9
-#define EQ_FEET         10
+// The equipment slots (EQ_*) are equipmentcomponent.h's, the quick spell
+// buttons (QSPELL_*) spellbookcomponent.h's.
 
 #define PLYRSTATMOD_NORMAL          0
 #define PLYRSTATMOD_HALFROUNDDOWN   1
 #define PLYRSTATMOD_HALFROUNDUP     2
-
-#define QSPELL_CONSTRUCT 0
-#define QSPELL_1         1
-#define QSPELL_2         2
-#define QSPELL_3         3
-#define QSPELL_4         4
-#define QSPELL_NUM       5
 
 // **************
 // * Skill Tree *
@@ -72,8 +57,6 @@ extern SSkill SkillTree[NUM_SKILLS];    // Master skill tree
 
 // A learned spell's talisman code. Retail stores it as char[6], NUL padded;
 // the extra byte keeps the code a C string.
-constexpr int32_t kSpellCodeBytes = 6;
-using TSpellCode = std::array<char, kSpellCodeBytes + 1>;
 
 // The HUD state retail writes into the player record: the play screen's
 // flags at save time (TPlayScreen 0x0065caf0 +0x6a0, +0x6c8, +0x6cc, +0x6ac).
@@ -102,17 +85,6 @@ struct SPlayerTeamRecord
 // The player's explored automap (retail +0x314; Load 0x00529770, Save
 // 0x00529830). One compressed explored-area mask per level visited
 // (compressor 0x005295e0, decompressor 0x00529220), for the module named.
-struct SAutoMapLevel
-{
-    int32_t              level = 0;
-    std::vector<int16_t> mask;
-};
-
-struct SAutoMapRecord
-{
-    std::string                module;
-    std::vector<SAutoMapLevel> levels;
-};
 
 // ***********
 // * TPlayer *
@@ -126,6 +98,10 @@ class TPlayer : public TCharacter
     friend class TPlayerDef;            // Apply / Capture of the record (characterdef.h)
   public:
     void ClearPlayer();
+    [[nodiscard]] TEquipmentComponent&   Equipment() const { return *equipment_; }
+    [[nodiscard]] TSpellbookComponent&   Spellbook() const { return *spellbook_; }
+    [[nodiscard]] TStatEffectsComponent& Effects()   const { return *effects_; }
+    [[nodiscard]] TAutomapComponent&     Automap()   const { return *automap_; }
     void SetPlayerLevel(int32_t level);
       // Rebuild as a fresh level-'level' character of its class (`playerlevel`)
     void LogStats(const char *why);
@@ -158,16 +134,16 @@ class TPlayer : public TCharacter
 //  virtual int32_t ThrustRange();
         // These are computed from the currently wielded weapon
 
-    TObjectInstance* PrimeHand() { return equipment[EQ_PRIMEHAND]; }
-    TObjectInstance* OffHand() { return equipment[EQ_OFFHAND]; }
-    TObjectInstance* Head() { return equipment[EQ_HEAD]; }
-    TObjectInstance* Body() { return equipment[EQ_BODY]; }
-    TObjectInstance* Neck() { return equipment[EQ_NECK]; }
-    TObjectInstance* RAccessory() { return equipment[EQ_R_ACCESSORY]; }
-    TObjectInstance* LAccessory() { return equipment[EQ_L_ACCESSORY]; }
-    TObjectInstance* RangedWeapon() { return equipment[EQ_RANGEDWEAPON]; }
-    TObjectInstance* Legs() { return equipment[EQ_LEGS]; }
-    TObjectInstance* Feet() { return equipment[EQ_FEET]; }
+    TObjectInstance* PrimeHand() { return Equipment().slots[EQ_PRIMEHAND]; }
+    TObjectInstance* OffHand() { return Equipment().slots[EQ_OFFHAND]; }
+    TObjectInstance* Head() { return Equipment().slots[EQ_HEAD]; }
+    TObjectInstance* Body() { return Equipment().slots[EQ_BODY]; }
+    TObjectInstance* Neck() { return Equipment().slots[EQ_NECK]; }
+    TObjectInstance* RAccessory() { return Equipment().slots[EQ_R_ACCESSORY]; }
+    TObjectInstance* LAccessory() { return Equipment().slots[EQ_L_ACCESSORY]; }
+    TObjectInstance* RangedWeapon() { return Equipment().slots[EQ_RANGEDWEAPON]; }
+    TObjectInstance* Legs() { return Equipment().slots[EQ_LEGS]; }
+    TObjectInstance* Feet() { return Equipment().slots[EQ_FEET]; }
 
     void RefreshEquip();
         // Sets up all equipment pointers, and refreshes equipment pane if necessary
@@ -180,7 +156,7 @@ class TPlayer : public TCharacter
         // Set up equipment pointers from objects in player's inventory
     void OnInventoryRemove(TObjectInstance* item) override;
         // An equipped item leaving the inventory is unequipped first
-    TObjectInstance* GetEquip(int32_t slot) { return equipment[slot]; }
+    TObjectInstance* GetEquip(int32_t slot) { return Equipment().At(slot); }
         // Returns object pointer to equipment in the given slot
     void UseBelt(int32_t box);
         // REVSYNC: TPlayer::UseBelt @ 0x0051e420 -- Belt Use 1..5 (F5..F9):
@@ -203,12 +179,8 @@ class TPlayer : public TCharacter
       // Starts a stat effect, a STATLINE that may last a TIME (retail 0x0051c2c0)
 
     // A STATLINE in force (retail +0x358 count, +0x35c {line, expiry} pairs).
-    struct SStatEffect
-    {
-        std::string statline;                       // ends "INITIALIZE" until first applied
-        int32_t expires = -1;                       // play-clock time it ends; -1 never
-    };
-    [[nodiscard]] const std::vector<SStatEffect>& StatEffects() const { return stateffects; }
+    using SStatEffect = ::SStatEffect;              // stateffectscomponent.h
+    [[nodiscard]] const std::vector<SStatEffect>& StatEffects() const { return Effects().effects; }
     [[nodiscard]] int32_t PlayClock() const { return statetime; }
       // The play clock the effects expire by (retail +0x370, vtable +0x314; 1/100 s)
     [[nodiscard]] const std::array<int32_t, 3>& LevelUpStats() const { return levelupstats; }
@@ -313,13 +285,13 @@ class TPlayer : public TCharacter
         // The multiplayer team record, set as a whole (0x0051e4d0 compares it)
     [[nodiscard]] const SPlayerHudWords& HudWords() const { return hudwords; }
     // The explored automap (retail +0x314), which the automap pane shows and adds to.
-    [[nodiscard]] SAutoMapRecord& AutoMapRecord() { return automap; }
+    [[nodiscard]] SAutoMapRecord& AutoMapRecord() { return Automap().record; }
     void SetHudWords(const SPlayerHudWords& words) { hudwords = words; }
         // The HUD state written into a save
-    [[nodiscard]] int32_t NumKnownSpells() const { return (int32_t)knownspells.size(); }
-    [[nodiscard]] const char* KnownSpell(int32_t i) const { return knownspells[i].data(); }
+    [[nodiscard]] int32_t NumKnownSpells() const { return (int32_t)Spellbook().known.size(); }
+    [[nodiscard]] const char* KnownSpell(int32_t i) const { return Spellbook().known[size_t(i)].data(); }
         // Talisman codes of the spells the player has learned (retail +0x2ec), in the order learned
-    [[nodiscard]] int32_t KnownSpellsVersion() const { return knownspellsversion; }
+    [[nodiscard]] int32_t KnownSpellsVersion() const { return Spellbook().version; }
         // Moves on whenever that list changes
     bool LearnSpell(const char* talismans);
         // Adds a spell's talisman code; false when it is already known
@@ -337,7 +309,7 @@ class TPlayer : public TCharacter
         // pick 2 is which of them was made last
     void SetLevelUpPicks(const std::array<int32_t, 3> &picks) { levelupstats = picks; }
         // All three, as a save holds them
-    void SetFixtureEquipment(int32_t slot, TObjectInstance *item) { equipment[slot] = item; }
+    void SetFixtureEquipment(int32_t slot, TObjectInstance *item) { Equipment().slots[size_t(slot)] = item; }
         // Retail A/B fixtures only: an item in an equipment slot, without
         // Equip's inventory moves and stat refresh
     struct SClockState
@@ -348,9 +320,9 @@ class TPlayer : public TCharacter
         int32_t deathcountdown = 0xc0;  // +0x39c
     };
     [[nodiscard]] SClockState ClockState() const
-        { return {stateframes, statetime, stateffectexpires, deathcountdown}; }
+        { return {stateframes, statetime, Effects().expires, deathcountdown}; }
     void SetClockState(const SClockState &s)
-        { stateframes = s.frames; statetime = s.time; stateffectexpires = s.effectexpires; deathcountdown = s.deathcountdown; }
+        { stateframes = s.frames; statetime = s.time; Effects().expires = s.effectexpires; deathcountdown = s.deathcountdown; }
         // The play clock, the next stat-effect expiry and the death screen
         // countdown together (retail A/B fixtures set and read them)
     void SetMoney(int32_t amount);
@@ -500,20 +472,18 @@ class TPlayer : public TCharacter
     void RemoveStatEffect(int32_t effect);
       // retail 0x0051d4a0
 
-    TObjectInstance* equipment[NUM_EQ_SLOTS];       // Player's weapons and armor
-    char quickspells[QSPELL_NUM][MAXTALISMANLEN];   // Quickspells (0-construction, 1-4 quick buttons)
+  // The player's components, every player's from construction
+    TEquipmentComponent*   equipment_ = nullptr;    // what it wears and wields
+    TSpellbookComponent*   spellbook_ = nullptr;    // the spells it knows and keeps ready
+    TStatEffectsComponent* effects_   = nullptr;    // the modified stats and the effects on them
+    TAutomapComponent*     automap_   = nullptr;    // the explored automap
+    void EnsurePlayerComponents();
     bool OnTheHog;                                  // hog cheat
     int32_t deathcountdown = 0xc0;                  // frames left before the death screen (retail +0x39c)
 
-  // Modified stats and stat effects (docs/gameplay/forensics/PLAYER_STATS.md)
-    std::vector<int32_t> modstats;                  // +0x34c: the modified copy, by stat id
-    int32_t stateffectexpires = -1;                 // +0x354: play-clock time to refresh again; -1 none
-    std::vector<SStatEffect> stateffects;           // +0x358: stat effects in force
     int32_t stateframes = 0;                        // +0x374: the play clock in 24 Hz frames
 
   // Shipped-game player record, in retail's save order (SAVE_GAME.md §11.4)
-    std::vector<TSpellCode> knownspells;            // +0x2ec: talisman codes learned
-    int32_t knownspellsversion = 0;
     SPlayerHudWords hudwords;                       // HUD state as last saved/loaded
     std::array<int32_t, 3> levelupstats{};          // +0x360: player-stat indices the level-up messages use
     SPlayerTeamRecord team;                         // +0x490: multiplayer team record
@@ -522,7 +492,6 @@ class TPlayer : public TCharacter
     int32_t statetime = 0;                          // +0x370: the play clock (game time, 1/100 s), runs while playing
     std::array<std::string, 4> profile;             // +0x378, +0x570, +0x590, +0x5d0: multiplayer lobby text
     std::array<int32_t, 4> frags{};                 // +0x650..+0x65c: multiplayer kill counts
-    SAutoMapRecord automap;                         // +0x314: explored automap
 };
 
 // The player's def is hand-written: characterdef.h (TPlayerDef)

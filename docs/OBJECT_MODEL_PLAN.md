@@ -433,13 +433,13 @@ record, codec and gate):
 | `TInventoryComponent` (landed: the slots) | the container's slots, retail's array semantics; items as child nodes still to come | `inventory`; the nested item records of the stream |
 | `TScriptComponent` (landed) | the bound script; the command state stays on the object (the action's) | `script` |
 | `TMotionComponent` | velocity, accumulator, move angle; the integrator `Move` reads and writes | `vel`, `accum`, `moveangle` |
-| `TVitalsComponent` (character) | recovery timers, poison, burning, invisibility, teleport point | `TCharacter` fields the stream carries |
+| `TVitalsComponent` (character, landed) | recovery clocks and accumulators, poison, the teleport point | `TCharacter` fields the stream carries |
 | `TAIComponent` (character) | targets, has-seen, waypoints, retreat, boss state | `TCharacter` AI fields |
 | `TCombatComponent` (character) | action blocks, auto-combat, fighting mode | `TCharacter` combat fields |
-| `TEquipmentComponent` (player) | the equip slots | `equipment[]` |
-| `TSpellbookComponent` (player) | known spells, talisman codes | `knownspells` |
-| `TAutomapComponent` (player) | the explored automap | `automap` |
-| `TStatEffectsComponent` (player) | stat effects in force | `stateffects` |
+| `TEquipmentComponent` (player, landed) | the equip slots (rebuilt from the inventory on load; not a record field) | `equipment[]` |
+| `TSpellbookComponent` (player, landed) | known talisman codes, the quick spells, the change count | `knownspells`, `quickspells` |
+| `TAutomapComponent` (player, landed) | the explored automap record | `automap` |
+| `TStatEffectsComponent` (player, landed, annotated) | stat effects in force, their expiry, the modified stats | `stateffects`, `modstats` |
 | `TExitComponent` (exit) | destination as a node ref, level | `TExit::name` |
 
 Not components: a scroll's open UI (`TScroll` pointers to a multi and a
