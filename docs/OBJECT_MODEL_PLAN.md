@@ -477,7 +477,9 @@ object.
    `SAmmoState`, `SMoneyState`, `SFoodState`, `SScrollState`,
    `SWeaponState`, `SDripState`, `SMonsterGenState`, each from its legacy
    read.
-7. The seal: `docs/OBJECT_SYSTEM.md` states the rule; `--test=state-roundtrip
+7. The seal: `docs/OBJECT_SYSTEM.md` states the rule (landed 2026-11-01:
+   "Object State and Serialization", the archetype, the component table);
+   `--test=state-roundtrip
    --level=L` (tools/state_gate.sh over every level) puts every object and
    the new game's player through `Capture` -> `Apply` -> `Capture` and
    asserts the records match (landed 2026-11-01: 6356 objects on levels
