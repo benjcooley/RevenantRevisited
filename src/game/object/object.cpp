@@ -9,6 +9,7 @@
 #include "engine/scene/intworld.h"
 #include "game/world/lightcomponent.h"
 #include "game/object/statscomponent.h"
+#include "game/object/scriptcomponent.h"
 #include "engine/render/visualcomponent.h"
 
 #include "game/world/3dscene.h"
@@ -375,7 +376,7 @@ void TObjectInstance::ClearObject()
     // animator pointer field removed; animators are TComponents
     // stored in the components array and freed via the components dtor.
     SetCommandDone(false);
-    script              = nullptr;
+    script_             = nullptr;
 
     objclass = objtype  = -1;
     flags               = 0;
@@ -639,6 +640,8 @@ TObjectInstance::~TObjectInstance()
     // gate now guards only the post-init bookkeeping that genuinely depends
     // on cl / inf / inventory / sector / script being populated.
     DetachComponents();
+    stats_ = nullptr;               // the components went with them
+    script_ = nullptr;
 
     TObjectImagery::FreeImagery(imagery);
     imagery = nullptr;
@@ -663,9 +666,7 @@ TObjectInstance::~TObjectInstance()
         name = nullptr;
     }
 
-    // Kill the script
-    if (script)
-        delete script;
+    // (The script went with the components above)
 
 }
 
@@ -682,12 +683,8 @@ void TObjectInstance::SetName(char *newname)
     else
         name = inf->name;           // Name cleared, set to objinfo name instead
 
-  // Reset script when name changes (could have a new script)   
-    if (script)
-    {
-        delete script;
-        script = nullptr;
-    }
+  // Reset script when name changes (could have a new script)
+    ClearScript();
 
     if (objclass != OBJCLASS_TILE) // No scripts for regular tiles (for efficiency sake)
         InitScript(ScriptManager.ObjectScript(this));
@@ -1926,7 +1923,7 @@ bool TObjectInstance::CanHaveScript() const
 // ported: the port plays single player.
 void TObjectInstance::InitScript(PTScript newscr)
 {
-    if (newscr == script)
+    if (newscr == GetScript())
         return;
     if (!CanHaveScript())
     {
@@ -1934,8 +1931,8 @@ void TObjectInstance::InitScript(PTScript newscr)
         return;
     }
 
-    delete script;
-    script = newscr;
+    EnsureScriptComponent().Set(std::unique_ptr<TScript>(newscr));
+    TScript* script = newscr;
     if (script)
     {
         flags |= OF_PULSE;          // Pulse me so script will run
@@ -1955,25 +1952,49 @@ void TObjectInstance::InitScript(PTScript newscr)
 // line as a command -- a door's `USE` used the door.)
 void TObjectInstance::ResetScript()
 {
-    if (script)
+    if (TScript* script = GetScript())
         script->Reset();
 }
 
 void TObjectInstance::ContinueScript(bool commanddone)
 {
+    TScript* script = GetScript();
     if (script && !(flags & OF_PAUSE))
         script->Continue(this, commanddone);
 }
 
 bool TObjectInstance::IsScriptWaiting() const
 {
+    const TScript* script = GetScript();
     return script && script->IsWaiting();
 }
 
 void TObjectInstance::ScriptJump(char *label)
 {
-    if (script)
+    if (TScript* script = GetScript())
         script->Jump(this, label);
+}
+
+TScript* TObjectInstance::GetScript() const
+{
+    return script_ ? script_->Script() : nullptr;
+}
+
+void TObjectInstance::ClearScript()
+{
+    if (script_)
+        script_->Clear();
+}
+
+TScriptComponent& TObjectInstance::EnsureScriptComponent()
+{
+    if (!script_)
+    {
+        auto owned = std::make_unique<TScriptComponent>();
+        script_ = owned.get();
+        AddComponent(std::move(owned));
+    }
+    return *script_;
 }
 
 // ****************************** Parse Command ********************************
@@ -2115,15 +2136,13 @@ void TObjectInstance::Notify(int32_t notify, void *ptr)
 {
     if (notify == N_SCRIPTDELETED) // Check if we're using this script and delete it if so
     {
+        TScript* script = GetScript();
         if (script && script->GetScriptProto() == (TScriptProto*)ptr)
-        {
-            delete script;
-            script = nullptr;
-        }
+            ClearScript();
     }
     else if (notify == N_SCRIPTADDED)   // Check to see if new script matches us
     {
-        if (!script && CanHaveScript())
+        if (!GetScript() && CanHaveScript())
             InitScript(ScriptManager.ObjectScript(this));
     }
 }

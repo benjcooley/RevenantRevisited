@@ -56,6 +56,7 @@ _CLASSDEF(TObjectAnimator)
 class TLightComponent;
 class TVisualComponent;
 class TStatsComponent;
+class TScriptComponent;
 
 // Forward-declared free function used by TObjectInstance::SafeRefLookup
 // (and by TSafeRef<TObjectInstance>) to avoid pulling the mappane /
@@ -1100,8 +1101,10 @@ class TObjectInstance : public TComponent
       // Continue script execution (call every frame)
     void ScriptJump(char *label);
       // Jump to a given label in the script
-    PTScript GetScript() { return script; }
-      // Returns object's script
+    [[nodiscard]] TScript* GetScript() const;
+      // Returns object's script, or nullptr
+    void ClearScript();
+      // Drops the script (a load or a rename attaches the right one after)
 
   // Command parsing function
     virtual int32_t ParseCommand(const TToken& t);
@@ -1311,9 +1314,12 @@ class TObjectInstance : public TComponent
     short inventnum;            // Inventory slot number
     short invindex;             // Inventory index (NOT necessarily equal to slot number)
 
-  // Script
+  // Script: a component added on the first InitScript, kept for life (the
+  // node destroys it after the object); the object's command state stays
+  // here, it is the action's, not the script's
     bool  commanddone;          // Indicates if command is complete
-    PTScript script;            // Pointer to object's script elements
+    TScriptComponent* script_ = nullptr;
+    TScriptComponent& EnsureScriptComponent();
 
   // Light
     TSafeComponentRef<TLightComponent> light_;   // the light component, when OF_LIGHT

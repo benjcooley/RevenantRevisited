@@ -456,8 +456,7 @@ void TLegacyDeserialize::ReadObjectInstance(TObjectInstance& o, TInputStream& is
     o.inf = o.cl->GetObjType(o.objtype);
 
   // Any script the object had goes; the right one is attached below
-    delete o.script;
-    o.script = nullptr;
+    o.ClearScript();
 
   // Reset inventory
     if (&o == Inventory.GetContainer())

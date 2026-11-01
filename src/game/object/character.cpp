@@ -581,7 +581,7 @@ void TCharacter::PulseCorpse()
         SetRoot(dead);
     }
 
-    if (script)
+    if (TScript* script = GetScript())
     {
         script->Trigger(TRIGGER_DEAD);
         SetIncidentals(false);
