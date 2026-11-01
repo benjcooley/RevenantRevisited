@@ -17,6 +17,7 @@
 #include "game/object/ammo.h"
 #include "game/world/automap.h"
 #include "game/object/character.h"
+#include "game/object/characterdef.h"
 #include "game/object/complexobj.h"
 #include "game/object/container.h"
 #include "game/effects/effect.h"
@@ -515,14 +516,13 @@ void TLegacyDeserialize::ReadComplexObject(TComplexObject& o, TInputStream& is, 
     FinishObjectInstance(o, version, derived);
 }
 
-// REVSYNC: TCharacter::Load @ 0x004d4eb0 (SAVE_GAME.md §11.3): the
-// character's record on top of the complex object's; what retail settled
-// after (the vitals clamped to the type's, a dead character removed, the
-// fade reset) is the def's (TCharacterDef::Apply).
-void TLegacyDeserialize::ReadCharacter(TCharacter& o, TInputStream& is, int32_t version, int32_t objversion)
+// REVSYNC: TCharacter::Load @ 0x004d4eb0 (SAVE_GAME.md §11.3), the bytes
+// half: the complex object's record, then the character's fields. What
+// retail settled after (the vitals clamped to the type's, a dead character
+// removed, the fade reset) is the def's (TCharacterDef::Apply).
+void TLegacyDeserialize::ReadCharacterState(SCharacterState& st, TCharacter& o, TInputStream& is,
+                                            int32_t version, int32_t objversion, SLoadDerived& derived)
 {
-    SCharacterState st;
-    SLoadDerived derived;
     uint8_t basever = 0;
     if (objversion >= 3)
         is >> basever;
@@ -552,61 +552,74 @@ void TLegacyDeserialize::ReadCharacter(TCharacter& o, TInputStream& is, int32_t 
             st.teleport_level = -1;
         }
     }
+}
+
+void TLegacyDeserialize::ReadCharacter(TCharacter& o, TInputStream& is, int32_t version, int32_t objversion)
+{
+    SCharacterState st;
+    SLoadDerived derived;
+    ReadCharacterState(st, o, is, version, objversion, derived);
     o.Archetype()->Apply(st, o);
     FinishObjectInstance(o, version, derived);
 }
 
-// REVSYNC: TPlayer::Load @ 0x0051b960 (SAVE_GAME.md §11.4). Ends with
-// RefreshStats (0x0051c660): the modified stats from the loaded ones.
+// REVSYNC: TPlayer::Load @ 0x0051b960 (SAVE_GAME.md §11.4): the player's
+// record on top of the character's. What retail derived on load (the clock
+// in frames, RefreshStats) is the def's (TPlayerDef::Apply).
 void TLegacyDeserialize::ReadPlayer(TPlayer& o, TInputStream& is, int32_t version, int32_t objversion)
 {
+    SPlayerState st;
+    SLoadDerived derived;
     uint8_t basever = (uint8_t)objversion;
     if (objversion >= 4)
         is >> basever;
-    ReadCharacter(o, is, version, basever);
+    ReadCharacterState(st, o, is, version, basever, derived);
 
     if (objversion >= 4)
     {
-        for (char* quickspell : o.quickspells)
-            ReadFixedString(is, quickspell, MAXTALISMANLEN);
+        for (int32_t i = 0; i < QSPELL_NUM; i++)
+        {
+            // A stored name longer than the buffer was cut to fit
+            std::string spell = is.ReadString();
+            spell.resize(std::min<size_t>(spell.size(), MAXTALISMANLEN - 1));
+            st.quickspells.push_back(spell);
+        }
     }
-
     if (objversion >= 5)
     {
         int32_t count = 0;
         is >> count;
-        o.knownspells.clear();
         for (int32_t i = 0; i < count && !is.Overrun(); i++)
-            is.ReadBytes(o.knownspells.emplace_back().data(), kSpellCodeBytes);
-        ++o.knownspellsversion;
+        {
+            char code[kSpellCodeBytes] = {};
+            is.ReadBytes(code, kSpellCodeBytes);
+            st.knownspells.emplace_back(code, strnlen(code, kSpellCodeBytes));
+        }
         if (objversion >= 6 && objversion <= 8)
             is.MovePos(count * 4);  // a per-spell int those versions had
     }
-
     // Retail kept these in a member nothing reads; the port restores the HUD
     // from them (TSaveGame).
     if (objversion >= 7)
-        is >> o.hudwords.sidebarOpen >> o.hudwords.upperMode >> o.hudwords.lowerMode >> o.hudwords.drawerOpen;
-
-    o.levelupstats = {};
+        is >> st.sidebarOpen >> st.upperMode >> st.lowerMode >> st.drawerOpen;
     if (objversion >= 8)
-        is >> o.levelupstats[0] >> o.levelupstats[1] >> o.levelupstats[2];
-
-    o.team = {};
-    o.modulename.clear();
+    {
+        st.levelupstats.resize(3);
+        is >> st.levelupstats[0] >> st.levelupstats[1] >> st.levelupstats[2];
+    }
     if (objversion >= 13)
     {
-        o.team.name  = is.ReadString();
-        o.team.name2 = is.ReadString();
-        is >> o.team.value >> o.team.id >> o.team.teamindex;
-        o.modulename = is.ReadString();
+        st.teamname  = is.ReadString();
+        st.teamname2 = is.ReadString();
+        is >> st.teamvalue >> st.teamid >> st.teamindex;
+        st.modulename = is.ReadString();
     }
     else if (objversion >= 11)
     {
-        o.team.name  = is.ReadString();
-        o.team.name2 = is.ReadString();
-        is >> o.team.value;
-        o.modulename = is.ReadString();
+        st.teamname  = is.ReadString();
+        st.teamname2 = is.ReadString();
+        is >> st.teamvalue;
+        st.modulename = is.ReadString();
     }
     else
     {
@@ -614,39 +627,37 @@ void TLegacyDeserialize::ReadPlayer(TPlayer& o, TInputStream& is, int32_t versio
         {
             char fixedname[50];
             is.ReadBytes(fixedname, (int32_t)sizeof(fixedname));
-            o.team.name.assign(fixedname, strnlen(fixedname, sizeof(fixedname)));
+            st.teamname.assign(fixedname, strnlen(fixedname, sizeof(fixedname)));
         }
-        o.team.value = -1;
+        st.teamvalue = -1;
     }
-
-    o.profile = {};
-    o.frags = {};
     if (objversion >= 13)
     {
-        is >> o.playerstate >> o.statetime;
-        o.stateframes = int32_t(int64_t(o.statetime) * 24 / 100);
-        for (std::string& text : o.profile)
+        is >> st.playerstate >> st.statetime;
+        st.profile.resize(4);
+        for (std::string& text : st.profile)
             text = is.ReadString();
-        is >> o.frags[0] >> o.frags[1];
+        st.frags.resize(4);
+        is >> st.frags[0] >> st.frags[1];
         if (objversion >= 15)
-            is >> o.frags[2] >> o.frags[3];
+            is >> st.frags[2] >> st.frags[3];
     }
     else
     {
-        o.playerstate = 0;
-        o.statetime = PlayScreen.GameTime();
-        o.stateframes = PlayScreen.GameFrame();
+        st.playerstate = 0;
+        st.statetime = PlayScreen.GameTime();
     }
-
-    o.automap = {};
     if (objversion >= 14)
-        ReadAutoMapRecord(o.automap, is);
-
-    o.RefreshStats();
+    {
+        SAutoMapRecord record;
+        ReadAutoMapRecord(record, is);
+        st.automap = AutoMapToState(record);
+    }
+    o.Archetype()->Apply(st, o);
+    FinishObjectInstance(o, version, derived);
     o.LogStats("loaded");
 }
 
-// REVSYNC: TContainer::Load @ 0x004dd3e0 (SAVE_GAME.md §11.3).
 // REVSYNC: TContainer::Load. An old map (versions 2-4) carried the lock as
 // fields that became stats; a container in the world re-enters its saved
 // state (open or shut).
@@ -1021,11 +1032,8 @@ void TLegacySerialize::WriteComplexObject(TComplexObject& o, TOutputStream& os)
 }
 
 // REVSYNC: TCharacter::Save @ 0x004d50d0.
-void TLegacySerialize::WriteCharacter(TCharacter& o, TOutputStream& os)
+void TLegacySerialize::WriteCharacterState(const SCharacterState& st, TOutputStream& os)
 {
-    SettleFlagsForSave(o);
-    SCharacterState st;
-    o.Archetype()->Capture(o, st);
     os << (uint8_t)kComplexObjectVersion;
     WriteComplexObjectState(st, os);
   // Last time any health/fatigue/mana was recovered
@@ -1041,39 +1049,49 @@ void TLegacySerialize::WriteCharacter(TCharacter& o, TOutputStream& os)
     os << st.teleport_level;
 }
 
+void TLegacySerialize::WriteCharacter(TCharacter& o, TOutputStream& os)
+{
+    SettleFlagsForSave(o);
+    SCharacterState st;
+    o.Archetype()->Capture(o, st);
+    WriteCharacterState(st, os);
+}
+
 // REVSYNC: TPlayer::Save @ 0x0051bdc0 (objversion 15). Retail wrote its
 // live HUD globals where the HUD words go; TSaveGame sets them from the
 // HUD before saving.
 void TLegacySerialize::WritePlayer(TPlayer& o, TOutputStream& os)
 {
-    os << (uint8_t)kCharacterVersion;
-    WriteCharacter(o, os);
-
-    for (const char* quickspell : o.quickspells)
-        os << quickspell;
-
-    os << (int32_t)o.knownspells.size();
-    for (const TSpellCode& code : o.knownspells)
-        os.WriteBytes(code.data(), kSpellCodeBytes);
-
-    os << o.hudwords.sidebarOpen << o.hudwords.upperMode << o.hudwords.lowerMode << o.hudwords.drawerOpen;
-    os << o.levelupstats[0] << o.levelupstats[1] << o.levelupstats[2];
-
-    os << o.team.name.c_str() << o.team.name2.c_str();
-    os << o.team.value << o.team.id << o.team.teamindex;
-    os << o.modulename.c_str();
-
-    os << o.playerstate << o.statetime;
-    for (const std::string& text : o.profile)
-        os << text.c_str();
-    for (int32_t count : o.frags)
-        os << count;
-
+    SettleFlagsForSave(o);
     // REVSYNC: 0x00529830 -- the level the automap shows goes into the
     // record first.
     if (AutoMap.IsBoundTo(o.automap))
         AutoMap.FlushGrid();
-    WriteAutoMapRecord(o.automap, os);
+    SPlayerState st;
+    o.Archetype()->Capture(o, st);
+    os << (uint8_t)kCharacterVersion;
+    WriteCharacterState(st, os);
+    for (int32_t i = 0; i < QSPELL_NUM; i++)
+        os << (size_t(i) < st.quickspells.size() ? st.quickspells[size_t(i)].c_str() : "");
+    os << (int32_t)st.knownspells.size();
+    for (const std::string& code : st.knownspells)
+    {
+        char bytes[kSpellCodeBytes] = {};
+        memcpy(bytes, code.data(), std::min<size_t>(code.size(), kSpellCodeBytes));
+        os.WriteBytes(bytes, kSpellCodeBytes);
+    }
+    os << st.sidebarOpen << st.upperMode << st.lowerMode << st.drawerOpen;
+    for (int32_t i = 0; i < 3; i++)
+        os << (size_t(i) < st.levelupstats.size() ? st.levelupstats[size_t(i)] : 0);
+    os << st.teamname.c_str() << st.teamname2.c_str();
+    os << st.teamvalue << st.teamid << st.teamindex;
+    os << st.modulename.c_str();
+    os << st.playerstate << st.statetime;
+    for (int32_t i = 0; i < 4; i++)
+        os << (size_t(i) < st.profile.size() ? st.profile[size_t(i)].c_str() : "");
+    for (int32_t i = 0; i < 4; i++)
+        os << (size_t(i) < st.frags.size() ? st.frags[size_t(i)] : 0);
+    WriteAutoMapRecord(AutoMapFromState(st.automap), os);
 }
 
 void TLegacySerialize::WriteContainer(TContainer& o, TOutputStream& os)

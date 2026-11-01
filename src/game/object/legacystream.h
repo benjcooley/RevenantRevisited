@@ -82,6 +82,8 @@ class TLegacyDeserialize
     static SLoadDerived ReadObjectInstanceState(SObjectState& st, TObjectInstance& o, TInputStream& is, int32_t version);
     static void ReadComplexObjectState(SComplexObjectState& st, TComplexObject& o, TInputStream& is,
                                        int32_t version, int32_t objversion, SLoadDerived& derived);
+    static void ReadCharacterState(SCharacterState& st, TCharacter& o, TInputStream& is,
+                                   int32_t version, int32_t objversion, SLoadDerived& derived);
     static void FinishObjectInstance(TObjectInstance& o, int32_t version, const SLoadDerived& derived);
     static void FinishContainer(TContainer& o, TInputStream& is, int32_t version);
         // What retail settled after a container's load (the old-map stat
@@ -128,6 +130,7 @@ class TLegacySerialize
     static void SettleFlagsForSave(TObjectInstance& o);
         // Retail saved a lit object animating and pulsing (and left it so)
     static void WriteComplexObjectState(const SComplexObjectState& st, TOutputStream& os);
+    static void WriteCharacterState(const SCharacterState& st, TOutputStream& os);
     static void WriteComplexObject(TComplexObject& o, TOutputStream& os);
     static void WriteCharacter(TCharacter& o, TOutputStream& os);
     static void WritePlayer(TPlayer& o, TOutputStream& os);

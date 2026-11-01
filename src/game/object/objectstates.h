@@ -48,6 +48,50 @@ struct SCharacterState : SComplexObjectState
         { return std::make_unique<SCharacterState>(*this); }
 };
 
+// One level of a player's explored automap: the grid as retail packs it.
+struct SAutoMapLevelState
+{
+    REFL_IDS(1, 9)
+    PROP(1, "Map level")                             int32_t              level = 0;
+    PROP(2, "The visited grid, words little-endian") std::vector<uint8_t> mask;
+};
+
+// A player's explored automap (TPlayer::Load @ 0x0051b960, the record).
+struct SAutoMapRecordState
+{
+    REFL_IDS(1, 9)
+    PROP(1, "The module it belongs to")              std::string                     module;
+    PROP(2, "The explored levels")                   std::vector<SAutoMapLevelState> levels;
+};
+
+// TPlayer: the shipped-game player record, in retail's save order
+// (SAVE_GAME.md §11.4, objversion 15).
+struct SPlayerState : SCharacterState
+{
+    REFL_IDS(800, 899)
+    PROP(800, "Quick spells: the composer, then the four buttons") std::vector<std::string> quickspells;
+    PROP(801, "Talisman codes learned")                            std::vector<std::string> knownspells;
+    PROP(802, "HUD: the sidebar is showing")                       int32_t sidebarOpen = 0;
+    PROP(803, "HUD: 0 equip, 1 stats, 2 spellbook")                int32_t upperMode   = 0;
+    PROP(804, "HUD: 0 inventory, 1 map, 2 spell composer")         int32_t lowerMode   = 0;
+    PROP(805, "HUD: the bottom drawer is open")                    int32_t drawerOpen  = 0;
+    PROP(806, "Player-stat indices the level-up messages use")     std::vector<int32_t> levelupstats;
+    PROP(807, "Multiplayer team id")                               int32_t     teamid     = 0;
+    PROP(808, "Multiplayer team name")                             std::string teamname;
+    PROP(809, "Multiplayer team name, second")                     std::string teamname2;
+    PROP(810, "Multiplayer team value")                            int32_t     teamvalue  = 0;
+    PROP(811, "Multiplayer team index")                            int32_t     teamindex  = 0;
+    PROP(812, "The module the player is in")                       std::string modulename;
+    PROP(813, "Player state bits")                                 int32_t playerstate = 1;
+    PROP(814, "The play clock, game time in 1/100 s")              int32_t statetime   = 0;
+    PROP(815, "Multiplayer lobby text")                            std::vector<std::string> profile;
+    PROP(816, "Multiplayer kill counts")                           std::vector<int32_t> frags;
+    PROP(817, "The explored automap")                              SAutoMapRecordState automap;
+
+    [[nodiscard]] std::unique_ptr<SObjectState> Clone() const override
+        { return std::make_unique<SPlayerState>(*this); }
+};
+
 // TExit (and TLever, TPressPlate, TUpBlock): the exit flags.
 struct SExitState : SObjectState
 {

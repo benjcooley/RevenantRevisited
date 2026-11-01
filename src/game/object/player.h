@@ -123,6 +123,7 @@ class TPlayer : public TCharacter
 {
     friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
     friend class TLegacySerialize;
+    friend class TPlayerDef;            // Apply / Capture of the record (characterdef.h)
   public:
     void ClearPlayer();
     void SetPlayerLevel(int32_t level);

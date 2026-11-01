@@ -40,11 +40,22 @@ class TCharacterDef : public TComplexObjectDef
     void Capture(const TObjectInstance& inst, SObjectState& state) const override;
 };
 
-// TPlayer ("Player"): a character with the player's record on top (to
-// come with the player's inch; today it is applied as a character).
+// TPlayer ("Player"): a character with the player's record on top.
 class TPlayerDef final : public TCharacterDef
 {
   public:
+    SPlayerState defaultState;
+    [[nodiscard]] const SObjectState& DefaultState() const override { return defaultState; }
+    [[nodiscard]] SObjectState& DefaultState() override { return defaultState; }
+
     TObjectInstance* Create(SObjectState& state, TObjectImagery* img) const override;
     TObjectInstance* Create(TObjectImagery* img) const override;
+    void Apply(const SObjectState& state, TObjectInstance& inst) const override;
+    void Capture(const TObjectInstance& inst, SObjectState& state) const override;
 };
+
+// The automap record as the game holds it <-> as the record stores it
+// (words as little-endian bytes). The legacy codec and the def share them.
+struct SAutoMapRecord;
+[[nodiscard]] SAutoMapRecordState AutoMapToState(const SAutoMapRecord& record);
+[[nodiscard]] SAutoMapRecord AutoMapFromState(const SAutoMapRecordState& state);

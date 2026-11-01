@@ -446,6 +446,16 @@ Not components: a scroll's open UI (`TScroll` pointers to a multi and a
 font are screen state), the seams the test fixtures hook, the editor's
 debug counters.
 
+**Landed 2026-10-31 / 11-01.** The base record complete and the base
+legacy codec on it; `TStatsComponent`; `TScriptComponent`; the records
+and defs for the complex object, the character, the player (with
+`--test=player-dump` as its byte gate), exits, scrolls, weapons, drips
+and generators, each class's legacy codec reading into and writing from
+its record; the reflection system's byte blobs and lists of ints and
+strings, which the player's record needed. Every field every class's
+retail stream carries is in a record now; nothing is streamed from a live
+object.
+
 **Order.** Base first, then the classes with state, biggest value first:
 
 1. The base record complete: `SObjectState` gains name, inventory slot,

@@ -11,6 +11,7 @@
 #include "game/object/player.h"
 #include "game/imagery/imagery.h"
 
+#include <algorithm>
 #include <cstring>
 
 // ---- TComplexObject ---------------------------------------------------------
@@ -143,6 +144,39 @@ void TCharacterDef::Capture(const TObjectInstance& inst, SObjectState& state) co
 
 // ---- TPlayer ----------------------------------------------------------------
 
+SAutoMapRecordState AutoMapToState(const SAutoMapRecord& record)
+{
+    SAutoMapRecordState state;
+    state.module = record.module;
+    for (const SAutoMapLevel& level : record.levels)
+    {
+        SAutoMapLevelState& ls = state.levels.emplace_back();
+        ls.level = level.level;
+        ls.mask.reserve(level.mask.size() * 2);
+        for (const int16_t w : level.mask)
+        {
+            ls.mask.push_back(uint8_t(uint16_t(w) & 0xFF));
+            ls.mask.push_back(uint8_t(uint16_t(w) >> 8));
+        }
+    }
+    return state;
+}
+
+SAutoMapRecord AutoMapFromState(const SAutoMapRecordState& state)
+{
+    SAutoMapRecord record;
+    record.module = state.module;
+    for (const SAutoMapLevelState& ls : state.levels)
+    {
+        SAutoMapLevel& level = record.levels.emplace_back();
+        level.level = ls.level;
+        level.mask.resize(ls.mask.size() / 2);
+        for (size_t i = 0; i < level.mask.size(); i++)
+            level.mask[i] = int16_t(uint16_t(ls.mask[i * 2]) | (uint16_t(ls.mask[i * 2 + 1]) << 8));
+    }
+    return record;
+}
+
 TObjectInstance* TPlayerDef::Create(SObjectState& state, TObjectImagery* img) const
 {
     return new TPlayer(&state, img);
@@ -151,6 +185,100 @@ TObjectInstance* TPlayerDef::Create(SObjectState& state, TObjectImagery* img) co
 TObjectInstance* TPlayerDef::Create(TObjectImagery* img) const
 {
     return new TPlayer(img);
+}
+
+// REVSYNC: the record half of TPlayer::Load @ 0x0051b960 (SAVE_GAME.md
+// §11.4), with what retail derived on load: the play clock in frames, a
+// fresh known-spells version, and RefreshStats (0x0051c660), the modified
+// stats from the loaded ones.
+void TPlayerDef::Apply(const SObjectState& state, TObjectInstance& inst) const
+{
+    TCharacterDef::Apply(state, inst);
+    const auto* ps = dynamic_cast<const SPlayerState*>(&state);
+    if (!ps)
+        return;
+    auto& o = static_cast<TPlayer&>(inst);
+
+    for (int32_t i = 0; i < QSPELL_NUM; i++)
+    {
+        const std::string& spell = size_t(i) < ps->quickspells.size() ? ps->quickspells[size_t(i)] : std::string();
+        const size_t n = std::min<size_t>(spell.size(), MAXTALISMANLEN - 1);
+        memcpy(o.quickspells[i], spell.data(), n);
+        o.quickspells[i][n] = 0;
+    }
+
+    o.knownspells.clear();
+    for (const std::string& code : ps->knownspells)
+    {
+        TSpellCode& c = o.knownspells.emplace_back();
+        c.fill(0);
+        memcpy(c.data(), code.data(), std::min<size_t>(code.size(), kSpellCodeBytes));
+    }
+    ++o.knownspellsversion;
+
+    o.hudwords.sidebarOpen = ps->sidebarOpen;
+    o.hudwords.upperMode   = ps->upperMode;
+    o.hudwords.lowerMode   = ps->lowerMode;
+    o.hudwords.drawerOpen  = ps->drawerOpen;
+
+    o.levelupstats = {};
+    for (size_t i = 0; i < o.levelupstats.size() && i < ps->levelupstats.size(); i++)
+        o.levelupstats[i] = ps->levelupstats[i];
+
+    o.team = {};
+    o.team.id        = ps->teamid;
+    o.team.name      = ps->teamname;
+    o.team.name2     = ps->teamname2;
+    o.team.value     = ps->teamvalue;
+    o.team.teamindex = ps->teamindex;
+    o.modulename     = ps->modulename;
+
+    o.playerstate = ps->playerstate;
+    o.statetime   = ps->statetime;
+    o.stateframes = int32_t(int64_t(ps->statetime) * 24 / 100);
+
+    o.profile = {};
+    for (size_t i = 0; i < o.profile.size() && i < ps->profile.size(); i++)
+        o.profile[i] = ps->profile[i];
+    o.frags = {};
+    for (size_t i = 0; i < o.frags.size() && i < ps->frags.size(); i++)
+        o.frags[i] = ps->frags[i];
+
+    o.automap = AutoMapFromState(ps->automap);
+    o.RefreshStats();
+}
+
+void TPlayerDef::Capture(const TObjectInstance& inst, SObjectState& state) const
+{
+    TCharacterDef::Capture(inst, state);
+    auto* ps = dynamic_cast<SPlayerState*>(&state);
+    if (!ps)
+        return;
+    const auto& o = static_cast<const TPlayer&>(inst);
+
+    ps->quickspells.clear();
+    for (const char* spell : o.quickspells)
+        ps->quickspells.emplace_back(spell);
+    ps->knownspells.clear();
+    for (const TSpellCode& code : o.knownspells)
+        ps->knownspells.emplace_back(code.data(), strnlen(code.data(), kSpellCodeBytes));
+
+    ps->sidebarOpen = o.hudwords.sidebarOpen;
+    ps->upperMode   = o.hudwords.upperMode;
+    ps->lowerMode   = o.hudwords.lowerMode;
+    ps->drawerOpen  = o.hudwords.drawerOpen;
+    ps->levelupstats.assign(o.levelupstats.begin(), o.levelupstats.end());
+    ps->teamid      = o.team.id;
+    ps->teamname    = o.team.name;
+    ps->teamname2   = o.team.name2;
+    ps->teamvalue   = o.team.value;
+    ps->teamindex   = o.team.teamindex;
+    ps->modulename  = o.modulename;
+    ps->playerstate = o.playerstate;
+    ps->statetime   = o.statetime;
+    ps->profile.assign(o.profile.begin(), o.profile.end());
+    ps->frags.assign(o.frags.begin(), o.frags.end());
+    ps->automap     = AutoMapToState(o.automap);
 }
 
 // ---- Registration -----------------------------------------------------------
