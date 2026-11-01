@@ -10,6 +10,7 @@
 #include "game/world/lightcomponent.h"
 #include "game/object/statscomponent.h"
 #include "game/object/scriptcomponent.h"
+#include "game/object/inventorycomponent.h"
 #include "engine/render/visualcomponent.h"
 
 #include "game/world/3dscene.h"
@@ -377,6 +378,7 @@ void TObjectInstance::ClearObject()
     // stored in the components array and freed via the components dtor.
     SetCommandDone(false);
     script_             = nullptr;
+    inventory_          = nullptr;
 
     objclass = objtype  = -1;
     flags               = 0;
@@ -639,9 +641,18 @@ TObjectInstance::~TObjectInstance()
     // plus any components added through AddComponent(). The objclass!=-1
     // gate now guards only the post-init bookkeeping that genuinely depends
     // on cl / inf / inventory / sector / script being populated.
+    // The items first: they are objects of their own, deleted here, and the
+    // slots they sit in are a component that goes next
+    for (TInventoryIterator i(this); i; i++)
+    {
+        i.Item()->RemoveFromInventory();
+        DeleteObject(i.Item());
+    }
+
     DetachComponents();
     stats_ = nullptr;               // the components went with them
     script_ = nullptr;
+    inventory_ = nullptr;
 
     TObjectImagery::FreeImagery(imagery);
     imagery = nullptr;
@@ -653,11 +664,6 @@ TObjectInstance::~TObjectInstance()
         Inventory.SetContainer(nullptr);
 
     // recursively delete all the objects in its inventory
-    for (TInventoryIterator i(this); i; i++)
-    {
-        i.Item()->RemoveFromInventory();
-        DeleteObject(i.Item());
-    }
 
     // Delete the name
     if (name && name != inf->name)
@@ -1112,7 +1118,7 @@ bool TObjectInstance::AddToInventory(TObjectInstance* inst, int32_t slot)
 // (MakeIndex 0x0044ce30), takes the slot and leaves the map.
 void TObjectInstance::PlaceInInventory(TObjectInstance* inst, int32_t slot)
 {
-    inst->invindex = short(inventory.Add(inst));
+    inst->invindex = short(EnsureInventory().Add(inst));
 
     if (inst->GetMapIndex() <= 0)
         inst->SetMapIndex(MapPane.MakeIndex());
@@ -1197,7 +1203,8 @@ void TObjectInstance::RemoveFromInventory()
         if (owner == Inventory.GetContainer())
             Inventory.Update();
 
-        owner->inventory.Remove(invindex);
+        if (owner->inventory_)
+            owner->inventory_->Remove(invindex);
         owner = nullptr;
     }
 
@@ -1384,7 +1391,7 @@ void TObjectInstance::CompactInventory()
 
 TObjectInstance* TObjectInstance::GetInventory(int32_t index) const
 {
-    return inventory[index];
+    return inventory_ ? inventory_->At(index) : nullptr;
 }
 
 TObjectInstance* TObjectInstance::GetInventorySlot(int32_t slot) const
@@ -2056,6 +2063,22 @@ TStatsComponent& TObjectInstance::EnsureStats()
         AddComponent(std::move(owned));
     }
     return *stats_;
+}
+
+int32_t TObjectInstance::NumInventoryItems() const
+{
+    return inventory_ ? inventory_->Count() : 0;
+}
+
+TInventoryComponent& TObjectInstance::EnsureInventory()
+{
+    if (!inventory_)
+    {
+        auto owned = std::make_unique<TInventoryComponent>();
+        inventory_ = owned.get();
+        AddComponent(std::move(owned));
+    }
+    return *inventory_;
 }
 
 TVisualComponent* TObjectInstance::Visual() const

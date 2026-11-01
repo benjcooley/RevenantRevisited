@@ -18,6 +18,7 @@
 #include "game/world/automap.h"
 #include "game/object/character.h"
 #include "game/object/characterdef.h"
+#include "game/object/inventorycomponent.h"
 #include "game/object/complexobj.h"
 #include "game/object/container.h"
 #include "game/effects/effect.h"
@@ -828,7 +829,7 @@ void TLegacyDeserialize::ReadInventory(TObjectInstance& o, TInputStream& is, int
         TObjectInstance* inst = ReadObject(is, version, streamflags);
         if (!inst)
             continue;
-        inst->invindex = (short)o.inventory.Add(inst);
+        inst->invindex = (short)o.EnsureInventory().Add(inst);
         inst->SetOwner(&o);
     }
 }
@@ -1101,7 +1102,13 @@ void TLegacySerialize::WriteContainer(TContainer& o, TOutputStream& os)
 
 void TLegacySerialize::WriteVialRack(TVialRack& o, TOutputStream& os)
 {
-    o.inventory.DeleteAll();
+    // A vial rack is saved empty (retail deleted its vials here, with the
+    // array's delete; they are node-owned objects, so DeleteObject)
+    for (TInventoryIterator i(&o); i; i++)
+    {
+        i.Item()->RemoveFromInventory();
+        DeleteObject(i.Item());
+    }
     WriteContainer(o, os);
 }
 

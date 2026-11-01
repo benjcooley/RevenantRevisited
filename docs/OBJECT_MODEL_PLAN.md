@@ -430,8 +430,8 @@ record, codec and gate):
 | `T2DVisualComponent` / `T3DVisualComponent` (landed) | nothing persisted: derived from the imagery | |
 | `TObjectAnimator` (exists) | its own data; the playhead stays on the object (see decisions) | the animator's duplicate `frame` / `framerate` copies go |
 | `TStatsComponent` (landed) | the object stats by class stat id | `stats` on the object, the stat block of the stream |
-| `TInventoryComponent` | the container's slots: items as child nodes, slot order | `inventory`; the nested item records of the stream |
-| `TScriptComponent` | the bound script, command state | `script`, `commanddone` |
+| `TInventoryComponent` (landed: the slots) | the container's slots, retail's array semantics; items as child nodes still to come | `inventory`; the nested item records of the stream |
+| `TScriptComponent` (landed) | the bound script; the command state stays on the object (the action's) | `script` |
 | `TMotionComponent` | velocity, accumulator, move angle; the integrator `Move` reads and writes | `vel`, `accum`, `moveangle` |
 | `TVitalsComponent` (character) | recovery timers, poison, burning, invisibility, teleport point | `TCharacter` fields the stream carries |
 | `TAIComponent` (character) | targets, has-seen, waypoints, retreat, boss state | `TCharacter` AI fields |

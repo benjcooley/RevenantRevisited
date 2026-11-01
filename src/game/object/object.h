@@ -57,6 +57,7 @@ class TLightComponent;
 class TVisualComponent;
 class TStatsComponent;
 class TScriptComponent;
+class TInventoryComponent;
 
 // Forward-declared free function used by TObjectInstance::SafeRefLookup
 // (and by TSafeRef<TObjectInstance>) to avoid pulling the mappane /
@@ -1161,7 +1162,10 @@ class TObjectInstance : public TComponent
         // Gets inventory object, index is NOT the same as inventory slot
     TObjectInstance* GetInventorySlot(int32_t slot) const;
         // Searches for inventory object occupying the given slot
-    int32_t NumInventoryItems() const { return inventory.NumItems(); }
+    int32_t NumInventoryItems() const;
+        // Slots in use up to the last one, holes included (RealNumInventoryItems counts items)
+    [[nodiscard]] TInventoryComponent* Contents() const { return inventory_; }
+        // What this object holds, or nullptr when nothing was ever put in it
         // Number of objects in the array
     int32_t RealNumInventoryItems();
         // Number of *used* objects in the array
@@ -1310,7 +1314,8 @@ class TObjectInstance : public TComponent
 
   // Inventory
     TObjectInstance* owner;     // What container it is in
-    TPointerArray<TObjectInstance, 0, 4> inventory;
+    TInventoryComponent* inventory_ = nullptr;   // a component, added on the first item, kept for life
+    TInventoryComponent& EnsureInventory();
     short inventnum;            // Inventory slot number
     short invindex;             // Inventory index (NOT necessarily equal to slot number)
 
