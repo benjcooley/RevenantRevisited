@@ -24,6 +24,8 @@
 
 #pragma once
 
+#include "game/object/objectstates.h"
+
 #include <cstdint>
 
 class TInputStream;
@@ -68,6 +70,19 @@ class TLegacyDeserialize
     static void Read(TObjectInstance& o, TInputStream& is, int32_t version, int32_t objversion);
         // Dispatches on the object's C++ type.
     static void ReadObjectInstance(TObjectInstance& o, TInputStream& is, int32_t version, int32_t objversion);
+    // The record halves: the bytes into a class's record, then the record
+    // onto the object through its archetype, then what retail settled
+    // after a load. What the bytes carry that is not record state (an old
+    // map's health byte, an old index to clear) rides SLoadDerived.
+    struct SLoadDerived
+    {
+        uint8_t health = 0;
+        bool    clearmapindex = false;
+    };
+    static SLoadDerived ReadObjectInstanceState(SObjectState& st, TObjectInstance& o, TInputStream& is, int32_t version);
+    static void ReadComplexObjectState(SComplexObjectState& st, TComplexObject& o, TInputStream& is,
+                                       int32_t version, int32_t objversion, SLoadDerived& derived);
+    static void FinishObjectInstance(TObjectInstance& o, int32_t version, const SLoadDerived& derived);
     static void ReadComplexObject(TComplexObject& o, TInputStream& is, int32_t version, int32_t objversion);
     static void ReadCharacter(TCharacter& o, TInputStream& is, int32_t version, int32_t objversion);
     static void ReadPlayer(TPlayer& o, TInputStream& is, int32_t version, int32_t objversion);
@@ -106,6 +121,10 @@ class TLegacySerialize
     static void Write(TObjectInstance& o, TOutputStream& os);
         // Dispatches on the object's C++ type.
     static void WriteObjectInstance(TObjectInstance& o, TOutputStream& os);
+    static void WriteObjectInstanceState(const SObjectState& st, TOutputStream& os);
+    static void SettleFlagsForSave(TObjectInstance& o);
+        // Retail saved a lit object animating and pulsing (and left it so)
+    static void WriteComplexObjectState(const SComplexObjectState& st, TOutputStream& os);
     static void WriteComplexObject(TComplexObject& o, TOutputStream& os);
     static void WriteCharacter(TCharacter& o, TOutputStream& os);
     static void WritePlayer(TPlayer& o, TOutputStream& os);

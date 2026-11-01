@@ -137,6 +137,7 @@ class TComplexObject : public TObjectInstance
 {
     friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
     friend class TLegacySerialize;
+    friend class TComplexObjectDef;     // Apply / Capture of the record (characterdef.h)
   public:
     void ClearComplexObj();
 

@@ -488,7 +488,7 @@ TObjectInstance::TObjectInstance(SObjectState* def, TObjectImagery* img)
     if (!inf)
         FatalError("Bad object type in class", cl->ClassName());
     name = inf->name;               // the type's name unless the record names it
-    initial_state_ = std::make_unique<SObjectState>(*def);
+    initial_state_ = def->Clone();
     inf->Apply(*def, *this);
 
   // Set imagery

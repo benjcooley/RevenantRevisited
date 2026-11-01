@@ -81,6 +81,7 @@ class TCharacter : public TComplexObject
 {
     friend class TLegacyDeserialize;    // the retail stream (legacystream.h)
     friend class TLegacySerialize;
+    friend class TCharacterDef;         // Apply / Capture of the record (characterdef.h)
   public:
     void ClearChar();       // Clear out working vars of char
 
@@ -1048,6 +1049,6 @@ protected:
     int32_t buttonrepeat = 0;
 };
 
-DEFINE_OBJECT_DEF("Character", TCharacter)
+// The character's def is hand-written: characterdef.h (TCharacterDef)
 
 #endif

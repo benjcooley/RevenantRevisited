@@ -313,14 +313,13 @@ void TLegacyDeserialize::Read(TObjectInstance& o, TInputStream& is, int32_t vers
     else                                                  ReadObjectInstance(o, is, version, objversion);
 }
 
-// REVSYNC: TObjectInstance::Load @ 0x0046f0b0. The bytes go into the
-// object's record (SObjectState), the record goes onto the object through
-// its archetype (Apply), and what retail settled after the read follows.
-void TLegacyDeserialize::ReadObjectInstance(TObjectInstance& o, TInputStream& is, int32_t version, int32_t objversion)
+// REVSYNC: TObjectInstance::Load @ 0x0046f0b0, the bytes half: into the
+// record. `o` supplies what the read depends on (the constructor's fixed
+// flags, the class); nothing is written to it here.
+TLegacyDeserialize::SLoadDerived TLegacyDeserialize::ReadObjectInstanceState(SObjectState& st, TObjectInstance& o,
+                                                                              TInputStream& is, int32_t version)
 {
-    (void)objversion;
-
-    SObjectState st;
+    SLoadDerived derived;
     st.objclass = o.objclass;
     st.objtype  = o.objtype;
 
@@ -370,11 +369,9 @@ void TLegacyDeserialize::ReadObjectInstance(TObjectInstance& o, TInputStream& is
             is >> st.level;
     }
 
-    uint8_t health = 0;
     if (version < 5)
-        is >> health; // Now an object stat
+        is >> derived.health; // Now an object stat
 
-    bool clearmapindex = false;
     if (version < 3)
     {
         uint8_t dummy8;
@@ -383,7 +380,7 @@ void TLegacyDeserialize::ReadObjectInstance(TObjectInstance& o, TInputStream& is
         is >> st.rotatez >> dummy16 >> inventnum >> dummy16 >> shadow >> dummy8;
         st.inventnum = -1;      // ignore inventories in old versions
         st.shadow = shadow;
-        clearmapindex = true;   // the sector sets old-style indexes after the load
+        derived.clearmapindex = true;   // the sector sets old-style indexes after the load
     }
     else
     {
@@ -436,17 +433,19 @@ void TLegacyDeserialize::ReadObjectInstance(TObjectInstance& o, TInputStream& is
         st.light.multiplier = multiplier;
         st.flags |= OF_LIGHT | OF_ANIMATE;
     }
+    return derived;
+}
 
-  // Through the archetype: the record onto the object (through SetMapIndex,
-  // so the mapindex registry sees every streamed-in instance)
-    o.Archetype()->Apply(st, o);
-
+// REVSYNC: the tail of TObjectInstance::Load @ 0x0046f0b0: what retail
+// settled once the object was loaded, after the record is on it.
+void TLegacyDeserialize::FinishObjectInstance(TObjectInstance& o, int32_t version, const SLoadDerived& derived)
+{
   // What retail derived at load: the move angle starts as the facing; an
   // old map's health lands in the stat it became; old indexes are cleared
-    o.moveangle = st.rotatez;
+    o.moveangle = IntFacing(o);
     if (version < 5)
-        o.SetHealth(health);
-    if (clearmapindex)
+        o.SetHealth(derived.health);
+    if (derived.clearmapindex)
         o.Node()->SetMapIndex(-1);
 
   // Set Object info pointer
@@ -477,125 +476,84 @@ void TLegacyDeserialize::ReadObjectInstance(TObjectInstance& o, TInputStream& is
         o.InitScript(ScriptManager.ObjectScript(&o));
 }
 
-// REVSYNC: TComplexObject::Load @ 0x004db930 (SAVE_GAME.md §11.3).
-void TLegacyDeserialize::ReadComplexObject(TComplexObject& o, TInputStream& is, int32_t version, int32_t objversion)
+// REVSYNC: TObjectInstance::Load @ 0x0046f0b0: a base object, whole.
+void TLegacyDeserialize::ReadObjectInstance(TObjectInstance& o, TInputStream& is, int32_t version, int32_t objversion)
+{
+    (void)objversion;
+    SObjectState st;
+    const SLoadDerived derived = ReadObjectInstanceState(st, o, is, version);
+    o.Archetype()->Apply(st, o);
+    FinishObjectInstance(o, version, derived);
+}
+
+// REVSYNC: TComplexObject::Load @ 0x004db930 (SAVE_GAME.md §11.3), the
+// bytes half: the base record, then the root action block. The root's
+// fallback and the state that goes with it are the def's (TComplexObjectDef).
+void TLegacyDeserialize::ReadComplexObjectState(SComplexObjectState& st, TComplexObject& o, TInputStream& is,
+                                                int32_t version, int32_t objversion, SLoadDerived& derived)
 {
     uint8_t basever = 0;
     if (objversion >= 1)
         is >> basever;
-    ReadObjectInstance(o, is, version, basever);
-
-  // Load root state
-    TActionBlock* ab;
-    if (version < 7)
-    {
-        ab = new TActionBlock(o.DefaultRootState());
-    }
-    else
+    derived = ReadObjectInstanceState(st, o, is, version);
+  // Load root state (a map older than version 7 has none: the type's root)
+    if (version >= 7)
     {
         uint8_t action;
         is >> action;
-        const std::string rootname = is.ReadString();
-        ab = new TActionBlock(rootname.substr(0, RESNAMELEN - 1).c_str(), (ACTION)action);
+        st.rootaction = action;
+        st.rootname = is.ReadString();
     }
-
-  // REVSYNC-DIVERGENCE: a root that names no state of the model can never be
-  // entered. Every ForceCommand back to it is impossible, so a speaker who
-  // finishes a line stays in "say" and the script's speech wait never ends.
-  // The shipped level-46 map saves Shegra and the slaves with a "combat" root
-  // their walk-and-say models lack (docs/gameflow/forensics/DIALOG.md §2.5).
-  // Such a root becomes the default one, else "walk", as a plain animation
-  // block like the one Clear builds.
-    if (o.imagery && !o.imagery->HasState(ab->name))
-    {
-        const char* fallback = o.imagery->HasState(o.DefaultRootState()) ? o.DefaultRootState() : "walk";
-        if (o.imagery->HasState(fallback))
-        {
-            delete ab;
-            ab = new TActionBlock(fallback);
-        }
-    }
-
-    o.SetRoot(ab);
-    o.SetDoing(ab);
-    o.SetDesired(ab);
-
-  // Keep the saved state when it is the root's own (an animation state is
-  // named "<group>:<name>"); otherwise start the root.
-    if (const char* statename = o.imagery ? o.imagery->GetAniName(o.state) : nullptr)
-    {
-        if (const char* colon = strchr(statename, ':'))
-            statename = colon + 1;
-        if (stricmp(ab->name, statename) == 0)
-            return;
-    }
-    o.state = o.FindState(ab->name);
 }
 
-// REVSYNC: TCharacter::Load @ 0x004d4eb0 (SAVE_GAME.md §11.3).
+void TLegacyDeserialize::ReadComplexObject(TComplexObject& o, TInputStream& is, int32_t version, int32_t objversion)
+{
+    SComplexObjectState st;
+    SLoadDerived derived;
+    ReadComplexObjectState(st, o, is, version, objversion, derived);
+    o.Archetype()->Apply(st, o);
+    FinishObjectInstance(o, version, derived);
+}
+
+// REVSYNC: TCharacter::Load @ 0x004d4eb0 (SAVE_GAME.md §11.3): the
+// character's record on top of the complex object's; what retail settled
+// after (the vitals clamped to the type's, a dead character removed, the
+// fade reset) is the def's (TCharacterDef::Apply).
 void TLegacyDeserialize::ReadCharacter(TCharacter& o, TInputStream& is, int32_t version, int32_t objversion)
 {
+    SCharacterState st;
+    SLoadDerived derived;
     uint8_t basever = 0;
     if (objversion >= 3)
         is >> basever;
-    ReadComplexObject(o, is, version, basever);
+    ReadComplexObjectState(st, o, is, version, basever, derived);
 
   // Get saved last pulse values (so we can figure what has happened to char)
-    if (objversion < 1)
-        return;
-
-  // Last time any health/fatigue/mana was recovered
-    is >> o.lasthealthrecov;
-    is >> o.lastfatiguerecov;
-    is >> o.lastmanarecov;
-
-    if (objversion >= 4)
+    if (objversion >= 1)
     {
-        is >> o.lastpoisondamage;
+      // Last time any health/fatigue/mana was recovered
+        is >> st.lasthealthrecov;
+        is >> st.lastfatiguerecov;
+        is >> st.lastmanarecov;
+        if (objversion >= 4)
+            is >> st.lastpoisondamage;
+        else
+            st.lastpoisondamage = -1;
+        if (objversion >= 2)
+        {
+            is >> st.teleport_position.x;
+            is >> st.teleport_position.y;
+            is >> st.teleport_position.z;
+            is >> st.teleport_level;
+        }
+        else
+        {
+            st.teleport_position = {-1, -1, -1};
+            st.teleport_level = -1;
+        }
     }
-    else
-    {
-        o.lastpoisondamage = -1;
-    }
-
-    if (objversion >= 2)
-    {
-        is >> o.teleport_position.x;
-        is >> o.teleport_position.y;
-        is >> o.teleport_position.z;
-        is >> o.teleport_level;
-    }
-    else
-    {
-        o.teleport_position.x = o.teleport_position.y = o.teleport_position.z = -1;
-        o.teleport_level = -1;
-    }
-
-    if (o.ObjClass() == OBJCLASS_CHARACTER && o.chardata)
-    {
-        if (o.Health() > o.chardata->health)
-            o.SetHealth(o.chardata->health);
-        if (o.MaxHealth() > o.chardata->health)
-            o.SetMaxHealth(o.chardata->health);
-        if (o.Fatigue() > o.chardata->fatigue)
-            o.SetFatigue(o.chardata->fatigue);
-        if (o.MaxFatigue() > o.chardata->fatigue)
-            o.SetMaxFatigue(o.chardata->fatigue);
-        if (o.Mana() > o.chardata->mana)
-            o.SetMana(o.chardata->mana);
-        if (o.MaxMana() > o.chardata->mana)
-            o.SetMaxMana(o.chardata->mana);
-    }
-
-  // A character saved dead is removed on its first frame.
-    if (o.Health() < 1)
-        o.ResetFlags(o.flags | OF_KILL);
-
-  // Fully visible, not fading.
-    o.fade = 100;
-    o.fade_step = 0;
-    o.fade_limit = 100;
-    o.fade_direction = 0;
+    o.Archetype()->Apply(st, o);
+    FinishObjectInstance(o, version, derived);
 }
 
 // REVSYNC: TPlayer::Load @ 0x0051b960 (SAVE_GAME.md §11.4). Ends with
@@ -974,16 +932,17 @@ void TLegacySerialize::Write(TObjectInstance& o, TOutputStream& os)
     else                                                  WriteObjectInstance(o, os);
 }
 
-// REVSYNC: TObjectInstance::Save @ 0x0046f8a0. The object's record (Capture
-// through its archetype) goes to the bytes in retail's order.
-void TLegacySerialize::WriteObjectInstance(TObjectInstance& o, TOutputStream& os)
+// Retail saved a lit object animating and pulsing (and left it so).
+void TLegacySerialize::SettleFlagsForSave(TObjectInstance& o)
 {
     if (o.flags & OF_LIGHT)
         o.flags |= OF_PULSE | OF_ANIMATE;
+}
 
-    SObjectState st;
-    o.Archetype()->Capture(o, st);
-
+// REVSYNC: TObjectInstance::Save @ 0x0046f8a0: the record to the bytes, in
+// retail's order.
+void TLegacySerialize::WriteObjectInstanceState(const SObjectState& st, TOutputStream& os)
+{
     // Only a renamed instance stores its name, each byte with bit 7 set.
     const uint8_t len = (uint8_t)std::min<size_t>(st.name.size(), 255);
     os << len;
@@ -1018,36 +977,51 @@ void TLegacySerialize::WriteObjectInstance(TObjectInstance& o, TOutputStream& os
             (uint8_t)st.light.intensity << (short)st.light.multiplier;
 }
 
-// REVSYNC: TComplexObject::Save @ 0x004dbb80.
-void TLegacySerialize::WriteComplexObject(TComplexObject& o, TOutputStream& os)
+void TLegacySerialize::WriteObjectInstance(TObjectInstance& o, TOutputStream& os)
+{
+    SettleFlagsForSave(o);
+    SObjectState st;
+    o.Archetype()->Capture(o, st);
+    WriteObjectInstanceState(st, os);
+}
+
+// REVSYNC: TComplexObject::Save @ 0x004dbb80: the base's bytes under its
+// version, then the root action block.
+void TLegacySerialize::WriteComplexObjectState(const SComplexObjectState& st, TOutputStream& os)
 {
     os << (uint8_t)kObjectInstanceVersion;
-    WriteObjectInstance(o, os);
+    WriteObjectInstanceState(st, os);
+    os << (uint8_t)st.rootaction;
+    os << st.rootname.c_str();
+}
 
-  // Save root state
-    os << (uint8_t)o.root->action;
-    os << o.root->name;
+void TLegacySerialize::WriteComplexObject(TComplexObject& o, TOutputStream& os)
+{
+    SettleFlagsForSave(o);
+    SComplexObjectState st;
+    o.Archetype()->Capture(o, st);
+    WriteComplexObjectState(st, os);
 }
 
 // REVSYNC: TCharacter::Save @ 0x004d50d0.
 void TLegacySerialize::WriteCharacter(TCharacter& o, TOutputStream& os)
 {
+    SettleFlagsForSave(o);
+    SCharacterState st;
+    o.Archetype()->Capture(o, st);
     os << (uint8_t)kComplexObjectVersion;
-    WriteComplexObject(o, os);
-
+    WriteComplexObjectState(st, os);
   // Last time any health/fatigue/mana was recovered
-    os << o.lasthealthrecov;
-    os << o.lastfatiguerecov;
-    os << o.lastmanarecov;
-
+    os << st.lasthealthrecov;
+    os << st.lastfatiguerecov;
+    os << st.lastmanarecov;
   // Last time poison damage was charged
-    os << o.lastpoisondamage;
-
+    os << st.lastpoisondamage;
   // Our teleport positions
-    os << o.teleport_position.x;
-    os << o.teleport_position.y;
-    os << o.teleport_position.z;
-    os << o.teleport_level;
+    os << st.teleport_position.x;
+    os << st.teleport_position.y;
+    os << st.teleport_position.z;
+    os << st.teleport_level;
 }
 
 // REVSYNC: TPlayer::Save @ 0x0051bdc0 (objversion 15). Retail wrote its

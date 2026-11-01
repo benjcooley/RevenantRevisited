@@ -31,7 +31,6 @@
 extern TObjectClass  CharacterClass; // Used to indicate player is derived from character
 extern TObjectClass TalismanClass;
 
-REGISTER_OBJECT_DEF(TPlayer)
 TObjectClass PlayerClass("PLAYER", OBJCLASS_PLAYER, 0, &CharacterClass);
 
 // REVSYNC: the shipped game's PLAYER object stats 17-83 (SStatEntry

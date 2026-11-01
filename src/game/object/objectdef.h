@@ -102,6 +102,16 @@ struct SObjectState
     PROP(20, "Animation direction and rate")                   int32_t  framerate = 1;
     PROP(21, "Object stats by unique id; empty keeps the type's") std::vector<SObjectStatState> stats;
     PROP(22, "The light, when OF_LIGHT is set")                SLightState light;
+
+    // A derived record (objectstates.h) is told apart by its dynamic type:
+    // a def applies the part of a record its class knows, and an object
+    // keeps a full copy of the record it was made from (Clone).
+    SObjectState() = default;
+    virtual ~SObjectState() = default;
+    SObjectState(const SObjectState&) = default;
+    SObjectState& operator=(const SObjectState&) = default;
+    [[nodiscard]] virtual std::unique_ptr<SObjectState> Clone() const
+        { return std::make_unique<SObjectState>(*this); }
 };
 
 // The archetype.

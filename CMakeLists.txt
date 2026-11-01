@@ -229,6 +229,7 @@ rev_reflect(Revenant
   src/engine/scene/node.h
   src/game/object/object.h
   src/game/object/objectdef.h
+  src/game/object/objectstates.h
   src/game/world/sector.h
   src/engine/fx/particledef.h
   src/engine/fx/particlecomponent.h

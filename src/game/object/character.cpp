@@ -40,7 +40,6 @@
 
 #define GRIDSNAPSIZE    48
 
-REGISTER_OBJECT_DEF(TCharacter)
 TObjectClass CharacterClass("CHARACTER", OBJCLASS_CHARACTER, 0);
 
 extern TObjectClass EffectClass;

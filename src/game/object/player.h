@@ -524,7 +524,7 @@ class TPlayer : public TCharacter
     SAutoMapRecord automap;                         // +0x314: explored automap
 };
 
-DEFINE_OBJECT_DEF("Player", TPlayer)
+// The player's def is hand-written: characterdef.h (TPlayerDef)
 
 typedef TPointerArray<TPlayer, 4, 4> TPlayerArray;
 
