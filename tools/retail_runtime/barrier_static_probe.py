@@ -54,7 +54,7 @@ def parse_asset(data,profile):
 
 
 def material_port(output,metadata):
-    source=(ROOT/'src/d3dport.cpp').read_text()
+    source=(ROOT/'src/game/imagery/d3dport.cpp').read_text()
     method=span(source,'void LoadMaterial(','// --------------------------------------------------------------------------\n// RenderObject')
     prelude=r'''
 #include <cstdio>

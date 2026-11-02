@@ -14,12 +14,12 @@ for(int tick=1;tick<30;++tick)for(int o=0;o<4;++o){hmm_vec3 p{},r{},s{};assert(i
 '''
 
 def compile_source(output):
- output.mkdir(parents=True,exist_ok=False);source=(ROOT/'src/3dimage.cpp').read_text();body=(ROOT/'src/3dimagebody.h').read_text();render=(ROOT/'src/render3d_types.h').read_text()
+ output.mkdir(parents=True,exist_ok=False);source=(ROOT/'src/game/imagery/3dimage.cpp').read_text();body=(ROOT/'src/engine/assets/3dimagebody.h').read_text();render=(ROOT/'src/engine/render/render3d_types.h').read_text()
  sigs=('static inline int32_t SkipAniKey32(','static inline void GetAniKey32(','bool T3DImagery::GetUninterpolatedAniKey(','static void MakeMatrix(');methods={s:function(source,s)for s in sigs};prefixes=('SMALLKEY','ANIKEY32_','ANIFLAG32_','ANICODE32_','ANIKEY_POSSCALE','ANIKEY_ANGSCALE','I3D_ANIKEY32');constants='\n'.join(l for l in body.splitlines()if l.startswith('#define ')and any(l.startswith('#define '+p)for p in prefixes));records='\n'.join(function(t,s)+';'for t,s in((body,'struct SAniKey32\n'),(body,'struct S3DFace\n'),(render,'struct S3DVertex\n'),(render,'struct SRenderColor\n'),(body,'struct S3DMaterial\n')))
  prelude=PRELUDE.replace('struct hmm_vec3 {float X=0,Y=0,Z=0;};','#include "math3d.h"\n#include "speedauthoredmatrix.h"\n#include "authoredpartsys.h"\n#include "cfireprofile.h"')
  cls=CLASS.replace(',3>',',64>').replace(',2>',',8>').replace('i<3;++i){const size_t o=','i<im.nobj;++i){const size_t o=').replace('t<3;++t','t<im.ntex+1;++t').replace('i<2;++i){const size_t p=tex','i<im.ntex;++i){const size_t p=tex').replace('i<3;++i){memcpy(&im.materials','i<im.nmat;++i){memcpy(&im.materials').replace('void Select(){speed_partsys_profile=ValidateRetailSpeedPartSysProfile();}','').replace('i<2;++i){const size_t p=tags','i<im.ntags;++i){const size_t p=tags')
  cls=cls.replace('bool ValidateRetailSpeedPartSysProfile();','void GetObject(int i,S3DObj*o){*o=objects[i];}void GetMaterial(int i,S3DMat*m){*m=materials[i];}void GetTexture(int i,S3DTex*t){*t=textures[i];}')
- methods['validation']=function((ROOT/'src/effects/cfireoriginal.cpp').read_text(),'static bool ValidateCFire(')
+ methods['validation']=function((ROOT/'src/game/effects/legacy/cfireoriginal.cpp').read_text(),'static bool ValidateCFire(')
  driver=output/'source.cpp';driver.write_text(prelude+'\n'+constants+'\n'+records+'\n'+cls+'\n'+'\n'.join(methods.values())+'\n'+MAIN);binary=output/'source'
  q=subprocess.run(['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(driver),*[str(ROOT/'src'/p)for p in('math3d.cpp','authoredpartsys.cpp','partsysdefinition.cpp')],'-o',str(binary)],capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr);assert q.returncode==0,'See compile.log'
  with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read(next(n for n in z.namelist()if n.lower()=='imagery/misc/cfire.i3d'))

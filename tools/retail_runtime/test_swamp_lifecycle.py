@@ -6,7 +6,7 @@ from test_authored_preview_lifecycle import PRELUDE,ROOT
 
 class SwampLifecycleTests(unittest.TestCase):
  def test_original_final_update_and_no_updates_after_kill(self):
-  actual=function((ROOT/'src/effects/swamppreview.cpp').read_text(),'void Advance(State* s,double seconds)')
+  actual=function((ROOT/'src/game/effects/legacy/swamppreview.cpp').read_text(),'void Advance(State* s,double seconds)')
   marker='s->owner->Pulse();++s->ticks;'
   self.assertEqual(actual.count(marker),1)
   early=actual.replace(marker,marker+'if(!Alive(s))return;')

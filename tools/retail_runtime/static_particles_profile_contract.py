@@ -81,7 +81,7 @@ int main(int argc,char**argv){assert(argc==4);static_assert(sizeof(S3DVertex)==3
 '''
 
 def run(archive,output,profiles=PROFILES):
- output.mkdir(parents=True,exist_ok=True);source=(ROOT/'src/3dimage.cpp').read_text();body=(ROOT/'src/3dimagebody.h').read_text();render=(ROOT/'src/render3d_types.h').read_text();method=function(source,'uint32_t T3DImagery::ValidateRetailStaticParticleProfile()');typed=function((ROOT/'src/3dimage.h').read_text(),'bool HasRetailStaticParticleProfile(')
+ output.mkdir(parents=True,exist_ok=True);source=(ROOT/'src/game/imagery/3dimage.cpp').read_text();body=(ROOT/'src/engine/assets/3dimagebody.h').read_text();render=(ROOT/'src/engine/render/render3d_types.h').read_text();method=function(source,'uint32_t T3DImagery::ValidateRetailStaticParticleProfile()');typed=function((ROOT/'src/game/imagery/3dimage.h').read_text(),'bool HasRetailStaticParticleProfile(')
  records='\n'.join(function(text,s)+';'for text,s in((body,'struct SAniKey32\n'),(body,'struct S3DFace\n'),(render,'struct S3DVertex\n'),(render,'struct SRenderColor\n'),(body,'struct S3DMaterial\n')))
  cpp=PRELUDE+'\n'+records+'\n'+CLASS.replace('TYPED_METHOD',typed)+'\n'+method+'\n'+MAIN;driver=output/'profile.cpp';driver.write_text(cpp);binary=output/'profile';cmd=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),str(driver),'-o',str(binary)];p=subprocess.run(cmd,text=True,capture_output=True);(output/'compile.log').write_text(p.stdout+p.stderr)
  if p.returncode:raise RuntimeError('Profile compilation failed')
@@ -95,7 +95,7 @@ def run(archive,output,profiles=PROFILES):
    categories={}
    for line in p.stdout.splitlines():categories[line]=categories.get(line,0)+1
    cases.append(dict(name=profile['name'],status='pass',positive_cases=sum(v for k,v in categories.items()if k.startswith('C accept')),rejection_cases=sum(v for k,v in categories.items()if k.startswith('C reject')),categories=categories,asset_sha256=profile['sha256'],class_binding=binding))
- report=dict(status='pass',cases=cases,compiled_profile_body_sha256=sha(method.encode()),compiled_typed_gate_sha256=sha(typed.encode()),header_sha256=sha((ROOT/'src/staticpartsysprofiles.h').read_bytes()),driver_sha256=sha(driver.read_bytes()),binary_sha256=sha(binary.read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),sanitizers='ASan/UBSan',accepted=False,scope='Actual exact profile validator and typed gate compiled against literal decoded record API. Every keyword/material float/vertex channel/index plus header/tag/path/type/texture mutation rejects; raw texels pinned by fixture asset SHA, not hashed by engine admission.')
+ report=dict(status='pass',cases=cases,compiled_profile_body_sha256=sha(method.encode()),compiled_typed_gate_sha256=sha(typed.encode()),header_sha256=sha((ROOT/'src/game/effects/staticpartsysprofiles.h').read_bytes()),driver_sha256=sha(driver.read_bytes()),binary_sha256=sha(binary.read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),sanitizers='ASan/UBSan',accepted=False,scope='Actual exact profile validator and typed gate compiled against literal decoded record API. Every keyword/material float/vertex channel/index plus header/tag/path/type/texture mutation rejects; raw texels pinned by fixture asset SHA, not hashed by engine admission.')
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');return report
 
 if __name__=='__main__':

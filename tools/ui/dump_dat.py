@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Decode and dump bitmaps from a Revenant TMulti .dat file as PNGs.
 
-On-disk format (from src/resource.cpp + src/resourcehdr.h):
+On-disk format (from src/engine/assets/resource.cpp + src/engine/assets/resourcehdr.h):
 
     FileResHdr {                       // 20 bytes
         uint32_t resmagic = 'CGSR';
@@ -16,7 +16,7 @@ On-disk format (from src/resource.cpp + src/resourcehdr.h):
     [topbm * uint32 — bitmap offset table into resource data]
     [datasize bytes — the TMultiData struct]
 
-TMulti format (from src/multidat.h):
+TMulti format (from src/engine/assets/multidat.h):
 
     TMultiData {
         int32_t numoffsets;
@@ -231,7 +231,7 @@ def dump_dat(dat_path: Path, out_dir: Path):
               file=sys.stderr)
         return 1
 
-    # Skip optional custom header. Per src/resource.cpp:96 the seek is to
+    # Skip optional custom header. Per src/engine/assets/resource.cpp:96 the seek is to
     # `hdrsize + sizeof(FileResHdr)`, so the optional header lives RIGHT
     # AFTER FileResHdr.
     body_off = FILERESHDR_SIZE + hdrsize

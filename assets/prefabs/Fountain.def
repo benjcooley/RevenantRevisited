@@ -1,0 +1,78 @@
+// Fountain -- the magic sparkle column (retail TFountainAnimator, registered
+// CYANFONT / REDFONT / GREENFONT / BLUEFONT; effect_old.cpp 3786-3890;
+// forensics docs/vfx/forensics/FOUNTAIN_TFountainAnimator.md; harness
+// baseline TFountainAnimator_BESPOKE, effect.cpp 11703-11903). Used by the
+// scripts as Sabu's vanish/appear puff and the tomb chest-unlock sparkle.
+//
+// Retail parameters, all per tick at 24 Hz (effect.h:758-760 + the bodies):
+//   count       NUM_FOUNTAIN_BUBBLES = 10, all seeded at once, each
+//               respawned in place when it dies (loops until the script
+//               deletes the effect)
+//   position    random(-20, 20) on x and y (FOUNTAIN_RADIUS), z = 0, in
+//               the object's local frame
+//   rise        random(1, 3) / 2 wu/tick straight up, i.e. one of
+//               {0.5, 1.0, 1.5}; local z goes through the object matrix's
+//               WORLD3D_Z_SCALE (1.5), so world rise is {0.75, 1.5, 2.25}
+//   scale       2.0 at spawn, -0.15 per tick (FOUNTAIN_SCALE_STEP), dead
+//               when <= 0: 13 drawn ticks (1.85 .. 0.05)
+//   start delay framenum = random(-5, 0), drawn once framenum > 0: the
+//               first Animate runs before the first draw, so a bubble is
+//               never shown at scale 2.0 -- hence the alpha-0 spawn and the
+//               alpha-1 first tick below (spawn_delay_max = 5 is the hold)
+//   sprite      Misc\Sparkle.I3D sub-object `photon` (colorobj 0, cyan):
+//               a camera-facing quad whose authored corners project to
+//               14.02 px wide (x - y) by 14.67 px tall ((x + y)/2 - 0.867 z,
+//               with the 1.5 z scale) at scale 1; its UVs are the
+//               (u 0.5..1, v 0.5..1) cell of the 2x2 sheet = frame 3.
+//               photon01/02/03 (red/green/blue) are frames 2, 0, 1.
+//   render      SetBlendState() = alpha, material diffuse white, unlit,
+//               texture colour only.
+particles
+{
+    effect Fountain
+    {
+        inactive_ttl_pulses = 12
+
+        bucket sparkles
+        {
+            imagery_path = "Misc\\Sparkle.I3D"
+            texture_slot = 0
+            atlas_cols = 2
+            atlas_rows = 2
+            atlas_frames = 4
+            width = 14.02
+            height = 14.67
+            blend_mode = "alpha"
+            light_mode = "unlit"
+            depth_mode = "test_no_write"
+            orientation = "screen_aligned"
+
+            spawn_count = 10
+            spawn_delay_min = 0
+            spawn_delay_max = 5
+            tick_hz = 24
+            default_life = 0
+
+            // scale is retail's uniform 2.0 times the sprite's size; the
+            // alpha-0 spawn keeps the untouched spawn state unseen until
+            // the first tick, as retail's framenum > 0 draw gate does.
+            spawn_expr = "
+                pos = emit_pos + vec3(rand(-20, 20), rand(-20, 20), 0);
+                vel = vec3(0, 0, 0.75 * (1 + floor(rand01() * 3)));
+                scale = vec3(2.0 * 14.02, 2.0 * 14.67, 1);
+                frame = 3;
+                color = vec4(1, 1, 1, 0);
+            "
+
+            // Rise, shrink by FOUNTAIN_SCALE_STEP of the sprite size, show.
+            tick_expr = "
+                pos = pos + vel;
+                scale = scale - vec3(0.15 * 14.02, 0.15 * 14.67, 0);
+                color.a = 1;
+            "
+
+            // Retail: scale <= 0 respawns the bubble on the disc.
+            kill_expr = "step(scale.x, 0)"
+        }
+    }
+}

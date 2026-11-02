@@ -21,7 +21,7 @@ return f?0:5;}
 '''
 def run(trace,out):
  out.mkdir(parents=True,exist_ok=False);d=json.loads(trace.read_text());records=d['rows'];source=out/'probe.cpp';source.write_text(DRIVER);binary=out/'probe'
- q=subprocess.run(['clang++','-std=c++17','-O1','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/authoredpartsys.cpp'),str(ROOT/'src/partsysdefinition.cpp'),'-o',str(binary)],capture_output=True,text=True);(out/'compile.log').write_text(q.stdout+q.stderr);assert q.returncode==0,q.stderr
+ q=subprocess.run(['clang++','-std=c++17','-O1','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/engine/fx/authoredpartsys.cpp'),str(ROOT/'src/engine/fx/partsysdefinition.cpp'),'-o',str(binary)],capture_output=True,text=True);(out/'compile.log').write_text(q.stdout+q.stderr);assert q.returncode==0,q.stderr
  raw=struct.pack('<i',len(records));rows=[];last=d['initial_inputs'][0];initial_origin=[x-y for x,y in zip(last['origin'],last['position'])]
  for r in records:
   assert len(r['pulse_inputs'])<=1
@@ -43,7 +43,7 @@ def run(trace,out):
  negatives={}
  for name,body in [('skipped_render_rng',DRIVER.replace('if(render)for','if(false)for')),('advanced_cached_frame',DRIVER.replace('in.animation_frame=frame;','in.animation_frame=frame+1;'))]:
   wrong=out/(name+'.cpp');wrong.write_text(body);exe=out/name
-  subprocess.run(['clang++','-std=c++17','-O1','-iquote',str(ROOT/'src'),str(wrong),str(ROOT/'src/authoredpartsys.cpp'),str(ROOT/'src/partsysdefinition.cpp'),'-o',str(exe)],check=True)
+  subprocess.run(['clang++','-std=c++17','-O1','-iquote',str(ROOT/'src'),str(wrong),str(ROOT/'src/engine/fx/authoredpartsys.cpp'),str(ROOT/'src/engine/fx/partsysdefinition.cpp'),'-o',str(exe)],check=True)
   bad=subprocess.check_output([str(exe),str(inp),tag],text=True);different=sum(a!=b for a,b in zip(bad.splitlines(),q.stdout.splitlines()));assert different>0;negatives[name]=dict(rejected=True,differing_rows=different)
  result=dict(negative_controls=negatives,status='fail'if errors else'pass',fields=checks,max_error=maximum,errors=errors[:80],error_count=len(errors),ground_queries=sum(len(r['ground'])for r in records),ground_results=sorted(set(q['result']for r in records for q in r['ground'])),initial_origin=initial_origin,native_sha256=sha(trace.read_bytes()),accepted=False,scope=__doc__);(out/'manifest.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
 if __name__=='__main__':

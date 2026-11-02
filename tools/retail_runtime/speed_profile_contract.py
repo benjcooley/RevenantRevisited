@@ -171,11 +171,11 @@ int main(int argc,char**argv){assert(argc==2);static_assert(sizeof(SAniKey32)==4
 
 def run(executable, archive, output):
     output.mkdir(parents=True, exist_ok=True)
-    source_paths = ('src/3dimage.cpp','src/3dimage.h','src/3dimagebody.h','src/render3d_types.h')
+    source_paths = ('src/game/imagery/3dimage.cpp','src/game/imagery/3dimage.h','src/engine/assets/3dimagebody.h','src/engine/render/render3d_types.h')
     pinned = {p:sha((ROOT/p).read_bytes()) for p in source_paths}
-    source = (ROOT/'src/3dimage.cpp').read_text()
-    body = (ROOT/'src/3dimagebody.h').read_text()
-    render = (ROOT/'src/render3d_types.h').read_text()
+    source = (ROOT/'src/game/imagery/3dimage.cpp').read_text()
+    body = (ROOT/'src/engine/assets/3dimagebody.h').read_text()
+    render = (ROOT/'src/engine/render/render3d_types.h').read_text()
     signatures = ('static inline int32_t SkipAniKey32(', 'static inline void GetAniKey32(',
                   'bool T3DImagery::ValidateRetailSpeedPartSysProfile()',
                   'bool T3DImagery::GetUninterpolatedAniKey(')

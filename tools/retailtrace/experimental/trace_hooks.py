@@ -13,7 +13,7 @@ runs line up by simulation time:
     <tick> [script] <object>: trigger <N> of '<proto>' starts
     <tick> [script] <object>: trigger <N> ends
 
-They match the port's own trace (src/dialog.cpp, src/script.cpp) so the two
+They match the port's own trace (src/game/script/dialog.cpp, src/game/script/script.cpp) so the two
 diff by line sequence.
 
 Addresses (retail Revenant.exe, Ghidra project RevenantDev):
@@ -111,7 +111,7 @@ static const char *obj_name(U32 obj)
 
 SAY_C = r'''
 /* TCharacter::Say(text, frames, anim, sound): this=ECX, text=arg0.
-   -> "<tick> [dialog] <name> says: <text>" (src/dialog.cpp AddSpeech). */
+   -> "<tick> [dialog] <name> says: <text>" (src/game/script/dialog.cpp AddSpeech). */
 void h_say(const U32 *f)
 {
     U32 self = f[6];
@@ -129,7 +129,7 @@ void h_say(const U32 *f)
 CMD_C = r'''
 /* CommandInterpreter(context, token, abbrevlen, script) cdecl: args at f[10..].
    The line is reconstructed from the token's stream: back up to the start of
-   the current line, trim leading blanks, stop at end of line (src/script.cpp
+   the current line, trim leading blanks, stop at end of line (src/game/script/script.cpp
    TraceLine). -> "<tick> [script] <object>: <line>". */
 void h_cmd(const U32 *f)
 {

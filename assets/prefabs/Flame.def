@@ -1,0 +1,62 @@
+// Flame -- the torch flame (retail TFlameEffect / TFlameAnimator, F01;
+// effect_old.cpp 4475-4578; forensics docs/vfx/forensics/F01_TFlameEffect.md).
+//
+// One card of Magic\flame.i3d, a 4x2 atlas of 32x64 cells in a 128x128
+// ARGB4444 surface, held for as long as the owner lives: no kill, no
+// particles, no light, no tint. The animator counts render ticks 0..17 and
+// picks cell floor(tick * 11 / 24), so the cells run
+// 0,0,0,1,1,2,2,3,3,4,4,5,5,5,6,6,7,7 and the loop is 0.75 s at 24 Hz.
+// Alpha blend (SetBlendState: SRC_ALPHA / INV_SRC_ALPHA, z test, no z
+// write), per-vertex colour left opaque white. Placement is the owner's
+// position (the animator's translate is zero).
+//
+// Geometry: the authored box01 quad is 38.11 x 69.57 model units, drawn
+// through Rx(45) * Ry(30) * Rz(160) * S(0.5) and the owner's transform
+// (WORLD3D_Z_SCALE on z). Iso-projected that is a 22.4 x 47.2 wu
+// parallelogram centred on the owner with its texture u axis running
+// screen-left, so the card is 22.4 x 47.2 and mirrored in x (negative
+// scale.x). The 19.5 degree shear of the rows is the one thing a
+// screen-aligned card does not carry.
+particles
+{
+    effect Flame
+    {
+        inactive_ttl_pulses = 12
+
+        bucket flame
+        {
+            imagery_path = "Magic\\flame.i3d"
+            texture_slot = 0
+            atlas_cols = 4
+            atlas_rows = 2
+            atlas_frames = 8
+            width = 22.4
+            height = 47.2
+            blend_mode = "alpha"
+            light_mode = "unlit"
+            depth_mode = "test_no_write"
+            orientation = "screen_aligned"
+            // The surface's transparent fill texel is red (255,34,0,0);
+            // coverage is the authored alpha.
+            chroma_key = [255, 0, 0]
+
+            spawn_count = 1
+            tick_hz = 24
+            default_life = -1.0
+
+            spawn_expr = "
+                pos = emit_pos;
+                scale = vec3(-22.4, 47.2, 1);
+                color = vec4(1, 1, 1, 1);
+                frame = 0;
+            "
+
+            // The retail counter: tick = ticks since spawn (age is seconds,
+            // 1/24 per tick; the + 0.5 absorbs float accumulation), wrapped
+            // at 18, then the 11/24 cell pick.
+            tick_expr = "
+                frame = floor((floor(age * 24 + 0.5) % 18) * 11 / 24);
+            "
+        }
+    }
+}

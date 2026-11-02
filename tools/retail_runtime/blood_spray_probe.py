@@ -9,7 +9,7 @@ Pulse `0x40e2e0`, GetObject `0x40eef0` (the eight boxes are only drawn),
 the imagery's GetVerts `0x40a0c0`, and the instance's SetFlags (slot 0x40,
 the kill). The CRT rand `0x58c582` is the MSVC stream from a fixed seed.
 
-The port side compiles src/effects/bloodspray.cpp unchanged with a driver
+The port side compiles src/game/effects/legacy/bloodspray.cpp unchanged with a driver
 that feeds the same stream. Every droplet field (30 x 0x24 bytes), the kill
 tick and the number of rand() calls are compared after Initialize and after
 every tick. Float fields are compared bit for bit, apart from Initialize's
@@ -39,7 +39,7 @@ RAND, VIOLENCE = 0x58c582, 0x5d79e8
 DROPS, DROP_SIZE, COUNT = 0xfc, 0x24, 30
 
 DRIVER = r'''
-#include "effects/bloodspray.h"
+#include "game/effects/legacy/bloodspray.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -80,7 +80,7 @@ def build_port(output: Path, simulation: Path | None = None) -> Path:
     driver.write_text(DRIVER)
     binary = output / 'driver'
     command = ['clang++', '-std=c++17', '-O1', '-g', '-fsanitize=address,undefined', '-iquote', str(ROOT / 'src'),
-               '-iquote', str(ROOT / 'src/effects'), str(driver), str(simulation or ROOT / 'src/effects/bloodspray.cpp'), '-o', str(binary)]
+               '-iquote', str(ROOT / 'src/effects'), str(driver), str(simulation or ROOT / 'src/game/effects/legacy/bloodspray.cpp'), '-o', str(binary)]
     result = subprocess.run(command, capture_output=True, text=True)
     (output / 'compile.log').write_text(result.stdout + result.stderr)
     if result.returncode:
@@ -206,7 +206,7 @@ CASES = [
 
 
 def run(executable: Path, output: Path, extra_cases: int = 24, ticks: int = 120, simulation: Path | None = None):
-    """`simulation` replaces src/effects/bloodspray.cpp (negative controls)."""
+    """`simulation` replaces src/game/effects/legacy/bloodspray.cpp (negative controls)."""
     output.mkdir(parents=True, exist_ok=False)
     binary = build_port(output, simulation)
     native = Native(executable)

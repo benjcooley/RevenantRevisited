@@ -17,10 +17,10 @@ from software_probe import save_rgb565_png
 
 
 def compile_core(output):
-    effect=(ROOT/'src/effect.cpp').read_text()
+    effect=(ROOT/'src/game/effects/effect.cpp').read_text()
     stage=effect[effect.index('void TFireBallEffect::StepAnimate()'):effect.index('void TFireBallEffect::',effect.index('void TFireBallEffect::StepAnimate()')+5)]
     if 'fireball_core::Advance(fireball_, trail_'not in stage:raise AssertionError('Actual runtime no longer invokes tested helper')
-    header=(ROOT/'src/effect.h').read_text()
+    header=(ROOT/'src/game/effects/effect.h').read_text()
     data=header[header.index('struct SFireBallData'):header.index('// One spark',header.index('struct SFireBallData'))]
     source=output/'port-core.cpp'
     source.write_text(r'''
@@ -64,7 +64,7 @@ def main():
     args=p.parse_args();args.output.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:asset=z.read('Imagery/Magic/newfireball.i3d')
     if hashlib.sha256(asset).hexdigest()!=ASSET_SHA:raise ValueError('Wrong authored asset')
-    files=['src/fireballcore.h','src/effect.cpp','src/effect.h','src/fireballquad.h','src/fireballquad.cpp','src/math3d.cpp']
+    files=['src/game/effects/fireballcore.h','src/game/effects/effect.cpp','src/game/effects/effect.h','src/game/effects/fireballquad.h','src/game/effects/fireballquad.cpp','src/engine/core/math3d.cpp']
     hashes={f:hashlib.sha256((ROOT/f).read_bytes()).hexdigest()for f in files}
     core,compiled=compile_core(args.output);render,verts,render_compiled=port_driver(args.output,asset)
     fixture=TrailFixture(args.executable,asset)

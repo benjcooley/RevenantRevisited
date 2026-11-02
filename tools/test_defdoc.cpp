@@ -4,7 +4,7 @@
 // *                  test_defdoc.cpp - DEF Parser Tests                    *
 // *************************************************************************
 
-#include "../src/defdoc.h"
+#include "../src/engine/refl/defdoc.h"
 
 #include <cassert>
 #include <filesystem>

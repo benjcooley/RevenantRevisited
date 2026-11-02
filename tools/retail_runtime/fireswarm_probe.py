@@ -28,13 +28,13 @@ def parse_asset(asset):
 
 
 def production_spans():
-    source=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     return dict(types=span(header,'class TFireSwarmEffect_Bespoke :','// *************************************************************************\n// * TBurnEffect_Bespoke'),
         constants=span(source,'constexpr const char* kFireSwarmBespokeImageryPath','}  // namespace'),
         initialize=span(source,'    texture_=tex.htexture; frameon_=0; cylth_=0.0f;','    if (attach_runtime_component) {'),
         advance_submit=span(source,'void TFireSwarmEffect_Bespoke::Advance(','void TFireSwarmEffect_Bespoke::TickAndSubmitForTest_BESPOKE('),
         map_dispatch=span(source,'class TFireSwarmReferenceComponent final','void TFireSwarmEffect_Bespoke::Initialize('),
-        math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
+        math=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text())
 
 
 def build_port(output,mesh,ticks):
@@ -56,8 +56,8 @@ enum class EFxBlend:uint8_t{Alpha};enum class EFxDepthMode:uint8_t{TestNoWrite};
 struct SMeshVertex{float pos[3]{},normal[3]{},uv[2]{};};
 struct SQuadDrawItem{bool retail_argb4444=false,retail_software_projection=false;int corner_count=4,retail_texture=0;float world_pos[4][3]{},uv[4][2]{};struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};};
 struct TRenderer{bool UsesRetailSoftwareMeshLighting()const{return true;}std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};TRenderer renderer;TRenderer*Renderer=&renderer;
-struct TObjectImagery{};struct SObjectDef{};struct S3DTex{TTextureHandle htexture=2;};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
-struct TEffect{World world;int kills=0;TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual~TEffect()=default;virtual void OffScreen(){};void KillThisEffect(){++kills;}void SetCommandDone(bool){};const World&Transform()const{return world;}};
+struct TObjectImagery{};struct SObjectState{};struct S3DTex{TTextureHandle htexture=2;};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
+struct TEffect{World world;int kills=0;TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};virtual~TEffect()=default;virtual void OffScreen(){};void KillThisEffect(){++kills;}void SetCommandDone(bool){};const World&Transform()const{return world;}};
 '''
     initialize='void TFireSwarmEffect_Bespoke::Initialize(bool attach_runtime_component){S3DTex tex;\n'+pieces['initialize']+'}\n'
     trailer=r'''
@@ -71,7 +71,7 @@ int main(int argc,char**argv){std::ifstream input(argv[1],std::ios::binary);uint
 '''.replace('TICKS',str(ticks))
     src=output/'fireswarm-port-components.cpp';src.write_text(prelude+'\n'+types+'\n'+pieces['constants']+'\n'+initialize+'\n'+pieces['advance_submit']+'\n'+trailer)
     data=output/'tube01-mesh.bin';data.write_bytes(struct.pack('<2I',174,576)+mesh['vertex_bytes']+mesh['index_bytes'])
-    binary=output/'fireswarm-port-components';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(src),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'fireswarm-port-components';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(src),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     result=subprocess.run(cmd,capture_output=True,text=True);(output/'compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('FireSwarm production compile failed')
     result=subprocess.run([str(binary),str(data)],capture_output=True,text=True);(output/'port-trace.txt').write_text(result.stdout);(output/'port-run.log').write_text(result.stderr)
@@ -81,7 +81,7 @@ int main(int argc,char**argv){std::ifstream input(argv[1],std::ios::binary);uint
         p=line.split();key=(int(p[1]),int(p[2]))
         if p[0]=='S':frames[key]=dict(frame=int(p[3]),alive=bool(int(p[4])),kills=int(p[5]),values=[float(x)for x in p[6:]],draws=[])
         else:frames[key]['draws'].append(dict(positions=[[float(x)for x in p[3+i*5:6+i*5]]for i in range(3)],uvs=[[float(x)for x in p[6+i*5:8+i*5]]for i in range(3)]))
-    return frames,dict(command=cmd,generated_source_sha256=sha(src.read_bytes()),binary_sha256=sha(binary.read_bytes()),mesh_input_sha256=sha(data.read_bytes()),bodies=['actual Initialize state','Advance','Submit','src/math3d.cpp'],ownership_modes=['preview','actual map owner'],boundaries=['exact tube01 vertices/indices/texture1','identity owner/no spell','normal kill request recorded','asset loading and component installation separate'])
+    return frames,dict(command=cmd,generated_source_sha256=sha(src.read_bytes()),binary_sha256=sha(binary.read_bytes()),mesh_input_sha256=sha(data.read_bytes()),bodies=['actual Initialize state','Advance','Submit','src/engine/core/math3d.cpp'],ownership_modes=['preview','actual map owner'],boundaries=['exact tube01 vertices/indices/texture1','identity owner/no spell','normal kill request recorded','asset loading and component installation separate'])
 
 
 class FireSwarmFixture:

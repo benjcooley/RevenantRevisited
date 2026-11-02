@@ -6,7 +6,7 @@ This exercises dispatch counts, not the GPU or full map/component lifecycle.
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
-source=(root/'src/maprenderer.cpp').read_text()
+source=(root/'src/game/world/maprenderer.cpp').read_text()
 start=source.index('        // A late replacement can inherit several cached submesh records.')
 end=source.index('        // obj_id = drawable index + 1',start)
 gate=source[start:end]
@@ -19,9 +19,14 @@ prelude=r'''
 #include <unordered_set>
 #include <vector>
 struct TParticleEffectComponent{};
-struct TFlipbookBillboardComponent{bool replacement=false;bool ReplacesDefaultVisual()const{return replacement;}};
-struct TObjectInstance{int id;bool particles=false,has_visual=false;TParticleEffectComponent particle;TFlipbookBillboardComponent visual;
- template<class T>T*GetComponent(){if constexpr(std::is_same_v<T,TParticleEffectComponent>)return particles?&particle:nullptr;else return has_visual?&visual:nullptr;}};
+struct TVisualComponent{bool replacement=false;bool ReplacesDefaultVisual()const{return replacement;}};
+struct TObjectInstance;
+struct TNode{TObjectInstance*owner;};
+struct TObjectInstance{int id;bool particles=false,has_visual=false;TParticleEffectComponent particle;TVisualComponent visual;TNode node{this};
+ TNode*Node(){return &node;}
+ template<class T>T*GetComponent(){static_assert(std::is_same_v<T,TParticleEffectComponent>);return particles?&particle:nullptr;}};
+// The engine's walk over a node's visuals (engine/render/visualcomponent.cpp)
+TVisualComponent*ReplacingVisual(const TNode&n){return n.owner->has_visual&&n.owner->visual.replacement?&n.owner->visual:nullptr;}
 struct Ref{TObjectInstance*owner;TObjectInstance*Get()const{return owner;}};
 struct Record{Ref src;};struct Scene{std::vector<Record>sectorDrawInst;};
 '''

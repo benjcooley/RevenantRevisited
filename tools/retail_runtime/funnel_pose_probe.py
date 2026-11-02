@@ -7,7 +7,7 @@ from speed_profile_contract import PRELUDE,function,sha,ROOT
 from funnel_visual_reference import FunnelScene
 
 def run(executable,output):
- output.mkdir(parents=True,exist_ok=True);source=(ROOT/'src/3dimage.cpp').read_text();body=(ROOT/'src/3dimagebody.h').read_text();render=(ROOT/'src/render3d_types.h').read_text()
+ output.mkdir(parents=True,exist_ok=True);source=(ROOT/'src/game/imagery/3dimage.cpp').read_text();body=(ROOT/'src/engine/assets/3dimagebody.h').read_text();render=(ROOT/'src/engine/render/render3d_types.h').read_text()
  signatures=('static inline int32_t SkipAniKey32(','static inline void GetAniKey32(','bool T3DImagery::GetUninterpolatedAniKey(','static void MakeMatrix(','bool T3DImagery::ValidateRetailFunnelProfile()');methods={s:function(source,s)for s in signatures}
  prefixes=('SMALLKEY','ANIKEY32_','ANIFLAG32_','ANICODE32_','ANIKEY_POSSCALE','ANIKEY_ANGSCALE','I3D_ANIKEY32');constants='\n'.join(l for l in body.splitlines()if l.startswith('#define ')and any(l.startswith('#define '+p)for p in prefixes))
  records='\n'.join(function(t,s)+';'for t,s in((body,'struct SAniKey32\n'),(body,'struct S3DFace\n'),(render,'struct S3DVertex\n'),(render,'struct SRenderColor\n'),(body,'struct S3DMaterial\n')))
@@ -39,7 +39,7 @@ printf("%d %d %d",st,o,t);for(float v:{p.X,p.Y,p.Z,r.X,r.Y,r.Z,s.X,s.Y,s.Z})prin
 fprintf(stderr,"profile_mutations=%d default_unchanged=%d inclusive_changed=%d\n",controls,defaults,changed);assert(changed>0);}
 '''
  driver=output/'pose.cpp';driver.write_text(prelude+'\n'+constants+'\n'+records+'\n'+cls+'\n'+'\n'.join(methods.values())+'\n'+main);binary=output/'pose'
- command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(driver),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+ command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(driver),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
  q=subprocess.run(command,capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr)
  if q.returncode:raise RuntimeError('Source compile failed; see compile.log')
  with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read('Imagery/Magic/funnel.i3d')
@@ -56,7 +56,7 @@ fprintf(stderr,"profile_mutations=%d default_unchanged=%d inclusive_changed=%d\n
   if not accepted:continue
   original=struct.unpack('<16f',v.uc.mem_read(f.animobjs[o]+0x58,64));delta=max(abs(a-b)for a,b in zip(original,current[9:]));matrix_max=max(matrix_max,delta);matrix_fields+=16
   if delta>2e-4:errors.append(dict(state=st,object=o,tick=t,matrix_error=delta))
- report=dict(status='fail'if errors else'pass',key_fields=key_fields,matrix_fields=matrix_fields,max_key_error=key_max,max_matrix_error=matrix_max,errors=errors,controls=q.stderr,asset_sha256=sha(data),source_spans={s:sha(b.encode())for s,b in methods.items()},driver_sha256=sha(driver.read_bytes()),production_sha256={p:sha((ROOT/p).read_bytes())for p in('src/3dimage.cpp','src/funnelprofile.h','src/funnelmatrix.h','src/goldauthoredmatrix.h','src/speedauthoredmatrix.h','src/math3d.cpp')},sanitizers='ASan/UBSan',accepted=False)
+ report=dict(status='fail'if errors else'pass',key_fields=key_fields,matrix_fields=matrix_fields,max_key_error=key_max,max_matrix_error=matrix_max,errors=errors,controls=q.stderr,asset_sha256=sha(data),source_spans={s:sha(b.encode())for s,b in methods.items()},driver_sha256=sha(driver.read_bytes()),production_sha256={p:sha((ROOT/p).read_bytes())for p in('src/game/imagery/3dimage.cpp','src/game/effects/funnelprofile.h','src/game/effects/funnelmatrix.h','src/game/effects/goldauthoredmatrix.h','src/game/effects/speedauthoredmatrix.h','src/engine/core/math3d.cpp')},sanitizers='ASan/UBSan',accepted=False)
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],key_fields,matrix_fields,len(errors));return report
 if __name__=='__main__':
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.executable,a.output)

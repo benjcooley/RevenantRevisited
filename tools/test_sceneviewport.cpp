@@ -1,3 +1,3 @@
-#include "../src/sceneviewport.h"
+#include "../src/engine/core/sceneviewport.h"
 #include <cassert>
 int main(){int32_t v[2]={640,340};assert(scene_viewport::FitsDisplay(v,640,480));assert(scene_viewport::Parse("452,420",v));assert(v[0]==452&&v[1]==420&&scene_viewport::FitsDisplay(v,640,480));for(const char*s:{"","0,420","452,0","-1,420","1921,420","452,1081","214748364800000,420","452","452,420junk","452,420,1"})assert(!scene_viewport::Parse(s,v));assert(v[0]==452&&v[1]==420);assert(!scene_viewport::FitsDisplay(v,451,480));assert(!scene_viewport::FitsDisplay(v,640,419));assert(scene_viewport::Parse("1920,1080",v)&&scene_viewport::FitsDisplay(v,1920,1080));assert(!scene_viewport::FitsDisplay(v,1280,720));}

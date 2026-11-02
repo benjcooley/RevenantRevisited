@@ -20,7 +20,7 @@ def run(trace,output):
  for i,(identity,a) in enumerate(query):
   x,y,z=a['position'];assign.append(f'caller.found[{i}]={{{identity},{{{x},{y},{z}}},{a["health"]}}};')
  driver=output/'driver.cpp'
- driver.write_text('''#include "effects/sandswirlcontroller.h"
+ driver.write_text('''#include "game/effects/legacy/sandswirlcontroller.h"
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
@@ -44,7 +44,7 @@ std::printf("%d %d %d %u %d %u %u %u %u %u %u %u %u %d\\n",tick,c.Frame(),c.Aliv
  test=output/'guards';subprocess.run(['clang++','-std=c++17','-Wall','-Wextra','-Werror','-iquote',str(ROOT/'src'),str(ROOT/'tools/test_sandswirl_controller.cpp'),'-o',str(test)],check=True,capture_output=True,text=True)
  guard=subprocess.run([str(test)],check=True,capture_output=True,text=True).stdout.strip()
  report=dict(status='pass',accepted=False,parent_controller_only=True,fields=count,frames=len(lines),failures=failures,
-             trace_sha256=sha(trace),source_sha256=sha(ROOT/'src/effects/sandswirlcontroller.h'),
+             trace_sha256=sha(trace),source_sha256=sha(ROOT/'src/game/effects/legacy/sandswirlcontroller.h'),
              probe_sha256=sha(__file__),driver_sha256=sha(driver),guard_test_sha256=sha(ROOT/'tools/test_sandswirl_controller.cpp'),
              guard_result=guard,compile_command=cmd,scope=__doc__,limits='The new source contract chooses no asset and has no default runtime admission. Missing child/caller fail-closed behavior intentionally avoids original null dereferences. Source particle seeking/pool/geometry/RNG and original sand resource remain unproven.')
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report));return report

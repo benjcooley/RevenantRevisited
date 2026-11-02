@@ -47,7 +47,7 @@ DESTINATION_CLASSES = {'character', 'exit', 'container', 'item', 'weapon', 'armo
 
 def game_distance(a: Sequence[float], b: Sequence[float]) -> int:
     """The flat distance as the game measures it (::Distance,
-    src/object.cpp; retail's DistTable): sqrt rounded, both components
+    src/game/object/object.cpp; retail's DistTable): sqrt rounded, both components
     halved together until they fit the 256x256 table."""
     x, y, shifts = abs(int(b[0]) - int(a[0])), abs(int(b[1]) - int(a[1])), 0
     while x > 255 or y > 255:

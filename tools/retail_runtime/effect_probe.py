@@ -211,7 +211,7 @@ def main():
     driver=args.output.parent/(args.output.stem+'.port-driver')
     command=['clang++','-std=c++17','-iquote',str(ROOT/'src'),
              str(Path(__file__).with_name('effect_probe_driver.cpp')),
-             str(ROOT/'src/authoredpartsys.cpp'),str(ROOT/'src/partsysdefinition.cpp'),
+             str(ROOT/'src/engine/fx/authoredpartsys.cpp'),str(ROOT/'src/engine/fx/partsysdefinition.cpp'),
              '-o',str(driver)]
     subprocess.run(command,check=True,capture_output=True,text=True)
     start=time.perf_counter();probe=PartsysProbe(args.executable)

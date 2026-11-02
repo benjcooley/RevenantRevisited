@@ -18,7 +18,7 @@ int main(int argc,char**argv){photon_core::State s;s.Initialize(random_range);if
 '''
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
- effect=(ROOT/'src/effect.cpp').read_text();assert 'particles_.Initialize('in effect and 'particles_.Animate(missile_.state,'in effect
+ effect=(ROOT/'src/game/effects/effect.cpp').read_text();assert 'particles_.Initialize('in effect and 'particles_.Animate(missile_.state,'in effect
  source=a.output/'driver.cpp';source.write_text(DRIVER);binary=a.output/'driver'
  subprocess.run(['clang++','-std=c++17','-I'+str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),'-o',str(binary)],check=True)
  with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read('Imagery/Magic/photon.i3d')
@@ -41,7 +41,7 @@ def main():
       if not equal:errors.append(dict(animate_first=first,tick=tick,field=field,path=path,native=x,port=y))
     check(n[field],c[field],[])
   cases.append(dict(animate_first=first,original=original,port=port,motion=motions))
- report=dict(status='pass'if not errors else'differences',checks=checks,errors=errors,cases=cases,executable_sha256=sha(a.executable.read_bytes()),asset_sha256=__import__('hashlib').sha256(data).hexdigest(),source_sha256={x:sha((ROOT/x).read_bytes())for x in('src/photoncore.h','src/effect.cpp','src/effect.h')},scope='Complete original 5104c0/510600 state versus compiled production helper; both explicit Pulse-first and one-Animate-before-Pulse cadences. Shared original missile supplies movement; natural spell/reaper/audio remain outside fixture.')
+ report=dict(status='pass'if not errors else'differences',checks=checks,errors=errors,cases=cases,executable_sha256=sha(a.executable.read_bytes()),asset_sha256=__import__('hashlib').sha256(data).hexdigest(),source_sha256={x:sha((ROOT/x).read_bytes())for x in('src/game/effects/photoncore.h','src/game/effects/effect.cpp','src/game/effects/effect.h')},scope='Complete original 5104c0/510600 state versus compiled production helper; both explicit Pulse-first and one-Animate-before-Pulse cadences. Shared original missile supplies movement; natural spell/reaper/audio remain outside fixture.')
  (a.output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],checks,'errors',len(errors));print(json.dumps(errors[:12],indent=2))
  if errors:raise SystemExit(1)
 if __name__=='__main__':main()

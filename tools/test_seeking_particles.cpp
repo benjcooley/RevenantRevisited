@@ -1,4 +1,4 @@
-#include "effects/seekingparticles.h"
+#include "game/effects/legacy/seekingparticles.h"
 #include <cassert>
 #include <cstring>
 #include <cstdio>

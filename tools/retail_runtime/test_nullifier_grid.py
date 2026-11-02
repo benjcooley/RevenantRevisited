@@ -20,7 +20,7 @@ int main(){for(float x:{-12.75f,-.25f,0.f,.25f,17.9f})for(float y:{-3.5f,0.f,9.7
    p=Path(d);(p/'grid.cpp').write_text(code);subprocess.run(['clang++','-std=c++17','-fsanitize=address,undefined',str(p/'grid.cpp'),'-o',str(p/'grid')],check=True);subprocess.run([str(p/'grid')],check=True)
  def test_actual_uv_clause_requires_native_and_software(self):
   from speed_profile_contract import function
-  source=(ROOT/'src/3dimage.cpp').read_text();body=function(source,'                if (item.retail_software_pixel_grid && native_software &&')
+  source=(ROOT/'src/game/imagery/3dimage.cpp').read_text();body=function(source,'                if (item.retail_software_pixel_grid && native_software &&')
   code=r'''#include <cassert>
 #include <cmath>
 struct Item{bool retail_software_pixel_grid;float uv[4][2];};

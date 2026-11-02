@@ -5,7 +5,7 @@ from static_particles_profile_contract import CLASS
 from speed_profile_contract import PRELUDE,function,sha,ROOT
 
 def run(native,output):
- output.mkdir(parents=True,exist_ok=False);source=(ROOT/'src/3dimage.cpp').read_text();body=(ROOT/'src/3dimagebody.h').read_text();render=(ROOT/'src/render3d_types.h').read_text()
+ output.mkdir(parents=True,exist_ok=False);source=(ROOT/'src/game/imagery/3dimage.cpp').read_text();body=(ROOT/'src/engine/assets/3dimagebody.h').read_text();render=(ROOT/'src/engine/render/render3d_types.h').read_text()
  signatures=('static inline int32_t SkipAniKey32(','static inline void GetAniKey32(','bool T3DImagery::GetUninterpolatedAniKey(','static void MakeMatrix(')
  methods='\n'.join(function(source,s)for s in signatures)
  prefixes=('SMALLKEY','ANIKEY32_','ANIFLAG32_','ANICODE32_','ANIKEY_POSSCALE','ANIKEY_ANGSCALE','I3D_ANIKEY32')
@@ -19,7 +19,7 @@ def run(native,output):
  driver=output/'pose.cpp';driver.write_text(prelude+'\n'+constants+'\n'+records+'\n'+cls+'\n'+methods+'\n'+main)
  with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:data=z.read('Imagery/Magic/quicksand.i3d')
  asset=output/'quicksand.i3d';asset.write_bytes(data);binary=output/'pose'
- command=['clang++','-std=c++20','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),'-I',str(ROOT/'thirdparty/handmademath'),str(driver),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+ command=['clang++','-std=c++20','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),'-I',str(ROOT/'thirdparty/handmademath'),str(driver),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
  subprocess.run(command,check=True,text=True)
  text=subprocess.check_output([str(binary),str(asset)],text=True);(output/'source.txt').write_text(text)
  poses={(int(v[0]),int(v[1])):list(map(float,v[2:]))for v in map(str.split,text.splitlines())if v[0]!='C'}

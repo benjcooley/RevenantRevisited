@@ -1,4 +1,4 @@
-#include "../src/assetcache.h"
+#include "../src/engine/assets/assetcache.h"
 
 #include <cassert>
 #include <memory>
@@ -13,7 +13,7 @@ int main()
     assert(uid_a == uid_b);
 
     auto payload = std::make_shared<int>(42);
-    TAssetRef<> ref = cache.RegisterClassic("Data\\I3D", "LOCKE.I3D",
+    TAssetHandle<> ref = cache.RegisterClassic("Data\\I3D", "LOCKE.I3D",
                                             EAssetKind::I3D, payload, sizeof(int));
     assert(ref.IsValid());
     assert(ref->Uid() == uid_a);
@@ -22,7 +22,7 @@ int main()
     assert(ref->Name() == "locke.i3d");
     assert(ref->PayloadAs<int>() && *ref->PayloadAs<int>() == 42);
 
-    TAssetRef<> same = cache.FindClassic("data/i3d", "locke.i3d");
+    TAssetHandle<> same = cache.FindClassic("data/i3d", "locke.i3d");
     assert(same == ref);
     assert(cache.AssetCount() == 1);
 
@@ -35,14 +35,14 @@ int main()
     std::vector<SAssetKey> set;
     set.push_back(SAssetKey::Classic("data/i3d", "guard.i3d", EAssetKind::I3D));
     set.push_back(SAssetKey::Classic("data/i3d", "torch.i3d", EAssetKind::I3D));
-    const std::vector<TAssetRef<>> refs = cache.RegisterAssets(set);
+    const std::vector<TAssetHandle<>> refs = cache.RegisterAssets(set);
     assert(refs.size() == 2);
     assert(refs[0].IsValid());
     assert(refs[1].IsValid());
     assert(cache.AssetCount() == 3);
 
     int load_count = 0;
-    TAssetRef<> loaded = cache.GetOrLoadClassic(
+    TAssetHandle<> loaded = cache.GetOrLoadClassic(
         "data/i3d", "mage.i3d", EAssetKind::I3D,
         [&load_count](const SAssetKey& key) {
             assert(key.kind == EAssetKind::I3D);
@@ -57,7 +57,7 @@ int main()
     assert(load_count == 1);
     assert(*loaded->PayloadAs<int>() == 77);
 
-    TAssetRef<> loaded_again = cache.GetOrLoadClassic(
+    TAssetHandle<> loaded_again = cache.GetOrLoadClassic(
         "DATA\\I3D\\", "MAGE.I3D", EAssetKind::I3D,
         [&load_count](const SAssetKey&) {
             ++load_count;

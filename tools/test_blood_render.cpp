@@ -1,5 +1,5 @@
-#include "../src/i3dtexturealpha.h"
-#include "../src/fxsubmissionorder.h"
+#include "../src/engine/assets/i3dtexturealpha.h"
+#include "../src/engine/render/fxsubmissionorder.h"
 #include <cassert>
 #include <iostream>
 

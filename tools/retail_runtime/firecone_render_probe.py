@@ -106,11 +106,11 @@ class FireConeRenderFixture(FireConeFixture):
 
 
 def compile_submit(output, parts):
-    source = (ROOT / 'src/effect.cpp').read_text()
-    header = (ROOT / 'src/effect.h').read_text()
+    source = (ROOT / 'src/game/effects/effect.cpp').read_text()
+    header = (ROOT / 'src/game/effects/effect.h').read_text()
     first = header.index('    static constexpr int FLAME_COUNT', header.index('class TFireConeEffect_Bespoke'))
     fields = header[first:header.index('    void SimulateTick();', first)]
-    particle = function((ROOT / 'src/effectcomp.h').read_text(), 'struct SParticleSystemInfo') + ';'
+    particle = function((ROOT / 'src/game/effects/effectcomp.h').read_text(), 'struct SParticleSystemInfo') + ';'
     body = function(source, 'void TFireConeEffect_Bespoke::SubmitPool(')
     observed = body.replace('Renderer->SubmitHelperMesh(submit);',
                             'Renderer->slot = int(&particle - pool.particles.data()); Renderer->SubmitHelperMesh(submit);')
@@ -159,7 +159,7 @@ renderer.pool="burst";e.SubmitPool(e.burst_,0,EFxDebugMode::Normal);}
     cpp = output / 'firecone-submit.cpp'
     cpp.write_text(prelude + observed + trailer)
     binary = output / 'firecone-submit'
-    command = ['clang++', '-std=c++17', '-I', str(ROOT / 'thirdparty/handmademath'), '-iquote', str(ROOT / 'src'), str(cpp), str(ROOT / 'src/math3d.cpp'), '-o', str(binary)]
+    command = ['clang++', '-std=c++17', '-I', str(ROOT / 'thirdparty/handmademath'), '-iquote', str(ROOT / 'src'), str(cpp), str(ROOT / 'src/engine/core/math3d.cpp'), '-o', str(binary)]
     result = subprocess.run(command, capture_output=True, text=True)
     (output / 'compile.log').write_text(result.stdout + result.stderr)
     if result.returncode:

@@ -4,7 +4,7 @@ from pathlib import Path
 from speed_profile_contract import ROOT,function
 class NullifierTransition(unittest.TestCase):
  def test_exact_profile_emitter_guard_and_state_restore(self):
-  body=function((ROOT/'src/3dimage.cpp').read_text(),'bool T3DImagery::GetRetailNullifierEmitterAniKey(')
+  body=function((ROOT/'src/game/imagery/3dimage.cpp').read_text(),'bool T3DImagery::GetRetailNullifierEmitterAniKey(')
   source=r'''
 #include <cassert>
 #include <cstdint>

@@ -7,7 +7,7 @@ from speed_profile_contract import function,sha
 
 def run(archive,output):
  profiles=json.loads((ROOT/'tools/retail_runtime/authored_water_profiles.json').read_text())['profiles'];r=exact_guard(archive,output,profiles)
- header=(ROOT/'src/3dimage.h').read_text();generic=function(header,'bool HasRetailStaticParticleProfile(');water=function(header,'bool HasRetailAuthoredWaterProfile(')
+ header=(ROOT/'src/game/imagery/3dimage.h').read_text();generic=function(header,'bool HasRetailStaticParticleProfile(');water=function(header,'bool HasRetailAuthoredWaterProfile(')
  cpp='#include <cassert>\n#include <cstdint>\n#include "staticpartsysprofiles.h"\nstruct T3DImagery{uint32_t static_particles_profile=0;'+generic+'\n'+water+'};\nint main(){T3DImagery im;for(const auto&p:retail_static_particles::profiles){im.static_particles_profile=p.id;for(const auto&q:retail_static_particles::profiles){bool expected=p.id==q.id&&(q.id==0xd0c0f036u||q.id==0xd0c0f037u||q.id==0xd0c0f038u||q.id==0xd0c0f039u);assert(im.HasRetailAuthoredWaterProfile(q.id)==expected);}assert(!im.HasRetailAuthoredWaterProfile(0xdeadbeefu));}im.static_particles_profile=0;for(const auto&p:retail_static_particles::profiles)assert(!im.HasRetailAuthoredWaterProfile(p.id));}\n'
  driver=output/'water-gate.cpp';driver.write_text(cpp);binary=output/'water-gate';command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),str(driver),'-o',str(binary)];q=subprocess.run(command,capture_output=True,text=True);(output/'water-gate-compile.log').write_text(q.stdout+q.stderr)
  if q.returncode:raise RuntimeError('Actual water gate failed compilation')

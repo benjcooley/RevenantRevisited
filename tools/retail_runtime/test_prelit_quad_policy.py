@@ -5,7 +5,7 @@ from speed_profile_contract import function
 ROOT=Path(__file__).resolve().parents[2]
 class PrelitQuad(unittest.TestCase):
  def test_explicit_format_and_default_admissions(self):
-  source=(ROOT/'src/renderer.cpp').read_text();h=(ROOT/'src/renderer.h').read_text();a=h.index('struct SQuadDrawItem\n');record=h[a:h.index('\n};',a)+3];body=function(source,'void TRenderer::SubmitFxQuad(')
+  source=(ROOT/'src/engine/render/renderer.cpp').read_text();h=(ROOT/'src/engine/render/renderer.h').read_text();a=h.index('struct SQuadDrawItem\n');record=h[a:h.index('\n};',a)+3];body=function(source,'void TRenderer::SubmitFxQuad(')
   pre=r'''
 #include <algorithm>
 #include <cassert>

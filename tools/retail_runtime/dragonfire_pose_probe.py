@@ -8,7 +8,7 @@ def run(native,out):
 #include "retailsoftwaretransform.h"
 #include <cstdio>
 int main(){retail_dragonfire::Particle p;hmm_mat4 owner;BuildRetailSoftwareOwner(owner,3185,3185,16,0);while(fread(&p,1,88,stdin)==88){hmm_mat4 local=retail_dragonfire::LocalMatrix(p),world;MtxMultiply(&world,&local,&owner);fwrite(&world,1,64,stdout);}}
-''');binary=out/'pose';subprocess.run(['clang++','-std=c++17','-ffp-contract=off','-iquote',str(ROOT/'src'),'-I',str(ROOT/'thirdparty/handmademath'),str(cpp),str(ROOT/'src/math3d.cpp'),'-o',str(binary)],check=True)
+''');binary=out/'pose';subprocess.run(['clang++','-std=c++17','-ffp-contract=off','-iquote',str(ROOT/'src'),'-I',str(ROOT/'thirdparty/handmademath'),str(cpp),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)],check=True)
  inputs=[];draws=[];identities=[]
  for row in ref['records']:
   if row['state']['flags']&0x1000:assert not row['draws'];continue
@@ -28,7 +28,7 @@ int main(){retail_dragonfire::Particle p;hmm_mat4 owner;BuildRetailSoftwareOwner
    e=abs(a-b);maximum=max(maximum,e)
    if e>1e-4:errors.append((identities[i],j,a,b))
  assert not errors,errors[:10]
- report=dict(status='pass',draws=len(draws),fields=len(draws)*16,max_float_error=maximum,native_manifest_sha256=hashlib.sha256(native.read_bytes()).hexdigest(),pose_sha256=hashlib.sha256((ROOT/'src/dragonfirepose.h').read_bytes()).hexdigest(),scope=__doc__)
+ report=dict(status='pass',draws=len(draws),fields=len(draws)*16,max_float_error=maximum,native_manifest_sha256=hashlib.sha256(native.read_bytes()).hexdigest(),pose_sha256=hashlib.sha256((ROOT/'src/game/effects/dragonfirepose.h').read_bytes()).hexdigest(),scope=__doc__)
  (out/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report))
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--native',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.native,a.output)

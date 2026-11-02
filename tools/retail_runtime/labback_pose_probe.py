@@ -16,7 +16,7 @@ printf("%d %d",o,t);for(float v:{p.X,p.Y,p.Z,r.X,r.Y,r.Z,s.X,s.Y,s.Z})printf(" %
 fprintf(stderr,"default_unchanged=2000 inclusive_changed=%d\n",changed);assert(changed>0);}
 '''
 def run(executable,archive,output):
- output.mkdir(parents=True,exist_ok=False);source=(ROOT/'src/3dimage.cpp').read_text();body=(ROOT/'src/3dimagebody.h').read_text();render=(ROOT/'src/render3d_types.h').read_text()
+ output.mkdir(parents=True,exist_ok=False);source=(ROOT/'src/game/imagery/3dimage.cpp').read_text();body=(ROOT/'src/engine/assets/3dimagebody.h').read_text();render=(ROOT/'src/engine/render/render3d_types.h').read_text()
  signatures=('static inline int32_t SkipAniKey32(','static inline void GetAniKey32(','bool T3DImagery::GetUninterpolatedAniKey(','static void MakeMatrix(');methods={s:function(source,s)for s in signatures}
  prefixes=('SMALLKEY','ANIKEY32_','ANIFLAG32_','ANICODE32_','ANIKEY_POSSCALE','ANIKEY_ANGSCALE','I3D_ANIKEY32');constants='\n'.join(l for l in body.splitlines()if l.startswith('#define ')and any(l.startswith('#define '+p)for p in prefixes))
  records='\n'.join(function(t,s)+';'for t,s in((body,'struct SAniKey32\n'),(body,'struct S3DFace\n'),(render,'struct S3DVertex\n'),(render,'struct SRenderColor\n'),(body,'struct S3DMaterial\n')))
@@ -25,7 +25,7 @@ def run(executable,archive,output):
  void*GetBody(){assert(false);return nullptr;}bool InitializeMesh(S3DImageryBody*){assert(false);return false;}''')
  prelude=PRELUDE.replace('struct hmm_vec3 {float X=0,Y=0,Z=0;};','#include "math3d.h"\n#include "speedauthoredmatrix.h"')
  driver=output/'pose.cpp';driver.write_text(prelude+'\n'+constants+'\n'+records+'\n'+cls+'\n'+'\n'.join(methods.values())+'\n'+MAIN);binary=output/'pose'
- command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(driver),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+ command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(driver),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
  q=subprocess.run(command,capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr)
  if q.returncode:raise RuntimeError('Actual source decoder compile failed')
  with zipfile.ZipFile(archive)as z:data=z.read(next(n for n in z.namelist()if n.lower()=='imagery/misc/labback.i3d'))
@@ -42,7 +42,7 @@ def run(executable,archive,output):
   if not accepted:continue
   original=struct.unpack('<16f',v.uc.mem_read(f.animobjs[o]+0x58,64));delta=max(abs(a-b)for a,b in zip(original,current[9:]));matrix_max=max(matrix_max,delta);matrix_fields+=16
   if delta>2e-4:errors.append(dict(object=o,tick=t,matrix_error=delta))
- report=dict(status='fail'if errors else'pass',key_fields=key_fields,matrix_fields=matrix_fields,max_key_error=key_max,max_matrix_error=matrix_max,errors=errors,controls=q.stderr,asset_sha256=sha(data),source_spans={s:sha(b.encode())for s,b in methods.items()},source_decoder_sha256=sha((ROOT/'src/3dimage.cpp').read_bytes()),driver_sha256=sha(driver.read_bytes()),sanitizers='ASan/UBSan',accepted=False)
+ report=dict(status='fail'if errors else'pass',key_fields=key_fields,matrix_fields=matrix_fields,max_key_error=key_max,max_matrix_error=matrix_max,errors=errors,controls=q.stderr,asset_sha256=sha(data),source_spans={s:sha(b.encode())for s,b in methods.items()},source_decoder_sha256=sha((ROOT/'src/game/imagery/3dimage.cpp').read_bytes()),driver_sha256=sha(driver.read_bytes()),sanitizers='ASan/UBSan',accepted=False)
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],key_fields,matrix_fields,len(errors));return report
 if __name__=='__main__':
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('executable',type=Path);p.add_argument('--archive',type=Path,default=ROOT/'data/imagery.rvi');p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.executable,a.archive,a.output)

@@ -21,7 +21,7 @@ def run(executable,archive,output):
  with zipfile.ZipFile(archive)as z:
   ns={n.lower():n for n in z.namelist()};data=z.read(ns['imagery/magic/yenergy.i3d'])
  if sha(data)!='89f1f9e88c8d64ba1278f54d3bc7a10275204feb7463c4ee3b9145dff1cd9be2':raise ValueError('Exact YEnergy fixture changed')
- base=read_asset(data);source=output/'parser.cpp';source.write_text(DRIVER);binary=output/'parser';command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/partsysdefinition.cpp'),'-o',str(binary)];p=subprocess.run(command,text=True,capture_output=True);(output/'compile.log').write_text(p.stdout+p.stderr)
+ base=read_asset(data);source=output/'parser.cpp';source.write_text(DRIVER);binary=output/'parser';command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/engine/fx/partsysdefinition.cpp'),'-o',str(binary)];p=subprocess.run(command,text=True,capture_output=True);(output/'compile.log').write_text(p.stdout+p.stderr)
  if p.returncode:raise RuntimeError('Production parser compile failed')
  rows=[];errors=[]
  for name,literal in CASES:
@@ -41,7 +41,7 @@ def run(executable,archive,output):
   if modern_accept:equal=equal and values[2:5]==['0','1','#particle']and float(values[5])==45
   if not equal:errors.append(name)
   rows.append(dict(name=name,literal=literal,parameters=tag['parameters'],native_accepted=accepted,native_size=value,native_events=events,production_accepted=modern_accept,production_size=modern,equal=equal))
- report=dict(status='fail'if errors else'pass',errors=errors,cases=rows,source_sha256=sha((ROOT/'src/partsysdefinition.cpp').read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),driver_sha256=sha(source.read_bytes()),binary_sha256=sha(binary.read_bytes()),original_executable_sha256=sha(executable.read_bytes()),sanitizers='ASan/UBSan',accepted=False,new_rendered_ab_cases=0,scope='Nine explicit quoted-name/decimal-integer diagnostics on exact YEnergy object resources. Whole native tokenization/ParseItem/Initialize vs actual production parser. Original404432 tests numeric token8,404443 copies integer view to controller+108; unchanged downstream PPS45 proves whole parser progress. No diagnostic tag is credited as a shipped effect.')
+ report=dict(status='fail'if errors else'pass',errors=errors,cases=rows,source_sha256=sha((ROOT/'src/engine/fx/partsysdefinition.cpp').read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),driver_sha256=sha(source.read_bytes()),binary_sha256=sha(binary.read_bytes()),original_executable_sha256=sha(executable.read_bytes()),sanitizers='ASan/UBSan',accepted=False,new_rendered_ab_cases=0,scope='Nine explicit quoted-name/decimal-integer diagnostics on exact YEnergy object resources. Whole native tokenization/ParseItem/Initialize vs actual production parser. Original404432 tests numeric token8,404443 copies integer view to controller+108; unchanged downstream PPS45 proves whole parser progress. No diagnostic tag is credited as a shipped effect.')
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');return report
 
 if __name__=='__main__':

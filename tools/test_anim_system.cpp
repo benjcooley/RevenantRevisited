@@ -4,7 +4,7 @@
 // *                test_anim_system.cpp - Animation Tests                  *
 // *************************************************************************
 
-#include "../src/animsystem.h"
+#include "../src/engine/scene/animsystem.h"
 
 #include <cassert>
 #include <cmath>

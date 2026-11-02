@@ -66,7 +66,7 @@ class WaterFixture(WaterfallFixture):
 
 
 def production_spans():
-    source=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     initialize=span(source,'void TWaterEffect_Bespoke::Initialize(','TWaterEffect_Bespoke*\nTWaterEffect_Bespoke::SpawnForTest_BESPOKE(') if 'void TWaterEffect_Bespoke::Initialize('in source else span(source,'    w->numdrops_ = kWaterMaxDrops;','    log_info("[water] SpawnForTest_BESPOKE:')
     tick=span(source,'void TWaterEffect_Bespoke::TickAndSubmitForTest_BESPOKE(','// wave-bespoke-W2A')
     advance=span(source,'void TWaterEffect_Bespoke::Advance(','void TWaterEffect_Bespoke::SetNativeDomain(') if 'void TWaterEffect_Bespoke::Advance('in source else ''
@@ -77,7 +77,7 @@ def production_spans():
             'void TWaterEffect_Bespoke::Initialize('if 'void TWaterEffect_Bespoke::Initialize('in source else 'TWaterEffect_Bespoke::SpawnForTest_BESPOKE('),
         runtime_component=span(source,'class TLiteralWaterReferenceComponent final','class TLiteralWaterAnimatorBuilder final')if'class TLiteralWaterReferenceComponent final'in source else'',
         initialize=initialize,advance_submit=advance,tick_submit=tick,
-        math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
+        math=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text())
 
 
 def build_port(output,asset,inputs,ticks):
@@ -104,7 +104,7 @@ struct Key{TTextureHandle texture{};uint8_t blend{},depth_mode{};uint16_t pipeli
 struct SBillboardDrawItem{float size_wu[2]{},color_rgba[4]{},uv_rect[4]{},world_pos[3]{};Key key;EFxLightMode light_mode{};EFxBillboardOrientation orientation{};EFxDebugMode debug_mode{};};
 struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};Key key;EFxLightMode light_mode{};EFxDebugMode debug_mode{};int retail_texture{};};
 using MeshHandle=uint64_t;struct TRenderer{bool UsesRetailSoftwareMeshLighting(){return false;}void ReleaseMeshAssetRef(MeshHandle){}std::vector<SBillboardDrawItem>billboards;std::vector<SQuadDrawItem>quads;void SubmitFxBillboard(const SBillboardDrawItem&i){billboards.push_back(i);}void SubmitFxQuad(const SQuadDrawItem&i){quads.push_back(i);}};TRenderer renderer;TRenderer*Renderer=&renderer;
-struct TObjectImagery{virtual~TObjectImagery()=default;};struct SObjectDef{};struct World{hmm_mat4 matrix;World(){MtxClear(&matrix);}const hmm_mat4&Matrix()const{return matrix;}};
+struct TObjectImagery{virtual~TObjectImagery()=default;};struct SObjectState{};struct World{hmm_mat4 matrix;World(){MtxClear(&matrix);}const hmm_mat4&Matrix()const{return matrix;}};
 constexpr int OBJCLASS_EFFECT=25;constexpr uint32_t kLiteralWaterId=0x1903abcd;
 struct TObjectInstance{int offscreen_calls=0;virtual void OffScreen(){++offscreen_calls;}};
 struct TFlipbookBillboardComponent{TObjectInstance*owner=nullptr;virtual~TFlipbookBillboardComponent()=default;virtual const char*ComponentName()const{return"stub";}virtual void Submit(TRenderer&,const TObjectInstance&)const{};virtual void OnUpdate(){};TObjectInstance*Owner()const{return owner;}EFxDebugMode DebugMode()const{return EFxDebugMode::Normal;}void Tick(){OnUpdate();}void Configure(TTextureHandle,int,int,int,int,int,float,float,bool,bool){}};
@@ -113,7 +113,7 @@ struct T3DImagery:TObjectImagery{int NumMaterials()const{return1;}void GetObject
 namespace literal_water_mesh{bool Matches(T3DImagery*){return false;}MeshHandle Cache(TRenderer&,T3DImagery*,TTextureHandle){return 0;}void Submit(TRenderer&,MeshHandle,const hmm_mat4&,bool){throw std::runtime_error("Normal-lit path requires actual Metal proof");}}
 T3DImagery imagery;bool imagery_ready=true;std::vector<S3DVertex>authored;
 bool LoadWaterQuad(T3DImagery*,int,std::vector<S3DVertex>&vertices,TTextureHandle&texture){if(!imagery_ready)return false;vertices=authored;texture=1;return true;}
-struct TEffect:TObjectInstance{World world;bool has_identity=false;uint32_t object_id=kLiteralWaterId,flags=0;int map_index=1,objclass=-1;std::vector<std::unique_ptr<TFlipbookBillboardComponent>>components;TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual~TEffect()=default;void KillThisEffect(){flags|=OF_KILL;}void SetCommandDone(bool){};uint32_t Flags()const{return flags;}uint32_t ObjId()const{if(!has_identity)throw std::runtime_error("Preview has no class/type identity");return object_id;}int GetMapIndex()const{return map_index;}int ObjClass()const{return objclass;}TObjectImagery*GetImagery()const{return&imagery;}void AddComponent(std::unique_ptr<TFlipbookBillboardComponent>c){c->owner=this;components.push_back(std::move(c));}const S3DPoint&Pos()const{static S3DPoint p{};return p;}const World&Transform()const{return world;}};
+struct TEffect:TObjectInstance{World world;bool has_identity=false;uint32_t object_id=kLiteralWaterId,flags=0;int map_index=1,objclass=-1;std::vector<std::unique_ptr<TFlipbookBillboardComponent>>components;TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};virtual~TEffect()=default;void KillThisEffect(){flags|=OF_KILL;}void SetCommandDone(bool){};uint32_t Flags()const{return flags;}uint32_t ObjId()const{if(!has_identity)throw std::runtime_error("Preview has no class/type identity");return object_id;}int GetMapIndex()const{return map_index;}int ObjClass()const{return objclass;}TObjectImagery*GetImagery()const{return&imagery;}void AddComponent(std::unique_ptr<TFlipbookBillboardComponent>c){c->owner=this;components.push_back(std::move(c));}const S3DPoint&Pos()const{static S3DPoint p{};return p;}const World&Transform()const{return world;}};
 struct TTime{static constexpr double LegacyFrameSeconds=1.0/24.0;static double DeltaTime(){return LegacyFrameSeconds;}};
 void log_info(const char*,...){};
 std::ifstream rng;int rng_count=0;int random(int low,int high){int a,b,v;if(!(rng>>a>>b>>v)||a!=low||b!=high)throw std::runtime_error("Water native/production RNG request order mismatch");++rng_count;return v;}
@@ -173,7 +173,7 @@ for(int tick=0;tick<=TICKS;++tick){renderer.billboards.clear();renderer.quads.cl
 '''.replace('SETUP',setup).replace('INITIALIZE',initializer).replace('CLOCK_CHECK',clock_check).replace('RUNTIME','runtime'if has_initialize else'false').replace('TICKS',str(ticks)).replace('FIRST_SUBMIT','effect.Submit(EFxDebugMode::Normal);'if parts['advance_submit']else'')
     prelude=prelude.replace('return1','return 1')
     generated=output/'water-port-component.cpp';generated.write_text('\n'.join((prelude,parts['particle'],types,parts['constants'],helpers,parts['runtime_component'],parts['initialize']if has_initialize else'',parts['advance_submit'],parts['tick_submit'],trailer)))
-    binary=output/'water-port-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'water-port-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     compile_result=subprocess.run(command,capture_output=True,text=True);(output/'port-compile.log').write_text(compile_result.stdout+compile_result.stderr)
     if compile_result.returncode:raise RuntimeError('Water production compile failed; see port-compile.log')
     result=subprocess.run([str(binary),str(inputs)],capture_output=True,text=True);(output/'port-trace.txt').write_text(result.stdout);(output/'port-run.log').write_text(result.stderr)

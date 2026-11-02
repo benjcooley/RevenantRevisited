@@ -16,7 +16,7 @@ while(scanf("%d %d %d %d %f %f %f %f %d %d %d",&mode,&frame,&spin,&face,&scale,&
  hmm_mat4 owner;BuildRetailSoftwareOwner(owner,x,y,z,face);hmm_vec3 pos{px,py,pz};auto q=mode?fireball_quad::BuildBurstGlow(v,frame,scale,pos,owner):fireball_quad::Build(v,frame,spin,face,scale,pos,owner);
  for(auto&p:q.position)printf("%.9g %.9g %.9g ",p.X,p.Y,p.Z);puts("");}}
 ''')
-cmd=['clang++','-std=c++17','-O1','-I',str(R/'thirdparty/handmademath'),'-iquote',str(R/'src'),str(s),str(R/'src/fireballquad.cpp'),str(R/'src/math3d.cpp'),'-o',str(P/'geometry')];subprocess.check_call(cmd)
+cmd=['clang++','-std=c++17','-O1','-I',str(R/'thirdparty/handmademath'),'-iquote',str(R/'src'),str(s),str(R/'src/game/effects/fireballquad.cpp'),str(R/'src/engine/core/math3d.cpp'),'-o',str(P/'geometry')];subprocess.check_call(cmd)
 with zipfile.ZipFile(R/'data/imagery.rvi')as z:asset=z.read('Imagery/Magic/Yfireball.I3D' if args.effect=='YFireBall' else 'Imagery/Magic/newfireball.i3d')
 from fireball_visual_reference import read_fireball
 raw=bytes.fromhex(read_fireball(asset)['objects'][0]['vertex_hex'])
@@ -40,6 +40,6 @@ for exp,line in zip(expected,actual):
   if exp['kind']=='quad':maximum=max(maximum,delta)
   if delta>(.0002 if exp['kind']=='quad'else 0):errors.append(dict(**exp,actual=vals));break
 assert len(actual)==len(expected) and len(expected)>0
-report=dict(effect=args.effect,fireball_palette_control=args.fireball_palette_control,asset_sha256=sha(asset),status='pass' if not errors else 'differences_found',checks=checks,packets=len(expected),maximum_position_error=maximum,errors=errors,native_trace_sha256=sha(args.trace.read_bytes()),source_sha256={f:sha((R/f).read_bytes())for f in('src/fireballquad.cpp','src/fireballring.h')});(P/'geometry-report.json').write_text(json.dumps(report,indent=2));print('checks',checks,'packets',len(expected),'max',maximum,'errors',len(errors));print(errors[:1])
+report=dict(effect=args.effect,fireball_palette_control=args.fireball_palette_control,asset_sha256=sha(asset),status='pass' if not errors else 'differences_found',checks=checks,packets=len(expected),maximum_position_error=maximum,errors=errors,native_trace_sha256=sha(args.trace.read_bytes()),source_sha256={f:sha((R/f).read_bytes())for f in('src/game/effects/fireballquad.cpp','src/game/effects/fireballring.h')});(P/'geometry-report.json').write_text(json.dumps(report,indent=2));print('checks',checks,'packets',len(expected),'max',maximum,'errors',len(errors));print(errors[:1])
 
 raise SystemExit(bool(errors))

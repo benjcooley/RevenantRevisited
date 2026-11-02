@@ -9,7 +9,7 @@ from pathlib import Path
 
 def run(trace,output):
     output.mkdir(parents=True,exist_ok=False)
-    source=Path(__file__).resolve().parents[2]/'src/renderer.cpp'
+    source=Path(__file__).resolve().parents[2]/'src/engine/render/renderer.cpp'
     shader=source.read_text()
     coefficients=(1.0101525783538818,.5050762891769409,1.237179160118103,
                   .8748177289962769,.7142857909202576)

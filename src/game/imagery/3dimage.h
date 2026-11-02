@@ -1,0 +1,786 @@
+// *************************************************************************
+// *                         Cinematix Revenant                            *
+// *                    Copyright (C) 1998 Cinematix                       *
+// *                 3dimage.h - 3D Object Include File                    *
+// *                                                                       *
+// *  Ported (2026): D3D3-era handle/surface types have been replaced with *
+// *  render3d_types.h vocabulary. Material and texture handles are now    *
+// *  engine-issued ids (TMaterialHandle / TTextureHandle) that the        *
+// *  renderer maps to backend GPU resources + material uniform slots. Per-*
+// *  imagery execute-buffer caching is gone (see 3dscene.h note).         *
+// *************************************************************************
+
+#pragma once
+#include "game/effects/dragonattackcache.h"
+
+#include <array>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "game/app/revenant.h"
+
+#include "engine/assets/3dimagebody.h"
+#include "game/world/3dscene.h"
+#include "engine/render/display.h"
+#include "game/object/object.h"
+#include "engine/core/parse.h"
+#include "engine/fx/partsysdefinition.h"
+#include "engine/render/render3d_types.h"
+#include "engine/assets/resource.h"
+#include "engine/scene/transform.h"
+#include "game/effects/legacy/warp_atlas.h"
+
+// **************************************************************
+// * T3DImagery - Shared imagery resource for a given 3D object *
+// **************************************************************
+
+_CLASSDEF(T3DImagery)
+_CLASSDEF(T3DAnimator)
+_CLASSDEF(T3DImageryRes)
+class TRenderer;
+
+_STRUCTDEF(S3DMat)
+struct S3DMat
+{
+    S3DMaterial     matdesc;     // Color properties (diffuse/ambient/specular/etc)
+    TMaterialHandle hmaterial;   // Engine-issued material id
+    int32_t         texture;     // Linked texture index (-1 if none)
+};
+typedef TVirtualArray<S3DMat, 4, 4> T3DMatArray;
+
+_STRUCTDEF(S3DTex)
+struct S3DTex
+{
+    SSurfaceDesc    desc;         // Source surface description
+    int32_t         numframes;    // Number of frames
+    int32_t         framenum;     // Current frame index
+
+    TTextureHandle* framehtexs;   // Per-frame engine texture handles
+
+    bool            copyframes;   // Legacy semantic: current frame is selected
+                                  // by htexture, never by a direct GPU object.
+
+    TTextureHandle  htexture;     // Current frame engine texture handle
+
+    // S3DTex is stored in TVirtualArray which copies elements via memcpy
+    // on resize — so this struct stays trivially-copyable. The i3ddump
+    // tool retains decoded RGBA bytes via T3DImagery::dump_textures, not
+    // here.
+};
+typedef TVirtualArray<S3DTex, 4, 4> T3DTexArray;
+
+_STRUCTDEF(S3DObj)
+struct S3DObj
+{
+    char name[RESNAMELEN];
+    int32_t *parent;                        // Parent object for each state
+    int32_t numverts;
+    int32_t startvert;
+    int32_t numfaces;
+    int32_t startface;
+    int32_t *texfaces;                      // 0 is no texture, 1 is texture 0, etc.
+    int32_t *numtexfaces;
+    int32_t material;
+    int32_t *numanikeys;
+    void **anikeys;
+};
+typedef TVirtualArray<S3DObj, 16, 16> T3DObjArray;
+
+_STRUCTDEF(S3DTag)
+struct S3DTag
+{
+    int32_t state;
+    int32_t frame;
+    char *name;
+    char *str;
+    S3DTag() { state = frame = 0; name = str = nullptr; }
+    S3DTag(int32_t pstate, int32_t pframe, char *pname, char *pstr)
+      { state = pstate; frame = pframe; name = strdup(pname); str = strdup(pstr); }
+    ~S3DTag() { if (name) free(name); if (str) free(str); }
+};
+typedef TVirtualArray<S3DTag, 16, 16> T3DTagArray;
+
+_STRUCTDEF(S3DImageryIcons)
+struct S3DImageryIcons
+{
+    TBitmap* invitem;
+    TAnimation* invanim;
+};
+
+#define MAX3DANIMOBJECTS 256
+
+#define OBJ3D_HIDE      0x000001    // Hide this object
+#define OBJ3D_ANIMTRACK 0x000002    // Override objects default anim track with given track
+#define OBJ3D_POS1      0x000004    // Override object animation - Sets object position first
+#define OBJ3D_POS2      0x000008    // Sets object position second (after either rot or scl)
+#define OBJ3D_POS3      0x00000C    // Sets object position third (after both rot and scl)
+#define OBJ3D_POSMASK   0x00000C    // Pos override mask (2 bits)
+#define OBJ3D_ROT1      0x000010    // Override object animation - Sets object rotation first
+#define OBJ3D_ROT2      0x000020    // Sets object rotation second (after either pos or scl)
+#define OBJ3D_ROT3      0x000030    // Sets object rotation third (after both pos and scl)
+#define OBJ3D_ROTMASK   0x000030    // Rot override mask (2 bits)
+#define OBJ3D_SCL1      0x000040    // Override objects animation - Sets object scale first
+#define OBJ3D_SCL2      0x000080    // Sets object scale second (after either rot or pos)
+#define OBJ3D_SCL3      0x0000C0    // Sets object scale third (after both rot and pos)
+#define OBJ3D_SCLMASK   0x0000C0    // Scale override mask (2 bits)
+#define OBJ3D_MATRIX    0x000100    // Override object matrix with given matrix (ignores anikey, pos, rot, and scl)
+#define OBJ3D_ADDTOANI  0x000200    // Adds above transforms to default obj anim (otherwise overrides)
+#define OBJ3D_PRIMTYPE  0x000400    // Override objects default primitive type with given type
+#define OBJ3D_VERTTYPE  0x000800    // Override objects default vertex type with given type
+#define OBJ3D_VERTONLY  0x001000    // Ignores face list (uses DrawPrim insted of DrawIndexPrim)
+#define OBJ3D_VERTS     0x002000    // Overrides objects default vertex list stored in T3DImagery
+#define OBJ3D_COPYVERTS 0x004000    // Causes NewObject() to allocate local copy of vertices for this obj
+#define OBJ3D_OWNSVERTS 0x008000    // Set if object should delete its own vertex buffer when deleted
+#define OBJ3D_FACES     0x010000    // Overrides objects default face list stored in T3DImagery
+#define OBJ3D_COPYFACES 0x020000    // Causes NewObject() to allocate local copy of faces for this obj
+#define OBJ3D_OWNSFACES 0x040000    // Set if object should delete its own face buffer when deleted
+#define OBJ3D_MAT       0x080000    // Overrides objects default material handle
+#define OBJ3D_TEXFRAME  0x100000    // Overrides objects default texture frame number
+#define OBJ3D_TEX       0x200000    // Overrides objects default texture handles
+#define OBJ3D_ABSPOS    0x400000    // Treats the position as absolute (already converted to world space)
+#define OBJ3D_PARENT    0x800000    // Override parent pointer
+#define OBJ3D_BLEND     0x1000000   // Retail per-object blend override
+#define OBJ3D_GOLD_CAMERA_FACING 0x20000000 // Exact Gold profile's recovered '#' branch
+
+#define OBJ3D_RENDERED  0x80000000  // Used internally to indicate if object was rendered
+
+// Retail draw blend modes for I3D objects. A "blendcont" tag names one for
+// every object of its state (parsed by 0x00405770, applied by 0x00405940);
+// the draw sets the matching render states (0x00417d60). "Lit" modes
+// modulate the texture by the object's fixed-function lighting; the others
+// draw the texture alone. The lowest set mode bit wins.
+inline constexpr uint32_t BLEND3D_NORMAL   = 0x01;  // "normal": opaque, lit, back faces culled
+inline constexpr uint32_t BLEND3D_ALPHA    = 0x02;  // "alpha": texture alpha blend
+inline constexpr uint32_t BLEND3D_LITALPHA = 0x04;  // "litalpha": alpha blend, lit
+inline constexpr uint32_t BLEND3D_ADD      = 0x08;  // "add": ONE, ONE
+inline constexpr uint32_t BLEND3D_LITADD   = 0x10;  // "litadd": ONE, ONE, lit
+inline constexpr uint32_t BLEND3D_ALPHAADD = 0x20;  // "alphaadd": SRCALPHA, ONE
+inline constexpr uint32_t BLEND3D_NOZCHECK = 0x40;  // the "...z" names: no depth test
+inline constexpr uint32_t BLEND3D_ZWRITE   = 0x80;  // writes depth (no tag sets it)
+
+_STRUCTDEF(S3DAnimObj)
+struct S3DAnimObj
+{
+    int32_t       flags     = 0;
+    int32_t       objnum    = 0;                        // Always set (not an override)
+    S3DAnimObj*   parent    = nullptr;                  // Pointer to a parent object (concatenates matrices)
+    int32_t       animtrack = 0;                        // Borrow another object's anim track
+    hmm_vec3      pos       { 0.0f, 0.0f, 0.0f };       // Used with OBJ3D_POS / ROT / SCL
+    hmm_vec3      rot       { 0.0f, 0.0f, 0.0f };
+    hmm_vec3      scl       { 1.0f, 1.0f, 1.0f };       // Identity scale, not zero -- degenerate scale would
+                                                        // make subsequent MakeMatrix output collapse the bone.
+    hmm_mat4      matrix    {};                         // Directly via OBJ3D_MATRIX, or derived from pos/rot/scl
+    TTransform    transform;                            // Per-bone spatial transform; parent chain wires to
+                                                        // parent->transform at setup. Per-frame: animation
+                                                        // writes SetLocalPos / SetLocalRot / SetLocalScl,
+                                                        // then root-level RefreshHierarchy() resolves all
+                                                        // globals top-down. Mesh extraction reads
+                                                        // transform.Matrix(). Replaces the legacy `matrix`
+                                                        // / `parent`-based manual parent compose.
+    ERender3DPrim primtype  = ERender3DPrim::TriangleList; // Topology
+    ERender3DVertex verttype = ERender3DVertex::Vertex; // Layout selector for `verts`
+    int32_t       numverts  = 0;
+    void*         verts     = nullptr;                  // Points at array of S3DVertex / S3DLVertex / S3DTLVertex
+                                                        // (based on `verttype`)
+    int32_t       numfaces  = 0;
+    S3DFace*      faces     = nullptr;
+    int32_t       texfaces[MAXTEXTURES + 1]    = {};    // Start face for each texture (index 0 is no texture)
+    int32_t       numtexfaces[MAXTEXTURES + 1] = {};    // Num faces to render for each texture
+    int32_t       textureframe[MAXTEXTURES + 1]= {};    // Frame number for animating textures
+    TTextureHandle htextures[MAXTEXTURES]      = {};    // Texture handles per texture slot
+    TMaterialHandle hmaterial                  = {};    // Material handle (only 1 per obj)
+    uint32_t      blend     = 0;                       // Retail blendcont / particle draw mode
+};
+typedef TPointerArray<S3DAnimObj, 16, 16> T3DAnimObjArray;
+
+// The sample a tag sound of `inst` plays for `name` (retail 0x0040af50):
+// false for none. T3DImagery::PlaySound's; public for the combat kata.
+bool ResolveTagSound(TObjectInstance& inst, const char* name, std::string& sample);
+
+class T3DImagery : public TObjectImagery
+{
+  protected:
+    bool meshinitialized;
+    bool hastextures;
+
+    int32_t baseobj;
+
+    uint32_t flags;                       // Flags for this 3D object
+    uint32_t version;
+
+    int32_t numverts;                     // Global retail-style vertex list
+    S3DVertex ***verts;
+
+    int32_t numfaces;                     // Global face list
+    S3DFace *faces;
+
+    T3DMatArray materials;                // Object resource arrays
+    T3DTexArray textures;
+    T3DObjArray objects;
+    T3DTagArray tags;
+    struct SScrollTexTrack
+    {
+        int32_t state = 0, tagframe = 0, object = -1;
+        float du = 0.0f, dv = 0.0f;
+    };
+    std::vector<SScrollTexTrack> scrolltex_tracks;
+    void InitializeScrollTexTracks(S3DImageryBody* mesh);
+
+    // Shared metadata only. Particle state belongs to each live animator,
+    // never the imagery resource used by many saved map objects.
+    struct SPartSysTrack
+    {
+        int32_t state = 0, tagframe = 0, prototype = -1, texture_slot = -1;
+        authored_partsys::Definition definition;
+        std::vector<int32_t> emitters;
+        std::array<S3DVertex, 4> vertices{};
+        std::string diagnostic;
+        bool supported = false;
+    };
+    std::vector<SPartSysTrack> partsys_tracks;
+    bool gold_partsys_profile = false;
+    bool might_partsys_profile = false;
+    bool immortalmight_partsys_profile = false;
+    bool fmastery_partsys_profile = false;
+    bool speed_partsys_profile = false;
+    bool quicksilver_partsys_profile = false;
+    bool lightstrip_partsys_profile = false;
+    bool jhagaattack_partsys_profile = false;
+    bool headfireball_partsys_profile = false;
+    bool funnel_partsys_profile = false;
+    bool ValidateRetailLightStripProfile();
+    bool ValidateRetailJhagaAttackProfile();
+    bool ValidateRetailHeadFireBallProfile();
+    bool ValidateRetailFunnelProfile();
+    bool comet_partsys_profile=false;
+    bool fgeyser_partsys_profile=false;
+    bool dust_partsys_profile=false;
+    bool poison_partsys_profile=false;
+    bool ValidateRetailCometProfile();
+    bool ValidateRetailFGeyserProfile();
+    bool ValidateRetailDustProfile();
+    bool ValidateRetailPoisonProfile();
+    uint32_t static_particles_profile = 0;
+    uint32_t ValidateRetailStaticParticleProfile();
+    bool ValidateRetailSpeedPartSysProfile();
+    bool ValidateRetailQuicksilverPartSysProfile();
+    bool ValidateRetailFmasteryPartSysProfile();
+    bool ValidateRetailImmortalmightPartSysProfile();
+    bool ValidateRetailMightPartSysProfile();
+    bool retail_punch_keys = false;
+    bool retail_mpappear_start_profile = false;
+    bool retail_shadowfist_profile = false;
+    bool retail_warriorborn_profile = false;
+    bool retail_teleportation_profile = false;
+    bool ValidateRetailTeleportationProfile();
+    bool ValidateRetailWarriorbornProfile();
+    bool ValidateRetailShadowfistProfile();
+    bool ValidateRetailMPAppearStartProfile();
+    bool ValidateRetailPunchProfile();
+    bool combatflash_partsys_profile = false;   // all 18 Impact states (combatflashprofile.h)
+    bool ValidateGoldPartSysProfile();
+    bool ValidateCombatFlashPartSysProfile();
+    void InitializePartSysTracks();
+    friend class T3DAnimator;
+    std::vector<uint32_t> stateblend;     // Draw blend per state from its "blendcont" tag (BLEND3D_*; 0 = none)
+
+    int32_t numframes;                    // Mesh/Ani/Icon/etc. arrays
+    SMotionData **motion;
+    S3DImageryIcons *icons;
+    unsigned char *hierarchy;
+
+  // State data for rendering
+    int32_t prevstate;                    // Used to control interpolation between states
+    int32_t prevframe;                    // Last frame drawn in previous state
+
+  public:
+    T3DImagery(int32_t imageid);
+    virtual ~T3DImagery();
+
+    // When true at LoadImagery time, the texture loader retains the decoded
+    // RGBA pixel bytes per frame in dump_textures so the i3ddump tool can
+    // write them out as PNG. Off by default — zero cost when not set.
+    // Toggle from a CLI/test-mode init before invoking FindImagery.
+    static bool g_retain_decoded_rgba;
+
+    // Per-texture, per-frame decoded RGBA bytes. Only populated when
+    // g_retain_decoded_rgba is true at LoadTexture time. Indexed as
+    // dump_textures[texture_index][frame_index] = width*height*4 bytes.
+    // Lives on T3DImagery (not S3DTex) because S3DTex is stored in
+    // TVirtualArray which copies via memcpy and would corrupt a
+    // std::vector member.
+    std::vector<std::vector<std::vector<uint8_t>>> dump_textures;
+
+    bool OldInitializeMesh(SOld3DImageryBody* mesh);
+      // Initializes old style 3DImageBody mesh
+    bool InitializeMesh(PS3DImageryBody mesh);
+      // Creates renderer objects from the given S3DMesh pointer
+    void ClearMesh();
+      // Deletes 3D objects from the given mesh pointer
+    bool MeshInitialized() const { return meshinitialized; }
+    virtual bool Restore();
+
+  private:
+    void ResolveStateBlends();
+      // Fills stateblend from the "blendcont" tags
+
+  public:
+
+  // GENERAL NOTE: T3DImagery is instantiated once per imagery file and shared
+  // by every T3DAnimator built from it.  Vertices, faces, objects, materials,
+  // and textures are shared state — mutating them changes every animator.
+
+  // Vertex/Face Functions (Note: vertices can't be added or deleted by outside program)
+    int32_t NumVerts();
+    void GetVerts(void* vertbuf, int32_t state = 0, int32_t frame = 0,
+        ERender3DVertex verttype = ERender3DVertex::Vertex, int32_t beg = 0, int32_t len = -1);
+      // Copies a single frame of vertices (default is state 0, frame 0, all verts).
+      // Vertex returns stored retail-style S3DVertex records; Lit/TL are adapted.
+    int32_t NumObjVerts(int32_t objnum);
+    void GetObjVerts(int32_t objnum, void* vertbuf, int32_t state = 0, int32_t frame = 0,
+        ERender3DVertex verttype = ERender3DVertex::Vertex);
+    void GetObjectBounds(int32_t objnum, hmm_vec3& low, hmm_vec3& high, int32_t state = 0, int32_t frame = 0);
+      // The object's vertex bounds (0x00408c20); +-1e6 when it has none
+    int32_t NumFaces();
+    void GetFaces(S3DFace* facesbuf);
+    int32_t NumObjFaces(int32_t objnum);
+    void GetObjFaces(int32_t objnum, S3DFace* facesbuf, int32_t *texfaces = nullptr, int32_t *numtexfaces = nullptr);
+
+  // Object functions (Note: objects can't be added or deleted by outside program)
+  private:
+    int32_t AddObject(S3DObj* obj);
+    void RemoveObject(int32_t objnum);
+    void ClearObjects();
+  public:
+    int32_t NumObjects();
+    bool HasRetailCometProfile() const { return comet_partsys_profile; }
+    bool HasRetailFGeyserProfile() const { return fgeyser_partsys_profile; }
+    bool HasRetailDustProfile() const { return dust_partsys_profile; }
+    bool HasRetailPoisonProfile() const { return poison_partsys_profile; }
+    bool HasRetailLightStripProfile() const { return lightstrip_partsys_profile; }
+    bool HasRetailJhagaAttackProfile() const { return jhagaattack_partsys_profile; }
+    bool HasRetailHeadFireBallProfile() const { return headfireball_partsys_profile; }
+    bool HasRetailFunnelProfile() const { return funnel_partsys_profile; }
+    bool HasGoldPartSysProfile() const { return gold_partsys_profile; }
+    bool HasRetailMightPartSysProfile() const { return might_partsys_profile; }
+    bool HasRetailImmortalmightPartSysProfile() const { return immortalmight_partsys_profile; }
+    bool HasRetailFmasteryPartSysProfile() const { return fmastery_partsys_profile; }
+    bool HasRetailSpeedPartSysProfile() const { return speed_partsys_profile; }
+    bool HasRetailQuicksilverPartSysProfile() const { return quicksilver_partsys_profile; }
+    bool HasRetailStaticParticleProfile(uint32_t type_id) const
+    { return static_particles_profile!=0 && static_particles_profile==type_id; }
+    bool HasRetailAuthoredWaterProfile(uint32_t type_id) const
+    { return HasRetailStaticParticleProfile(type_id) &&
+             (type_id==0xd0c0f036u || type_id==0xd0c0f037u ||
+              type_id==0xd0c0f038u || type_id==0xd0c0f039u); }
+    bool HasRetailCameraParticleProfile(uint32_t type_id) const
+    { return HasRetailStaticParticleProfile(type_id) &&
+             (type_id==0x42e0fcd0u || type_id==0xad92bd39u); }
+    bool HasRetailSpeedFamilyPartSysProfile(uint32_t type_id) const
+    { return (type_id==0xad92bd36u && speed_partsys_profile) ||
+             (type_id==0xad92bd35u && quicksilver_partsys_profile); }
+    bool HasRetailPunchProfile() const { return retail_punch_keys; }
+    bool HasRetailMPAppearStartProfile() const { return retail_mpappear_start_profile; }
+    bool HasRetailShadowfistProfile() const { return retail_shadowfist_profile; }
+    bool HasRetailWarriorbornProfile() const { return retail_warriorborn_profile; }
+    bool HasRetailTeleportationProfile() const { return retail_teleportation_profile; }
+    bool HasRetailWarpProfile(uint32_t type_id);
+    bool HasCombatFlashPartSysProfile() const { return combatflash_partsys_profile; }
+    char *GetObjectName(int32_t objnum);
+    int32_t GetObjectNum(char *objname);
+    void GetObject(int32_t objnum, S3DObj* obj);
+    bool IsHidden(int32_t objnum, int32_t state);
+    bool GetUninterpolatedAniKey(int32_t objnum, int32_t state, int32_t frame,
+        hmm_vec3 &pos, hmm_vec3 &rot, hmm_vec3 &scl, bool retail_inclusive = false);
+    bool GetAniKey(int32_t objnum, int32_t state, int32_t frame,
+        hmm_vec3 &pos, hmm_vec3 &rot, hmm_vec3 &scl);
+    // Exact nullifier cached emitter pose, including the original transition.
+    bool GetRetailNullifierEmitterAniKey(int32_t object,int32_t frame,int32_t previous_state,
+        int32_t previous_frame,hmm_vec3& pos,hmm_vec3& rot,hmm_vec3& scale);
+    // Exact loaded Meteor Storm/Strike initial previous-state0/frame0 pose.
+    bool GetRetailStrikeAniKey(int32_t object,int32_t frame,hmm_vec3& pos,hmm_vec3& rot,hmm_vec3& scale);
+    void SetPrevState(int32_t pstate, int32_t pframe)
+      { prevstate = pstate; prevframe = pframe; }
+    int32_t GetObjectParent(int32_t objnum, int32_t state) const { return objects[objnum].parent[state]; }
+    void BeginRender(bool clearbuf);
+      // Called before any RenderObject() calls for an animator.
+      // (The legacy second `cachebuf` argument is gone — the execute-buffer
+      // cache path has been removed.)
+    bool CalcObjectMatrix(S3DAnimObj* animobj, int32_t state, int32_t frame, hmm_mat4* pos,
+        bool calcparents = true);
+    bool CalcObjectMatrixCopy(S3DAnimObj* animobj, int32_t state, int32_t frame, hmm_mat4* pos,
+        bool calcparents = true);
+    bool RenderObject(S3DAnimObj* animobj, int32_t state, int32_t frame, hmm_mat4* pos,
+        int32_t tex = -1, bool uselastmatrix = false);
+    void EndRender();
+    void PlaySound(TObjectInstance* inst, int32_t state, int32_t frame);
+
+  // Material functions (Note: materials can't be added or deleted by outside program)
+  private:
+    int32_t AddMaterial(S3DMaterial* newmat, int32_t tex = -1);
+    void RemoveMaterial(int32_t matnum);
+    void ClearMaterials();
+  public:
+    int32_t NumMaterials() const { return materials.NumItems(); }
+    void GetMaterial(int32_t matnum, S3DMat* mat);
+    TMaterialHandle GetMaterialHandle(int32_t matnum);
+    void SetMaterial(int32_t matnum, S3DMat* mat);
+
+  // Texture functions (Note: textures can't be added or deleted by outside program)
+  private:
+    int32_t AddTexture(SSurfaceDesc* srcsd,
+        OFFSET *pixels, int32_t frames, void *palette);
+    bool LoadTexture(S3DTex* tex, SSurfaceDesc* srcsd,
+        OFFSET *pixels, int32_t frames, void *palette, bool copyframes,
+        int32_t texture_index);
+    void RemoveTexture(int32_t texnum);
+    void ClearTextures();
+  public:
+    int32_t NumTextures();
+    void GetTexture(int32_t texnum, S3DTex* tex);
+    TTextureHandle GetTextureHandle(int32_t texnum);
+    int32_t GetTextureFrame(int32_t texnum);
+    bool SetTextureFrame(int32_t texnum, int32_t framenum);
+    bool SurfacesLost();
+    void RestoreSurfaces();
+
+  // Miscellaneous support functions
+    void RefreshZBuffer(TObjectInstance* oi);
+    void ResetExtents();
+    void GetExtents(SRenderRect* extents);
+    void AddUpdateRect(SRenderRect* extents, int32_t uflags = UPDATE_RESTORE);
+    void UpdateBoundingRect(TObjectInstance* oi, int32_t state, SRenderRect* extents);
+    int32_t NumTags() const { return tags.NumItems(); }
+    S3DTag* GetTag(int32_t tagnum) { return &(tags[tagnum]); }
+    char* FindTag(const char* name, int32_t state, int32_t frame = -1, int32_t* foundstate = nullptr, int32_t* foundframe = nullptr);
+    [[nodiscard]] uint32_t StateBlend(int32_t state) const
+      { return (state >= 0 && size_t(state) < stateblend.size()) ? stateblend[size_t(state)] : 0; }
+      // The draw blend (BLEND3D_*) the objects of this state take from a
+      // "blendcont" tag; 0 when the state has none
+
+    bool GetZ(TObjectInstance* oi, const TObjectInstance* frontmost) override { return true; }
+    TBitmap* GetInvImage(int32_t state, int32_t num = 0) override;
+    TAnimation* GetInvAnimation(int32_t state) override;
+
+    // Authored scrolltex: shared immutable metadata, per-instance UV delta.
+    // Single-object obj=...,du=...,dv=... grammar only; lists are diagnosed.
+    bool ScrollTexOffset(int32_t object, int32_t state, int32_t frame,
+                         int64_t legacy_frame, float out_uv[2]) const;
+    bool HasScrollTex() const { return !scrolltex_tracks.empty(); }
+
+    void AttachAnimatorComponents(TObjectInstance* oi);
+    virtual TObjectAnimator* NewObjectAnimator(TObjectInstance* oi);
+    bool NeedsAnimator(const TObjectInstance* oi) const override;
+    std::unique_ptr<TVisualComponent> NewVisualComponent() override;
+
+  // Motion functions
+    bool GetMotion(int32_t state, int32_t frame,
+        int32_t &dist, int32_t &vert, int32_t &ang, int32_t &rotx, int32_t &roty, int32_t &rotz);
+    virtual void SetObjectMotion(TObjectInstance* inst);
+};
+
+DEFINE_IMAGERYBUILDER(OBJIMAGE_MESH3D, T3DImagery);
+
+// Authored scrolltex uses immutable imagery tracks. The recovered partsys
+// subset has immutable definitions and animator-owned controller state.
+
+// ***************************************************************************
+// * T3DAnimatorBuilder - Used to register and automatically build animators *
+// ***************************************************************************
+
+#define MAX3DANIMATORTYPES 128
+
+_CLASSDEF(T3DAnimatorBuilder)
+class T3DAnimatorBuilder
+{
+  public:
+    T3DAnimatorBuilder();
+    T3DAnimatorBuilder(const char* name);
+    virtual T3DAnimator* Build(TObjectInstance* oi);
+    virtual void AttachComponents(TObjectInstance* oi) { (void)oi; }
+    static T3DAnimatorBuilder* GetBuilder(const char* name);
+
+  private:
+    static int32_t numanimtypes;
+    static T3DAnimatorBuilder* builders[MAX3DANIMATORTYPES];
+
+    char* animatorname;
+};
+
+#define REGISTER_3DANIMATOR(name, obj)                                          \
+class obj##Builder : public T3DAnimatorBuilder                                  \
+{                                                                               \
+  public:                                                                       \
+    obj##Builder() : T3DAnimatorBuilder(name) {}                                \
+    virtual T3DAnimator* Build(TObjectInstance* oi)                             \
+        { return new obj(oi); }                                                 \
+};                                                                              \
+obj##Builder obj##BuilderInstance;
+
+#define REGISTER_MULTI_3DANIMATOR_(name, obj, anim)                             \
+class obj##Builder : public T3DAnimatorBuilder                                  \
+{                                                                               \
+  public:                                                                       \
+    obj##Builder() : T3DAnimatorBuilder(name) {}                                \
+    virtual T3DAnimator* Build(TObjectInstance* oi)                             \
+        { return new anim(oi); }                                                \
+};                                                                              \
+obj##Builder obj##BuilderInstance;
+
+// ********************************************
+// * T3DAnimator - Default 3D Animator Object *
+// ********************************************
+
+#define ANI3D_ADDUPDATERECT         1   // (default true) adds update rect for extents of all objects
+#define ANI3D_UPDATEBOUNDRECT       2   // (default false) uses extents to reset obj state bounding rects
+#define ANI3D_UPDATEALLSTATES       4   // (default false) resets extents for all states
+#define ANI3D_UPDATEFRONTONLY       8   // (default false) resets extents for front rotation only
+
+// An animation key: a state and a frame of it.
+struct SLegacyRenderKey
+{
+    int32_t state = -1;
+    int32_t frame = 0;
+};
+
+class T3DAnimator : public TObjectAnimator
+{
+  protected:
+    uint32_t         flags;
+    int32_t          animid;
+    T3DAnimObjArray  animobjs;
+    bool             changed;
+    hmm_vec3         pos;
+    hmm_vec3         rot;
+    hmm_vec3         scl;
+    SRenderRect      extents;
+    hmm_mat4         matrix;
+    bool             updated;
+    bool             retail_warp_enabled = false;
+    retail_warp::State retail_warp_state;
+    struct SPartSysControllers;
+    std::unique_ptr<SPartSysControllers> partsys_controllers;
+    retail_dragonattack::PrototypeOrigin dragonattack_object_zero;
+    bool headfireball_object_zero_sampled=false;
+    hmm_vec3 headfireball_object_zero_origin{}; // original outgoing-flight initialization input
+    bool jhagaattack_object_zero_sampled=false;
+    hmm_vec3 jhagaattack_object_zero_origin{}; // outgoing-flight origin consumed by controller initialization
+    std::function<int(int,int,int)> lightstrip_ground;
+    void RefreshPartSysControllers();
+    void AdvancePartSysControllers();
+    // Runtime animation pose buffers. These are configured once when the
+    // animator attaches to a stable I3D skeleton, then reused every frame.
+    // The live path must write into these arrays only; map-backed SAnimPose
+    // and other allocating compatibility APIs stay outside this hot path.
+    SAnimPoseLayout  pose_layout;
+    SAnimPoseBuffer  pose_current;
+    SAnimPoseBuffer  pose_next;
+    SAnimPoseBuffer  pose_blended;
+    int64_t          pose_update_render_frame = -1;
+    int32_t          pose_update_state = -1;
+    int32_t          pose_update_frame = -1;
+    int32_t          parents_state = -1;      // state the object parents are wired for; -1 = not
+                                              // wired from the imagery (a custom SetupObjects)
+    int32_t          parents_count = 0;       // objects when they were wired
+    std::array<uint8_t, MAX3DANIMOBJECTS> parent_order{}; // object indices, each after its parent
+    int32_t          pose_update_next_state = -1;
+    int32_t          pose_update_next_frame = -1;
+    int32_t          pose_update_prev_state = -1;
+    int32_t          pose_update_prev_frame = -1;
+    float            pose_update_frame_frac = -1.0f;
+    // Legacy prevstate is object bookkeeping, not a persistent blend command.
+    // The bridge allows it only for the first state-entry frames, then samples
+    // loops as pure key interpolation so frame 0 after wrap is not re-blended
+    // from an old state.
+    int32_t          pose_transition_state = -1;
+    int32_t          pose_transition_prev_state = -1;
+    int32_t          pose_transition_prev_frame = -1;
+    int32_t          pose_transition_last_frame = -1;
+    int32_t          pose_transition_highest_frame = -1;
+    bool             pose_transition_active = false;
+    void UpdateLegacyTransitionWindow(T3DImagery* img,
+                                      int32_t state,
+                                      int32_t frame,
+                                      int32_t prevstate,
+                                      int32_t prevframe);
+
+  public:
+    T3DAnimator(TObjectInstance* oi);
+    virtual ~T3DAnimator();
+
+    virtual void Initialize();
+    virtual void Close();
+
+    uint32_t GetFlags() const { return flags; }
+    void SetFlags(uint32_t newflags) { flags = newflags; }
+    T3DImagery* Get3DImagery() const { return (T3DImagery*)image; }
+    bool DebugTransitionActive() const { return pose_transition_active; }
+    int32_t DebugTransitionState() const { return pose_transition_state; }
+    int32_t DebugTransitionPrevState() const { return pose_transition_prev_state; }
+    int32_t DebugTransitionPrevFrame() const { return pose_transition_prev_frame; }
+    int32_t DebugTransitionLastFrame() const { return pose_transition_last_frame; }
+    int32_t DebugTransitionHighestFrame() const { return pose_transition_highest_frame; }
+    int32_t DebugPoseUpdateFrame() const { return pose_update_frame; }
+    int32_t DebugPoseUpdateNextState() const { return pose_update_next_state; }
+    int32_t DebugPoseUpdateNextFrame() const { return pose_update_next_frame; }
+    float DebugPoseUpdateFrameFrac() const { return pose_update_frame_frac; }
+
+    virtual void Pulse();
+    virtual void Animate(bool draw);
+    bool WarpAtlasOffset(int32_t object, float output[2]) const;
+
+    // True for the hidden particle prototype, or every mesh when an authored
+    // controller is unsupported. The caller must not submit a static substitute.
+    hmm_vec3 JhagaAttackObjectZeroOrigin() const { return jhagaattack_object_zero_origin; }
+    void SetJhagaAttackObjectZeroOrigin(const hmm_vec3& origin);
+    void NoteJhagaAttackPrototypeSample();
+    void SetJhagaAttackGround(std::function<int(int,int,int)> query);
+    hmm_vec3 HeadFireBallObjectZeroOrigin() const { return headfireball_object_zero_origin; }
+    void SetHeadFireBallObjectZeroOrigin(const hmm_vec3& origin);
+    void NoteHeadFireBallPrototypeSample();
+    void SetHeadFireBallGround(std::function<int(int,int,int)> query);
+    void SetDragonAttackGround(std::function<int(int,int,int)> query);
+    void SetDragonAttackPrototypePose(const hmm_vec3& position,const hmm_vec3& scale);
+    const retail_dragonattack::PrototypeOrigin& DragonAttackPrototype() const { return dragonattack_object_zero; }
+    void SetLightStripGround(std::function<int(int,int,int)> query);
+    void SetFunnelGround(std::function<int(int,int,int)> query);
+    void SetCometGround(std::function<int(int,int,int)> query);
+    void SetFGeyserGround(std::function<int(int,int,int)> query);
+    void SetDustGround(std::function<int(int,int,int)> query);
+    void SetPoisonGround(std::function<int(int,int,int)> query);
+    bool PartSysOwnsObject(int32_t object) const;
+    // Narrow retail Goldp base-mesh route. Particle draws retain their own mode.
+    bool TeleportationMeshBlend(int32_t object, uint32_t& blend) const;
+    bool TeleportationMeshWorldMatrix(int32_t object, hmm_mat4& world);
+    bool WarriorbornMeshBlend(int32_t object, uint32_t& blend) const;
+    bool WarriorbornMeshWorldMatrix(int32_t object, hmm_mat4& world);
+    bool ShadowfistMeshBlend(int32_t object, uint32_t& blend) const;
+    bool ShadowfistMeshWorldMatrix(int32_t object, hmm_mat4& world);
+    bool MPAppearStartMeshBlend(int32_t object, uint32_t& blend) const;
+    bool MPAppearStartMeshWorldMatrix(int32_t object, hmm_mat4& world);
+    bool FmasteryBaseMeshBlend(int32_t object, uint32_t& blend) const;
+    bool FmasteryBaseMeshWorldMatrix(hmm_mat4& world, const hmm_mat4* owner_override = nullptr);
+    bool SpeedEmitterLocalMatrix(hmm_mat4& matrix, hmm_vec3* position = nullptr,
+                                 hmm_vec3* scale = nullptr);
+    bool CameraParticleEmitterLocalMatrix(int32_t object, hmm_mat4& matrix,
+                                         hmm_vec3* position=nullptr, hmm_vec3* scale=nullptr);
+    bool CameraParticleBaseMeshBlend(int32_t object, uint32_t& blend) const;
+    bool CameraParticleBaseMeshWorldMatrix(int32_t object, hmm_mat4& world,
+                                          const hmm_mat4* owner_override=nullptr);
+    bool SpeedBaseMeshBlend(int32_t object, uint32_t& blend) const;
+    bool SpeedBaseMeshWorldMatrix(hmm_mat4& world, const hmm_mat4* owner_override = nullptr);
+    bool ImmortalmightBaseMeshBlend(int32_t object, uint32_t& blend) const;
+    bool ImmortalmightBaseMeshWorldMatrix(hmm_mat4& world);
+    bool GoldBaseMeshBlend(int32_t object, uint32_t& blend) const;
+    bool GoldBaseMeshWorldMatrix(hmm_mat4& world);
+    // An authored Impact flare of the combat flash's current state (litadd,
+    // depth-tested; '#' camera matrices). The particle prototypes are drawn
+    // by SubmitPartSys. `native_software` builds the owner as retail's
+    // software transform does (the VFX native-domain reference).
+    bool CombatFlashBaseMeshBlend(int32_t object, uint32_t& blend) const;
+    bool CombatFlashBaseMeshWorldMatrix(int32_t object, hmm_mat4& world, bool native_software = false);
+    int32_t SubmitPartSys(TRenderer& renderer, int32_t object, int32_t texture_slot,
+                         const hmm_vec3& render_scale, bool native_software = false, bool submit_geometry = true);
+    uint64_t PartSysPulseCount() const;
+    size_t PartSysLiveParticles() const;
+    size_t PartSysControllerCount() const;
+    bool PartSysUnsupported() const;
+    struct SAuthoredPartSysStats
+    {
+        size_t controllers = 0, capacity = 0, alive = 0, emitters = 0;
+        size_t next_emitter = 0; // first controller, for the audited one-tag assets
+        uint64_t ticks = 0, quads = 0, renders = 0;
+        bool unsupported = false;
+    };
+    SAuthoredPartSysStats PartSysStats() const;
+
+    void UpdateBoneTransforms();
+        // Per-frame hot path:
+        //   * sample animation track data (currently via the legacy I3D
+        //     adapter) into fixed float pose buffers;
+        //   * blend pose buffers only; no type-aware blend code here;
+        //   * write local TRS into each bone's TTransform;
+        //   * RefreshHierarchy once from the owning instance transform.
+        // No ordinary frame should allocate here. Resize/reconfigure is
+        // only expected if the imagery/skeleton changes under the animator.
+
+    virtual bool SurfacesLost();
+    virtual void RestoreSurfaces();
+
+  // Object Functions
+    virtual void SetupObjects();
+    void ResolveObjectParents(int32_t state);
+      // Points each object (and its transform) at its parent object in the
+      // imagery for this state; a root hangs off the instance's transform.
+      // An I3D object can change parent from state to state (a sword sits in
+      // the hand in one, on the back in another). OBJ3D_PARENT keeps the
+      // parent a caller set.
+    void GetVerts(S3DAnimObj* obj, ERender3DVertex verttype = ERender3DVertex::Vertex);
+    void FreeVerts(S3DAnimObj* obj);
+    void GetFaces(S3DAnimObj* obj);
+    void FreeFaces(S3DAnimObj* obj);
+    int32_t NumObjects() const { return animobjs.NumItems(); }
+    S3DAnimObj* NewObject(int32_t objnum, int32_t flags = 0);
+    int32_t AddObject(S3DAnimObj* obj);
+    void RemoveObject(int32_t objnum);
+    int32_t GetObjectNum(const char* name);
+    S3DAnimObj* GetObject(int32_t objnum);
+    bool IsObjectEnabled(int32_t objnum);
+    void EnableObject(int32_t objnum, bool enable);
+    bool RenderObject(S3DAnimObj* animobj, int32_t tex = -1, bool uselastmatrix = false)
+      { return Get3DImagery()->RenderObject(animobj, state, frame, &matrix, tex, uselastmatrix); }
+    bool GetObjectMatrix(int32_t objnum, hmm_mat4* m);
+    bool ObjectModelMatrix(int32_t objnum, float framefrac, hmm_mat4& model);
+      // An object's model-space matrix (its parent chain, not the owner's
+      // transform) in the pose UpdateBoneTransforms draws at framefrac: 0
+      // this tick's key, 1 the next one. The bones are left as they are.
+    [[nodiscard]] SLegacyRenderKey NextKey() const;
+      // The key the render blends toward from the instance's current one
+    bool GetObjectPos(int32_t objnum, hmm_vec3& v, hmm_vec3* s = nullptr);
+    bool GetObjectPos(const char* objname, hmm_vec3& v, hmm_vec3* s = nullptr);
+    bool GetObjectMapPos(int32_t objnum, S3DPoint& pos);
+    bool GetObjectMapPos(const char* objname, S3DPoint& pos);
+
+  // Render functions
+    virtual void RefreshZBuffer()
+      { ((T3DImagery*)image)->RefreshZBuffer(inst); }
+    void MakeMatrix(hmm_mat4* m);
+    void PreRender();
+    virtual bool Render();
+    void PostRender();
+    hmm_mat4* GetMatrix() { return &matrix; };
+
+  // Draw state. The scene manager advances it once per drawn frame, then
+  // reads it when it submits the object's meshes (the renderer submits;
+  // the animator holds the data).
+    virtual void UpdateDrawState(double dt_seconds) { (void)dt_seconds; }
+      // Advances draw-only state by one drawn frame of dt_seconds
+    [[nodiscard]] virtual float DrawAlpha() const { return 1.0f; }
+      // Opacity to draw the object at, 0..1; 0 = not drawn
+    [[nodiscard]] virtual bool DrawsCombatFlash() const { return false; }
+      // Draw the meshes a second time, added on top (a struck character)
+    virtual void SubmitFx(TRenderer& renderer) const { (void)renderer; }
+      // Submits what the animator draws besides its meshes (a character's
+      // weapon swipe); the scene manager calls it once a drawn frame
+
+  // Extents
+    void ResetExtents()
+      { Get3DImagery()->ResetExtents(); updated = false; }
+    void GetExtents(SRenderRect* extents)
+      { Get3DImagery()->GetExtents(extents); }
+    void AddUpdateRect(SRenderRect* extents, int32_t uflags = UPDATE_RESTORE)
+      { if (flags & ANI3D_ADDUPDATERECT)
+            Get3DImagery()->AddUpdateRect(extents, uflags); updated = true; }
+    void UpdateBoundingRect(SRenderRect* extents)
+      { if (flags & ANI3D_UPDATEBOUNDRECT)
+            Get3DImagery()->UpdateBoundingRect(inst, state, extents); updated = true; }
+    bool WasUpdated() const { return updated; }
+    void UpdateExtents()
+      { GetExtents(&extents); AddUpdateRect(&extents); UpdateBoundingRect(&extents); }
+    void RecordNewExtents(TObjectInstance* oi, int32_t state = -1, bool frontonly = false);
+
+  private:
+    void AnimateResetBoundRect();
+};

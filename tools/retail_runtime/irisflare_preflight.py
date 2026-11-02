@@ -61,7 +61,7 @@ def inspect(executable):
             bindings.append(dict(name=match[1], path=match[2], class_id=match[3]))
     if {b['name'] for b in bindings} != {'IrisFlare', 'Teleporter'}:
         raise ValueError('Expected exact type bindings absent')
-    source = (ROOT / 'src/vfxtest.cpp').read_text()
+    source = (ROOT / 'src/game/ab/vfxtest.cpp').read_text()
     start = source.index('e.id            = "TFlareAnimator_BESPOKE__Teleporter";')
     block = source[start:source.index('VfxTest::DeferredRegister(e);', start)]
     if 'FlareBespokeVariantSpawn<kVariantIrisFlare_I3D>' not in block:

@@ -10,7 +10,7 @@ int main(){std::array<hmm_vec3,4>a;for(auto&v:a)if(std::scanf("%f%f%f",&v.X,&v.Y
 '''
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--trace',type=Path,action='append',required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();a.output.mkdir(parents=True,exist_ok=True)
- source=a.output/'geometry.cpp';source.write_text(DRIVER);binary=a.output/'geometry';subprocess.run(['clang++','-std=c++17','-I'+str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/math3d.cpp'),'-o',str(binary)],check=True)
+ source=a.output/'geometry.cpp';source.write_text(DRIVER);binary=a.output/'geometry';subprocess.run(['clang++','-std=c++17','-I'+str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)],check=True)
  with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:asset=read_photon(z.read('Imagery/Magic/photon.i3d'))
  verts=list(struct.iter_unpack('<8f',bytes.fromhex(asset['objects'][0]['vertex_hex'])));prefix=' '.join(str(x)for v in verts for x in v[:3])+'\n';errors=[];checks=0;maximum=0;cases=[]
  for trace in a.trace:
@@ -31,7 +31,7 @@ def main():
     checks+=1;delta=abs(x-y);maximum=max(maximum,delta)
     if delta>5e-5:errors.append(dict(tick=tick,slot=slot,component=component,native=x,port=y,delta=delta))
   cases.append(dict(trace=str(trace.resolve()),sha256=sha(trace.read_bytes()),packets=len(packets)))
- report=dict(status='pass'if not errors else'differences',checks=checks,max_world_component_error=maximum,errors=errors,cases=cases,source_sha256={x:sha((ROOT/x).read_bytes())for x in('src/photoncore.h','src/math3d.cpp','src/retailsoftwaretransform.h')},scope='Actual original world matrix times authored vertex compared to compiled production BuildQuad and opcode-derived owner. Actual five-frame texture selection and source vertex/UV/index bytes checked. Facing0 controlled flight; shared owner rotation independently verified elsewhere.')
+ report=dict(status='pass'if not errors else'differences',checks=checks,max_world_component_error=maximum,errors=errors,cases=cases,source_sha256={x:sha((ROOT/x).read_bytes())for x in('src/game/effects/photoncore.h','src/engine/core/math3d.cpp','src/engine/render/retailsoftwaretransform.h')},scope='Actual original world matrix times authored vertex compared to compiled production BuildQuad and opcode-derived owner. Actual five-frame texture selection and source vertex/UV/index bytes checked. Facing0 controlled flight; shared owner rotation independently verified elsewhere.')
  (a.output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],checks,maximum,'errors',len(errors));print(errors[:3])
  if errors:raise SystemExit(1)
 if __name__=='__main__':main()

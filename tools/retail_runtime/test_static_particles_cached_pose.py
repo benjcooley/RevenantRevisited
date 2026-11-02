@@ -10,7 +10,7 @@ from speed_profile_contract import function, ROOT
 
 class CachedParticlePoseTests(unittest.TestCase):
     def test_actual_fill_inputs_cached_pose_and_unrelated_fallback(self):
-        source = (ROOT / 'src/3dimage.cpp').read_text()
+        source = (ROOT / 'src/game/imagery/3dimage.cpp').read_text()
         fill = function(source, '    static void FillInputs(')
         make = function(source, 'static void MakeMatrix(')
         driver = r'''
@@ -138,7 +138,7 @@ int main(){
             command = [shutil.which('clang++') or 'c++', '-std=c++17',
                        '-fsanitize=address,undefined', '-iquote', str(ROOT / 'src'),
                        '-I' + str(ROOT / 'thirdparty/handmademath'),
-                       str(p / 'test.cpp'), str(ROOT / 'src/math3d.cpp'), '-o', str(p / 'test')]
+                       str(p / 'test.cpp'), str(ROOT / 'src/engine/core/math3d.cpp'), '-o', str(p / 'test')]
             compiled = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(compiled.returncode, 0, compiled.stderr)
             result = subprocess.run([str(p / 'test')], capture_output=True, text=True)

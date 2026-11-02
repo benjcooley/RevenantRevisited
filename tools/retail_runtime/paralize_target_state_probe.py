@@ -62,7 +62,7 @@ def run(trace,out):
   ('stale_egg_offsets','float(t[0]),float(t[1]),float(t[2]+40)','float(t[0]-10),float(t[1]-20),float(t[2]+20)'),
   ('missing_target_center','target[0]+20,target[1]+20,target[2]','target[0],target[1],target[2]')]:
   directory=out/label;directory.mkdir(exist_ok=True)
-  header=(ROOT/'src/paralizecore.h').read_text();assert old in header
+  header=(ROOT/'src/game/effects/paralizecore.h').read_text();assert old in header
   (directory/'paralizecore.h').write_text(header.replace(old,new))
   source=directory/'state.cpp';source.write_text(DRIVER);binary=directory/'state'
   result=subprocess.run(['clang++','-std=c++17','-O1','-ffp-contract=off',str(source),'-o',str(binary)],capture_output=True);assert result.returncode==0,result.stderr
@@ -72,7 +72,7 @@ def run(trace,out):
   assert mismatches or draw_changes,label
   negatives[label]=dict(rejected=True,state_bytes=mismatches,draw_packets=draw_changes)
  status='pass' if not errors else ('bounded_float_residual' if all(e.get('category')=='float_accumulation'for e in errors) else 'fail')
- report=dict(status=status,exact_integer_rng_and_draw_count=True,diagnostic_float_tolerance='.003 absolute or2e-6 relative, retained without widening; accumulated exceptions remain explicit',negative_controls=negatives,fields=checks,pose_fields=pose_checks,maximum_pose_error=pose_max,authored_vertex_fields=vertex_checks,authored_indices=index_checks,maximum_accumulated_uv_error=uv_max,asset_sha256=sha(asset_bytes),error_count=len(errors),errors=errors[:100],maximum_float_error=maximum,native_trace_sha256=sha(trace.read_bytes()),source_sha256=sha((ROOT/'src/paralizecore.h').read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),target_identity_normalization='genuine original pointer to token1; no simulated field substitution',sanitizers='ASan/UBSan',accepted=False)
+ report=dict(status=status,exact_integer_rng_and_draw_count=True,diagnostic_float_tolerance='.003 absolute or2e-6 relative, retained without widening; accumulated exceptions remain explicit',negative_controls=negatives,fields=checks,pose_fields=pose_checks,maximum_pose_error=pose_max,authored_vertex_fields=vertex_checks,authored_indices=index_checks,maximum_accumulated_uv_error=uv_max,asset_sha256=sha(asset_bytes),error_count=len(errors),errors=errors[:100],maximum_float_error=maximum,native_trace_sha256=sha(trace.read_bytes()),source_sha256=sha((ROOT/'src/game/effects/paralizecore.h').read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),target_identity_normalization='genuine original pointer to token1; no simulated field substitution',sanitizers='ASan/UBSan',accepted=False)
  (out/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],len(errors),maximum);return report
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('trace',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.trace,a.output)

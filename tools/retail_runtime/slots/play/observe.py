@@ -35,7 +35,7 @@ DIALOG_PANE = 0x00667cc8          # TDialogPane (DLG §4.1): entries +0x17c coun
                                   # the response entry +0x190 (non-null while choices show)
 ENTRY_SPEAKER, ENTRY_MODE, ENTRY_TEXTS, ENTRY_TEXT = 0x04, 0x08, 0x5c, 0x60   # dialog entry (DLG §4.2); mode 1 NPC
 STAT_IDS = dict(health=0x0066ca4c, fatigue=0x0066ca3c, mana=0x0066ca38)  # globals holding stat ids (HIT)
-LEVEL_STAT, EXP_STAT, NEXTEXP_STAT = 17, 18, 19      # PS §1 (src/charstats.h order, retail-confirmed)
+LEVEL_STAT, EXP_STAT, NEXTEXP_STAT = 17, 18, 19      # PS §1 (src/game/object/charstats.h order, retail-confirmed)
 ATTACKLEVEL_STAT = 20             # AttackLevel, the gate on an attack's attackskill (ACH §3.1 item 19, 0x004d1654)
 ATTRIBUTE_STATS = dict(strn=34, cons=35, agil=36, rflx=37, mind=38, luck=39)   # PS §1
 SKILL_NAMES = ('attack', 'defense', 'invoke', 'hands', 'knife', 'sword', 'bludgeon', 'axes', 'bows',
@@ -50,7 +50,7 @@ SECTOR_MASK, SECTOR_CELLS, WALK_HEIGHT_MASK = (1 << SECTOR_SHIFT) - 1, 1 << 2 * 
 MAP_PANE = 0x006668d8             # TMapPane: rect +0x04..+0x10, scroll origin +0x78 / +0x7c (MI §1)
 MAP_SCROLL_X, MAP_SCROLL_Y = 0x78, 0x7c
 WORLD_TO_SCREEN = 0x0046d7a0      # cdecl (const S3DPoint*, int *sx, int *sy): map-screen pixels
-IS_ENEMY = 0x004c89c0             # TCharacter::IsEnemy(TCharacter *other), thiscall (src/character.cpp)
+IS_ENEMY = 0x004c89c0             # TCharacter::IsEnemy(TCharacter *other), thiscall (src/game/object/character.cpp)
 CURSOR_X, CURSOR_Y = 0x00668510, 0x00668514   # the pointer, polled each screen pass (CW §3.3)
 PICK_X, PICK_Y, PICK = 0x005e91cc, 0x005e91d0, 0x005e91d4   # the 3D pick and the point it was made at:
                                   # every DrawScene picks at the pointer (MI §2.1)
@@ -150,7 +150,7 @@ QUICK_SPELLS = 0x2cc              # TPlayer: char[6] talisman codes, slot 0 the 
 SPELL_LIST = 0x00667c38           # TSpellList: +4 pointer array of SSpellData (count +0, data +0x10)
 SPELL_VARIANTS = 0x00              # SSpellData: the variants pointer array
 VARIANT_NAME, VARIANT_TALISMANS = 0x04, 0x24   # SSpellVariant: char[32] spell.def VARIANT name, char[6]
-                                               # (src/spell.h; slots/combat/spell_guest.py)
+                                               # (src/game/spells/spell.h; slots/combat/spell_guest.py)
 CLASS_NAMES = ['item', 'weapon', 'armor', 'talisman', 'food', 'container', 'lightsource', 'tool',
                'money', 'tile', 'exit', 'player', 'character', 'trap', 'shadow', 'helper', 'key',
                'invcontainer', 'potion', None, None, 'ammo', 'scroll', 'rangedweapon', None,
@@ -443,7 +443,7 @@ class Observer:
         height the walkmap's low 10 bits at cell (k & 63) (0x00499720), 0 in
         a sector without a walkmap. Where retail finds no sector (and would
         answer 0), -1: unknown, not "no floor". The square is the port's
-        (src/observation.cpp WriteWalkGrid)."""
+        (src/game/playtest/observation.cpp WriteWalkGrid)."""
         x, y, _ = self.pos(player)
         gx, gy = (x - radius) >> WALK_SHIFT, (y - radius) >> WALK_SHIFT
         cells = ((2 * radius) >> WALK_SHIFT) + 1

@@ -75,7 +75,7 @@ static void AppFrame()
 {
     ...
     CurrentScreen->Tick();             // sim catch-up
-    TObjectComponent::RunUpdateList(); // post-sim component pass
+    TComponent::RunUpdateList(); // post-sim component pass
 
     CurrentScreen->DrawFrame();        // 2D overlay pass on backbuffer
     DebugUI::DrawFrame();              // ImGui frame build

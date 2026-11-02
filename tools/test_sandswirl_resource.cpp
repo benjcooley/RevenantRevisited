@@ -1,4 +1,4 @@
-#include "effects/sandswirlresource.h"
+#include "game/effects/legacy/sandswirlresource.h"
 #include <cassert>
 #include <cstdio>
 using sandswirl_runtime::LegacySandResourceAllowed;

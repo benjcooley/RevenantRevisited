@@ -2,26 +2,33 @@
 
 ## Overview
 
-Revenant's object system is a sophisticated class-based architecture that manages all game objects including characters, items, tiles, effects, and interactive elements. The system uses a **factory pattern** with builders, **class-based statistics**, and **hierarchical object management**.
+Revenant's object system manages every game object: characters, items,
+tiles, effects and the interactive pieces. Since the 2026 object model
+work (docs/OBJECT_MODEL_PLAN.md, phases 1-5) it is one reflected model: a
+map object is a node that owns its object instance and its components,
+its type is an archetype in the class's type table, and its state is a
+plain record that every file format is a serialization of.
 
 ## Summary
 
 ### Object System Architecture
 
-Revenant's object system is built around **four core components**:
+Revenant's object system is built around five things:
 
-1. **TObjectClass** - Manages object types and statistics for a class
-2. **TObjectBuilder** - Factory pattern for creating object instances
-3. **TObjectInstance** - Individual game object instances
-4. **SObjectInfo** - Shared metadata for object types
+1. **TNode** - the thing in the map: name, uid, transform, children, components
+2. **TObjectInstance** - the node's first component, the root of the class hierarchy
+3. **TObjectClass** - a class of types with its statistics (CLASS.DEF)
+4. **TObjectDef** - the archetype, one per type, in the class's type table
+5. **SObjectState** - the record of one object's state, reflected, derived per class
 
 ### Key Design Principles
 
 - **Class-Based Organization** - Objects grouped by functionality (items, characters, tiles, etc.)
-- **Factory Pattern** - Builders create specific object types
+- **Archetypes** - one `TObjectDef` per type makes, applies and captures instances
+- **One Record** - `SObjectState` is the state; DEF text, the retail stream and the packed format only serialize it
+- **Components** - everything optional or separable on an object is a `TComponent` on its node
 - **Shared Statistics** - Class-level and instance-level statistics
-- **Memory Efficiency** - Optimized for thousands of objects
-- **Unique Identification** - Each object type has a unique ID
+- **Unique Identification** - Each object type has a unique ID; each node a 64-bit uid
 
 ### Object Types Overview
 
@@ -56,8 +63,8 @@ class TObjectClass
     uint16_t objflags;              // Class-wide flags
     TObjectClass* basedon;          // Inheritance (base class)
     
-    // Object type management
-    TVirtualArray<SObjectInfo> objinfo;  // All object types in this class
+    // Object type management: the archetypes, by type index
+    std::vector<std::unique_ptr<TObjectDef>> objinfo;
     
     // Statistics system
     TStatisticDefList statdefs;     // Class-level statistics
@@ -65,201 +72,229 @@ class TObjectClass
 };
 ```
 
-**Object Type Registration:**
+**Object Type Registration:** `TObjectClass::AddType(name, imgfilename,
+uniqueid)` asks the def registry (`TObjectDef::Make`) for the type name
+first, then the class name, so a type with code of its own ("ArrowWallS",
+"VialRack") gets its def and every other type of the class gets the
+class's; registers the imagery; fills the def's name, imagery id, stats
+and unique id; and appends it to the type table. The index is the
+`objtype` every record names.
+
+### TObjectDef - The Archetype
+
+**Purpose:** Class information: one per CLASS.DEF type, owned by its
+`TObjectClass`, reached from an instance through `Archetype()`. It
+carries the type-level data retail kept in `SObjectInfo` (name, imagery,
+the type's stats, the retail unique id), the type's default state, and
+does the work in code (src/game/object/objectdef.h):
+
 ```cpp
-int32_t TObjectClass::AddType(char *name, char *imgfilename, uint32_t uniqueid)
+class TObjectDef
 {
-    // Find appropriate builder for this object type
-    TObjectBuilder* objbuilder = TObjectBuilder::GetBuilder(name);
-    
-    // Register imagery
-    int32_t imageryid = TObjectImagery::RegisterImagery(imgfilename);
-    
-    // Create object info structure
-    SObjectInfo* inf = new SObjectInfo(name, objbuilder, imageryid, uniqueid);
-    
-    // Add to class and initialize statistics
-    int32_t objtype = objinfo.AddPtr(inf);
-    
-    return objtype;
-}
-```
+    std::string      name;
+    int32_t          imageryid;
+    TObjectImagery*  imagery;
+    TStatisticList   stats, objstats;
+    uint32_t         uniqueid;
 
-### TObjectBuilder - Factory Pattern
+    virtual const SObjectState& DefaultState() const = 0;   // the type's default record
+    virtual TObjectInstance* Create(SObjectState& state, TObjectImagery* img) const = 0;
+    virtual TObjectInstance* Create(TObjectImagery* img) const = 0;
+    virtual void Apply(const SObjectState& state, TObjectInstance& inst) const;
+    virtual void Capture(const TObjectInstance& inst, SObjectState& state) const;
 
-**Purpose:** Creates specific object instances using the factory pattern.
-
-**Builder Registration:**
-```cpp
-#define DEFINE_BUILDER(name, obj)                                               \
-class obj##Builder : public TObjectBuilder                                      \
-{                                                                               \
-  public:                                                                       \
-    obj##Builder() : TObjectBuilder(name) {}                                    \
-    virtual TObjectInstance* Build(TObjectImagery* img)                         \
-        { return new obj(img); }                                                \
-    virtual TObjectInstance* Build(SObjectDef* def, TObjectImagery* img)        \
-        { return new obj(def, img); }                                           \
-};
-
-#define REGISTER_BUILDER(obj) obj##Builder obj##BuilderInstance;
-```
-
-**Builder System:**
-```cpp
-class TObjectBuilder
-{
-  public:
-    TObjectBuilder(const char *name);
-    virtual TObjectInstance* Build(TObjectImagery* img) = 0;
-    virtual TObjectInstance* Build(SObjectDef* def, TObjectImagery* img) = 0;
-    
-    static TObjectBuilder* GetBuilder(int32_t objtype);
-    static TObjectBuilder* GetBuilder(const char *name);
-    
-  private:
-    static int32_t numobjtypes;
-    static TObjectBuilder* builders[MAXOBJECTTYPES];
-    char *objtypename;
+    static void Register(const char* name, FMake make);     // SRegistrar at file scope
+    static std::unique_ptr<TObjectDef> Make(const char* name);
 };
 ```
 
-### SObjectInfo - Shared Metadata
-
-**Purpose:** Stores shared information for all instances of an object type.
-
-**Structure (Memory Optimized):**
-```cpp
-struct SObjectInfo
-{   // HEY! KEEP ME SMALL! (Used by thousands of objects)
-    char *name;                             // Object type name
-    TObjectBuilder* objbuilder;             // Builder for this type
-    int32_t imageryid;                      // Imagery resource ID
-    TObjectImagery* imagery;                // Loaded imagery object
-    TStatisticList stats, objstats;         // Class and instance statistics
-    uint32_t uniqueid;                      // Unique type identifier
-};
-```
-
-**Memory Optimization:** This structure is shared across all instances of an object type, so it's kept as small as possible to minimize memory usage.
+`Create` makes an instance of the right C++ class (what the builders
+did). `Apply` puts a record's values onto a live instance and its
+components; `Capture` takes them back out. They are hand-written per
+class, not generated: a class with state of its own derives
+(`TCharacterDef : TStateObjectDef<SCharacterState>`,
+`TPlayerDef : TCharacterDef`, `TExitDef`, `TScrollDef`, `TWeaponDef`,
+`TDripDef`, `TMonsterGenDef`) and overrides the pair, calling the base's
+first; a class without derives nothing and registers with
+`REGISTER_OBJECT_DEF(TArmor)` or, under a type name,
+`DEFINE_OBJECT_DEF("VIAL RACK", TVialRack)`. A subclass with only a
+constructor of its own registers `MakeObjectDef<TPressPlate, TExitDef>`.
 
 ### TObjectInstance - Individual Objects
 
 **Purpose:** Represents individual game object instances in the world.
 
-**Inheritance Structure:**
+**Structure** (since 2026-10-18, docs/OBJECT_MODEL_PLAN.md §3b): a map object is
+a `TNode` (final: name, soft-ref id, TTransform, children, components, map
+index, sector, level) whose first component is the `TObjectInstance`, the root
+of the object class hierarchy. The node owns the object; `node->Object()` and
+`instance->Node()` are cached pointers. The instance forwards the node-facing
+API, so a `TObjectInstance*` still answers transform, map index, sector and
+components. Delete an object with `DeleteObject(inst)`, own one with
+`TObjectPtr<T>`.
 ```cpp
-class TObjectInstance : protected SObjectDef
+class TObjectInstance : public TComponent
 {
-    // Object identification
+    // Identity in the class system
+    short objclass, objtype;         // Class / type indices
     SObjectInfo* inf;                // Pointer to shared object info
     TObjectClass* cl;                // Pointer to object class
     char *name;                      // Instance-specific name
-    
-    // Object state
-    S3DPoint pos;                    // 3D position in world
+
+    // State retail kept in the object header (reflected: props 15-19)
     uint32_t flags;                  // Object flags
     uint16_t state;                  // Current state
+    uint16_t level;                  // Map level
+    S3DPoint vel, accum;             // Movement integrator
     uint8_t group;                   // Group assignment
-    
-    // Systems
-    TObjectAnimator* animator;       // Animation system
-    TScript* script;                 // Scripting system
-    TInventory inventory;            // Inventory system
-    SLightDef lightdef;              // Lighting system
+
+    // The record it was spawned or loaded with (Reset re-applies it)
+    std::unique_ptr<SObjectState> initial_state_;
+
+    // Components live in the node's slots: stats_, script_, inventory_
+    // are kept for life; the light and the visual through TSafeComponentRef
 };
 ```
 
-## Object Definition System
+The transform is the only spatial store. Code written against retail's
+integer world reads and writes it through the free functions in
+`intworld.h`: `IntPos(oi)`, `SetIntPos(oi, p)`, `IntFacing(oi)`,
+`SetIntFacing(oi, f)`, `IntRotateX/Y`. `SetPos` remains the map move with
+its sector, walkmap, shadow and light side effects.
 
-### SObjectDef - Object Creation Template
+## Object State and Serialization
 
-**Purpose:** Defines the initial state when creating new object instances.
+### The rule
 
-**Structure:**
+**An object's state is its record.** `SObjectState` (objectdef.h) is the
+reflected record of one object: what a spawn site fills, what a file
+stores, what an instance keeps as the state it was loaded or spawned in.
+Every file format is a serialization of it and nothing else:
+
+- the retail stream (sector `.DAT` files, `game.sav`): `TLegacyDeserialize`
+  reads bytes into a record and hands it to `Archetype()->Apply`;
+  `TLegacySerialize` has `Capture` fill a record and writes its bytes
+  (src/game/object/legacystream.{h,cpp}); the fixed-flag and version
+  rules live in the codec, not on the objects;
+- DEF text and the packed binary: the reflection system's codecs
+  (src/engine/refl/defio.cpp, packed.cpp) over the same records;
+- the editor: shows the record, edits it, applies it.
+
+No object class has `Load`, `Save` or `ObjVersion`; nothing is streamed
+from a live object. The instance keeps its record: `InitialState()` is
+what it was spawned or loaded with, `Reset()` applies it again,
+`CaptureState()` fills a fresh one.
+
+### SObjectState - The Record
+
 ```cpp
-class SObjectDef
+struct SObjectState            // ids 1-99 are the base's
 {
-  public:
-    short       objclass;   // Class of item (-1 if no object)
-    short       objtype;    // Type of item in class (-1 if no object)
-    uint32_t    flags;      // Initial object flags
-    
-    uint16_t    state;      // Initial state
-    uint16_t    level;      // Object level
-    
-    S3DPoint    pos;        // Initial position
-    S3DPoint    vel;        // Initial velocity
-    S3DPoint    accum;      // Movement accumulator
-    
-    uint8_t     rotatex;    // X-axis rotation (0-255)
-    uint8_t     rotatey;    // Y-axis rotation (0-255)
-    union
-    {
-        uint8_t rotatez;    // Z-axis rotation (0-255)
-        uint8_t facing;     // Facing direction (0-255)
-    };
-    
-    uint8_t     group;      // Group assignment
+    REFL_IDS(1, 99)
+    short    objclass, objtype;       // 1, 2
+    uint32_t flags;  uint16_t state, level;
+    S3DPoint pos, vel, accum;  uint8_t rotatex, rotatey, rotatez (facing);
+    uint8_t  group;
+    TUid     uid;                     // 13: the node's identity
+    std::string name;                 // 14: the instance's own, if any
+    int32_t  inventnum, invindex;     // 15, 16: the slot it sits in
+    int32_t  shadow, mapindex;        // 17, 18
+    int32_t  frame, framerate;        // 19, 20: the playhead
+    std::vector<SObjectStatState> stats;   // 21: object stats by unique id
+    SLightState light;                // 22: the light, when OF_LIGHT
+
+    virtual std::unique_ptr<SObjectState> Clone() const;
 };
 ```
 
-### Object Creation Process
+A derived record takes its own hundred so the base can grow
+(src/game/object/objectstates.h): `SComplexObjectState` 100s,
+`SCharacterState` 200s (recovery clocks, poison, the teleport point),
+`SExitState` 300s, `SScrollState` 400s, `SWeaponState` 500s,
+`SDripState` 600s, `SMonsterGenState` 700s, `SPlayerState` 800s (the
+quick spells, the talisman codes, the HUD modes, the level-up stats, the
+multiplayer fields, the module, the play clock, the explored automap).
+Each holds exactly the field set its retail stream carries, so the
+sector and save formats barely changed; what changed is that every
+field has an id.
 
-**1. Object Definition:**
+### Object Creation
+
 ```cpp
-SObjectDef def;
+SObjectState def;
 def.objclass = OBJCLASS_ITEM;
-def.objtype = 5;  // Specific item type
-def.pos = S3DPoint(100, 200, 0);
-def.flags = OF_IMMOBILE;
+def.objtype  = 5;                       // the record's default is -1: no type
+def.pos      = S3DPoint(100, 200, 0);
+TObjectInstance* inst = cl->NewObject(&def);
 ```
 
-**2. Class Object Creation:**
-```cpp
-TObjectInstance* TObjectClass::NewObject(SObjectDef* objectdef)
-{
-    // Validate object type
-    if ((uint32_t)objectdef->objtype >= (uint32_t)objinfo.NumItems())
-        return nullptr;
-    
-    // Load imagery
-    objinfo[objectdef->objtype].imagery = 
-        TObjectImagery::LoadImagery(objinfo[objectdef->objtype].imageryid);
-    
-    // Create instance using builder
-    TObjectInstance* inst = objinfo[objectdef->objtype].objbuilder->Build(
-        objectdef, objinfo[objectdef->objtype].imagery);
-    
-    return inst;
-}
-```
+`TObjectClass::NewObject` loads the type's imagery and calls its def's
+`Create`. The constructor adopts a node, sets `inf` to the archetype,
+clones the record as `initial_state_` and has the archetype `Apply` it;
+the class constructors (`TCharacter::ClearChar`, `TPlayer::ClearPlayer`)
+add the components every object of the class has.
 
-**3. Instance Construction:**
-```cpp
-TObjectInstance::TObjectInstance(SObjectDef* def, TObjectImagery* img)
-{
-    // Copy definition data
-    memcpy(&objclass, def, sizeof(SObjectDef));
-    
-    // Set imagery and initialize systems
-    imagery = img;
-    cl = TObjectClass::GetClass(objclass);
-    inf = cl->GetObjType(objtype);
-    
-    // Initialize statistics
-    if (cl->NumObjStats() > 0)
-    {
-        stats.SetNumItems(cl->NumObjStats());
-        for (int32_t c = 0; c < cl->NumObjStats(); c++)
-            ResetObjStat(c);
-    }
-    
-    // Initialize script (except for tiles)
-    if (objclass != OBJCLASS_TILE)
-        InitScript(ScriptManager.ObjectScript(this));
-}
-```
+### Components
+
+Everything optional or separable on an object is a `TComponent` on its
+node, with annotated properties the inspector shows. Those the record
+carries are applied and captured by the def; the rest (marked *between
+ticks*) retail never saved and the port doesn't either.
+
+| Component | On | Reached by | Holds |
+|---|---|---|---|
+| `TLightComponent` | any, when OF_LIGHT | `Light()` / `EnsureLight()` | the light (record: `light`) |
+| `T2DVisualComponent` / `T3DVisualComponent` | any | `Visual()` | nothing persisted: the imagery's draw |
+| `TStatsComponent` | any with object stats | `Stats()` | the object stats (record: `stats`) |
+| `TScriptComponent` | any scripted | `GetScript()` | the bound script |
+| `TInventoryComponent` | containers | `Contents()` | the slots (record: the nested items) |
+| `TVitalsComponent` | characters | `Vitals()` | recovery clocks (record), accumulators (between ticks), poison, the teleport point |
+| `TAIComponent` | characters | `Brain()` | attack timers and requests, target memory, waypoints, wander, retreat, boss state, has-seen, auto-combat, glimpse and noise (between ticks) |
+| `TCombatComponent` | characters | `Combat()` | the last attack, chain, button, bow, combat flash, snap time, invoke delay, magic resistance (between ticks) |
+| `TFadeComponent` | characters | `Fader()` | the fade and the invisibility spell (between ticks) |
+| `TEquipmentComponent` | players | `Equipment()` | the equip slots (rebuilt from the inventory on load) |
+| `TSpellbookComponent` | players | `Spellbook()` | talisman codes, quick spells (record) |
+| `TStatEffectsComponent` | players | `Effects()` | stat effects in force, their expiry, the modified stats |
+| `TAutomapComponent` | players | `Automap()` | the explored automap (record) |
+
+What stays on the object: the playhead (`frame`, `framerate`) and
+`state`, since an object without an animator still has them; the action
+blocks and `commanddone` (the complex object's); velocity and the
+accumulator (a motion component is deferred); the spell manager; the
+burn, the voice, the corpse clock. An exit has no component: its state
+is one flags word in `SExitState`, and its destination is the exit list's
+entry by name.
+
+### Links
+
+There is one reference type, `TSafeRef<T>` (engine/core/saferef.h). At
+run time it is a handle: a slot in the type's handle table and that
+slot's generation, so a deleted referent reads null and a reused slot
+is told from its old tenant. An object's handle is its node's. As a
+property it serializes as the referent's uid, the way Unity writes a
+file id: the uid names the link in the file, the handle is what runs.
+
+A load hands a reference its uid and nothing more; the loader ends with
+the link step (`nodepack::ResolveRefs(root)`, or `refl::ResolveRefs` on
+a lone object), which closes every reference it loaded at once, after
+every object exists. There is no lazy resolution on `Get()`: a reference
+read before the step is null, a load-order bug to find rather than hide.
+The AI component's look-at, waypoint and Goto item, its has-seen entries
+and the character's burn effect are references of this kind.
+
+The map index is the retail file's field for an object, only mostly
+unique (retail sector files hold duplicates): it names objects in the
+sector and save streams and the editor's selection, and is never an
+identity a reference is built on.
+
+### The Gate
+
+`--test=state-roundtrip --level=L` (tools/state_gate.sh over every
+level) puts every object of a level and the new game's player through
+`Capture` -> `Apply` -> `Capture` and asserts the records match.
+`--test=sector-dump` and `--test=player-dump` prove the retail bytes
+against a baseline binary. Run them before pushing a change to any
+record, def or component.
 
 ## Object Flags System
 
@@ -348,52 +383,11 @@ int32_t TObjectClass::AddStat(SStatisticDef &newstatdef, int32_t newid)
 
 ### Destruction and Cleanup
 
-**Destructor Process:**
-```cpp
-TObjectInstance::~TObjectInstance()
-{
-    // Clean up inventory
-    if (Inventory.GetContainer() == this)
-        Inventory.SetContainer(nullptr);
-    
-    // Delete animator
-    if (animator)
-        delete animator;
-    
-    // Free imagery
-    TObjectImagery::FreeImagery(imagery);
-    
-    // Clean up lighting
-    if (lightdef.lightindex != -1)
-        Scene3D.DeleteLight(lightdef.lightindex);
-    
-    // Recursively delete inventory contents
-    for (TInventoryIterator i(this); i; i++)
-    {
-        i.Item()->RemoveFromInventory();
-        delete i.Item();
-    }
-    
-    // Remove from parent inventory
-    RemoveFromInventory();
-    
-    // Remove from map
-    if (GetSector() != nullptr)
-        MapPane.RemoveObject(this);
-    
-    // Clean up name
-    if (name && name != inf->name)
-        free(name);
-    
-    // Cancel centering
-    if (MapPane.GetCenterOnObj() == this)
-        MapPane.CenterOnObj(nullptr, false);
-    
-    // Delete script
-    if (script)
-        delete script;
-}
-```
+**Destructor Process:** the node owns the object (`DeleteObject(inst)`,
+never `delete inst`). The object's destructor deletes its inventory items
+first (they are its contents, held by the inventory component), then
+detaches its components, frees the imagery, removes itself from the map
+and the parent inventory, and cancels any centering on it.
 
 ## Inventory System
 
@@ -470,13 +464,12 @@ enum
 
 ### Optimization Strategies
 
-**1. Shared Metadata:** SObjectInfo structures are shared across all instances
-**2. Small Instance Data:** TObjectInstance contains only instance-specific data
-**3. Efficient Arrays:** TVirtualArray for sparse object type storage
-**4. Lazy Loading:** Imagery loaded only when needed
+**1. Shared Metadata:** one TObjectDef per type, shared by all its instances
+**2. Small Instance Data:** TObjectInstance contains only instance-specific data; what a class doesn't need is a component it doesn't have
+**3. Lazy Loading:** Imagery loaded only when needed
 
 **Memory Usage Notes:**
-- **SObjectInfo** kept small (used by thousands of objects)
+- **TObjectDef** is per type, not per instance (the type table is the registry)
 - **TObjectInstance** contains only instance-specific data
 - **Statistics** stored efficiently with default values
 - **Imagery** shared across instances of same type
@@ -495,7 +488,7 @@ enum
 
 ### Lighting System
 - Objects can generate light (OF_LIGHT flag)
-- Light definitions stored in SLightDef structure
+- The light is a TLightComponent, there exactly when the flag is set; the record's `light` field is its serialization
 - Integrated with 3D scene system
 
 ### Map System

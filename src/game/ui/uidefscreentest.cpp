@@ -1,0 +1,384 @@
+// *************************************************************************
+// *                  Revenant Revisited (port) - 2026                     *
+// *  uidefscreentest.cpp - DEF widget engine test harness                  *
+// *************************************************************************
+//
+// Drives the in-scope DEF screens in isolation:
+//   --test=ui-ingamemenu   ingamemenu.def  "ingamemenu"  (ESC pause menu)
+//   --test=ui-options      options.def     "default"     (Settings)  -> the real
+//                          TOptionsPane (controller list bound to ControlMap +
+//                          key rebinding)
+//   --test=ui-savegame     savegame.def    "default"     (Save)
+//   --test=ui-loadgame     loadgame.def    "default"     (Load)
+//
+// Each screen's pane rect and DEF flags are the host-side DefScreen_Open
+// constants from the respective *_SPEC.md (the .def carries pane-LOCAL coords);
+// the flags pick the chrome (docs/gameflow/forensics/INGAME_MENU.md §4.2).
+// Simple screens run on a raw TDefPane with synthetic FIELD data; Options runs
+// on TOptionsPane which sources its controller list from the live keymapper.
+
+#include "game/ui/uidefscreentest.h"
+
+#include "game/ui/defpane.h"
+#include "engine/render/display.h"
+#include "engine/assets/font.h"
+#include "game/app/gameoptions.h"
+#include "engine/core/jsonout.h"
+#include "engine/core/logging.h"
+#include "game/ui/optionspane.h"
+#include "engine/core/revdefs.h"
+#include "game/app/revenant.h"   // CurrentScreen, the setting globals
+#include "game/ui/screen.h"
+#include "engine/render/surface.h"
+#include "game/app/testconfig.h"
+#include "engine/core/textencoding.h"
+#include "engine/core/revtime.h"
+#include "game/ui/uipanehost.h"
+
+#include <cstdio>
+#include <cstring>
+#include <fstream>
+#include <iterator>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace {
+
+struct SScreenSpec
+{
+    const char* mode;
+    const char* def;        // <def>.def, and the base of its chrome dat
+    const char* panel;      // PANEL name
+    int32_t     x, y, w, h; // pane rect on the 640x480 design canvas
+    uint32_t    defflags;   // retail DefScreen_Open flags (TDefPane::DEF_*)
+    bool        modal;      // pushed as a modal (retail RunModal) vs added as a pane
+};
+
+constexpr SScreenSpec kScreens[] = {
+    // InGameMenuDef_SPEC §3: pane TL (126,65), 394x316, flags 0x11. Retail runs
+    // it modally (TPlayScreen in-game menu 0x0047e500 -> RunModal).
+    {"ui-ingamemenu", "ingamemenu", "ingamemenu", 126, 65, 394, 316, TDefPane::DEF_INGAME, true},
+    // OptionsDef_SPEC §3: full-display pane (0,0) 640x480. From the title (flags
+    // 0) the "alpha" chrome: the full pre-composited Ahkuilon backdrop + frame +
+    // OPTIONS plate.
+    {"ui-options",    "options",    "default",    0,   0,  640, 480, 0,                    false},
+    // Save/Load full-display chrome. Load from the title takes the "alpha" scene
+    // backdrop (battle vista); Save is in-game only (flags 0x11, the "tex"
+    // chrome with a transparent interior over the frozen game frame).
+    {"ui-savegame",   "savegame",   "default",    0,   0,  640, 480, TDefPane::DEF_INGAME, false},
+    {"ui-loadgame",   "loadgame",   "default",    0,   0,  640, 480, 0,                    false},
+};
+
+const SScreenSpec* FindSpec(const char* mode)
+{
+    if (!mode) return nullptr;
+    for (const SScreenSpec& s : kScreens)
+        if (std::strcmp(mode, s.mode) == 0)
+            return &s;
+    return nullptr;
+}
+
+bool IsOptions(const SScreenSpec* s) { return s && std::strcmp(s->mode, "ui-options") == 0; }
+
+TDefPane*          g_pane = nullptr;
+const SScreenSpec* g_spec = nullptr;
+
+// Save / Load with made-up slots: the slot list's names from the pane's
+// field getter, as the real dialogs give them.
+class TSyntheticSlotsPane : public TDefPane
+{
+  protected:
+    std::string FieldText(const std::string& field, int32_t index, SDefColor& colour) override
+    {
+        if (field == "gamelist_name" && index >= 0 && index < static_cast<int32_t>(std::size(kNames)))
+            return kNames[index];
+        return TDefPane::FieldText(field, index, colour);
+    }
+
+    void OnOpened() override
+    {
+        SetListCount("gamelist", static_cast<int32_t>(std::size(kNames)));
+        SelectListItem("gamelist", 1);  // "Misty Caves"
+        SetText("gamename", "Misty Caves");
+        SetText("modname", "Ahkuilon");
+        SetText("charname", "Locke");
+    }
+
+  private:
+    static constexpr const char* kNames[] = {
+        "Ahkuilon Entrance", "Misty Caves", "The Lost Vault",
+        "Tomb of Set-amun", "Sea of Serpents", "Final Descent",
+    };
+};
+
+bool IsSlotScreen(const SScreenSpec* s)
+{
+    return s && (std::strcmp(s->mode, "ui-savegame") == 0 || std::strcmp(s->mode, "ui-loadgame") == 0);
+}
+
+// Pushes the modal pane and re-pushes it when it ends, so the test screen keeps
+// showing it after each choice (the result is logged).
+void PushModalPane()
+{
+    if (!g_pane || !CurrentScreen) return;
+    CurrentScreen->PushModal(g_pane, 0, [](int32_t result) {
+        log_info("[ui-defscreen] modal result %d", result);
+        PushModalPane();
+    });
+}
+
+}  // namespace
+
+bool IsUIDefScreenMode(const char* mode)
+{
+    return FindSpec(mode) != nullptr;
+}
+
+bool InitializeUIDefScreenMode(const char* mode)
+{
+    g_spec = FindSpec(mode);
+    if (!g_spec || !CurrentScreen)
+        return false;
+
+    log_info("[ui-defscreen] === DEF pane '%s' (%s.def / panel '%s') ===",
+             g_spec->mode, g_spec->def, g_spec->panel);
+
+    int32_t ox = 0, oy = 0;
+    ClassicCanvasOrigin(ox, oy);
+    const int32_t x = ox + g_spec->x, y = oy + g_spec->y;
+
+    bool ok = false;
+    if (IsOptions(g_spec))
+    {
+        auto* options = new TOptionsPane();
+        ok = options->OpenOptions(g_spec->defflags != 0, x, y);
+        g_pane = options;
+    }
+    else
+    {
+        g_pane = IsSlotScreen(g_spec) ? new TSyntheticSlotsPane() : new TDefPane();
+        ok = g_pane->Open(g_spec->def, g_spec->panel, g_spec->defflags, x, y, g_spec->w,
+                          g_spec->h, g_spec->def);
+    }
+    if (!ok)
+    {
+        log_error("[ui-defscreen] Open failed for %s", g_spec->mode);
+        delete g_pane;
+        g_pane = nullptr;
+        g_spec = nullptr;
+        return false;
+    }
+
+    g_pane->SetOnActivate([](TDefPane& pane, const SDefWidget& w, int32_t index) {
+        log_info("[ui-defscreen] clicked '%s'", w.name.c_str());
+        if (g_spec && g_spec->modal)
+            pane.EndModal(index);
+    });
+
+    if (g_spec->modal)
+        PushModalPane();
+    else
+        CurrentScreen->AddPane(g_pane);
+    return true;
+}
+
+void RenderUIDefScreenMode()
+{
+    // The pane composes and draws itself through the screen's pane layer; the
+    // test only clears to a dark backdrop so transparent chrome reads.
+    Display.BackBuffer()->StartPass(0.10f, 0.10f, 0.12f, 1.0f);
+    Display.BackBuffer()->EndPass();
+}
+
+void CloseUIDefScreenMode()
+{
+    if (g_pane)
+    {
+        if (CurrentScreen)
+            CurrentScreen->RemovePane(g_pane);
+        g_pane->Close();
+        delete g_pane;
+        g_pane = nullptr;
+    }
+    g_spec = nullptr;
+}
+
+// ---- --test=ab-options -----------------------------------------------------
+
+namespace {
+
+struct SAbInput
+{
+    enum class EKind : uint8_t { Down, Up, Move, Key };
+    EKind   kind = EKind::Move;
+    int32_t x = 0, y = 0;   // pane-local; a key: the VK and 1 down / 0 up
+};
+
+struct SOptionsCase
+{
+    std::vector<std::pair<std::string, int32_t>> settings;
+    bool fromGame = false;
+    std::vector<SAbInput> input;
+};
+
+TOptionsPane* g_abOptions = nullptr;
+TAbClock      g_abClock;
+
+bool ParseOptionsCase(const std::string& text, SOptionsCase& c)
+{
+    for (const std::string& field : SplitAbField(text, ';'))
+    {
+        const size_t eq = field.find('=');
+        const std::string key = field.substr(0, eq);
+        const std::string value = eq == std::string::npos ? std::string() : field.substr(eq + 1);
+        if (key == "settings")
+        {
+            for (const std::string& setting : SplitAbField(value, ','))
+            {
+                const size_t colon = setting.find(':');
+                int32_t number = 0;
+                if (colon == std::string::npos || std::sscanf(setting.c_str() + colon + 1, "%d", &number) != 1)
+                    return false;
+                c.settings.emplace_back(setting.substr(0, colon), number);
+            }
+        }
+        else if (key == "from_game")
+            c.fromGame = value == "1";
+        else if (key == "input")
+        {
+            for (const std::string& event : SplitAbField(value, '|'))
+            {
+                char kind[8] = {};
+                SAbInput in;
+                if (std::sscanf(event.c_str(), "%7[a-z]:%d,%d", kind, &in.x, &in.y) != 3)
+                    return false;
+                const std::string k = kind;
+                if (k == "down")      in.kind = SAbInput::EKind::Down;
+                else if (k == "up")   in.kind = SAbInput::EKind::Up;
+                else if (k == "move") in.kind = SAbInput::EKind::Move;
+                else if (k == "key")  in.kind = SAbInput::EKind::Key;
+                else                  return false;
+                c.input.push_back(in);
+            }
+        }
+        else
+            return false;
+    }
+    return true;
+}
+
+// The setting globals the pane copies on opening, by its control names.
+bool ApplyOptionsSetting(const std::string& name, int32_t value)
+{
+    if (name == "Realtime") RealTimeLight = value != 0;
+    else if (name == "Auto") AutoBeginCombat = value != 0;
+    else if (name == "Dialog") PlaySpeech = value != 0;
+    else if (name == "Face") CombatFace = value != 0;
+    else if (name == "Enhanced") EnhancedLighting = value != 0;
+    else if (name == "Limit") NoGameSpeedLimit = value == 0;
+    else if (name == "NoCombatRes") NoCombatResults = value != 0;
+    else if (name == "Violence") ViolenceLevel = value;
+    else if (name == "Music") MusicVolume = value;
+    else if (name == "Sound") EffectsVolume = value;
+    else if (name == "Gamma") GammaLevel = value;
+    else return false;
+    return true;
+}
+
+
+bool WriteOptionsShown(const std::string& path, const std::vector<STextDraw>& text)
+{
+    const SOptionsPaneValues& v = g_abOptions->Values();
+    JsonOut json;
+    json.Begin('{');
+    json.FieldString("schema", "port.options.v1");
+    json.Key("pane").Begin('[').Value(g_abOptions->GetPosX()).Value(g_abOptions->GetPosY())
+        .Value(g_abOptions->GetWidth()).Value(g_abOptions->GetHeight()).End(']');
+    json.Key("members").Begin('{');
+    json.Field("Realtime", v.realTimeLight).Field("Auto", v.autoCombat).Field("Dialog", v.playSpeech)
+        .Field("Face", v.combatFace).Field("Enhanced", v.enhancedLighting).Field("Limit", v.limitSpeed)
+        .Field("NoCombatRes", v.noCombatResults).Field("Violence", v.violence).Field("Music", v.music)
+        .Field("Sound", v.effects).Field("Gamma", v.gamma);
+    json.End('}');
+    json.Key("bindings").Begin('[');
+    for (const int32_t key : g_abOptions->Bindings())
+        json.Value(key);
+    json.End(']');
+    json.Key("rebind").Begin('{');
+    json.Field("capturing", g_abOptions->Capturing() ? 1 : 0).Field("item", g_abOptions->RebindItem());
+    json.End('}');
+    WriteTextDraws(json, text);
+    json.End('}');
+    std::ofstream out(path, std::ios::binary);
+    out << json.str() << '\n';
+    return bool(out);
+}
+
+}  // namespace
+
+bool InitializeABOptionsMode()
+{
+    SOptionsCase c;
+    if (!ParseOptionsCase(StartupAbCase, c))
+    {
+        log_error("[ab-options] bad --ab-case \"%s\"", StartupAbCase.c_str());
+        return false;
+    }
+    for (const auto& [name, value] : c.settings)
+        if (!ApplyOptionsSetting(name, value))
+        {
+            log_error("[ab-options] no setting \"%s\"", name.c_str());
+            return false;
+        }
+    g_abOptions = new TOptionsPane();
+    if (!CurrentScreen || !g_abOptions->OpenOptions(c.fromGame, 0, 0))
+    {
+        log_error("[ab-options] the options pane did not open");
+        delete g_abOptions;
+        g_abOptions = nullptr;
+        return false;
+    }
+    CurrentScreen->AddPane(g_abOptions);
+    for (const SAbInput& in : c.input)
+    {
+        switch (in.kind)
+        {
+            case SAbInput::EKind::Down: g_abOptions->MouseClick(MB_LEFTDOWN, in.x, in.y); break;
+            case SAbInput::EKind::Up:   g_abOptions->MouseClick(MB_LEFTUP, in.x, in.y); break;
+            case SAbInput::EKind::Move: g_abOptions->MouseMove(MB_LEFTDOWN, in.x, in.y); break;
+            case SAbInput::EKind::Key:  g_abOptions->KeyPress(in.x, in.y != 0); break;
+        }
+    }
+    return true;
+}
+
+void RenderABOptionsMode()
+{
+    Display.BackBuffer()->StartPass(0.0f, 0.0f, 0.0f, 1.0f);
+    Display.BackBuffer()->EndPass();
+    // An in-game pane is captured once it has faded in.
+    if (!g_abOptions || !g_abOptions->FadedIn() || !g_abClock.Stop())
+        return;
+    std::vector<STextDraw> text;
+    SetTextDrawRecorder(&text);
+    g_abOptions->Compose();
+    SetTextDrawRecorder(nullptr);
+    if (!StartupAbOut.empty() && !WriteOptionsShown(StartupAbOut, text))
+        log_error("[ab-options] could not write %s", StartupAbOut.c_str());
+    log_info("[ab-options] composed at frame %lld, %zu text draws", static_cast<long long>(TTime::FrameCount()),
+             text.size());
+}
+
+void CloseABOptionsMode()
+{
+    g_abClock.Restore();
+    if (g_abOptions)
+    {
+        if (CurrentScreen)
+            CurrentScreen->RemovePane(g_abOptions);
+        g_abOptions->Close();
+        delete g_abOptions;
+        g_abOptions = nullptr;
+    }
+}

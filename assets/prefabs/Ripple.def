@@ -1,0 +1,83 @@
+// Ripple -- the expanding water ring at a drip/splash impact (retail
+// TRippleEffect + TRippleAnimator, effect_old.cpp 10686-10947; forensics
+// docs/vfx/forensics/H03_H04_WATER_AUDIT.md, INVENTORY row H03; existing
+// port TRippleEffect in effect.cpp).
+//
+// Retail parameters, all per tick at 24 Hz (one animator frame = one tick):
+//   sprite     Magic\ripples.I3D object 0 ("box01"): flat quad spanning
+//              X +-10.6024, Y +-11.0843 (21.2048 x 22.1686 wu at scale 1),
+//              texture slot 0 = 256x256 4x4 atlas, white RGB, authored alpha
+//   blend      SRCALPHA / INVSRCALPHA, depth test, no write (SetBlendState)
+//   lie        flat in the owner's XY plane at the water surface z
+//   scale      0.5 at Initialize, += 1/16 every Animate
+//   length     controller-supplied lifetime; 96 here, the value the harness
+//              entry TRippleEffect::SpawnForTest uses for its preview
+//   ripframe   advances on even frames only: 0..3 cyclic while
+//              frameon <= length - 24, then 4 once past it and +1 to 15
+//   atlas cell rippleframeof[15 - ripframe] with
+//              rippleframeof = {3,2,1,0, 7,6,5,4, 11,10,9,8, 15,14,13,12},
+//              i.e. cell = 12 - ripframe + 2 * (ripframe % 4)
+//   death      frameon > length && ripframe == 15  (frameon 97 for 96)
+//   alpha      no curve: the dissipation is the atlas's cells 4..15
+//
+// Not carried: the splash droplets (2-3 ballistic drops when length > 24,
+// each landing spawning a half-length child ripple) -- a composite the
+// harness entry still owns; this prefab is the ring only.
+//
+// VM notes: vel.x is the frameon counter (the ring never moves); frame is
+// written twice per tick, first as ripframe, then rewritten as the atlas
+// cell -- the VM has no temporaries.
+particles
+{
+    effect Ripple
+    {
+        inactive_ttl_pulses = 12
+
+        bucket ring
+        {
+            imagery_path = "Magic\\ripples.I3D"
+            texture_slot = 0
+            atlas_cols = 4
+            atlas_rows = 4
+            atlas_frames = 16
+            width = 21.2048
+            height = 22.1686
+            scale = 0.5
+            blend_mode = "alpha"
+            light_mode = "unlit"
+            depth_mode = "test_no_write"
+            orientation = "world_xy"
+
+            spawn_burst = 1
+            tick_hz = 24
+            default_life = -1
+
+            // frameon 0: scale 0.5, ripframe 0 -> cell 12.
+            spawn_expr = "
+                pos = emit_pos;
+                vel = vec3(0, 0, 0);
+                scale = vec3(10.6024, 11.0843, 1);
+                color = vec4(1, 1, 1, 1);
+                frame = 12;
+            "
+
+            // frameon++, scale += 1/16 (21.2048/16, 22.1686/16 wu), then
+            // ripframe: floor(frameon/2) % 4 through frameon 73 (length-24
+            // = 72; frame 73 is odd and keeps 72's value), from 74 on
+            // 4 + floor((frameon-74)/2) clamped to 15. Last line maps
+            // ripframe to the atlas cell.
+            tick_expr = "
+                vel.x = vel.x + 1;
+                scale.x = scale.x + 1.3253;
+                scale.y = scale.y + 1.385538;
+                frame = select(step(74, vel.x),
+                               min(4 + floor((vel.x - 74) * 0.5), 15),
+                               floor(vel.x * 0.5) - 4 * floor(vel.x * 0.125));
+                frame = 12 - frame + 2 * (frame - 4 * floor(frame * 0.25));
+            "
+
+            // frameon > 96 (ripframe is 15 from frameon 96 on).
+            kill_expr = "step(97, vel.x)"
+        }
+    }
+}

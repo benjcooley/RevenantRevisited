@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-source = (ROOT / 'src/effect.cpp').read_text()
+source = (ROOT / 'src/game/effects/effect.cpp').read_text()
 start = source.index('TAuthoredStaticMeshEffect::~TAuthoredStaticMeshEffect()')
 end = source.index('void TAuthoredStaticMeshEffect::TickAndSubmitForTest_BESPOKE', start)
 actual = source[start:end]

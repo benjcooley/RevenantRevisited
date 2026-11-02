@@ -14,10 +14,10 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 
 HARNESS = r'''
-#include "gamemap.h"
-#include "mapmanager.h"
-#include "sector.h"
-#include "sectorstore.h"
+#include "game/world/gamemap.h"
+#include "game/world/mapmanager.h"
+#include "game/world/sector.h"
+#include "game/world/sectorstore.h"
 #include <cassert>
 #include <cstdio>
 #include <strings.h>
@@ -41,7 +41,8 @@ void TSector::WalkmapHandler(int32_t, uint8_t*, int32_t, int32_t, int32_t,
 int32_t TSector::AddObject(TObjectInstance*, int32_t) { return 0; }
 void TObjectInstance::GetFacingBoundBox(int32_t&, int32_t&, int32_t&, int32_t&) {}
 TObjectImagery* TObjectInstance::GetImagery() const { return nullptr; }
-S3DPoint TObjectInstance::Pos() const { return {}; }
+hmm_vec3 TTransform::Pos() const { return {}; }
+hmm_vec3 TTransform::LocalRotEuler() const { return {}; }
 TObjectInstance* LookupMapIndex(int32_t) { return nullptr; }
 int stricmp(const char* a, const char* b) { return strcasecmp(a, b); }
 extern "C" void log_log(int, const char*, int, const char*, ...) {}
@@ -171,7 +172,7 @@ def main():
         binary = path / "check"
         subprocess.run([
             *compiler, "-std=c++17", *includes, str(source),
-            str(ROOT / "src/gamemap.cpp"), str(ROOT / "src/mapmanager.cpp"),
+            str(ROOT / "src/game/world/gamemap.cpp"), str(ROOT / "src/game/world/mapmanager.cpp"),
             "-o", str(binary),
         ], check=True, cwd=path)
         subprocess.run([str(binary), str(path)], check=True, cwd=path)

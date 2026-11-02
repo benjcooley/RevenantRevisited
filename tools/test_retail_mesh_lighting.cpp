@@ -1,7 +1,7 @@
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
-#include "../src/retailmeshlighting.h"
+#include "../src/engine/render/retailmeshlighting.h"
 #include <cassert>
 #include <cmath>
 #include <iostream>

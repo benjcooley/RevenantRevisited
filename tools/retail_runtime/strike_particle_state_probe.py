@@ -26,7 +26,7 @@ return f?0:5;}
 
 def run(trace,output):
  output.mkdir(parents=True,exist_ok=True);data=json.loads(trace.read_text());records=data['records'];source=output/'state.cpp';source.write_text(DRIVER);binary=output/'state'
- cmd=['clang++','-std=c++17','-O1','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/authoredpartsys.cpp'),str(ROOT/'src/partsysdefinition.cpp'),'-o',str(binary)]
+ cmd=['clang++','-std=c++17','-O1','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/engine/fx/authoredpartsys.cpp'),str(ROOT/'src/engine/fx/partsysdefinition.cpp'),'-o',str(binary)]
  q=subprocess.run(cmd,capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr);assert q.returncode==0,q.stderr
  raw=struct.pack('<iI',len(records),data['initial']['seed']);rows={};initialized=set()
  for record in records:
@@ -52,7 +52,7 @@ def run(trace,output):
    if slot not in born and i in(15,19):continue
    d=abs(x-y);maximum=max(maximum,d);checks+=1
    if d>(0 if i in(0,1,2,3,4,5,6,14)else .002):errors.append(dict(key=key,field=i,native=x,source=y,error=d))
- report=dict(status='fail'if errors else'pass',checks=checks,rows=len(rows),maximum_error=maximum,errors=errors[:100],error_count=len(errors),trace_sha256=sha(trace.read_bytes()),source_sha256=sha(source.read_bytes()),production_sha256={p:sha((ROOT/p).read_bytes())for p in('src/authoredpartsys.cpp','src/partsysdefinition.cpp')},inputs_sha256=sha(raw),sanitizers='ASan/UBSan',accepted=False,scope=__doc__)
+ report=dict(status='fail'if errors else'pass',checks=checks,rows=len(rows),maximum_error=maximum,errors=errors[:100],error_count=len(errors),trace_sha256=sha(trace.read_bytes()),source_sha256=sha(source.read_bytes()),production_sha256={p:sha((ROOT/p).read_bytes())for p in('src/engine/fx/authoredpartsys.cpp','src/engine/fx/partsysdefinition.cpp')},inputs_sha256=sha(raw),sanitizers='ASan/UBSan',accepted=False,scope=__doc__)
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],checks,len(errors));return report
 if __name__=='__main__':
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('trace',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.trace,a.output)

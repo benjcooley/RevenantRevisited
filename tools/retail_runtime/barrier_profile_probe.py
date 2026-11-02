@@ -59,7 +59,7 @@ def run(output):
             q=subprocess.run([str(binary),str(asset),'misc/'+name.lower()+'.i3d'],capture_output=True,text=True)
             (output/(name+'.log')).write_text(q.stdout+q.stderr);assert q.returncode==0,q.stdout+q.stderr
             cases.append(dict(name=name,type_id=type_id,accepted_paths=4,rejections=25253,asset_sha256=digest))
-    report=dict(status='pass',cases=cases,profile_sha256=sha((ROOT/'src/barrierlegacykeys.h').read_bytes()),
+    report=dict(status='pass',cases=cases,profile_sha256=sha((ROOT/'src/game/effects/barrierlegacykeys.h').read_bytes()),
                 scope='Complete immutable own-body admission; every byte mutation and header/path/null/cross-resource controls under ASan/UBSan. Does not enable a shared loader branch or grant pose/render/appearance credit.')
     (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print('PASS both own bodies')
 

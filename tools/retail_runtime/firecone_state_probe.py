@@ -123,8 +123,8 @@ class FireConeFixture:
 
 
 def build_port(output, inputs, ticks):
-    source = (ROOT / 'src/effect.cpp').read_text()
-    header = (ROOT / 'src/effect.h').read_text()
+    source = (ROOT / 'src/game/effects/effect.cpp').read_text()
+    header = (ROOT / 'src/game/effects/effect.h').read_text()
     start = header.index('    static constexpr int FLAME_COUNT', header.index('class TFireConeEffect_Bespoke'))
     end = header.index('    void SimulateTick();', start)
     fields = header[start:end]
@@ -132,7 +132,7 @@ def build_port(output, inputs, ticks):
         ('add', 'void TFireConeEffect_Bespoke::Pool::Add('),
         ('animate', 'void TFireConeEffect_Bespoke::Pool::Animate('),
         ('tick', 'void TFireConeEffect_Bespoke::SimulateTick('))}
-    particle_header = (ROOT / 'src/effectcomp.h').read_text()
+    particle_header = (ROOT / 'src/game/effects/effectcomp.h').read_text()
     particle = function(particle_header, 'struct SParticleSystemInfo') + ';'
     prelude = r'''
 #include <cstdio>

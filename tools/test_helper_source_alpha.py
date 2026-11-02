@@ -2,7 +2,7 @@
 """Compile actual helper pipeline creation: existing culls and source mode2 state."""
 from pathlib import Path
 import subprocess,tempfile
-root=Path(__file__).resolve().parents[1];source=(root/'src/renderer.cpp').read_text();start=source.index('    hpip.index_type     = SG_INDEXTYPE_UINT16;');end=source.index('    // Gold',start);body=source[start:end]
+root=Path(__file__).resolve().parents[1];source=(root/'src/engine/render/renderer.cpp').read_text();start=source.index('    hpip.index_type     = SG_INDEXTYPE_UINT16;');end=source.index('    // Gold',start);body=source[start:end]
 prelude=r'''
 #include <cassert>
 #include <vector>

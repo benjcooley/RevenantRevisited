@@ -3,8 +3,8 @@
 // *              test_particlefx.cpp - Particle FX VM Tests                *
 // *************************************************************************
 
-#include "../src/defdoc.h"
-#include "../src/particlefx.h"
+#include "../src/engine/refl/defdoc.h"
+#include "../src/engine/fx/particlefx.h"
 
 #include <cmath>
 #include <filesystem>

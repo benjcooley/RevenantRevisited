@@ -10,7 +10,7 @@ def fingerprint(raw):
 
 class IcedsparksProfile(unittest.TestCase):
  def test_literal_identity_and_all_fifty_roots(self):
-  header=(ROOT/'src/genericstaticprofile.h').read_text();declarations=header[header.index('namespace generic_static_profile {'):header.index('inline uint64_t Hash(')]+'}\n'
+  header=(ROOT/'src/game/effects/genericstaticprofile.h').read_text();declarations=header[header.index('namespace generic_static_profile {'):header.index('inline uint64_t Hash(')]+'}\n'
   source='#include <cstdint>\n#include <cstdio>\n#include <cassert>\n'+declarations+r'''
 int main(){using namespace generic_static_profile;const auto*p=Find(0xacabfadau);assert(p&&p->frames==100&&p->objects==50&&p->key_bytes==8);assert(!Find(0xffffffffu));assert(!Find(0xacabfadau^1u));printf("%s\n",p->path);
 for(int i=0;i<p->objects;++i){const auto&o=p->object[i];printf("%s %d %d %d %d %llu %llu %llu\n",o.name,o.material,o.vertices,o.faces,o.keys,(unsigned long long)o.key_hash,(unsigned long long)o.vertex_hash,(unsigned long long)o.face_hash);}}

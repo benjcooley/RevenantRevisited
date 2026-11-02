@@ -5,7 +5,7 @@ from speed_profile_contract import function
 from antimagic_visual_reference import NativeAntimagic,ROOT
 class AntimagicTests(unittest.TestCase):
  def test_actual_source_does_not_advance_particles_after_owner_kill(self):
-  source=(ROOT/'src/effects/antimagicpreview.cpp').read_text()
+  source=(ROOT/'src/game/effects/legacy/antimagicpreview.cpp').read_text()
   actual=function(source,'void Advance(State* s,double seconds)')
   driver=r'''#include <cassert>
 #include <cmath>

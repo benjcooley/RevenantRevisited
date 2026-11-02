@@ -8,7 +8,7 @@ from burn_owner_probe import run as owner
 EVIDENCE=Path('/Users/benjamincooley/RevenantRetailLab/research/vfx-next-burn-aura-20261011')
 class BurnPublicTests(unittest.TestCase):
  def test_integer_pose_restores_shared_interpolation_on_failure(self):
-  helper=function((ROOT/'src/effects/burnpublicpreview.cpp').read_text(),'static bool IntegerBone(')
+  helper=function((ROOT/'src/game/effects/legacy/burnpublicpreview.cpp').read_text(),'static bool IntegerBone(')
   driver=r'''
 #include <cassert>
 struct hmm_mat4{int value=0;};bool Interpolate=true;

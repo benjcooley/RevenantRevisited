@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
-source=(ROOT/'src/renderer.cpp').read_text()
+source=(ROOT/'src/engine/render/renderer.cpp').read_text()
 start=source.index('    SQuadDrawItem queued = item;',source.index('void TRenderer::SubmitFxQuad('))
 end=source.index('\n}',start)
 body=source[start:end]

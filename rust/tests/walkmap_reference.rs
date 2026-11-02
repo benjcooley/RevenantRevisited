@@ -19,8 +19,9 @@ use std::{fs, path::Path, process::Command};
 #[test]
 #[ignore = "requires sibling C++ source and a C++ compiler (CXX or c++)"]
 fn terrain_radius_matches_native_cpp() -> Result<()> {
-    let source =
-        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/mappane.cpp"))?;
+    let source = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../src/game/world/mappane.cpp"),
+    )?;
     let start = source
         .find("void TMapPane::GetWalkHeightRadius(")
         .context("native walk probe")?;

@@ -5,7 +5,7 @@ from pathlib import Path
 from speed_profile_contract import sha
 ROOT=Path(__file__).resolve().parents[2]
 def run(out):
- out.mkdir(parents=True,exist_ok=False);s=(ROOT/'src/revmain.cpp').read_text();helpers=s[s.index('std::string to_lower('):s.index('template <typename T>',s.index('std::string to_lower('))];a=s.index('        if (arg_param(cmd, "partsys-quality", p))');b=s.index('\n    }',a);block=s[a:b];code='''#include "argh.h"
+ out.mkdir(parents=True,exist_ok=False);s=(ROOT/'src/game/app/revmain.cpp').read_text();helpers=s[s.index('std::string to_lower('):s.index('template <typename T>',s.index('std::string to_lower('))];a=s.index('        if (arg_param(cmd, "partsys-quality", p))');b=s.index('\n    }',a);block=s[a:b];code='''#include "argh.h"
 #include <string>
 #include <cctype>
 #include <cassert>

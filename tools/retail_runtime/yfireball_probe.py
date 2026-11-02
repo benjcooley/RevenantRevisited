@@ -47,13 +47,13 @@ def main():
     args=parser.parse_args();args.output.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:asset=z.read(ASSET)
     if hashlib.sha256(asset).hexdigest()!=SHA:raise ValueError('Wrong Y authored asset')
-    source=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     if 'class TFireBallEffect_Bespoke__YFireBall : public TFireBallEffect'not in header:raise AssertionError('Y preview no longer shares verified producer')
     wrapper=function(source,'void TFireBallEffect_Bespoke__YFireBall::TickAndSubmitForTest_BESPOKE(')
     if 'TickAndSubmit(debug_mode);'not in wrapper:raise AssertionError('Y preview no longer delegates actual shared runtime')
     factory=function(source,'TFireBallEffect_Bespoke__YFireBall::SpawnForTest_BESPOKE(')
     if 'SpawnForTestWithAsset'not in factory or 'YFireBall.I3D'not in factory:raise AssertionError('Y asset factory changed')
-    files=['src/effect.cpp','src/effect.h','src/fireballquad.cpp','src/fireballquad.h','src/fireballcore.h','src/fireballspark.h']
+    files=['src/game/effects/effect.cpp','src/game/effects/effect.h','src/game/effects/fireballquad.cpp','src/game/effects/fireballquad.h','src/game/effects/fireballcore.h','src/game/effects/fireballspark.h']
     source_sha={p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest()for p in files}
     prefix,compiled=compile_prefix(args.output);render,vertices,render_compiled=port_driver(args.output,asset)
     vertices.write_bytes(asset[HEAD:HEAD+256]);fixture=YFixture(args.executable,asset)

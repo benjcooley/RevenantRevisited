@@ -1,0 +1,16 @@
+// *************************************************************************
+// *                         Cinematix Revenant                            *
+// *                    Copyright (C) 1998 Cinematix                       *
+// *                  mapscroll.cpp - TMapScroll module                    *
+// *                                                                       *
+// *  Retail class registration for MAPSCROLL (id 26). Body lives in the  *
+// *  retail Revenant.exe only; this TU exists so the class is present    *
+// *  in `TObjectClass::classes[26]` at sector-load time.                  *
+// *************************************************************************
+
+#include "game/app/revenant.h"
+#include "game/object/mapscroll.h"
+#include "game/object/object.h"
+
+REGISTER_OBJECT_DEF(TMapScroll)
+TObjectClass MapScrollClass("MAPSCROLL", OBJCLASS_MAPSCROLL, 0);

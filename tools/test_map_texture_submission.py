@@ -22,9 +22,9 @@ def function(text, signature):
     return text[start:end]
 
 
-map_source = (ROOT/'src/maprenderer.cpp').read_text()
-renderer_source = (ROOT/'src/renderer.cpp').read_text()
-renderer_header = (ROOT/'src/renderer.h').read_text()
+map_source = (ROOT/'src/game/world/maprenderer.cpp').read_text()
+renderer_source = (ROOT/'src/engine/render/renderer.cpp').read_text()
+renderer_header = (ROOT/'src/engine/render/renderer.h').read_text()
 lighting_policy = function(renderer_header, 'bool UsesRetailSoftwareMeshLighting()')
 selection = function(map_source, 'static TTextureHandle MapMeshTexture(')
 material = function(map_source, 'void LoadObjectMaterial(')
@@ -32,7 +32,7 @@ tint_start = map_source.index('            m.tint[0] = m.tint[1] = m.tint[2] = 1
 tint = map_source[tint_start:map_source.index('            m.obj_id = obj_id;', tint_start)]
 drain = function(renderer_source, 'void TRenderer::DrainMeshQueue()')
 prelude = r'''
-#include "retailmeshlighting.h"
+#include "engine/render/retailmeshlighting.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>

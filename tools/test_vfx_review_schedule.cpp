@@ -1,5 +1,5 @@
 // clang++ -std=c++17 -O2 -Wall -Wextra -pedantic tools/test_vfx_review_schedule.cpp -o /tmp/test_vfx_review_schedule
-#include "../src/vfxreviewschedule.h"
+#include "../src/game/ab/vfxreviewschedule.h"
 #ifdef NDEBUG
 #undef NDEBUG // Keep standalone checks active in Release CMake builds.
 #endif

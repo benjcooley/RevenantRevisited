@@ -50,7 +50,7 @@ def parse_asset(data,profile):
 
 
 def production_spans():
-    image=(ROOT/'src/3dimage.cpp').read_text();mesh=(ROOT/'src/meshextract.cpp').read_text();effects=(ROOT/'src/effect.cpp').read_text()
+    image=(ROOT/'src/game/imagery/3dimage.cpp').read_text();mesh=(ROOT/'src/game/imagery/meshextract.cpp').read_text();effects=(ROOT/'src/game/effects/effect.cpp').read_text()
     return dict(key_decoder=span(image,'#define POSCHANGED 1','constexpr int32_t kLegacyTransitionBlendFrames'),
         interpolation_helpers=span(image,'static void InterpolatePoints','bool T3DImagery::GetAniKey('),
         key_getter=span(image,'bool T3DImagery::GetAniKey(','bool T3DImagery::CalcObjectMatrix('),
@@ -59,7 +59,7 @@ def production_spans():
         mesh_extract=span(mesh,'bool ExtractSubMesh(','// Mirror of the static MakeMatrix'),
         static_pose=span(mesh,'void BuildStaticObjectMatrix(','void BuildAnimatedObjectMatrix('),
         static_submit=span(effects,'void TAuthoredStaticMeshEffect::SubmitWorldMeshForTest_BESPOKE(','// ----- W3-G #3'),
-        math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
+        math=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text())
 
 
 def build_port(output,metadata,frames=FRAMES,texture_frames=False,untextured=False):
@@ -163,7 +163,7 @@ int main(int argc,char**argv){
         'constexpr int32_t kLegacyTransitionBlendFrames=5;\n'+pieces['interpolation_helpers']+'\n'+pieces['key_getter']+'\n'+
         pieces['object_matrix']+'\n'+pieces['mesh_extract']+'\n'+pieces['static_pose']+'\n'+pieces['static_submit']+'\n'+trailer)
     binary=output/'static-port-components';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),
-        '-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+        '-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     result=subprocess.run(command,capture_output=True,text=True);(output/'port-compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Static production-body compilation failed; see port-compile.log')
     traces={}
@@ -181,7 +181,7 @@ int main(int argc,char**argv){
         traces[name]=dict(indices=indices,cases=cases)
     return traces,dict(command=command,generated_source_sha256=sha(generated.read_bytes()),binary_sha256=sha(binary.read_bytes()),
         compiled_production_bodies=['GetUninterpolatedAniKey','GetAniKey','CalcObjectMatrix','BuildStaticObjectMatrix',
-                                   'ExtractSubMeshTextureSlot','TAuthoredStaticMeshEffect::SubmitWorldMeshForTest_BESPOKE','src/math3d.cpp'],
+                                   'ExtractSubMeshTextureSlot','TAuthoredStaticMeshEffect::SubmitWorldMeshForTest_BESPOKE','src/engine/core/math3d.cpp'],
         untextured=untextured,
         boundaries=['decoded exact asset records supplied by verified relative-offset layout','identity/translated owner matrix',
                     'renderer captures actual generic SubmitMesh payload','cross-state interpolation disabled for one constant track'])

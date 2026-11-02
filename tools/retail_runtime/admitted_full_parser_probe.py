@@ -32,8 +32,8 @@ def sha(data):
 
 
 def pins():
-    paths = [ROOT/p for p in ('src/partsysdefinition.cpp','src/partsysdefinition.h',
-        'src/authoredpartsys.cpp','src/authoredpartsys.h',
+    paths = [ROOT/p for p in ('src/engine/fx/partsysdefinition.cpp','src/engine/fx/partsysdefinition.h',
+        'src/engine/fx/authoredpartsys.cpp','src/engine/fx/authoredpartsys.h',
         'tools/retail_runtime/speed_controller_preflight.py',
         'tools/retail_runtime/speed_state_compare.py','tools/retail_runtime/admitted_full_parser_probe.py')]
     return {str(p.relative_to(ROOT)):sha(p.read_bytes())for p in paths}

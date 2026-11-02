@@ -188,7 +188,7 @@ class MissileProbe:
 
 def compile_current_port(output,probe):
     """Compile production shared controller and actual engine math helpers."""
-    obj=(ROOT/'src/object.cpp').read_text()
+    obj=(ROOT/'src/game/object/object.cpp').read_text()
     def function(signature):
         start=obj.index(signature);opening=obj.index('{',start);depth=1;end=opening+1
         while depth:
@@ -246,7 +246,7 @@ int main(int argc,char**argv){
     table=output/'original-movement-tables.bin';table.write_bytes(lookup)
     binary=output/'missile-port-driver'
     command=['clang++','-std=c++17','-iquote',str(ROOT/'src'),str(source),
-             str(ROOT/'src/missilestate.cpp'),'-o',str(binary)]
+             str(ROOT/'src/game/effects/missilestate.cpp'),'-o',str(binary)]
     result=subprocess.run(command,capture_output=True,text=True)
     (output/'port-compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Current Fireball Pulse compile failed; inspect port-compile.log')
@@ -259,8 +259,8 @@ def main():
     parser.add_argument('executable',type=Path);parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--build',type=Path,help='Explicit named fixed-layout variant build.json')
     args=parser.parse_args();args.output.mkdir(parents=True,exist_ok=True)
-    paths=[ROOT/p for p in ('src/effect.cpp','src/effect.h','src/object.cpp','src/missileeffect.cpp',
-                          'src/missilestate.cpp','src/missilestate.h')]
+    paths=[ROOT/p for p in ('src/game/effects/effect.cpp','src/game/effects/effect.h','src/game/object/object.cpp','src/game/effects/missileeffect.cpp',
+                          'src/game/effects/missilestate.cpp','src/game/effects/missilestate.h')]
     before={str(p.relative_to(ROOT)):digest(p.read_bytes()) for p in paths}
     probe=MissileProbe(args.executable,args.build);binary,table,compiled=compile_current_port(args.output,probe)
     probe.configure([0,0,128],[320,0,128])

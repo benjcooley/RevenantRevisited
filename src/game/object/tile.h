@@ -1,0 +1,28 @@
+// *************************************************************************
+// *                         Cinematix Revenant                            *
+// *                    Copyright (C) 1998 Cinematix                       *
+// *                        tile.h - TTile module                          *
+// *************************************************************************
+
+#pragma once
+
+#include "game/app/revenant.h"
+
+#include "game/object/object.h"
+
+_CLASSDEF(TTile)
+class TTile : public TObjectInstance
+{
+  public:
+    TTile(TObjectImagery* newim) : TObjectInstance(newim) { flags |= OF_IMMOBILE; }
+    TTile(SObjectState* def, TObjectImagery* newim) : TObjectInstance(def, newim) { flags |= OF_IMMOBILE; }
+
+    // Tile stats
+    STATFUNC(Code)
+    STATFUNC(Extra)
+    STATFUNC(Supertile)
+    STATFUNC(Width)
+    STATFUNC(Height)
+};
+
+DEFINE_OBJECT_DEF("TILE", TTile)

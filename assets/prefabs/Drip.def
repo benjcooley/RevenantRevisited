@@ -1,0 +1,142 @@
+// Drip -- the leaky-ceiling drop (retail TDripEffect / TDripAnimator,
+// effect_old.cpp 10940-11110; INVENTORY H04; forensics
+// docs/vfx/forensics/DRIP_LOADED_LIFECYCLE_20261011.md). One drop at a
+// time waits, falls under gravity and chains into a ripple on landing:
+// the "effect that spawns another effect", done with chain_bucket.
+//
+// Retail parameters (setdrip <ripplesize> <height> <period>, defaults
+// 64 / 128 / 48 -- the harness entry TDripEffect uses these defaults):
+//   height      128 local = 192 world (the animator draws through the
+//               owner matrix, WORLD3D_Z_SCALE 1.5 on local z)
+//   launch vz   -(RIPPLE_GRAVITY * 5) = -1.85 local = -2.775 world /tick
+//   gravity     RIPPLE_GRAVITY 0.37 local = 0.555 world /tick^2
+//   flight      23 ticks (~1 s) from release to pos.z <= 0
+//   respawn     while dead: time++; respawn when time > period and
+//               random(0, period / 2) == 0  (period 48: first trial on
+//               tick 49, then a 1/25 Bernoulli trial every tick; mean
+//               respawn tick 73, i.e. ~3 s between landing and release)
+//   sprite      Magic\drip.i3d photon quad (9.92 x 9.92 local, tilted
+//               toward the camera), scale 0.3, alpha blend, texture
+//               colour only (white, alpha 0..255 radial blob)
+//   on landing  AddNewRipple(landing xy, origin z, ripplesize) and
+//               PLAY("drip") (audio is out of scope here)
+//
+// The ripple is TRippleAnimator at length 64 (effect_old.cpp 10745-10920):
+//   ring        Magic\ripples.I3D box01, 21.2 x 22.17 wu flat on the
+//               ground, 4x4 cell atlas (256x256, white, alpha 0..170)
+//   scale       0.5 + frameon / 16 per tick
+//   cell        ripframe advances every 2nd tick: 0..3 cycling while
+//               frameon <= length - 24, then 4..15 once; the drawn cell
+//               is rippleframeof[15 - ripframe] = 12 + r - 8 * floor(r / 4)
+//   kill        frameon > length and ripframe == 15 -> tick 65
+//
+// Approximations / not expressed (see the port note):
+//   * The dead-time wait is a uniform start delay in [48, 96] ticks
+//     instead of the retail geometric trial (same minimum, same mean of
+//     72 held ticks + 1; the retail tail is longer).
+//   * At length > 24 the retail ripple also throws 2-3 splash droplets
+//     (ripples.I3D photon01 at scale 0.25) that each spawn a child
+//     ripple of half length on landing. A bucket cannot spawn several
+//     particles into a second bucket at birth, so the splash and its
+//     recursion are not carried here.
+particles
+{
+    effect Drip
+    {
+        debug = normal
+        inactive_ttl_pulses = 12
+
+        bucket drip
+        {
+            imagery_path = "Magic\\drip.i3d"
+            texture_slot = 0
+            atlas_cols = 1
+            atlas_rows = 1
+            atlas_frames = 1
+            width = 3.0
+            height = 4.1
+            scale = 1.0
+            blend_mode = "alpha"
+            light_mode = "unlit"
+            depth_mode = "test_no_write"
+            orientation = "screen_aligned"
+
+            // One drop, respawned in place after each landing; a fresh
+            // respawn is held (not drawn) for the dead-time delay first.
+            spawn_count = 1
+            spawn_delay_min = 48
+            spawn_delay_max = 96
+            tick_hz = 24
+            default_life = 0.0
+            chain_bucket = "ripple"
+
+            // Release point 192 wu above the emitter, straight down.
+            spawn_expr = "
+                pos = emit_pos + vec3(0, 0, 192);
+                vel = vec3(0, 0, -2.775);
+                scale = vec3(3.0, 4.1, 1);
+                color = vec4(1, 1, 1, 1);
+            "
+
+            // Euler step, then gravity (retail order); the landing tick
+            // snaps z to the ground so the chained ripple sits exactly on
+            // it (retail places the ripple at the emitter's z). The drop
+            // is not drawn on its landing tick in either implementation.
+            tick_expr = "
+                pos = pos + vel;
+                vel.z = vel.z - 0.555;
+                pos.z = max(pos.z, emit_pos.z);
+            "
+
+            kill_expr = "step(pos.z, emit_pos.z)"
+        }
+
+        bucket ripple
+        {
+            imagery_path = "Magic\\ripples.I3D"
+            texture_slot = 0
+            atlas_cols = 4
+            atlas_rows = 4
+            atlas_frames = 16
+            width = 21.2
+            height = 22.17
+            scale = 1.0
+            blend_mode = "alpha"
+            light_mode = "unlit"
+            depth_mode = "test_no_write"
+            orientation = "world_xy"
+
+            // Chain-driven only: one ring per landing.
+            spawn_burst = 0
+            spawn_count = 0
+            tick_hz = 24
+            default_life = 0.0
+
+            // Born at the impact point at scale 0.5, ripframe 0 -> cell 12.
+            spawn_expr = "
+                pos = emit_pos;
+                vel = vec3(0, 0, 0);
+                scale = vec3(10.6, 11.085, 1);
+                frame = 12;
+                color = vec4(1, 1, 1, 1);
+            "
+
+            // frameon = round(age * 24). ripframe r: floor(frameon / 2) % 4
+            // while frameon <= 40 (length - 24), then 4 + (frameon - 42) / 2
+            // capped at 15. The drawn atlas cell is rippleframeof[15 - r],
+            // which is 12 + r - 8 * floor(r / 4) (frame is reused as the
+            // scratch for r). Ring scale 0.5 + frameon / 16.
+            tick_expr = "
+                frame = select(step(42, floor(age * 24 + 0.5)),
+                               min(4 + floor((floor(age * 24 + 0.5) - 42) / 2), 15),
+                               floor(floor(age * 24 + 0.5) / 2) % 4);
+                frame = 12 + frame - 8 * floor(frame / 4);
+                scale.x = 21.2 * (0.5 + floor(age * 24 + 0.5) / 16);
+                scale.y = 22.17 * (0.5 + floor(age * 24 + 0.5) / 16);
+            "
+
+            // frameon > 64 with ripframe at 15: dead on tick 65.
+            kill_expr = "step(64.5, age * 24)"
+        }
+    }
+}

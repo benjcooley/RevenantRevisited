@@ -5,7 +5,7 @@ from speed_profile_contract import ROOT,function
 
 class SourceAlphaQueueTests(unittest.TestCase):
  def test_separate_admission_and_order(self):
-  source=(ROOT/'src/renderer.cpp').read_text()
+  source=(ROOT/'src/engine/render/renderer.cpp').read_text()
   methods='\n'.join(function(source,s) for s in ('void TRenderer::SubmitGoldFlareAfterFx(','void TRenderer::SubmitRetailSourceAlphaAfterFx('))
   driver='''#include <vector>
 #include <cassert>

@@ -5,7 +5,7 @@ from speed_profile_contract import function
 ROOT=Path(__file__).resolve().parents[2]
 class ShriekLifecycleTests(unittest.TestCase):
  def test_actual_advance_guards_owner_completion(self):
-  source=(ROOT/'src/effects/shriekpreview.cpp').read_text();body=function(source,'void Advance(State* s,double seconds)');alive=function(source,'bool Alive(State* s)')
+  source=(ROOT/'src/game/effects/legacy/shriekpreview.cpp').read_text();body=function(source,'void Advance(State* s,double seconds)');alive=function(source,'bool Alive(State* s)')
   marker='s->owner->Pulse();if(!Alive(s))return;';self.assertEqual(body.count(marker),1)
   prelude=r'''
 #include "shriekcore.h"

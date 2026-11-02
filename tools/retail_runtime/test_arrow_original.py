@@ -5,7 +5,7 @@ from speed_profile_contract import ROOT
 from test_vfxreviewspawn import function
 class ArrowTests(unittest.TestCase):
  def test_actual_adapter_tick_rng_and_draw_cache_at_display_rates(self):
-  advance=function((ROOT/'src/effects/arroworiginal.cpp').read_text(),'void Advance(')
+  advance=function((ROOT/'src/game/effects/legacy/arroworiginal.cpp').read_text(),'void Advance(')
   cpp=r'''
 #include <cassert>
 #include <cmath>
@@ -27,7 +27,7 @@ int main(){for(bool queen:{false,true}){auto original=run(queen,24);assert(!orig
 '''
   with tempfile.TemporaryDirectory(prefix='arrow-adapter-cadence-')as tmp:
    p=Path(tmp);driver=p/'driver.cpp';driver.write_text(cpp);binary=p/'driver'
-   subprocess.run(['clang++','-std=c++17','-ffp-contract=off','-fsanitize=address,undefined','-I'+str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(driver),str(ROOT/'src/math3d.cpp'),'-o',str(binary)],check=True)
+   subprocess.run(['clang++','-std=c++17','-ffp-contract=off','-fsanitize=address,undefined','-I'+str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(driver),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)],check=True)
    subprocess.run([str(binary)],check=True)
  def invoke(self,tool,*args):
   p=subprocess.run([sys.executable,str(ROOT/'tools/retail_runtime'/tool),*map(str,args)],cwd=ROOT,capture_output=True,text=True,timeout=100)

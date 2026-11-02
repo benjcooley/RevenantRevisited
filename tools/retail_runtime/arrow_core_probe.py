@@ -18,7 +18,7 @@ int main(){arrow_core::State s;for(int tick=0;tick<TICKS;++tick){s.Pulse({-180,0
   if native.get('terrain_plane'):
    blocked=f'return (int64_t(p.x)-({target[0]}))*({target[0]-source[0]})+(int64_t(p.y)-({target[1]}))*({target[1]-source[1]})>=0;'
   cpp=cpp.replace('arrow_core::State s;',f'arrow_core::AttachedCaller caller;caller.position={point(source)};caller.velocity_fixed={point(velocity)};auto& s=caller.core;').replace('s.Pulse({-180,0,38},64,[](arrow_core::Point p){return p.x>=180;},random_range);',f'caller.Pulse({facing},[](arrow_core::Point p){{{blocked}}});')
- p=output/'core.cpp';p.write_text(cpp);exe=output/'core';subprocess.run(['clang++','-std=c++17','-ffp-contract=off','-fsanitize=address,undefined','-I'+str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(p),str(ROOT/'src/math3d.cpp'),'-o',str(exe)],check=True)
+ p=output/'core.cpp';p.write_text(cpp);exe=output/'core';subprocess.run(['clang++','-std=c++17','-ffp-contract=off','-fsanitize=address,undefined','-I'+str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(p),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(exe)],check=True)
  raw=subprocess.check_output([str(exe)],text=True);(output/'source.trace').write_text(raw);states={};packets={}
  for line in raw.splitlines():
   kind,t,*values=line.split();t=int(t)
@@ -34,7 +34,7 @@ int main(){arrow_core::State s;for(int tick=0;tick<TICKS;++tick){s.Pulse({-180,0
   for i,(s,n)in enumerate(zip(actual,r['draws'])):
    assert s['object']==n['object'];d=max(abs(x-y)for x,y in zip(s['matrix'],n['matrix']));maximum=max(maximum,d);checks+=16
    if d>5e-5:errors.append(dict(tick=r['tick'],index=i,error=d,native=n['matrix'],source=s['matrix']))
- report=dict(status='pass'if not errors else'fail',ticks=len(states),state_fields=len(states)*(10 if native.get('effect')=='ArrowEffect' else 11),matrix_fields=checks,max_matrix_error=maximum,errors=errors,trace_sha256=sha(trace.read_bytes()),source_sha256={p:sha((ROOT/p).read_bytes())for p in('src/arrowcore.h','src/arrowmatrix.h','src/math3d.cpp')})
+ report=dict(status='pass'if not errors else'fail',ticks=len(states),state_fields=len(states)*(10 if native.get('effect')=='ArrowEffect' else 11),matrix_fields=checks,max_matrix_error=maximum,errors=errors,trace_sha256=sha(trace.read_bytes()),source_sha256={p:sha((ROOT/p).read_bytes())for p in('src/game/effects/arrowcore.h','src/game/effects/arrowmatrix.h','src/engine/core/math3d.cpp')})
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],checks,maximum,errors[:1]);assert not errors;return report
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('trace',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.trace,a.output)

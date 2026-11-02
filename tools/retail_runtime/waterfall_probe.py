@@ -13,7 +13,7 @@ WIDTH=320;HEIGHT=512;INDICES=(1,0,2,2,3,1)
 
 
 def production_spans():
-    source=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     return dict(types=span(header,'class TWaterFallEffect_Bespoke :','// *************************************************************************\n// * TWaterEffect_Bespoke'),
         particle=span(header,'struct SWaterParticle','_CLASSDEF(TWaterFallAnimator)'),
         constants=span(source,'constexpr int32_t kWaterFallMaxDrops','// Snapshot constants — direct from effect_old.cpp:11903'),
@@ -21,7 +21,7 @@ def production_spans():
         helpers=span(source,'TWaterFallEffect_Bespoke::~TWaterFallEffect_Bespoke()','void TWaterFallEffect_Bespoke::Initialize('),
         advance_submit=span(source,'void TWaterFallEffect_Bespoke::Advance(','void TWaterFallEffect_Bespoke::SetNativeDomain('),
         map_dispatch=span(source,'class TWaterfallReferenceComponent final','TWaterFallEffect_Bespoke::~TWaterFallEffect_Bespoke()'),
-        math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
+        math=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text())
 
 
 def build_port(output,asset,inputs,ticks):
@@ -41,10 +41,10 @@ def build_port(output,asset,inputs,ticks):
 enum class EFxBlend:uint8_t{Alpha,AdditiveStraight};constexpr uint32_t OF_KILL=0x1000;enum class EFxDepthMode:uint8_t{TestNoWrite};enum class EFxDebugMode:uint8_t{Normal};enum class EFxLightMode:uint8_t{Unlit};
 struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 using MeshHandle=uint64_t;struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}void ReleaseMeshAssetRef(MeshHandle){}bool UsesRetailSoftwareMeshLighting(){return false;}};TRenderer renderer;TRenderer*Renderer=&renderer;
-struct TObjectImagery{virtual~TObjectImagery()=default;};struct SObjectDef{};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
+struct TObjectImagery{virtual~TObjectImagery()=default;};struct SObjectState{};struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
 struct T3DImagery:TObjectImagery{};
 namespace literal_water_mesh{bool Matches(T3DImagery*){return false;}MeshHandle Cache(TRenderer&,T3DImagery*,TTextureHandle){return 0;}void Submit(TRenderer&,MeshHandle,const hmm_mat4&,bool){throw std::runtime_error("Normal-lit path requires actual Metal proof");}}
-struct TObjectInstance{virtual void OffScreen(){}};struct TEffect:TObjectInstance{World world;TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual~TEffect()=default;uint32_t Flags()const{return 0;}void SetCommandDone(bool){};uint32_t ObjId()const{return 0xa907dabf;}int GetMapIndex()const{return 1;}int GetFace()const{return 0;}TObjectImagery*GetImagery()const{return nullptr;}const World&Transform()const{return world;}};
+struct TObjectInstance{virtual void OffScreen(){}};struct TEffect:TObjectInstance{World world;TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};virtual~TEffect()=default;uint32_t Flags()const{return 0;}void SetCommandDone(bool){};uint32_t ObjId()const{return 0xa907dabf;}int GetMapIndex()const{return 1;}int GetFace()const{return 0;}TObjectImagery*GetImagery()const{return nullptr;}const World&Transform()const{return world;}};
 struct TTime{static constexpr double LegacyFrameSeconds=1.0/24.0;};void log_info(const char*,...){};
 std::ifstream rng;int rng_count=0;int random(int low,int high){int a,b,v;if(!(rng>>a>>b>>v)||a!=low||b!=high)throw std::runtime_error("Waterfall native/port RNG order mismatch");++rng_count;return v;}
 '''
@@ -63,7 +63,7 @@ int main(int argc,char**argv){rng.open(argv[1]);if(!rng)return 2;TWaterFallEffec
  int a,b,c;if(rng>>a>>b>>c)throw std::runtime_error("Unused original RNG inputs");}
 '''.replace('VERTICES',vertices).replace('TICKS',str(ticks))
     source=output/'waterfall-port-component.cpp';source.write_text(prelude+'\n'+pieces['particle']+'\n'+types+'\n'+pieces['constants']+'\n'+pieces['helpers']+'\n'+initializer+'\n'+pieces['advance_submit']+'\n'+trailer)
-    binary=output/'waterfall-port-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'waterfall-port-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     result=subprocess.run(command,capture_output=True,text=True);(output/'port-compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Waterfall production compile failed')
     result=subprocess.run([str(binary),str(inputs)],capture_output=True,text=True);(output/'port-trace.txt').write_text(result.stdout);(output/'port-run.log').write_text(result.stderr)
@@ -75,7 +75,7 @@ int main(int argc,char**argv){rng.open(argv[1]);if(!rng)return 2;TWaterFallEffec
         elif p[0]=='P':frames[tick]['particles'].append(dict(index=int(p[2]),time=int(p[3]),values=[float(x)for x in p[4:]]))
         else:frames[tick]['draws'].append(dict(positions=[[float(x)for x in p[2+i*5:5+i*5]]for i in range(4)],uvs=[[float(x)for x in p[5+i*5:7+i*5]]for i in range(4)],material_diffuse=[float(x)for x in p[22:26]]))
     return frames,dict(command=command,generated_source_sha256=sha(source.read_bytes()),binary_sha256=sha(binary.read_bytes()),
-        bodies=['Initialize actual state/warmup loop','InitParticle','UpdateStuff','Advance','Submit','src/math3d.cpp'],boundaries=['exact authored geometry/texture','identity owner, face zero','unchanged original range-RNG result replay','asset/component binding separate'])
+        bodies=['Initialize actual state/warmup loop','InitParticle','UpdateStuff','Advance','Submit','src/engine/core/math3d.cpp'],boundaries=['exact authored geometry/texture','identity owner, face zero','unchanged original range-RNG result replay','asset/component binding separate'])
 
 
 class WaterfallFixture:

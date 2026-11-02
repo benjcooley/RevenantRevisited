@@ -7,10 +7,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def main():
-    parser = (ROOT / 'src/revmain.cpp').read_text()
+    parser = (ROOT / 'src/game/app/revmain.cpp').read_text()
     parser = parser[parser.index('        if (arg_param(cmd, "vfx-camera", p))'):]
     parser = parser[:parser.index('        if (arg_param(cmd, "vfx-origin", p))')]
-    render = (ROOT / 'src/vfxtest.cpp').read_text()
+    render = (ROOT / 'src/game/ab/vfxtest.cpp').read_text()
     expressions = '\n'.join(line for line in render.splitlines()
                             if 'const float cam_ox =' in line or 'const float cam_oy =' in line)
     source = r'''

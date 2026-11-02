@@ -33,14 +33,14 @@ def parse_asset(asset):
 
 
 def production_spans():
-    source = (ROOT/'src/effect.cpp').read_text(); header = (ROOT/'src/effect.h').read_text()
+    source = (ROOT/'src/game/effects/effect.cpp').read_text(); header = (ROOT/'src/game/effects/effect.h').read_text()
     return dict(types=span(header, 'inline constexpr int32_t kSparkMaxParticles', 'class TFlameEffect :'),
                 params=span(header, 'struct SParticleParams\n', '_CLASSDEF(TParticle3DAnimator)'),
                 clock=span(source, 'constexpr double kSparkSimTickMs', '// Retail spark params'),
                 jitter=span(source, 'double SparkUnitJitter()' if 'double SparkUnitJitter()' in source else 'float SparkUnitJitter()', '}   // namespace'),
                 initialize_advance=span(source, 'bool TSparkEffect::InitParticles(', 'void TSparkEffect::Submit('),
                 submit=span(source,'void TSparkEffect::Submit(','// Map ownership adapter'),
-                math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
+                math=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text())
 
 
 def decode_params(data):
@@ -179,8 +179,8 @@ struct SQuadDrawItem{float world_pos[4][3]{},uv[4][2]{},color_rgba[4]{};struct{T
 struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};
 struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
 struct TObjectInstance{World world;const World&Transform()const{return world;}};
-struct TObjectImagery{};struct SObjectDef{};
-struct TEffect{TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual~TEffect()=default;};
+struct TObjectImagery{};struct SObjectState{};
+struct TEffect{TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};virtual~TEffect()=default;};
 void log_error(const char*,...){}
 std::ifstream rng;int random_count=0;
 int random(int lo,int hi){int a,b,v;if(!(rng>>a>>b>>v)||a!=lo||b!=hi)throw std::runtime_error("Native RNG call order mismatch");++random_count;return v;}
@@ -214,7 +214,7 @@ int main(int argc,char**argv){rng.open(argv[1]);SParticleParams params{};PARAMET
 '''.replace('PARAMETERS',''.join(assignments)).replace('SHAPES',shape_init).replace('TICKS',str(ticks)).replace('return2','return 2')
     source=output/'sparks-port-state.cpp'
     source.write_text(prelude+pieces['types'].replace('  private:','  public:')+pieces['params']+pieces['clock']+pieces['jitter']+pieces['initialize_advance']+pieces['submit']+trailer)
-    binary=output/'sparks-port-state'; command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'sparks-port-state'; command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     result=subprocess.run(command,capture_output=True,text=True);(output/'port-compile.log').write_text(result.stdout+result.stderr)
     if result.returncode: raise RuntimeError('Production Sparks compile failed; see port-compile.log')
     result=subprocess.run([str(binary),str(rng_path)],capture_output=True,text=True);(output/'port-trace.txt').write_text(result.stdout)

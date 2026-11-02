@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 class PackedPrelit(unittest.TestCase):
  def test_all_packed_colors_all_three_vertex_shaders(self):
-  source=(ROOT/'src/renderer.cpp').read_text();marker='// Exact packed20-bit prelit color;';parts=source.split(marker)[1:];self.assertEqual(len(parts),3);functions=[]
+  source=(ROOT/'src/engine/render/renderer.cpp').read_text();marker='// Exact packed20-bit prelit color;';parts=source.split(marker)[1:];self.assertEqual(len(parts),3);functions=[]
   for index,part in enumerate(parts):
    body=part[part.index('\n'):part.index('\n        }')].replace('p.retail_raster.z','packed').replace('retail_raster.z','packed').replace('in.uv.y','weight').replace('i.uv.y','weight').replace('uv.y','weight').replace('p.uv_shift.x','shift').replace('uv_shift.x','shift').replace('o.retail_color','out.rgb').replace('v_retail_color','out.rgb').replace('o.uv.x','out.alpha').replace('v_uv.x','out.alpha').replace('vec3','float3').replace('float3(','make3(')
    functions.append(f'Result decode{index}(float packed,float weight,float shift){{Result out;'+body+'return out;}')

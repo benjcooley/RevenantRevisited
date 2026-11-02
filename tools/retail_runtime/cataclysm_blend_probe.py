@@ -24,7 +24,7 @@ for texel in [0,0xffff,0x8421,0x1234,0xabcd,0x37e7,0x7bef]:
    pixel=struct.unpack_from('<H',raw,2*(((i//32)*8+3)*256+(i%32)*8+3))[0]
    records.append([texel,*color,alpha,(pixel>>11)&31,(pixel>>5)&63,pixel&31])
 (a.output/'native-literals.json').write_text(json.dumps(records))
-source=(ROOT/'src/renderer.cpp').read_text();parts=source.split('// Explicit RGB565 + constant prelit RGBA5 (actual FVF_LVERTEX).')[1:];assert len(parts)==3;functions=[]
+source=(ROOT/'src/engine/render/renderer.cpp').read_text();parts=source.split('// Explicit RGB565 + constant prelit RGBA5 (actual FVF_LVERTEX).')[1:];assert len(parts)==3;functions=[]
 for i,part in enumerate(parts):
  begin=part.index('float a5 =');alpha=part[begin:part.index('\n        ',part.index('discard',begin))];alpha=alpha.replace('hp.diffuse','carrier').replace('diffuse','carrier').replace('discard_fragment();','return float3{0,0,0};').replace('discard;','return float3{0,0,0};')
  begin=part.index('texture5 =');begin=part.rfind('\n',0,begin)+1;end=part.index('\n        ',part.index(' / (alpha *',begin));body=part[begin:end].replace('hp.diffuse','carrier').replace('diffuse','carrier').replace('vec3','float3').replace('float3(','make3(')

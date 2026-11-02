@@ -6,7 +6,7 @@
 // The plan format (docs/shadow/ARCHITECTURE.md §9.1): what parses, what it
 // parses to, and that every mistake is refused with its line.
 
-#include "../src/shadow/shadowplan.h"
+#include "../src/game/shadow/shadowplan.h"
 
 #include <gtest/gtest.h>
 

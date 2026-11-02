@@ -49,7 +49,7 @@ def preflight(executable,archive):
             route='Reuse the literal Waterfall software-fixture structure for the distinct native Water leaf; inspect real Init/Animate/Render and full drop cardinality before credit.',
             reason='Existing port has a small delay/move/respawn drop machine; no authored curve parser or character-spell context in its basic drop path.'),
         source_sha256={name:digest((ROOT/name).read_bytes())for name in
-            ('tools/retail_runtime/effect_probe.py','src/3dimage.cpp','src/authoredpartsys.cpp','src/partsysdefinition.cpp')},
+            ('tools/retail_runtime/effect_probe.py','src/game/imagery/3dimage.cpp','src/engine/fx/authoredpartsys.cpp','src/engine/fx/partsysdefinition.cpp')},
         new_rendered_ab_cases=0,production_changes=False,dosbox_used=False,full_acceptance=False)
 
 

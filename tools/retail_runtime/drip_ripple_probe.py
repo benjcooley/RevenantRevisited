@@ -10,7 +10,7 @@ PARAMS=(20,128,1);STOP_TICK=121;TICKS=144
 
 
 def production_spans():
-    source=(ROOT/'src/effect.cpp').read_text()
+    source=(ROOT/'src/game/effects/effect.cpp').read_text()
     return {**{'drip_'+k:v for k,v in drip_spans().items()},**{'ripple_'+k:v for k,v in ripple_spans().items()},
         'ripple_factory':span(source,'TRippleEffect* TRippleEffect::SpawnForTest(','void TRippleEffect::Advance('),
         'asset_quad_loader':span(source,'bool LoadWaterQuad(','void SubmitWaterQuad(')}
@@ -96,12 +96,12 @@ enum class EFxBlend:uint8_t{Alpha};enum class EFxDepthMode:uint8_t{TestNoWrite};
 struct SQuadDrawItem{bool retail_software_projection=false,retail_argb4444=false;float world_pos[4][3]{},uv[4][2]{};struct{TTextureHandle texture{};uint8_t blend{},depth_mode{};}key;EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 struct TRenderer{std::vector<SQuadDrawItem>draws;void SubmitFxQuad(const SQuadDrawItem&i){draws.push_back(i);}};TRenderer renderer;TRenderer*Renderer=&renderer;
 struct Journal{int tick,id;};std::vector<Journal>births,deaths;int now=0;
-struct TObjectImagery{virtual~TObjectImagery()=default;static void FreeImagery(TObjectImagery*){throw std::runtime_error("Unexpected asset rejection");}};struct SObjectDef{};
+struct TObjectImagery{virtual~TObjectImagery()=default;static void FreeImagery(TObjectImagery*){throw std::runtime_error("Unexpected asset rejection");}};struct SObjectState{};
 struct World{hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4&Matrix()const{return m;}};
 struct TObjectInstance{int GetFace()const{return 0;}World world;S3DPoint pos{};int mapindex=0;virtual~TObjectInstance(){if(mapindex)deaths.push_back({now,mapindex});}
  const S3DPoint&Pos()const{return pos;}const World&Transform()const{return world;}void ForcePos(S3DPoint p){pos=p;MtxClear(&world.m);hmm_vec3 v={float(p.x),float(p.y),float(p.z)};MtxTranslate(&world.m,&v);}
  void SetMapIndex(int n){mapindex=n;births.push_back({now,n});}int GetMapIndex()const{return mapindex;}void ActivateComponents(){}};
-struct TEffect:TObjectInstance{TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};virtual void Pulse(){};virtual void Load(RTInputStream,int32_t,int32_t){};virtual void Save(RTOutputStream){}};
+struct TEffect:TObjectInstance{TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};virtual void Pulse(){};virtual void Load(RTInputStream,int32_t,int32_t){};virtual void Save(RTOutputStream){}};
 struct TMapPane{int next=0;int MakeIndex(){return ++next;}}MapPane;
 void log_info(const char*,...){};void log_error(const char*,...){throw std::runtime_error("Asset binding failed");}
 extern "C" int rand(void){throw std::runtime_error("Unexpected raw RNG: native short no-splash physics requires none");}
@@ -139,7 +139,7 @@ int main(int argc,char**argv){rng.open(argv[1]);if(!rng)return 2;S3DVertex head[
  int a,b,c,d;if(rng>>a>>b>>c>>d)throw std::runtime_error("Unused linked physics RNG input");}
 '''.replace('HEAD',vertices(drip_asset,0xfc)).replace('RING',vertices(ripple_asset,0x144)).replace('SPLASH',vertices(ripple_asset,0x1c4))
     generated=output/'drip-ripple-production.cpp';generated.write_text(prelude+'\nnamespace production_random {\n'+pieces['drip_random_helper']+'}\n'+rng_wrapper+'\n'+types+'\n'+boundary+'\n'+pieces['drip_constants']+'\n'+pieces['drip_time_helpers']+'\n'+pieces['asset_quad_loader']+'\n'+pieces['drip_quad']+'\n'+pieces['ripple_factory']+'\n'+pieces['ripple_methods']+'\n'+pieces['drip_advance_submit']+'\n'+trailer)
-    binary=output/'drip-ripple-production';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    binary=output/'drip-ripple-production';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     result=subprocess.run(cmd,capture_output=True,text=True);(output/'compile.log').write_text(result.stdout+result.stderr)
     if result.returncode:raise RuntimeError('Composed production compile failed')
     result=subprocess.run([str(binary),str(inputs)],capture_output=True,text=True);(output/'port-trace.txt').write_text(result.stdout);(output/'port-run.log').write_text(result.stderr)

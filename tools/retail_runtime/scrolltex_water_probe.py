@@ -12,7 +12,7 @@ TICKS=(0,1,24,50,99,100,120);POSE_FRAMES=(0,1,20,24,50,99);WIDTH=1280;HEIGHT=720
 
 
 def controller_span(source=None):
-    if source is None:source=(ROOT/'src/3dimage.cpp').read_text()
+    if source is None:source=(ROOT/'src/game/imagery/3dimage.cpp').read_text()
     return span(source,'static bool ParseScrollTexParams','static inline uint8_t ExpandBitsTo8')
 
 
@@ -81,7 +81,7 @@ struct T3DImagery{bool meshinitialized=true;Objects objects;struct SScrollTexTra
  int NumObjects()const{return objects.NumItems();}const char*GetResFilename(){return "shipped-scroll-water";}void*GetBody(){std::abort();}void InitializeMesh(S3DImageryBody*){std::abort();}
  int GetObjectNum(char*);void InitializeScrollTexTracks(S3DImageryBody*);bool ScrollTexOffset(int,int,int,int64_t,float[2])const;};
 '''
-    getter=span((ROOT/'src/3dimage.cpp').read_text(),'int32_t T3DImagery::GetObjectNum(','char* T3DImagery::GetObjectName(').replace('int32_t T3DImagery','int T3DImagery')
+    getter=span((ROOT/'src/game/imagery/3dimage.cpp').read_text(),'int32_t T3DImagery::GetObjectNum(','char* T3DImagery::GetObjectName(').replace('int32_t T3DImagery','int T3DImagery')
     trailer='int main(){\n'
     for name,m in metadata.items():
         trailer+='{T3DImagery image;image.objects.rows={{'+json.dumps(m['object_name'])+'}};S3DImageryBody body;body.tags={{0,0,{"scrolltex"},{'+json.dumps(m['tag_params'])+'}}};image.InitializeScrollTexTracks(&body);\n'
@@ -115,7 +115,7 @@ struct ScrollTagFixture{int state,frame;Ref name,str;};struct ScrollBodyFixture{
     code=code.replace('S3DObj objects[1];','S3DObjCollection objects;')
     code=code.replace('bool ScrollTexOffset(int,int,int,int64_t,float*)const{throw std::runtime_error("Unexpected scroll in static fixture");}',r'''struct SScrollTexTrack{int state=0,tagframe=0,object=-1;float du=0,dv=0;};std::vector<SScrollTexTrack>scrolltex_tracks;int GetObjectNum(char*);void InitializeScrollTexTracks(ScrollBodyFixture*);bool ScrollTexOffset(int,int,int,int64_t,float*)const;const char*GetResFilename(){return "audited-scroll-water";}''')
     code=code.replace('struct TTime{static int64_t LegacyFrameCount(){return 0;}};','int64_t global_tick=0;struct TTime{static int64_t LegacyFrameCount(){return global_tick;}};')
-    getter=span((ROOT/'src/3dimage.cpp').read_text(),'int32_t T3DImagery::GetObjectNum(','char* T3DImagery::GetObjectName(')
+    getter=span((ROOT/'src/game/imagery/3dimage.cpp').read_text(),'int32_t T3DImagery::GetObjectNum(','char* T3DImagery::GetObjectName(')
     where=code.index('void TAuthoredStaticMeshEffect::SubmitWorldMeshForTest_BESPOKE(')
     code=code[:where]+getter+'\n'+controller_span().replace('S3DImageryBody*','ScrollBodyFixture*').replace('S3DImageryTag&','ScrollTagFixture&')+'\n'+code[where:]
     init='img.key_count=nk;img.key_pointer=img.keys.data();img.objects[0]={&img.key_count,&img.key_pointer};'
@@ -124,7 +124,7 @@ struct ScrollTagFixture{int state,frame;Ref name,str;};struct ScrollBodyFixture{
     code=code.replace(old,'for(int tick:{'+','.join(map(str,TICKS))+'})for(int moved:{0,1}){int frame=tick%frames;global_tick=tick;')
     code=code.replace('effect.parts_.resize(1); BuildStaticObjectMatrix','effect.parts_.resize(1);effect.frame_=frame;effect.scroll_imagery_=&img;effect.parts_[0].object_index=0; BuildStaticObjectMatrix')
     code=code.replace('frame,moved','tick,moved').replace('v.uv[0],v.uv[1]','v.uv[0]+renderer.last.uv_offset[0],v.uv[1]+renderer.last.uv_offset[1]')
-    src=output/'scroll-mesh-production.cpp';src.write_text(code);binary=output/'scroll-mesh-production';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(src),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+    src=output/'scroll-mesh-production.cpp';src.write_text(code);binary=output/'scroll-mesh-production';cmd=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(src),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     r=subprocess.run(cmd,capture_output=True,text=True);(output/'scroll-mesh-compile.log').write_text(r.stdout+r.stderr)
     if r.returncode:raise RuntimeError('Combined actual Submit/controller compile failed')
     traces={}
@@ -145,7 +145,7 @@ def main():
     with zipfile.ZipFile(args.archive)as z:
         names={n.lower():n for n in z.namelist()}
         for row in profiles:metadata[row['name']]=parse_asset(z.read(names[('Imagery/'+row['asset']).lower()]),row)
-    before={k:sha(v.encode())for k,v in mesh_spans().items()};before['scrolltex']=sha(controller_span().encode());port,mesh=build_scroll_mesh(args.output,metadata);controller,compiled=build_controller(args.output,metadata);baseline=subprocess.check_output(['git','show','466fbba:src/3dimage.cpp'],cwd=ROOT,text=True);old,oldcompile=build_controller(args.output,metadata,source=baseline,label='before-fallback-fix');fixture=ScrollFixture(args.executable);dispatch=original_registry(fixture.vm,list(metadata));cases=[];failures=[];times=[];pre={}
+    before={k:sha(v.encode())for k,v in mesh_spans().items()};before['scrolltex']=sha(controller_span().encode());port,mesh=build_scroll_mesh(args.output,metadata);controller,compiled=build_controller(args.output,metadata);baseline=subprocess.check_output(['git','show','466fbba:src/game/imagery/3dimage.cpp'],cwd=ROOT,text=True);old,oldcompile=build_controller(args.output,metadata,source=baseline,label='before-fallback-fix');fixture=ScrollFixture(args.executable);dispatch=original_registry(fixture.vm,list(metadata));cases=[];failures=[];times=[];pre={}
     for row in profiles:
         name=row['name'];m=metadata[name];fixture.setup_scroll(m);pre[name]=dict(selected_before_fallback=fixture.pre_fallback,selected_after_fallback=fixture.vm.u32(fixture.controller+0x18),rates=fixture.rates,object=m['object_name'],tag=m['tag_params'])
         for tick in TICKS:

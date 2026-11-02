@@ -21,11 +21,11 @@ WIDTH=384;HEIGHT=384;PIXELS=WIDTH*HEIGHT
 
 
 def production_spans():
-    s=(ROOT/'src/effect.cpp').read_text();h=(ROOT/'src/effect.h').read_text()
+    s=(ROOT/'src/game/effects/effect.cpp').read_text();h=(ROOT/'src/game/effects/effect.h').read_text()
     return dict(reset=span(s,'void TFogEffect_Bespoke__MistFog::ResetBall_(','\nvoid TFogEffect_Bespoke__MistFog::Initialize'),
         advance_submit=span(s,'void TFogEffect_Bespoke__MistFog::Advance(','// =========================================================================\n// W3-C RockStorm'),
         types=span(h,'class TFogEffect_Bespoke__MistFog :','\n_CLASSDEF(TRockStormEffect_Bespoke)'),
-        math=(ROOT/'src/math3d.cpp').read_text(),math_header=(ROOT/'src/math3d.h').read_text())
+        math=(ROOT/'src/engine/core/math3d.cpp').read_text(),math_header=(ROOT/'src/engine/core/math3d.h').read_text())
 
 
 def build_port(output,asset,inputs,ticks):
@@ -54,9 +54,9 @@ struct SQuadDrawItem {float world_pos[4][3]{};float uv[4][2]{};float color_rgba[
  EFxDebugMode debug_mode{};EFxLightMode light_mode{};};
 struct TRenderer {std::vector<SQuadDrawItem> draws;void SubmitFxQuad(const SQuadDrawItem& i){draws.push_back(i);}};
 TRenderer renderer;TRenderer* Renderer=&renderer;
-struct TObjectImagery {};struct SObjectDef {};
+struct TObjectImagery {};struct SObjectState {};
 struct World {hmm_mat4 m;World(){MtxClear(&m);}const hmm_mat4& Matrix()const{return m;}};
-struct TEffect {World world;TEffect(TObjectImagery*){};TEffect(SObjectDef*,TObjectImagery*){};
+struct TEffect {World world;TEffect(TObjectImagery*){};TEffect(SObjectState*,TObjectImagery*){};
  virtual ~TEffect()=default;virtual void OffScreen(){};void SetCommandDone(bool){};
  const World& Transform()const{return world;}};
 std::ifstream random_inputs;int random_count=0;bool in_range=false;int expected_low=0,expected_high=0;
@@ -94,7 +94,7 @@ int main(int argc,char**argv){random_inputs.open(argv[1]);if(!random_inputs)retu
     generated=output/'mistfog-port-component.cpp'
     generated.write_text(prelude+'\n'+types+'\n'+pieces['reset']+'\n'+pieces['advance_submit']+'\n'+trailer)
     binary=output/'mistfog-port-component';command=['clang++','-std=c++17','-I',str(ROOT/'thirdparty/handmademath'),
-        '-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+        '-iquote',str(ROOT/'src'),str(generated),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     compile=subprocess.run(command,capture_output=True,text=True);(output/'port-compile.log').write_text(compile.stdout+compile.stderr)
     if compile.returncode:raise RuntimeError('MistFog production-body compile failed; see port-compile.log')
     trace=subprocess.run([str(binary),str(inputs)],capture_output=True,text=True)
@@ -107,7 +107,7 @@ int main(int argc,char**argv){random_inputs.open(argv[1]);if(!random_inputs)retu
         elif tag=='P':frames[tick]['particles'].append(dict(index=int(fields[2]),life=int(fields[3]),values=[float(x) for x in fields[4:]]))
         elif tag=='D':frames[tick]['draws'].append(dict(positions=[[float(v) for v in fields[2+i*5:5+i*5]] for i in range(4)],uvs=[[float(v) for v in fields[5+i*5:7+i*5]] for i in range(4)]))
     return frames,dict(command=command,generated_source_sha256=sha(generated.read_bytes()),binary_sha256=sha(binary.read_bytes()),
-        compiled_production_bodies=['ResetBall_','Advance','Submit','src/math3d.cpp'],
+        compiled_production_bodies=['ResetBall_','Advance','Submit','src/engine/core/math3d.cpp'],
         boundaries=['exact Misc asset vertices/UVs/texture','identity owner world','renderer records production SubmitFxQuad',
                     'strict native raw/range RNG input replay; RAND_MAX=32767 is explicit common Windows-input normalization'])
 

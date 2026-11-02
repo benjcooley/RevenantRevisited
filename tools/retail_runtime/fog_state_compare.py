@@ -15,7 +15,7 @@ def compare(reference,output):
 #include <cstring>
 #include <fstream>
 #include <stdexcept>
-#include "effects/fog_grid.h"
+#include "game/effects/legacy/fog_grid.h"
 int main(int argc,char**argv){
  std::ifstream f(argv[1]),g(argv[1]);int count=0;
  auto rng=[&](int a,int b){int x,y,z;if(!(f>>x>>y>>z)||a!=x||b!=y)throw std::runtime_error("rng order");++count;return z;};
@@ -44,7 +44,7 @@ int main(int argc,char**argv){
  assert len(result.stdout.splitlines())==len(native['cases'])==121
  report=dict(status='pass',float_fields=fields,ticks=120,states=121,rng_calls=native['cases'][-1]['state']['rng_calls'],
   dt_partition='1/24 and two1/48 calls equal every tick',native_manifest_sha256=sha((reference/'manifest.json').read_bytes()),
-  production_header_sha256=sha((ROOT/'src/effects/fog_grid.h').read_bytes()),compiled_driver_sha256=sha(source.read_bytes()),
+  production_header_sha256=sha((ROOT/'src/game/effects/legacy/fog_grid.h').read_bytes()),compiled_driver_sha256=sha(source.read_bytes()),
   compiled_binary_sha256=sha(binary.read_bytes()),command=command,scope='Actual production State Initialize/Step/Advance; exact original RNG range/order/values. Rendering compared separately.')
  (output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print('PASS',fields,'fields',report['rng_calls'],'RNG calls')
 

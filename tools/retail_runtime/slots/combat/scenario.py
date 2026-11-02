@@ -53,7 +53,7 @@ one record a tick ({tick, frame, chars: each character's dump and vitals,
 seams, draws}), then each character's AI and tick state.
 
 Schema `combat.scenario.v1`, shared with the port's `Revenant
---retail-ab=combat-scenario` (src/retailab_scenario.cpp).
+--retail-ab=combat-scenario` (src/game/ab/retailab_scenario.cpp).
 """
 from __future__ import annotations
 

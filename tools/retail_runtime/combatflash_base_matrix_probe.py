@@ -11,9 +11,9 @@ from speed_controller_preflight import read_asset
 
 def run(trace, output):
     output.mkdir(parents=True, exist_ok=False)
-    source = (ROOT / 'src/3dimage.cpp').read_text()
-    body = (ROOT / 'src/3dimagebody.h').read_text()
-    render = (ROOT / 'src/render3d_types.h').read_text()
+    source = (ROOT / 'src/game/imagery/3dimage.cpp').read_text()
+    body = (ROOT / 'src/engine/assets/3dimagebody.h').read_text()
+    render = (ROOT / 'src/engine/render/render3d_types.h').read_text()
     prefixes = ('SMALLKEY', 'ANIKEY32_', 'ANIFLAG32_', 'ANICODE32_',
                 'ANIKEY_POSSCALE', 'ANIKEY_ANGSCALE', 'I3D_ANIKEY32')
     constants = '\n'.join(line for line in body.splitlines() if line.startswith('#define ')
@@ -76,7 +76,7 @@ int main(int argc,char**argv){assert(argc==2);std::ifstream f(argv[1],std::ios::
     binary = output / 'matrix'
     command = ['clang++', '-std=c++17', '-O1', '-fsanitize=address,undefined',
         '-iquote', str(ROOT / 'src'), '-I', str(ROOT / 'thirdparty/handmademath'),
-        str(cpp), str(ROOT / 'src/math3d.cpp'), '-o', str(binary)]
+        str(cpp), str(ROOT / 'src/engine/core/math3d.cpp'), '-o', str(binary)]
     result = subprocess.run(command, capture_output=True, text=True)
     (output / 'compile.log').write_text(result.stdout + result.stderr)
     if result.returncode:

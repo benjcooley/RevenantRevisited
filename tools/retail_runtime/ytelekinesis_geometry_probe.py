@@ -9,7 +9,7 @@ cpp=r'''
 uint32_t seed=1;int random_range(int lo,int hi){seed=seed*214013+2531011;return lo+int((seed>>16)&32767)%(hi-lo+1);}
 int main(){ytelekinesis_core::State s;s.Initialize(random_range);for(int tick=0;tick<TICKS;++tick){s.Pulse();if(!s.alive)continue;for(int i=0;i<s.count;++i){const auto&r=s.rocks[i];hmm_mat4 m;ytelekinesis_core::Matrix(m,r);printf("%d %d %d %d %u",tick,i,r.mesh,1,0xffffffffu);for(int j=0;j<16;++j)printf(" %.9g",(&m.Elements[0][0])[j]);puts("");}}}
 '''.replace('TICKS',str(len(native['records'])))
-source=a.output/'draw.cpp';source.write_text(cpp);binary=a.output/'draw';subprocess.run(['clang++','-std=c++17','-ffp-contract=off','-I'+str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/math3d.cpp'),'-o',str(binary)],check=True)
+source=a.output/'draw.cpp';source.write_text(cpp);binary=a.output/'draw';subprocess.run(['clang++','-std=c++17','-ffp-contract=off','-I'+str(ROOT/'thirdparty/handmademath'),'-iquote',str(ROOT/'src'),str(source),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)],check=True)
 raw=subprocess.check_output([str(binary)],text=True);(a.output/'source.trace').write_text(raw);port={}
 for line in raw.splitlines():
  t,i,o,mode,color,*m=line.split();port.setdefault(int(t),[]).append(dict(object=int(o),mode=int(mode),color=int(color),matrix=[float(x)for x in m]))
@@ -22,4 +22,4 @@ for r in native['records']:
 
   delta=max(abs(x-y)for x,y in zip(s['matrix'],n['matrix']));maximum=max(maximum,delta);checks+=16
   if delta>5e-5:errors.append(dict(tick=r['tick'],draw=i,error=delta,native=n['matrix'],port=s['matrix']))
-report=dict(status='pass'if not errors else'fail',matrix_fields=checks,max_matrix_error=maximum,errors=errors,trace_sha256=sha(a.trace.read_bytes()),source_sha256={p:sha((ROOT/p).read_bytes())for p in('src/ytelekinesiscore.h','src/ytelekinesismatrix.h','src/math3d.cpp','src/retailsoftwaretransform.h')});(a.output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],checks,maximum,errors[:2]);assert not errors
+report=dict(status='pass'if not errors else'fail',matrix_fields=checks,max_matrix_error=maximum,errors=errors,trace_sha256=sha(a.trace.read_bytes()),source_sha256={p:sha((ROOT/p).read_bytes())for p in('src/game/effects/ytelekinesiscore.h','src/game/effects/ytelekinesismatrix.h','src/engine/core/math3d.cpp','src/engine/render/retailsoftwaretransform.h')});(a.output/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],checks,maximum,errors[:2]);assert not errors

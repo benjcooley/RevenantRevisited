@@ -83,7 +83,7 @@ int main(){
 
 class BrazierMapAnimationTests(unittest.TestCase):
     def test_actual_sprite_layers_cache_completion_and_transfer(self):
-        text = (ROOT/'src/maprenderer.cpp').read_text()
+        text = (ROOT/'src/game/world/maprenderer.cpp').read_text()
         pieces = [function(text, name) for name in (
             'static TBitmap* StateStillBitmap(', 'static TBitmap* StateAnimationBitmap(',
             'static bool AnimationLayerVisible(', 'static int32_t FindSectorBitmap(',

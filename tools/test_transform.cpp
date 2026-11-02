@@ -12,7 +12,7 @@
 // full suite passes. A failing assert exits non-zero with a diagnostic.
 // *************************************************************************
 
-#include "../src/transform.h"
+#include "../src/engine/scene/transform.h"
 
 #include <cassert>
 #include <cmath>
@@ -1643,18 +1643,18 @@ void test_saferef_copy()
 
 void test_saferef_distinct_instances_have_distinct_ids()
 {
-    // Two TTransforms have monotonically distinct ids and gens.
+    // Two live TTransforms hold distinct slots of the handle table; the
+    // generation is the slot's, so (slot, gen) is what tells them apart.
     TTransform a, b;
-    EXPECT(a.SafeRefId() != b.SafeRefId(),  "distinct ids");
-    EXPECT(a.SafeRefGen() != b.SafeRefGen(),"distinct gens");
+    EXPECT(a.SafeRefId() != b.SafeRefId(),  "distinct slots");
+    EXPECT(TSafeRef<TTransform>(&a) != TSafeRef<TTransform>(&b), "distinct references");
 }
 
 void test_saferef_id_reuse_safety()
 {
-    // Capture a ref, destroy the target, create a new transform.
-    // The new transform has a fresh id (monotonic, no reuse) and fresh
-    // gen, so the old ref doesn't accidentally resolve to it. This
-    // exercises the (id, gen) defense against id recycling.
+    // Capture a ref, destroy the target, create a new transform. The
+    // freed slot is reused (a handle table recycles), under a bumped
+    // generation, so the old ref doesn't resolve to the new tenant.
     TSafeRef<TTransform> stale;
     int32_t old_id = -1;
     uint32_t old_gen = 0;
@@ -1666,14 +1666,12 @@ void test_saferef_id_reuse_safety()
     }
     EXPECT(!stale.IsValid(), "stale ref invalid");
 
-    // Allocate many transforms; the id space should remain monotonic
-    // (TSafeObjectBase doesn't recycle), but verify the stale ref
-    // never resolves regardless.
     TTransform fresh1, fresh2, fresh3;
-    EXPECT(fresh1.SafeRefId() != old_id, "monotonic id never reuses old id");
-    EXPECT(stale.Get() == nullptr,       "stale ref still null after fresh allocations");
-    EXPECT(stale.Id()  == old_id,        "stale captured id preserved");
-    EXPECT(stale.Gen() == old_gen,       "stale captured gen preserved");
+    EXPECT(fresh1.SafeRefId() == old_id,  "the freed slot is reused");
+    EXPECT(fresh1.SafeRefGen() != old_gen, "under a new generation");
+    EXPECT(stale.Get() == nullptr,         "stale ref still null after fresh allocations");
+    EXPECT(stale.Id()  == old_id,          "stale captured id preserved");
+    EXPECT(stale.Gen() == old_gen,         "stale captured gen preserved");
 }
 
 void test_saferef_survives_multiple_resolves()

@@ -13,7 +13,7 @@ for(int tick=0;tick<=201;++tick){if(tick)sim.Advance(in,rng);for(size_t i=0;i<si
 printf("F %d %u %.9g\n",tick,seed,sim.EmissionCredit());for(size_t i=0;i<sim.Particles().size();++i){const auto&q=sim.Particles()[i];if(!q.alive)continue;printf("P %d %zu %d %d",tick,i,q.age,q.lifespan);for(float v:{q.position[0],q.position[1],q.position[2],q.velocity[0],q.velocity[1],q.velocity[2],q.scale,q.color[0],q.color[1],q.color[2],q.alpha})printf(" %.9g",v);puts("");}pose(tick%200);}}
 '''
 def run(executable,archive,output):
- output.mkdir(parents=True,exist_ok=False);source=(ROOT/'src/3dimage.cpp').read_text();body=(ROOT/'src/3dimagebody.h').read_text();render=(ROOT/'src/render3d_types.h').read_text()
+ output.mkdir(parents=True,exist_ok=False);source=(ROOT/'src/game/imagery/3dimage.cpp').read_text();body=(ROOT/'src/engine/assets/3dimagebody.h').read_text();render=(ROOT/'src/engine/render/render3d_types.h').read_text()
  sigs=('static inline int32_t SkipAniKey32(','static inline void GetAniKey32(','bool T3DImagery::GetUninterpolatedAniKey(');methods={s:function(source,s)for s in sigs};prefixes=('SMALLKEY','ANIKEY32_','ANIFLAG32_','ANICODE32_','ANIKEY_POSSCALE','ANIKEY_ANGSCALE','I3D_ANIKEY32');constants='\n'.join(l for l in body.splitlines()if l.startswith('#define ')and any(l.startswith('#define '+p)for p in prefixes));records='\n'.join(function(t,s)+';'for t,s in((body,'struct SAniKey32\n'),(body,'struct S3DFace\n'),(render,'struct S3DVertex\n'),(render,'struct SRenderColor\n'),(body,'struct S3DMaterial\n')))
  prelude=PRELUDE.replace('struct hmm_vec3 {float X=0,Y=0,Z=0;};','#include "math3d.h"\n#include "speedauthoredmatrix.h"\n#include "authoredpartsys.h"');cls=CLASS.replace('void Select(){speed_partsys_profile=ValidateRetailSpeedPartSysProfile();}','')
  driver=output/'state.cpp';driver.write_text(prelude+'\n'+constants+'\n'+records+'\n'+cls+'\n'+'\n'.join(methods.values())+'\n'+MAIN);binary=output/'state';command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(driver),*[str(ROOT/'src'/p)for p in('math3d.cpp','authoredpartsys.cpp','partsysdefinition.cpp')],'-o',str(binary)];q=subprocess.run(command,capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr)
@@ -24,10 +24,10 @@ def run(executable,archive,output):
  # Default-zero regression: actual old and new implementation, same independent
  # moving-emitter keys and 202 ticks, removing only the optional authored field.
  control_driver=output/'default-control.cpp';control_driver.write_text(driver.read_text().replace('im.tags[1].str,d,err','std::string(im.tags[1].str).substr(0,std::string(im.tags[1].str).find(",scljitter=")),d,err'))
- previous=output/'previous-authoredpartsys.cpp';previous.write_text(subprocess.check_output(['git','show','7b64f2a1:src/authoredpartsys.cpp'],cwd=ROOT,text=True))
+ previous=output/'previous-authoredpartsys.cpp';previous.write_text(subprocess.check_output(['git','show','7b64f2a1:src/engine/fx/authoredpartsys.cpp'],cwd=ROOT,text=True))
  controls=[]
- for label,implementation in(('previous',previous),('current',ROOT/'src/authoredpartsys.cpp')):
-  control_binary=output/('default-'+label);cmd=[str(control_driver)if x==str(driver)else str(implementation)if x==str(ROOT/'src/authoredpartsys.cpp')else str(control_binary)if x==str(binary)else x for x in command]
+ for label,implementation in(('previous',previous),('current',ROOT/'src/engine/fx/authoredpartsys.cpp')):
+  control_binary=output/('default-'+label);cmd=[str(control_driver)if x==str(driver)else str(implementation)if x==str(ROOT/'src/engine/fx/authoredpartsys.cpp')else str(control_binary)if x==str(binary)else x for x in command]
   compile_control=subprocess.run(cmd,capture_output=True,text=True)
   if compile_control.returncode:raise RuntimeError(compile_control.stderr)
   trace=subprocess.run([str(control_binary),str(path)],capture_output=True,text=True,check=True).stdout;controls.append(trace)

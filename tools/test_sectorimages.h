@@ -7,7 +7,7 @@
 // for test_savefile and test_sectorstore.
 #pragma once
 
-#include "../src/savefile.h"
+#include "../src/game/save/savefile.h"
 
 #include <cstdint>
 #include <cstring>

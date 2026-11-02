@@ -116,14 +116,14 @@ def run(executable,archive,output,retain_draws=False,native_mode=False):
     with zipfile.ZipFile(archive)as z:data=z.read('Imagery/Magic/speed.I3D')
     asset=read_asset(data);asset['name']='speed';f=NativeSpeed(executable,asset);punctuation(f);f.initialize(0)
     native=f.state_trace(90)
-    production=(ROOT/'src/3dimage.cpp').read_text();body=fn(production,'int32_t T3DAnimator::SubmitPartSys(')
-    family=fn((ROOT/'src/3dimage.h').read_text(),'bool HasRetailSpeedFamilyPartSysProfile(')
+    production=(ROOT/'src/game/imagery/3dimage.cpp').read_text();body=fn(production,'int32_t T3DAnimator::SubmitPartSys(')
+    family=fn((ROOT/'src/game/imagery/3dimage.h').read_text(),'bool HasRetailSpeedFamilyPartSysProfile(')
     cpp=PRELUDE.replace('SPEED_FAMILY_METHOD',family)+'\n'+body+'\n'+MAIN
     if native_mode:cpp=cpp.replace('a.SubmitPartSys(renderer,2,2,{1,1,1})','a.SubmitPartSys(renderer,2,2,{1,1,1},true)')
     source=output/'packet_driver.cpp';source.write_text(cpp);binary=output/'packet_driver'
     command=['clang++','-std=c++17','-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer',
         '-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(source),
-        str(ROOT/'src/authoredpartsys.cpp'),str(ROOT/'src/partsysdefinition.cpp'),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+        str(ROOT/'src/engine/fx/authoredpartsys.cpp'),str(ROOT/'src/engine/fx/partsysdefinition.cpp'),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
     q=subprocess.run(command,capture_output=True,text=True);(output/'compile.log').write_text(q.stdout+q.stderr)
     if q.returncode:raise RuntimeError('Actual SubmitPartSys compile failed; see compile.log')
     inputs=struct.pack('<i',90)+bytes.fromhex(asset['objects'][2]['vertex_hex'])

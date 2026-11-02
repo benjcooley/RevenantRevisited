@@ -39,7 +39,7 @@ level-up, AwardSkillExp and AddSkillExp, AwardStealthExp over the victim's
 45-second memory.
 
 Retail: tools/retail_runtime/slots/combat/melee_attack.py; port:
-src/retailab_melee.cpp (`Revenant --retail-ab=melee-*`). The compare is
+src/game/ab/retailab_melee.cpp (`Revenant --retail-ab=melee-*`). The compare is
 combat_targets.compare (every field; the seams aligned as sequences).
 
 The character data are the shipped char.def and rules.def as the port

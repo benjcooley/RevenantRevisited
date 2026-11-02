@@ -18,7 +18,7 @@ def run(trace,out):
  out.mkdir(parents=True,exist_ok=False);native=json.loads(trace.read_text());records=native['records']
  def compile_run(folder,driver):
   folder.mkdir(exist_ok=True);p=folder/'driver.cpp';p.write_text(driver.replace('FRAMES',str(len(records)-1)).replace('3185,3185,16',','.join(map(str,native.get('source',[3185,3185,16])))));exe=folder/'driver'
-  subprocess.run(['clang++','-std=c++17','-O1','-ffp-contract=off','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(p),str(ROOT/'src/math3d.cpp'),'-o',str(exe)],check=True)
+  subprocess.run(['clang++','-std=c++17','-O1','-ffp-contract=off','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(p),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(exe)],check=True)
   result=subprocess.run([str(exe)],cwd=folder,capture_output=True,text=True);assert result.returncode==0,result.stderr;(folder/'states.txt').write_text(result.stdout);return result.stdout,(folder/'pools.bin').read_bytes()
  driver=DRIVER.replace('CLOCK','0').replace('EXTRA','');text,raw=compile_run(out,driver);states=[list(map(int,x.split()))for x in text.splitlines()];assert len(states)==len(records)
  fields=0
@@ -49,7 +49,7 @@ def run(trace,out):
  negatives={}
  for name,variant in [('wrong_clock1',DRIVER.replace('CLOCK','1').replace('EXTRA','')),('missing_intrinsic_reseed',driver.replace('seed=first+0;','')),('double_pulse',driver.replace('s.Advance({3185,3185,16},rng,ground,decal);','s.Advance({3185,3185,16},rng,ground,decal);s.Advance({3185,3185,16},rng,ground,decal);'))]:
   txt,pool=compile_run(out/name,variant);changed=sum(a!=b for a,b in zip(raw,pool));assert changed;negatives[name]={'rejected':True,'changed_pool_bytes':changed,'changed_state_rows':sum(a!=b for a,b in zip(text.splitlines(),txt.splitlines()))}
- report=dict(status='pass',accepted=False,visual_pass=False,exact_pool_fields=fields,exact_rng_rows=len(states),original_failed_tile_requests=10,exact_consumed_ground_queries=len(source_ground),unused_decal_query_z_differences=unused_z_differences,all_original_ground_results_zero=True,declared_clock_ms=0,ordered_pose_fields=pose_fields,maximum_pose_error=maximum,authored_vertex_bytes=vertex_bytes,authored_indices=indices,negative_controls=negatives,native_manifest_sha256=sha(trace),source_hashes={str(p.relative_to(ROOT)):sha(p)for p in(ROOT/'src/pulpcore.h',ROOT/'src/pulppose.h',Path(__file__))},scope=__doc__)
+ report=dict(status='pass',accepted=False,visual_pass=False,exact_pool_fields=fields,exact_rng_rows=len(states),original_failed_tile_requests=10,exact_consumed_ground_queries=len(source_ground),unused_decal_query_z_differences=unused_z_differences,all_original_ground_results_zero=True,declared_clock_ms=0,ordered_pose_fields=pose_fields,maximum_pose_error=maximum,authored_vertex_bytes=vertex_bytes,authored_indices=indices,negative_controls=negatives,native_manifest_sha256=sha(trace),source_hashes={str(p.relative_to(ROOT)):sha(p)for p in(ROOT/'src/game/effects/pulpcore.h',ROOT/'src/game/effects/pulppose.h',Path(__file__))},scope=__doc__)
  (out/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('trace',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.trace,a.output)

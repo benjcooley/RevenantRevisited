@@ -56,7 +56,7 @@ class SparkFixture(TrailFixture):
 
 
 def compile_prefix(output):
-    effect=(ROOT/'src/effect.cpp').read_text();header=(ROOT/'src/effect.h').read_text()
+    effect=(ROOT/'src/game/effects/effect.cpp').read_text();header=(ROOT/'src/game/effects/effect.h').read_text()
     body=function(effect,'void TFireBallEffect::StepAnimate()')
     body=body[:body.index('    // --- state-specific actions')]+ '\n}\n'
     count=function(effect,'int32_t TFireBallEffect::LiveSparkCount() const')
@@ -120,7 +120,7 @@ def main():
     parser.add_argument('--output',type=Path,required=True);args=parser.parse_args();args.output.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(ROOT/'data/imagery.rvi')as z:asset=z.read('Imagery/Magic/newfireball.i3d')
     if hashlib.sha256(asset).hexdigest()!=ASSET_SHA:raise ValueError('Wrong authored asset')
-    files=['src/effect.cpp','src/effect.h','src/fireballcore.h','src/fireballspark.h'];sources={f:hashlib.sha256((ROOT/f).read_bytes()).hexdigest()for f in files}
+    files=['src/game/effects/effect.cpp','src/game/effects/effect.h','src/game/effects/fireballcore.h','src/game/effects/fireballspark.h'];sources={f:hashlib.sha256((ROOT/f).read_bytes()).hexdigest()for f in files}
     if args.producer:
         if not args.producer_manifest:parser.error('--producer requires retained manifest')
         prior=json.loads(args.producer_manifest.read_text());compiled=dict(prior['compiled_port']);binary=args.producer.resolve()

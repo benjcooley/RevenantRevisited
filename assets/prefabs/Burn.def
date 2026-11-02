@@ -1,0 +1,139 @@
+// Burn -- the burning-character flame column (retail TBurnEffect /
+// TBurnAnimator, effect_old.cpp:3201-3460; forensics
+// docs/vfx/forensics/M04_TBurnEffect.md; port src/effects/burn.cpp).
+//
+// Two stacked TParticleSystems on Magic\burnbabyburn.I3D: `fire` draws
+// sub-object 1 "smoke01" (texture 1, the bright orange blob, emissive
+// material), `smoke` draws sub-object 0 "smoke" (texture 0, the dim grey
+// blob). Both authored as one 58.63 wu quad (bbox +-29.3141), drawn
+// AdditiveStraight (SetAddBlendState, ONE/ONE), unlit, depth-test only.
+//
+// Retail parameters, all per tick at 24 Hz (snapshot-only except
+// BURN_FRAME = 50, corroborated in retail TCharacter::Burn):
+//   spawn       to_add per tick, ramping 0->8 over ticks 1-8 (BURN_ADD),
+//               8/tick until tick 50 (BURN_FRAME), 7..1 over ticks 50-56,
+//               then nothing: 392 fire particles over 56 ticks
+//   position    victim bone position, jitter +-2 wu per axis (BURN_SPREAD)
+//   scale       random(15, 40) * 0.01 of the authored quad -> 8.8..23.5 wu
+//   velocity    pure vertical, random(30, 75) * 0.1 = 3.0..7.5 wu/tick,
+//               acc = 1 (no damping, no gravity)
+//   decay       scale *= 0.97 every tick (BURN_DEC), fire and smoke alike
+//   fire life   random(5, 15) ticks (BURN_MIN/MAX_LIFE)
+//   promotion   an expiring fire particle becomes a smoke particle at its
+//               position and velocity, scale * 1.25, life_span * 2 / 3
+//   slots       70 per system (BURN_COUNT); overflow spawns are dropped
+//
+// Divergences, each one a generic capability the engine lacks today:
+//   * Emission envelope: the 0->8->0 to_add ramp is a time-shaped rate;
+//     a bucket only has a burst spread uniformly over spawn_delay. The
+//     392 spawns are spread evenly over 56 ticks (7/tick), so the first
+//     and last third of a second have ~1.5x retail's spawns.
+//   * Promotion: a chain spawn is handed the dying particle's pos and
+//     vel only. Smoke size and life below are drawn from the retail
+//     distributions instead of carried from the fire particle; exact
+//     port needs read-only emit_scale / emit_life in the chain spawn.
+//   * Anchor: retail spawns at a random bone of the victim's rig; the
+//     prefab spawns at the stamp position (the in-game stamp needs an
+//     emitter that samples the owner's bones). The harness entry
+//     TBurnEffect_BESPOKE is anchored on an Acolyte, so its column is
+//     taller by the body height.
+//   * The 70-slot cap is not modelled; the uniform 7/tick spawn with a
+//     10-tick mean life holds ~70 live fire particles anyway.
+particles
+{
+    effect Burn
+    {
+        inactive_ttl_pulses = 12
+
+        // fire system: sub-object "smoke01", texture 1.
+        bucket burn_fire
+        {
+            imagery_path = "Magic\\burnbabyburn.I3D"
+            texture_slot = 1
+            atlas_cols = 1
+            atlas_rows = 1
+            atlas_frames = 1
+            width = 58.63
+            height = 58.63
+            scale = 1.0
+            blend_mode = "additive_straight"
+            light_mode = "unlit"
+            depth_mode = "test_no_write"
+            orientation = "screen_aligned"
+
+            // 392 = sum of to_add over ticks 1..56, spread over the same
+            // 56 ticks (see the envelope note above).
+            spawn_burst = 392
+            spawn_delay_min = 0
+            spawn_delay_max = 55
+            tick_hz = 24
+            // Backstop only; spawn_expr sets each particle's life.
+            default_life = 0.625
+            chain_bucket = "burn_smoke"
+
+            // Scale is random(15,40) percent of the 58.63 wu quad; vz is
+            // random(30,75) tenths; life random(5,15) ticks. The +0.5 tick
+            // on life makes the kill land on tick L regardless of float
+            // accumulation in age.
+            spawn_expr = "
+                pos = emit_pos + vec3(rand(-2, 2), rand(-2, 2), rand(-2, 2));
+                vel = vec3(0, 0, floor(rand(30, 76)) * 0.1);
+                scale.x = floor(rand(15, 41)) * 0.5863;
+                scale.y = scale.x;
+                life = (floor(rand(5, 16)) + 0.5) / 24;
+                color = vec4(1, 1, 1, 1);
+            "
+
+            // TParticleSystem::Animate (pos += vel, vel *= acc = 1) then
+            // the animator's decay pass (scl *= BURN_DEC).
+            tick_expr = "
+                pos = pos + vel;
+                scale.x = scale.x * 0.97;
+                scale.y = scale.y * 0.97;
+            "
+        }
+
+        // smoke system: sub-object "smoke", texture 0. Fed only by the
+        // chain from burn_fire (the fire->smoke promotion).
+        bucket burn_smoke
+        {
+            imagery_path = "Magic\\burnbabyburn.I3D"
+            texture_slot = 0
+            atlas_cols = 1
+            atlas_rows = 1
+            atlas_frames = 1
+            width = 58.63
+            height = 58.63
+            scale = 1.0
+            blend_mode = "additive_straight"
+            light_mode = "unlit"
+            depth_mode = "test_no_write"
+            orientation = "screen_aligned"
+
+            spawn_burst = 0
+            tick_hz = 24
+            default_life = 0.4167
+
+            // Continues at the fire particle's position and velocity.
+            // Retail: scale = fire scale at death * 1.25, where the fire
+            // scale is random(15,40)% decayed by 0.97^(L+1) over its
+            // L = 5..15 tick life (mean factor 0.73); life = L * 2 / 3 =
+            // 3..10 ticks. Drawn from those distributions here (see the
+            // promotion note above).
+            spawn_expr = "
+                pos = emit_pos;
+                vel = emit_vel;
+                scale.x = floor(rand(15, 41)) * 0.5863 * 0.73 * 1.25;
+                scale.y = scale.x;
+                life = (floor(rand(3, 11)) + 0.5) / 24;
+                color = vec4(1, 1, 1, 1);
+            "
+
+            tick_expr = "
+                pos = pos + vel;
+                scale.x = scale.x * 0.97;
+                scale.y = scale.y * 0.97;
+            "
+        }
+    }
+}

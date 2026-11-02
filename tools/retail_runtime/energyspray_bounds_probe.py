@@ -29,7 +29,7 @@ def run(exe,out,tick=111,width=640,height=480):
  admission=[]
  if tick<111:
   source=out/'admission.cpp';source.write_text('#include "cometsoftwarebounds.h"\n#include <cstdio>\nint main(){hmm_mat4 m;hmm_vec3 p[3];while(scanf("%f",&m.Elements[0][0])==1){for(int i=1;i<16;++i)scanf("%f",(&m.Elements[0][0])+i);for(auto&v:p)scanf("%f%f%f",&v.X,&v.Y,&v.Z);printf("%d\\n",RetailCometTriangleAllowed(p,m));}}')
-  binary=out/'admission';subprocess.run(['clang++','-std=c++17','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(source),str(ROOT/'src/math3d.cpp'),'-o',str(binary)],check=True)
+  binary=out/'admission';subprocess.run(['clang++','-std=c++17','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(source),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)],check=True)
   packets=[(i,d)for i,d in enumerate(rows[0]['draws'])if d['object']==2];values=[]
   for i,d in packets:
    raw=bytes.fromhex(d['vertices_hex']);values.append(d['matrix']+[x for off in(0,32,64)for x in struct.unpack_from('<3f',raw,off)])

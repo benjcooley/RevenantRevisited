@@ -2,7 +2,7 @@
 
 Controls are pressed with the keys the game itself reads: `Bindings` parses
 the `[Controls]` section of the Revenant.ini in use, with the key names of
-the control mapper (src/ctrlmap.cpp: `CTRL-BS`, `PGUP`, `NUM5`, ...).
+the control mapper (src/game/ui/ctrlmap.cpp: `CTRL-BS`, `PGUP`, `NUM5`, ...).
 
     plan = Plan(state)                       # state: the pointer and held keys so far
     t = plan.press(0, bindings['CombatSwing'])

@@ -29,6 +29,6 @@ for tick,(n,c)in enumerate(zip(original,port)):
    checks+=1;equal=x==y if path[0]in('seed','rng_draws','frame','angle')else struct.pack('<f',x)==struct.pack('<f',y)
    if not equal:errors.append(dict(tick=tick,path=path,native=x,port=y))
  check(n,c,[])
-r=dict(status='pass'if not errors else'differences',checks=checks,errors=errors,original_trace=dict(path=str(a.trace.resolve()),sha256=sha(a.trace.read_bytes())),source_sha256=sha((ROOT/'src/iceboltcore.h').read_bytes()),port=port)
+r=dict(status='pass'if not errors else'differences',checks=checks,errors=errors,original_trace=dict(path=str(a.trace.resolve()),sha256=sha(a.trace.read_bytes())),source_sha256=sha((ROOT/'src/game/effects/iceboltcore.h').read_bytes()),port=port)
 (a.output/'manifest.json').write_text(json.dumps(r,indent=2)+'\n');print(r['status'],checks,'errors',len(errors));print(json.dumps(errors[:15],indent=2))
 if errors:raise SystemExit(1)

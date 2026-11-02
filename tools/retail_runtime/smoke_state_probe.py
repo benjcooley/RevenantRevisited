@@ -23,7 +23,7 @@ def run(out):
     if delta>2e-5 and len(errors)<20:errors.append(dict(quality=quality,tick=tick,field=k,native=expected,port=actual))
    if tick%100==0:before=f.state();f.render();assert before==f.state()
   results.append(dict(quality=quality,alive=n['alive'],ticks=n['tick'],seed=n['seed']))
- report=dict(status='fail'if errors else'pass',fields=fields,max_error=maximum,errors=errors,results=results,source_sha256=sha((ROOT/'src/smokecore.h').read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),scope='601ticks each at original quality0/1 immediatekill and quality3 live50-puff reset/centerbounce; allfields andMSVCstream, completeoriginalRender probes preservestate/RNG, compiled actualsource ASan/UBSan.')
+ report=dict(status='fail'if errors else'pass',fields=fields,max_error=maximum,errors=errors,results=results,source_sha256=sha((ROOT/'src/game/effects/smokecore.h').read_bytes()),probe_sha256=sha(Path(__file__).read_bytes()),scope='601ticks each at original quality0/1 immediatekill and quality3 live50-puff reset/centerbounce; allfields andMSVCstream, completeoriginalRender probes preservestate/RNG, compiled actualsource ASan/UBSan.')
  (out/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report);return report
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.output)

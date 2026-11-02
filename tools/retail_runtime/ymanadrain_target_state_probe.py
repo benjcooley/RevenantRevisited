@@ -15,7 +15,7 @@ for(int t=1;t<=100;++t){s.Advance({3185,3185,11},{3281,3185,11},64,160,260,rng,d
 def run(trace,out):
  out.mkdir(parents=True,exist_ok=False)
  source=out/'state.cpp';source.write_text(DRIVER);binary=out/'state'
- command=['clang++','-std=c++17','-O1','-ffp-contract=off','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(source),str(ROOT/'src/math3d.cpp'),'-o',str(binary)]
+ command=['clang++','-std=c++17','-O1','-ffp-contract=off','-fsanitize=address,undefined','-iquote',str(ROOT/'src'),'-I'+str(ROOT/'thirdparty/handmademath'),str(source),str(ROOT/'src/engine/core/math3d.cpp'),'-o',str(binary)]
  result=subprocess.run(command,capture_output=True,text=True);assert result.returncode==0,result.stderr
  result=subprocess.run([str(binary)],capture_output=True,text=True);assert result.returncode==0,result.stderr
  (out/'state.txt').write_text(result.stdout);(out/'poses.txt').write_text(result.stderr)
@@ -53,14 +53,14 @@ def run(trace,out):
     if error>1e-5:errors.append([t,'matrix',obj,error])
  negatives={}
  for name,old,new in [('stale_stream_speed','random(7,13)','random(3,5)'),('missing_initial_damage_rng','amount=random(minimum,maximum)','amount=maximum')]:
-  directory=out/name;directory.mkdir();header=(ROOT/'src/manadraincore.h').read_text();assert old in header
-  (directory/'manadraincore.h').write_text(header.replace(old,new));(directory/'ymanadraincore.h').write_text((ROOT/'src/ymanadraincore.h').read_text());(directory/'manadrainpose.h').write_text((ROOT/'src/manadrainpose.h').read_text());(directory/'state.cpp').write_text(DRIVER)
+  directory=out/name;directory.mkdir();header=(ROOT/'src/game/effects/manadraincore.h').read_text();assert old in header
+  (directory/'manadraincore.h').write_text(header.replace(old,new));(directory/'ymanadraincore.h').write_text((ROOT/'src/game/effects/ymanadraincore.h').read_text());(directory/'manadrainpose.h').write_text((ROOT/'src/game/effects/manadrainpose.h').read_text());(directory/'state.cpp').write_text(DRIVER)
   cmd=command.copy();cmd[cmd.index(str(source))]=str(directory/'state.cpp');cmd[-1]=str(directory/'state');compiled=subprocess.run(cmd,capture_output=True,text=True);assert compiled.returncode==0,compiled.stderr
   control=subprocess.run([str(directory/'state')],capture_output=True,text=True);assert control.returncode==0,control.stderr
   changed=sum(a!=b for a,b in zip(result.stdout.splitlines(),control.stdout.splitlines()));assert changed
   negatives[name]=dict(rejected=True,changed_state_frames=changed)
  for name in ('double_custom_pulse','post_owner_animation','incorrect_caster_cap'):
-  directory=out/name;directory.mkdir();header=(ROOT/'src/ymanadraincore.h').read_text();driver=DRIVER
+  directory=out/name;directory.mkdir();header=(ROOT/'src/game/effects/ymanadraincore.h').read_text();driver=DRIVER
   if name=='double_custom_pulse':
    driver=driver.replace('float glow=s.alive?', 'if(s.alive)s.Animate({3185,3185,11},{3281,3185,11},64,rng,dist);float glow=s.alive?')
   elif name=='post_owner_animation':
@@ -73,7 +73,7 @@ def run(trace,out):
   control=subprocess.run([str(directory/'state')],capture_output=True,text=True);assert control.returncode==0,control.stderr
   changed=sum(a!=b for a,b in zip(result.stdout.splitlines(),control.stdout.splitlines()));assert changed
   negatives[name]=dict(rejected=True,changed_state_frames=changed)
- report=dict(status='pass'if not errors else'fail',accepted=False,visual_pass=False,fields=checks,authored_vertex_bytes=vertex_bytes,authored_indices=index_count,asset_sha256=asset['sha256'],maximum_state_error=maximum,pose_fields=pose_checks,maximum_pose_error=pose_max,errors=errors[:50],negative_controls=negatives,native_manifest_sha256=sha(trace),core_sha256=sha(ROOT/'src/manadraincore.h'),pose_sha256=sha(ROOT/'src/manadrainpose.h'),y_core_sha256=sha(ROOT/'src/ymanadraincore.h'),probe_sha256=sha(__file__),sanitizers='ASan/UBSan',scope='Exact integer/RNG/lifecycle and mana; independently compiled float state and sampled whole-render matrices with decimal-output tolerance. Dormant undefined slot fields excluded. No actor pose/damage replacement.')
+ report=dict(status='pass'if not errors else'fail',accepted=False,visual_pass=False,fields=checks,authored_vertex_bytes=vertex_bytes,authored_indices=index_count,asset_sha256=asset['sha256'],maximum_state_error=maximum,pose_fields=pose_checks,maximum_pose_error=pose_max,errors=errors[:50],negative_controls=negatives,native_manifest_sha256=sha(trace),core_sha256=sha(ROOT/'src/game/effects/manadraincore.h'),pose_sha256=sha(ROOT/'src/game/effects/manadrainpose.h'),y_core_sha256=sha(ROOT/'src/game/effects/ymanadraincore.h'),probe_sha256=sha(__file__),sanitizers='ASan/UBSan',scope='Exact integer/RNG/lifecycle and mana; independently compiled float state and sampled whole-render matrices with decimal-output tolerance. Dormant undefined slot fields excluded. No actor pose/damage replacement.')
  (out/'manifest.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'],checks,pose_checks,maximum,pose_max);return report
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('trace',type=Path);p.add_argument('--output',type=Path,required=True);a=p.parse_args();run(a.trace,a.output)

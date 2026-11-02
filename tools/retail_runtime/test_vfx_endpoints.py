@@ -7,7 +7,7 @@ from test_vfxreviewspawn import ROOT, function
 
 class EndpointTests(unittest.TestCase):
  def test_exact_coordinates_and_actual_dispatch(self):
-  actual=function((ROOT/'src/vfxtest.cpp').read_text(),'void* CreatePreviewContext(')
+  actual=function((ROOT/'src/game/ab/vfxtest.cpp').read_text(),'void* CreatePreviewContext(')
   code=r'''
 #include "vfxpointoption.h"
 #include <cassert>

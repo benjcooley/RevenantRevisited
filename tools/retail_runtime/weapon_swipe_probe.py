@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Retail weapon swipe against the port's TWeaponSwipe (src/weaponswipe.cpp).
+"""Retail weapon swipe against the port's TWeaponSwipe (src/game/effects/weaponswipe.cpp).
 
 Drives the original code a drawn frame at a time, as TCharAnimator does:
 SetupWeaponSwipe `0x4d8f10` (which calls TWeaponSwipe::Init `0x4d90b0`)
@@ -14,7 +14,7 @@ The engine calls are answered by the host and recorded: GetWeaponExtents
 case's names) and GetObject `0x40eef0` (an object whose +0x58 is the step's
 weapon matrix). Allocation and the name compare are the original CRT.
 
-The port side compiles src/weaponswipe.cpp unchanged with a driver that
+The port side compiles src/game/effects/weaponswipe.cpp unchanged with a driver that
 plays the same frames through the same selection TCharAnimator makes.
 After every frame the running flag, the colour, both sample histories and
 the 80 strip vertices (position bits and packed colour) are compared bit
@@ -120,7 +120,7 @@ def build_port(output: Path, source: Path | None = None) -> Path:
     driver.write_text(DRIVER)
     binary = output / 'driver'
     command = ['clang++', '-std=c++17', '-O1', '-g', '-fsanitize=address,undefined', '-iquote', str(ROOT / 'src'),
-               str(driver), str(source or ROOT / 'src/weaponswipe.cpp'), '-o', str(binary)]
+               str(driver), str(source or ROOT / 'src/game/effects/weaponswipe.cpp'), '-o', str(binary)]
     result = subprocess.run(command, capture_output=True, text=True)
     (output / 'compile.log').write_text(result.stdout + result.stderr)
     if result.returncode:
@@ -344,7 +344,7 @@ def cases(extra: int):
 
 
 def run(executable: Path, output: Path, extra: int = 24, source: Path | None = None):
-    """`source` replaces src/weaponswipe.cpp (negative controls)."""
+    """`source` replaces src/game/effects/weaponswipe.cpp (negative controls)."""
     output.mkdir(parents=True, exist_ok=False)
     binary = build_port(output, source)
     native = Native(executable)

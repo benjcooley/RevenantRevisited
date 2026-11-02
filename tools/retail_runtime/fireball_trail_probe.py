@@ -108,7 +108,7 @@ def main():
         vertices=args.output/'authored-box01.bin';vertices.write_bytes(asset[VERTEX_OFFSET:VERTEX_OFFSET+128])
         compiled['retained_manifest']=str(args.producer_manifest.resolve())
     else:binary,vertices,compiled=port_driver(args.output,asset)
-    sources=[ROOT/p for p in ('src/effect.cpp','src/effect.h','src/fireballquad.cpp','src/fireballquad.h','src/math3d.cpp')]
+    sources=[ROOT/p for p in ('src/game/effects/effect.cpp','src/game/effects/effect.h','src/game/effects/fireballquad.cpp','src/game/effects/fireballquad.h','src/engine/core/math3d.cpp')]
     source_hashes={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in sources}
     fixture=TrailFixture(args.executable,asset)
     fixture.missile.configure([0,0,128],[1000,0,128],target_hp=0,animator_present=True)

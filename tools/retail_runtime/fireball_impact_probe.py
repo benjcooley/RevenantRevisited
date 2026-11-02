@@ -5,7 +5,7 @@ from fireball_spark_probe import compile_prefix,function,ROOT
 from speed_controller_preflight import sha
 
 def compile_full(output,negative_control=False):
- _,meta=compile_prefix(output);src=output/'port-spark.cpp';text=src.read_text();cpp=(ROOT/'src/effect.cpp').read_text()
+ _,meta=compile_prefix(output);src=output/'port-spark.cpp';text=src.read_text();cpp=(ROOT/'src/game/effects/effect.cpp').read_text()
  text=text.replace(function(text,'void TFireBallEffect::StepAnimate()'),function(cpp,'void TFireBallEffect::StepAnimate()'))
  text=text.replace('bool status_{};','bool status_{},ring_active_{},ring_done_{true},alive_{true};float ring_scale_=25;hmm_vec3 ring_pos_{};SFireBallData burst_[10];bool IsTrailDraining()const;')
  text=text.replace('void card(const SFireBallData&p)',function(cpp,'bool TFireBallEffect::IsTrailDraining() const')+'\nvoid card(const SFireBallData&p)')
@@ -43,7 +43,7 @@ def run(trace,output,negative_control=False):
    for key in('ring_scale','ring_done'):
     checks+=1
     if not equivalent(a[key],b[key]):errors.append(dict(tick=tick,field=key,native=a[key],port=b[key]))
- report=dict(negative_control=negative_control,status='pass'if not errors else'differences_found',checks=checks,errors=errors,frames=len(native),native_trace_sha256=sha(trace.read_bytes()),source_sha256={f:sha((ROOT/f).read_bytes())for f in('src/effect.cpp','src/fireballcore.h','src/fireballspark.h')})
+ report=dict(negative_control=negative_control,status='pass'if not errors else'differences_found',checks=checks,errors=errors,frames=len(native),native_trace_sha256=sha(trace.read_bytes()),source_sha256={f:sha((ROOT/f).read_bytes())for f in('src/game/effects/effect.cpp','src/game/effects/fireballcore.h','src/game/effects/fireballspark.h')})
  (output/'state-report.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps({k:v for k,v in report.items()if k!='errors'},indent=2));print('errors',len(errors));print(errors[:5]);return report
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('trace',type=Path);p.add_argument('--output',required=True,type=Path);p.add_argument('--negative-control',action='store_true');a=p.parse_args();r=run(a.trace,a.output,a.negative_control);raise SystemExit(bool(r['errors']))

@@ -5,7 +5,7 @@ from vortex_native_preflight import ROOT,ASSET_SHA
 from speed_profile_contract import sha
 
 def run(output):
- output.mkdir(parents=True,exist_ok=False);source=(ROOT/'src/effects/vortexpreview.cpp').read_text();start=source.index('  const auto copy=[]');end=source.index('  // Original untextured kernel:',start);body=source[start:end]
+ output.mkdir(parents=True,exist_ok=False);source=(ROOT/'src/game/effects/legacy/vortexpreview.cpp').read_text();start=source.index('  const auto copy=[]');end=source.index('  // Original untextured kernel:',start);body=source[start:end]
  driver=output/'material.cpp';driver.write_text(r'''
 #include <cassert>
 #include <cstdio>
