@@ -490,13 +490,13 @@ object.
    asserts the records match (landed 2026-11-01: 6356 objects on levels
    1-4, none differ), and the sector and player dumps prove the bytes.
 
-**Links (2026-11-01, user-steered).** A link between objects is
-`TObjectRef<T>`: the node's uid, a reflected `Ref` property, resolved
-lazily so a load never dereferences before every object exists. The map
-index is only mostly unique and is never an identity; `TSafeRef<T>` is a
-handle-table slot plus generation, runtime only, an object's being its
-node's. The AI component's links, its has-seen list and the burn effect
-landed this way.
+**Links (2026-11-01, user-steered).** One reference type, `TSafeRef<T>`:
+a handle-table slot plus generation at run time (an object's being its
+node's), serialized as the referent's uid, and closed by the loader's
+post-load link step all at once; no lazy resolution, so a reference read
+before the step is a load-order bug that shows. The map index is only
+mostly unique and is never an identity. The AI component's links, its
+has-seen list and the burn effect landed this way.
 
 **Decisions.** The animation `state` stays on the object: it is the
 object's state (a door open, a chest shut), not the playhead, and the

@@ -267,21 +267,25 @@ entry by name.
 
 ### Links
 
-A link from one object to another is a property like any other:
-`TObjectRef<T>` (object.h) holds the other node's 64-bit uid, reflects as
-a `Ref` property that the DEF text and the packed codec write as the
-uid, and `Get()` resolves through the node registry to the object as
-`T`, null when it is gone or is not a `T`. A load stores only the uid;
-nothing resolves until a use, by which time every object exists. The AI
-component's look-at, waypoint and Goto item, its has-seen entries and
-the character's burn effect are links of this kind.
+There is one reference type, `TSafeRef<T>` (engine/core/saferef.h). At
+run time it is a handle: a slot in the type's handle table and that
+slot's generation, so a deleted referent reads null and a reused slot
+is told from its old tenant. An object's handle is its node's. As a
+property it serializes as the referent's uid, the way Unity writes a
+file id: the uid names the link in the file, the handle is what runs.
 
-`TSafeRef<T>` (engine/core/saferef.h) is the runtime-only weak handle: a
-slot in the type's handle table and that slot's generation, taken from
-the live object and never serialized. An object's handle is its node's.
+A load hands a reference its uid and nothing more; the loader ends with
+the link step (`nodepack::ResolveRefs(root)`, or `refl::ResolveRefs` on
+a lone object), which closes every reference it loaded at once, after
+every object exists. There is no lazy resolution on `Get()`: a reference
+read before the step is null, a load-order bug to find rather than hide.
+The AI component's look-at, waypoint and Goto item, its has-seen entries
+and the character's burn effect are references of this kind.
+
 The map index is the retail file's field for an object, only mostly
 unique (retail sector files hold duplicates): it names objects in the
-sector and save streams and nowhere else.
+sector and save streams and the editor's selection, and is never an
+identity a reference is built on.
 
 ### The Gate
 

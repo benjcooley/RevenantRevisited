@@ -39,7 +39,7 @@ struct STestMesh
 struct STestLinks
 {
     PROP(1) TUid                 uid;
-    PROP(2, "What it points at") TNodeRef          target;
+    PROP(2, "What it points at") TSafeRef<TNode>   target;
     PROP(3)                      TAssetRef<TAsset> image;
     PROP(4)                      int32_t           after = 5;
 };

@@ -18,7 +18,10 @@
 
 #pragma once
 
+#include "engine/core/uid.h"
+
 #include <cstdint>
+#include <type_traits>
 #include <vector>
 
 class TObjectInstance;  // for the default template arg of TSafeRef<>
@@ -37,6 +40,18 @@ class TObjectInstance;  // for the default template arg of TSafeRef<>
 //   uint32_t SafeRefGen() const;           // member: per-instance generation
 //   static T* SafeRefLookup(int32_t id);   // static: id -> pointer or null
 //
+// and, to be serialized (a reflected Ref property):
+//
+//   TUid      SafeRefUid() const;          // member: the persistent identity
+//   static T* SafeRefByUid(TUid uid);      // static: uid -> pointer or null
+//
+// The serialized form of a reference is the referent's uid, as Unity
+// writes a file id: the handle is for the run, the uid for the file. A
+// load hands the reference its uid (FromUid); it reads null until the
+// loader's post-load pass calls Resolve on every reference, once every
+// object exists. There is no lazy resolution on Get: a reference read
+// before the pass is a load-order bug to find, not to hide.
+//
 // The generation guards against id recycling: a SafeRef captures
 // (id, generation) at construction. If the original referent is destroyed
 // and a new instance later inherits the same slot id, its generation will
@@ -51,8 +66,7 @@ class TObjectInstance;  // for the default template arg of TSafeRef<>
 // slot's generation when the reference was taken. A slot is reused; the
 // generation says whether the tenant is still the one referenced. It is
 // never a map index: a map index is the retail file's field for an
-// object, only mostly unique, not an identity. A link that must survive
-// a save is a node uid (TNodeRef, TObjectRef<T>), not a TSafeRef.
+// object, only mostly unique, not an identity.
 //
 // Both options for satisfying the contract are supported:
 //
@@ -83,7 +97,38 @@ class TSafeRef
     {
         idx = inst ? inst->SafeRefId()  : -1;
         gen = inst ? inst->SafeRefGen() : 0u;
+        pending = TUid();
         return *this;
+    }
+
+    // A reference as a load hands it over: the uid alone, until Resolve.
+    [[nodiscard]] static TSafeRef FromUid(TUid uid)
+    {
+        TSafeRef r;
+        r.pending = uid;
+        return r;
+    }
+    // What a save writes: the referent's uid; with none, the uid a load
+    // gave that never resolved, so an unresolvable link survives a re-save.
+    [[nodiscard]] TUid Uid() const
+    {
+        if (const T* p = Get())
+            return p->SafeRefUid();
+        return pending;
+    }
+    // The post-load step: the uid becomes the handle. A uid with no object
+    // behind it stays pending and the reference reads null.
+    void Resolve()
+    {
+        if (!pending.IsValid())
+            return;
+        T* p;
+        if constexpr (std::is_polymorphic_v<T>)
+            p = dynamic_cast<T*>(T::SafeRefByUid(pending));
+        else
+            p = static_cast<T*>(T::SafeRefByUid(pending));
+        if (p)
+            *this = p;
     }
 
     [[nodiscard]] T* Get() const
@@ -103,7 +148,7 @@ class TSafeRef
     [[nodiscard]] bool IsValid() const { return Get() != nullptr; }
     [[nodiscard]] int32_t Id() const { return idx; }
     [[nodiscard]] uint32_t Gen() const { return gen; }
-    void Clear() { idx = -1; gen = 0u; }
+    void Clear() { idx = -1; gen = 0u; pending = TUid(); }
 
     explicit operator bool() const { return IsValid(); }
     T* operator->() const { return Get(); }
@@ -117,6 +162,7 @@ class TSafeRef
   private:
     int32_t  idx = -1;
     uint32_t gen = 0u;
+    TUid     pending;       // a loaded uid awaiting Resolve
 };
 
 // Resolve an id (or any TSafeRef<U>) to a typed pointer of choice. Same

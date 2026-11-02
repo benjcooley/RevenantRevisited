@@ -73,9 +73,8 @@ TYPE_MAP = {
     # Identity and links: 64-bit uids (engine/core/uid.h). TAssetRef<T> is
     # looked up by its template name; {t} is the member's full type.
     "TUid":        ("Uid",    "u",   "{m} = TUid(v.u);",                             "out = SPropValue::Uid({m}.value);"),
-    "TNodeRef":    ("Ref",    "u",   "{m} = TNodeRef(TUid(v.u));",                   "out = SPropValue::Ref({m}.Uid().value);"),
+    "TSafeRef":    ("Ref",    "u",   "{m} = {t}::FromUid(TUid(v.u));",               "out = SPropValue::Ref({m}.Uid().value);"),
     "TAssetRef":   ("Ref",    "u",   "{m} = {t}(TUid(v.u));",                        "out = SPropValue::Ref({m}.Uid().value);"),
-    "TObjectRef":  ("Ref",    "u",   "{m} = {t}(TUid(v.u));",                        "out = SPropValue::Ref({m}.Uid().value);"),
     # Retail's integer world point rides the Vec3 lanes.
     "S3DPoint":    ("Vec3",   "v3",  "{m} = S3DPoint(int32_t(std::lround(v.v3[0])), int32_t(std::lround(v.v3[1])), int32_t(std::lround(v.v3[2])));",
                                      "out = SPropValue::Vec3(float({m}.x), float({m}.y), float({m}.z));"),
@@ -101,14 +100,14 @@ def snake(name: str) -> str:
     return s.lower()
 
 
-REF_KIND = {"TNodeRef": "Node", "TAssetRef": "Asset", "TObjectRef": "Node"}
+REF_KIND = {"TSafeRef": "Node", "TAssetRef": "Asset"}
 # Lists of scalars: the List machinery with a scalar element.
 SCALAR_LISTS = {"std::vector<int32_t>": "Int", "std::vector<std::string>": "String"}
 
 
 def base_ctype(ctype):
-    """`TAssetRef<TObjectImagery>` -> `TAssetRef`, `TObjectRef<TCharacter>` -> `TObjectRef`; anything else unchanged."""
-    for ref in ("TAssetRef", "TObjectRef"):
+    """`TAssetRef<TObjectImagery>` -> `TAssetRef`, `TSafeRef<TCharacter>` -> `TSafeRef`; anything else unchanged."""
+    for ref in ("TAssetRef", "TSafeRef"):
         if ctype.startswith(ref + "<"):
             return ref
     return ctype
@@ -523,7 +522,16 @@ def emit(path: Path, out: Path, include: str):
             o.append("    static void    ListClear(void* obj, uint16_t id);\n")
         if k.has_postload:
             o.append("    static void PostLoad(void* obj) { static_cast<%s*>(obj)->PostLoad(); }\n" % k.name)
+        ref_members = [m for m in k.members if base_ctype(m.ctype) == "TSafeRef"]
+        if ref_members:
+            o.append("    static void ResolveRefs(void* obj);\n")
         o.append("};\n\n")
+        if ref_members:
+            o.append("void refl::Access<%s>::ResolveRefs(void* obj)\n{\n" % k.name)
+            o.append("    %s& self = *static_cast<%s*>(obj);\n" % (k.name, k.name))
+            for m in ref_members:
+                o.append("    self.%s.Resolve();\n" % m.member)
+            o.append("}\n\n")
         if k.members:
           o.append("bool refl::Access<%s>::Set(void* obj, uint16_t id, const SPropValue& v)\n{\n" % k.name)
           o.append("    %s& self = *static_cast<%s*>(obj);\n" % (k.name, k.name))
@@ -613,12 +621,13 @@ def emit(path: Path, out: Path, include: str):
         cnode = ("[]() -> TNode* { return new %s(); }" % k.name) if k.def_kind == "node" else "nullptr"
         ccomp = ("[]() -> TComponent* { return new %s(); }" % k.name) if k.def_kind == "component" else "nullptr"
         loaded = ("&refl::Access<%s>::PostLoad" % k.name) if k.has_postload else "nullptr"
+        resolve = ("&refl::Access<%s>::ResolveRefs" % k.name) if ref_members else "nullptr"
         if nested_members:
             nest = ", ".join("&refl::Access<%s>::%s" % (k.name, fn) for fn in ("Nested", "ListCount", "ListAt", "ListAdd", "ListClear"))
         else:
             nest = "nullptr, nullptr, nullptr, nullptr, nullptr"
-        o.append('refl::SType kType_%s = { "%s", "%s", &typeid(%s), %s, %d, %s, %s, nullptr, "%s", %s, %s, %s, %s };\n'
-                 % (k.name, k.name, k.base, k.name, props, len(k.members), setf, getf, k.def_name, cnode, ccomp, loaded, nest))
+        o.append('refl::SType kType_%s = { "%s", "%s", &typeid(%s), %s, %d, %s, %s, nullptr, "%s", %s, %s, %s, %s, %s };\n'
+                 % (k.name, k.name, k.base, k.name, props, len(k.members), setf, getf, k.def_name, cnode, ccomp, loaded, resolve, nest))
         o.append("refl::SRegistrar kReg_%s(kType_%s);\n\n" % (k.name, k.name))
     o.append("} // namespace\n")
     out.parent.mkdir(parents=True, exist_ok=True)

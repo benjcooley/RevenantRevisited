@@ -925,7 +925,7 @@ class TCharacter : public TComplexObject
   // Teleport Coordinates
 
   // burn stuff
-    TObjectRef<TObjectInstance> burning;                 // the burn effect on this character, weak
+    TSafeRef<TObjectInstance> burning;                 // the burn effect on this character, weak
 
   // The corpse
 

@@ -148,7 +148,22 @@ bool Unpack(TPackedReader& r, TNode& root,
     std::string err;
     const bool ok = UnpackNode(r, root, owned, err, apply_root_props, post_load);
     if (error) *error = err;
+    if (ok && post_load)
+        ResolveRefs(root);
     return ok;
+}
+
+void ResolveRefs(TNode& root)
+{
+    if (const refl::SType* t = refl::Of(root))
+        refl::ResolveRefs(*t, &root);
+    for (int32_t i = 0; i < root.NumComponents(); ++i)
+        if (TComponent* c = root.GetComponent(i))
+            if (const refl::SType* ct = refl::Of(*c))
+                refl::ResolveRefs(*ct, c);
+    for (int32_t i = 0; i < root.GetChildCount(); ++i)
+        if (TNode* child = root.GetChildAt(i))
+            ResolveRefs(*child);
 }
 
 namespace {
@@ -218,6 +233,8 @@ void Reidentify(TNode& root, const std::vector<std::unique_ptr<TNode>>& stamped)
     for (const auto& node : stamped)
         if (node)
             RemapNode(*node, map);
+    // The remap wrote uids back into the references: close them again.
+    ResolveRefs(root);
 }
 
 } // namespace nodepack

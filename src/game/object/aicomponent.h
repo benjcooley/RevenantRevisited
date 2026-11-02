@@ -20,22 +20,20 @@
 
 #include "engine/scene/component.h"
 #include "engine/core/revtypes.h"
-#include "game/object/object.h"
+#include "game/object/character.h"      // the has-seen references resolve to characters
 #include "game/ai/bossai.h"
 
 #include <vector>
-
-class TCharacter;
 
 // Maximum number of characters a character can remember seeing
 constexpr int32_t MAXHASSEEN = 8;
 
 // One character seen lately (retail +0x1c0, MAXHASSEEN entries). The
-// character is a weak link by uid: a deleted one reads as none.
+// character is a weak reference: a deleted one reads as none.
 struct SHasSeen
 {
     REFL_IDS(1, 9)
-    PROP(1, "The character seen")                   TObjectRef<TCharacter> chr;
+    PROP(1, "The character seen")                   TSafeRef<TCharacter> chr;
     PROP(2, "Game ticks when last seen")            int32_t time = 0;
     PROP(3, "Keeps the player from auto-combat")    bool noautocombat = false;
 };
@@ -61,14 +59,14 @@ class TAIComponent final : public TComponent
   // patrols to; how many more ticks it keeps facing that waypoint while
   // chasing, a new waypoint gives it 6.
     PROP_NOSAVE(5, "Where the target was last seen or heard")    S3DPoint target_last_position = {};  // retail +0x23c
-    PROP(16, "What the AI walks toward and faces")                TObjectRef<TObjectInstance> ai_lookat;              // retail +0x234
+    PROP(16, "What the AI walks toward and faces")                TSafeRef<TObjectInstance> ai_lookat;              // retail +0x234
     PROP_NOSAVE(6, "Ticks left facing the waypoint")             int32_t  waypointticks = 0;          // retail +0x248
 
   // The wander (retail +0x238 / +0x24c / +0x250): the waypoint before the
   // current one, its pick passes over both and with none to pick it goes
   // back, retail drops it when its object goes, 0x004c38a6; the ticks it
   // still does nothing; the ticks a run has left.
-    PROP(17, "The waypoint before the current one")               TObjectRef<TObjectInstance> lastwaypoint;
+    PROP(17, "The waypoint before the current one")               TSafeRef<TObjectInstance> lastwaypoint;
     PROP_NOSAVE(7, "Ticks the wander still idles")               int32_t  wanderidle = 0;
     PROP_NOSAVE(8, "Ticks a wander's run has left")              int32_t  runticks   = 0;
 
@@ -87,7 +85,7 @@ class TAIComponent final : public TComponent
   // The item a Goto carries (retail +0x288): the map pane's walk to an item
   // out of reach, 0x004cedb0, picked up when that walk arrives (0x004c6155,
   // 0x004c7fc3). Kept until then, or until a Goto carries another.
-    PROP(18, "The item a Goto picks up on arrival")               TObjectRef<TObjectInstance> gotoitem;
+    PROP(18, "The item a Goto picks up on arrival")               TSafeRef<TObjectInstance> gotoitem;
 
   // The boss (retail +0x280 / +0x284): the kind AI_PerMonster 0x004c9b70
   // gives, once (TCharacter::kMonsterBaez, whom magic can't hurt, Solifuge,

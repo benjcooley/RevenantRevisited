@@ -89,8 +89,11 @@ class TNode final : public TSafeObjectBase<TNode>
 
     // The persistent identity (engine/core/uid.h): random at construction,
     // then whatever the record or document says. A serialized link names
-    // this; TNodeRef resolves it through the uid registry.
+    // this; the post-load pass resolves it through the uid registry.
     [[nodiscard]] TUid Uid() const { return uid_; }
+    // The TSafeRef<T> serialization half (engine/core/saferef.h)
+    [[nodiscard]] TUid SafeRefUid() const { return uid_; }
+    [[nodiscard]] static TNode* SafeRefByUid(TUid uid) { return FindByUid(uid); }
     void SetUid(TUid uid);
     [[nodiscard]] static TNode* FindByUid(TUid uid);
 
@@ -194,43 +197,6 @@ class TNode final : public TSafeObjectBase<TNode>
     int32_t level_ = 0;
 };
 
-// A link to a node by its persistent uid: what a property holds and a file
-// stores. Resolution goes through the uid registry once and is cached as a
-// soft ref, so a hot path pays the soft-ref check, not a hash lookup.
-class TNodeRef
-{
-  public:
-    TNodeRef() = default;
-    explicit TNodeRef(TUid uid) : uid_(uid) {}
-    explicit TNodeRef(const TNode* node) { Set(node); }
-
-    void Set(const TNode* node)
-    {
-        uid_ = node ? node->Uid() : TUid();
-        cached_ = node;
-    }
-    void Clear() { uid_ = TUid(); cached_.Clear(); }
-
-    [[nodiscard]] TUid Uid() const { return uid_; }
-    [[nodiscard]] TNode* Get() const
-    {
-        if (!uid_.IsValid()) return nullptr;
-        if (TNode* node = cached_.Get())
-            if (node->Uid() == uid_) return node;
-        TNode* node = TNode::FindByUid(uid_);
-        cached_ = node;
-        return node;
-    }
-    [[nodiscard]] bool IsValid() const { return Get() != nullptr; }
-    explicit operator bool() const { return IsValid(); }
-    TNode* operator->() const { return Get(); }
-    bool operator==(const TNodeRef& o) const { return uid_ == o.uid_; }
-    bool operator!=(const TNodeRef& o) const { return uid_ != o.uid_; }
-
-  private:
-    TUid uid_;
-    mutable TSafeRef<TNode> cached_;
-};
 
 // Safe reference to a component owned by a node. Resolves the owner
 // through the node registry, then validates the component slot and

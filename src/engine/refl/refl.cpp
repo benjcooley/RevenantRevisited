@@ -160,6 +160,36 @@ void Reset(const SType& type, void* obj)
     }
 }
 
+void ResolveRefs(const SType& type, void* obj)
+{
+    for (const SType* t = &type; t; t = t->base)
+    {
+        if (t->base == nullptr && t->base_name && *t->base_name)
+            LinkBase(const_cast<SType&>(*t));
+        if (t->resolve_refs)
+            t->resolve_refs(obj);
+        for (int32_t i = 0; i < t->prop_count; ++i)
+        {
+            const SProp& p = t->props[i];
+            if (p.type == EPropType::Struct)
+            {
+                if (const SType* et = ElemType(p))
+                    if (void* n = Nested(type, obj, p.id))
+                        ResolveRefs(*et, n);
+            }
+            else if (p.type == EPropType::List)
+            {
+                const SType* et = ElemType(p);
+                if (!et) continue;
+                const int32_t count = ListCount(type, obj, p.id);
+                for (int32_t k = 0; k < count; ++k)
+                    if (void* e = ListAt(type, obj, p.id, k))
+                        ResolveRefs(*et, e);
+            }
+        }
+    }
+}
+
 void PostLoad(const SType& type, void* obj)
 {
     std::vector<const SType*> chain;

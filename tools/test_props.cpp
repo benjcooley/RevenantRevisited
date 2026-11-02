@@ -279,7 +279,7 @@ TEST(Props, UidsAndRefsRoundTrip)
 
     STestLinks a;
     a.uid    = TUid(0x0123456789abcdefull);
-    a.target = TNodeRef(TUid(0xfedcba9876543210ull));   // ten varint bytes
+    a.target = TSafeRef<TNode>::FromUid(TUid(0xfedcba9876543210ull));   // ten varint bytes
     a.image  = TAssetRef<TAsset>(TUid(7));
     a.after  = 9;
 

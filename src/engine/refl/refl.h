@@ -128,7 +128,7 @@ enum class EPropType : uint8_t
 enum class ERefKind : uint8_t
 {
     None,
-    Node,       // TNodeRef: a node, by uid
+    Node,       // TSafeRef<T>: a node or an object, by its node's uid
     Asset,      // TAssetRef<T>: an asset, by the asset cache's uid
 };
 
@@ -322,6 +322,7 @@ struct SType
     TNode*        (*create_node)()      = nullptr;
     TComponent* (*create_component)() = nullptr;
     void (*post_load)(void* obj)            = nullptr;   // the class's PostLoad(), if any
+    void (*resolve_refs)(void* obj)         = nullptr;   // generated: Resolve() on each TSafeRef member
     // Struct / List access (generated): the nested object, list size,
     // element, append (returns the new element), clear.
     void*   (*nested)(void* obj, uint16_t id)                    = nullptr;
@@ -352,6 +353,11 @@ void Reset(const SType& type, void* obj);
 
 // Post-deserialize hook: runs PostLoad() for the base chain, base first.
 void PostLoad(const SType& type, void* obj);
+// The link step: resolves every TSafeRef the object holds, nested records
+// and lists included, from the uid a load gave it to the handle. A loader
+// runs it over everything it loaded once every object exists; no
+// reference closes before that.
+void ResolveRefs(const SType& type, void* obj);
 
 // The nested class of a Struct / List property (resolved by name).
 [[nodiscard]] const SType* ElemType(const SProp& prop);

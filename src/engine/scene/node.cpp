@@ -98,7 +98,7 @@ TObjectInstance* TComponent::OwnerInstance() const
 
 // ---- the uid registry ----------------------------------------------------
 //
-// uid -> node, for TNodeRef. A process-lifetime table like the soft-ref
+// uid -> node, for the post-load link step. A process-lifetime table like the soft-ref
 // registries (never destructed: late destructors must still find it).
 
 namespace {

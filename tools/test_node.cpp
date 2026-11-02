@@ -161,22 +161,34 @@ TEST(Node, UidsAndNodeRefs)
     EXPECT_NE(a.Uid(), b.Uid());                       // random, distinct
     EXPECT_EQ(TNode::FindByUid(a.Uid()), &a);
 
-    TNodeRef ref(&a);
+    // A reference is a handle; its serialized form is the referent's uid.
+    TSafeRef<TNode> ref(&a);
     EXPECT_EQ(ref.Get(), &a);
+    EXPECT_EQ(ref.Uid(), a.Uid());
     a.SetUid(TUid(0x1234));                            // a renamed identity
     EXPECT_EQ(TNode::FindByUid(TUid(0x1234)), &a);
-    EXPECT_EQ(ref.Get(), nullptr);                     // the old uid names nothing now
-    TNodeRef by_uid(TUid(0x1234));
-    EXPECT_EQ(by_uid.Get(), &a);
+    EXPECT_EQ(ref.Get(), &a);                          // the handle doesn't care
+    EXPECT_EQ(ref.Uid(), TUid(0x1234));                // a save writes the new name
+
+    // A loaded reference is the uid alone until the link step; no lazy
+    // resolution.
+    TSafeRef<TNode> loaded = TSafeRef<TNode>::FromUid(TUid(0x1234));
+    EXPECT_EQ(loaded.Get(), nullptr);
+    EXPECT_EQ(loaded.Uid(), TUid(0x1234));
+    loaded.Resolve();
+    EXPECT_EQ(loaded.Get(), &a);
     {
         TNode c("c");
         c.SetUid(TUid(0x5678));
-        TNodeRef to_c(&c);
+        TSafeRef<TNode> to_c(&c);
         EXPECT_EQ(to_c.Get(), &c);
         // c dies here
     }
     EXPECT_EQ(TNode::FindByUid(TUid(0x5678)), nullptr);
-    EXPECT_EQ(TNodeRef(TUid(0x5678)).Get(), nullptr);
+    TSafeRef<TNode> gone = TSafeRef<TNode>::FromUid(TUid(0x5678));
+    gone.Resolve();
+    EXPECT_EQ(gone.Get(), nullptr);                    // nothing to close on
+    EXPECT_EQ(gone.Uid(), TUid(0x5678));               // the name survives a re-save
 
     // The uid is a node property: packed with the node and applied back.
     const refl::SType* t = refl::Of(a);
@@ -190,7 +202,7 @@ TEST(Node, UidsAndNodeRefs)
 // A prefab-style component holding a ref to a sibling node.
 struct STestPointer : public TComponent
 {
-    TNodeRef target;
+    TSafeRef<TNode> target;
     const char* ComponentName() const override { return "pointer"; }
 };
 

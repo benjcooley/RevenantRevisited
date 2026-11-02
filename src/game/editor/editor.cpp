@@ -773,6 +773,8 @@ void DrawPropertyRow(TNode* node, void* obj, const refl::SType& type, const refl
     auto commit = [&](const SPropValue& nv) {
         if (read_only) return;
         refl::Set(type, obj, p.id, nv);
+        if (p.type == EPropType::Ref)
+            refl::ResolveRefs(type, obj);      // a reference set by hand closes now, as after a load
         if (after_commit) after_commit();
         EditorMarkDirty();
     };

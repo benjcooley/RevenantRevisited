@@ -314,11 +314,15 @@ target_compile_definitions(test_particlefx PRIVATE REV_ASSETS_DIR="${CMAKE_SOURC
 add_executable(test_props
   tools/test_props.cpp
   src/engine/core/uid.cpp
+  src/engine/scene/node.cpp
+  src/engine/scene/transform.cpp
+  src/engine/scene/animsystem.cpp
+  src/engine/core/math3d.cpp
   src/engine/refl/refl.cpp
   src/engine/refl/packed.cpp)
 target_include_directories(test_props PRIVATE ${HANDMADE_MATH_DIR})
 target_link_libraries(test_props PRIVATE GTest::gtest_main)
-rev_reflect(test_props tools/test_props_types.h)
+rev_reflect(test_props tools/test_props_types.h src/engine/scene/node.h)
 
 add_executable(test_defio
   tools/test_defio.cpp

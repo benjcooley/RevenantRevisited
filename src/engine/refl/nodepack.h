@@ -54,4 +54,10 @@ bool Unpack(TPackedReader& r, TNode& root,
 // new one. Refs to anything outside the stamp are left alone.
 void Reidentify(TNode& root, const std::vector<std::unique_ptr<TNode>>& stamped);
 
+// The link step over a tree: every TSafeRef on the node, its components
+// and its children, resolved from uid to handle. Unpack (with post_load)
+// and Reidentify end with it; a loader that builds nodes another way runs
+// it once everything it loaded exists.
+void ResolveRefs(TNode& root);
+
 } // namespace nodepack

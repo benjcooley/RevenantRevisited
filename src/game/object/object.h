@@ -18,7 +18,6 @@
 
 #include <atomic>
 #include <memory>
-#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -61,8 +60,8 @@ class TScriptComponent;
 class TInventoryComponent;
 
 // The object a map index names, for the streams and the editor's selection
-// (the map index is the retail file's field, not an identity: references
-// are TSafeRef<T> and TObjectRef<T>). Forward-declared to keep the mappane /
+// (the map index is the retail file's field, not an identity: a reference
+// is a TSafeRef<T>). Forward-declared to keep the mappane /
 // sector include chain out of object.h; defined in mappane.cpp.
 TObjectInstance* LookupMapIndex(int32_t mapindex);
 
@@ -1205,6 +1204,14 @@ class TObjectInstance : public TComponent
         TNode* node = TNode::SafeRefLookup(id);
         return node ? node->Object() : nullptr;
     }
+  // The serialization half: a link to an object is its node's uid; the
+  // post-load pass resolves it once every object exists.
+    TUid SafeRefUid() const { return Node()->Uid(); }
+    static TObjectInstance* SafeRefByUid(TUid uid)
+    {
+        TNode* node = TNode::FindByUid(uid);
+        return node ? node->Object() : nullptr;
+    }
 
   // Nextmove functions
     void SetNextMove(S3DPoint& p);
@@ -1378,33 +1385,6 @@ struct SObjectDeleter
 // An owning pointer to an object (any class of the hierarchy).
 template <class T = TObjectInstance>
 using TObjectPtr = std::unique_ptr<T, SObjectDeleter>;
-
-// A link to a map object, weak and serializable: the node's uid, as a
-// TNodeRef holds it (a Ref property; DEF text and the packed codec write
-// the uid), answered as the object. Get() is null when the object is gone
-// or is not a T. The map index is the retail file's field, not an identity.
-template <typename T = TObjectInstance>
-class TObjectRef : public TNodeRef
-{
-  public:
-    TObjectRef() = default;
-    explicit TObjectRef(TUid uid) : TNodeRef(uid) {}
-    TObjectRef(const T* obj) : TNodeRef(obj ? obj->Node() : nullptr) {}
-    TObjectRef& operator=(const T* obj) { Set(obj ? obj->Node() : nullptr); return *this; }
-
-    [[nodiscard]] T* Get() const
-    {
-        TNode* node = TNodeRef::Get();
-        TObjectInstance* obj = node ? node->Object() : nullptr;
-        if constexpr (std::is_same_v<T, TObjectInstance>)
-            return obj;
-        else
-            return dynamic_cast<T*>(obj);
-    }
-    [[nodiscard]] bool IsValid() const { return Get() != nullptr; }
-    explicit operator bool() const { return IsValid(); }
-    T* operator->() const { return Get(); }
-};
 
 // The integer views (intworld.h) through the object: the same expressions
 // over its node's transform.

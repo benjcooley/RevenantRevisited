@@ -6,6 +6,7 @@
 
 #include "engine/refl/defio.h"
 #include "engine/refl/defdoc.h"
+#include "engine/refl/nodepack.h"
 #include "engine/scene/node.h"
 
 #include <cstdio>
@@ -480,13 +481,19 @@ bool Read(std::string_view text, TNode& root,
         return false;
     }
     TReaderSink sink(*t, &root, &root, &owned, post_load);
-    return Run(text, sink, error);
+    const bool ok = Run(text, sink, error);
+    if (ok && post_load)
+        nodepack::ResolveRefs(root);           // the link step: every object exists now
+    return ok;
 }
 
 bool ReadObject(std::string_view text, const refl::SType& type, void* obj, std::string* error, bool post_load)
 {
     TReaderSink sink(type, obj, nullptr, nullptr, post_load);
-    return Run(text, sink, error);
+    const bool ok = Run(text, sink, error);
+    if (ok && post_load)
+        refl::ResolveRefs(type, obj);
+    return ok;
 }
 
 namespace {
