@@ -166,7 +166,7 @@ std::vector<int32_t> g_tree_order_this_frame;
 TObjectInstance* SelectionPrimary()
 {
     return g_selection.empty() ? nullptr
-                               : safe_cast<TObjectInstance>(g_selection.back());
+                               : LookupMapIndex(g_selection.back());
 }
 bool IsSelected(int32_t mapindex)
 {
@@ -1201,7 +1201,7 @@ void DrawGameViewPanel()
                                 g_tool == EEditorTool::Rotate ? "rotate" :
                                 g_tool == EEditorTool::Scale  ? "scale"  : "transform");
                             for (int32_t mi : g_selection) {
-                                TObjectInstance* sel = safe_cast<TObjectInstance>(mi);
+                                TObjectInstance* sel = LookupMapIndex(mi);
                                 if (!sel) continue;
                                 EditorUndo::MarkDirty(sel->Node());
                                 if (sel != oi)
@@ -1216,7 +1216,7 @@ void DrawGameViewPanel()
                         const int32_t dz = np.z - s_drag_start.z;
                         oi->SetPos(np, -1, true);
                         for (const auto& e : s_drag_others) {
-                            if (auto* other = safe_cast<TObjectInstance>(e.mapindex))
+                            if (auto* other = LookupMapIndex(e.mapindex))
                                 other->SetPos({ e.from.x + dx, e.from.y + dy,
                                                 e.from.z + dz }, -1, true);
                         }
@@ -1480,7 +1480,7 @@ public:
         std::vector<TObjectInstance*> live;
         live.reserve(mapindices_.size());
         for (int32_t mi : mapindices_)
-            if (auto* oi = safe_cast<TObjectInstance>(mi)) live.push_back(oi);
+            if (auto* oi = LookupMapIndex(mi)) live.push_back(oi);
         text_ = EditorSerialize::ToText(live, /*include_refid=*/true);
     }
 
@@ -1493,7 +1493,7 @@ public:
         // See memory/project_editor_object_model.md for the longer
         // story on the MapPane/renderer ownership split.
         for (int32_t mi : mapindices_) {
-            TObjectInstance* oi = safe_cast<TObjectInstance>(mi);
+            TObjectInstance* oi = LookupMapIndex(mi);
             if (!oi) continue;
             TSector* sec = oi->GetSector();
             if (!sec) continue;
@@ -1541,7 +1541,7 @@ public:
             std::vector<TObjectInstance*> live;
             live.reserve(created_indices_.size());
             for (int32_t mi : created_indices_)
-                if (auto* oi = safe_cast<TObjectInstance>(mi)) live.push_back(oi);
+                if (auto* oi = LookupMapIndex(mi)) live.push_back(oi);
             created_text_ = EditorSerialize::ToText(live, /*include_refid=*/true);
         } else {
             created_indices_ = EditorSerialize::FromText(created_text_, /*preserve_refid=*/true);
@@ -1555,7 +1555,7 @@ public:
         // MapPane.DeleteObject iterates MapPane.sectors[][] (empty in
         // editor mode) and FATALs. Go through oi->GetSector() directly.
         for (int32_t mi : created_indices_) {
-            TObjectInstance* oi = safe_cast<TObjectInstance>(mi);
+            TObjectInstance* oi = LookupMapIndex(mi);
             if (!oi) continue;
             TSector* sec = oi->GetSector();
             if (!sec) continue;
@@ -1603,7 +1603,7 @@ void RegisterBuiltinCommands()
             int32_t count = 0;
             int32_t level = 0;
             for (int32_t mi : g_selection) {
-                TObjectInstance* sel = safe_cast<TObjectInstance>(mi);
+                TObjectInstance* sel = LookupMapIndex(mi);
                 if (!sel) continue;
                 if (count == 0) level = sel->GetLevel();
                 const S3DPoint& p = IntPos(sel);
@@ -1785,7 +1785,7 @@ void RegisterBuiltinCommands()
             std::vector<TObjectInstance*> live;
             live.reserve(g_selection.size());
             for (int32_t mi : g_selection)
-                if (auto* oi = safe_cast<TObjectInstance>(mi)) live.push_back(oi);
+                if (auto* oi = LookupMapIndex(mi)) live.push_back(oi);
             if (live.empty()) return;
             const std::string text = EditorSerialize::ToText(live, /*include_refid=*/false);
             ImGui::SetClipboardText(text.c_str());
@@ -1806,7 +1806,7 @@ void RegisterBuiltinCommands()
             std::vector<TObjectInstance*> live;
             live.reserve(g_selection.size());
             for (int32_t mi : g_selection)
-                if (auto* oi = safe_cast<TObjectInstance>(mi)) live.push_back(oi);
+                if (auto* oi = LookupMapIndex(mi)) live.push_back(oi);
             if (live.empty()) return;
             const std::string text = EditorSerialize::ToText(live, /*include_refid=*/false);
             ImGui::SetClipboardText(text.c_str());
@@ -1865,7 +1865,7 @@ void RegisterBuiltinCommands()
             std::vector<TObjectInstance*> live;
             live.reserve(g_selection.size());
             for (int32_t mi : g_selection)
-                if (auto* oi = safe_cast<TObjectInstance>(mi)) live.push_back(oi);
+                if (auto* oi = LookupMapIndex(mi)) live.push_back(oi);
             if (live.empty()) return;
             const std::string text = EditorSerialize::ToText(live, /*include_refid=*/false);
             auto cmd = std::make_unique<TCreateInstancesCommand>(text, "Duplicate");

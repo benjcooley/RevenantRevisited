@@ -3680,8 +3680,8 @@ void TMapRenderer::RenderFrame()
         // game mode even if the editor's selection set is non-empty.
         if (EditorOverlaysEnabled())
         {
-            const int32_t mi = s.sectorDrawInst[idx].src.MapIndex();
-            if (mi >= 0 && s.selectedMapIndices.count(mi))
+            const TObjectInstance* src = s.sectorDrawInst[idx].src.Get();
+            if (src && s.selectedMapIndices.count(src->GetMapIndex()))
                 obj_id |= kObjFlagSelected;
         }
         if (TObjectInstance* oi = s.sectorDrawInst[idx].src.Get())

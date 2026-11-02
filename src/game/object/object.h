@@ -60,9 +60,10 @@ class TStatsComponent;
 class TScriptComponent;
 class TInventoryComponent;
 
-// Forward-declared free function used by TObjectInstance::SafeRefLookup
-// (and by TSafeRef<TObjectInstance>) to avoid pulling the mappane /
-// sector include chain into object.h. Defined in mappane.cpp.
+// The object a map index names, for the streams and the editor's selection
+// (the map index is the retail file's field, not an identity: references
+// are TSafeRef<T> and TObjectRef<T>). Forward-declared to keep the mappane /
+// sector include chain out of object.h; defined in mappane.cpp.
 TObjectInstance* LookupMapIndex(int32_t mapindex);
 
 #include "game/object/objectdef.h"
@@ -1193,14 +1194,17 @@ class TObjectInstance : public TComponent
     int32_t FileMapIndex() const { return filemapindex >= 0 ? filemapindex : GetMapIndex(); }
         // The instance id sector and save files record for this object
 
-  // TSafeRef<T> contract -- see comment block before TSafeRef in this file.
-  // SafeRefId is the mapindex (the existing stable id for instances).
-  // SafeRefGen is a per-instance generation counter, fresh per construction;
-  // SafeRef captures (id, gen) so a recycled slot resolves to nullptr
-  // through a stale ref instead of the new tenant.
-    int32_t  SafeRefId()  const { return GetMapIndex(); }
-    uint32_t SafeRefGen() const { return safe_ref_gen; }
-    static TObjectInstance* SafeRefLookup(int32_t idx) { return ::LookupMapIndex(idx); }
+  // TSafeRef<T> contract (engine/core/saferef.h): a reference to an object
+  // is a reference to its node, its slot in the node handle table and that
+  // slot's generation. Never the map index, which is the retail file's
+  // field and only mostly unique.
+    int32_t  SafeRefId()  const { return Node()->SafeRefId(); }
+    uint32_t SafeRefGen() const { return Node()->SafeRefGen(); }
+    static TObjectInstance* SafeRefLookup(int32_t id)
+    {
+        TNode* node = TNode::SafeRefLookup(id);
+        return node ? node->Object() : nullptr;
+    }
 
   // Nextmove functions
     void SetNextMove(S3DPoint& p);
@@ -1277,11 +1281,6 @@ class TObjectInstance : public TComponent
     int32_t filemapindex = -1;  // The id the object was loaded with when another object
                                 // already held it and the registry had to give this one
                                 // a fresh id (retail allowed duplicates); -1 otherwise
-    uint32_t safe_ref_gen;      // Per-instance generation; TSafeRef<T>
-                                // captures (id, gen) and rejects lookups
-                                // where gen mismatches the current
-                                // tenant of the slot. Assigned fresh in
-                                // ClearObject() from a global counter.
     TObjectClass* cl;           // Pointer to object's class
     TObjectDef* inf;            // The archetype: the type's entry in its class's type table
     int32_t shadow;             // Attached shadow (-1 if none)

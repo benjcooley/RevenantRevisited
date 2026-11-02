@@ -487,12 +487,13 @@ void UpdateRuntimeParticles(const SParticleEffectDef& effect_def, float owner_pa
 } // namespace
 
 TParticleEffectManager::SRuntime* TParticleEffectManager::FindRuntime(
-    const SParticleEffectDef* effect_def, int32_t owner_node_id)
+    const SParticleEffectDef* effect_def, const TNode* owner)
 {
-    if (!effect_def || owner_node_id < 0)
+    if (!effect_def || !owner)
         return nullptr;
+    const TSafeRef<TNode> key(owner);    // slot and generation: a reused slot is another owner
     for (SRuntime& runtime : runtimes)
-        if (runtime.effect_def == effect_def && runtime.owner.Id() == owner_node_id)
+        if (runtime.effect_def == effect_def && runtime.owner == key)
             return &runtime;
     return nullptr;
 }
@@ -502,14 +503,13 @@ void TParticleEffectManager::PulseEffect(const SParticleEffectDef* effect_def, T
     if (!effect_def || !owner)
         return;
 
-    const int32_t owner_node_id = owner->NodeId();
-    SRuntime* runtime = FindRuntime(effect_def, owner_node_id);
+    SRuntime* runtime = FindRuntime(effect_def, owner);
     if (!runtime)
     {
         SRuntime new_runtime = {};
         new_runtime.effect_def = effect_def;
         new_runtime.owner = owner;
-        new_runtime.owner_particle_id = float(owner_node_id);
+        new_runtime.owner_particle_id = float(owner->NodeId());
         runtimes.push_back(std::move(new_runtime));
         runtime = &runtimes.back();
         StartRuntime(*runtime, owner);
@@ -520,10 +520,12 @@ void TParticleEffectManager::PulseEffect(const SParticleEffectDef* effect_def, T
 
 void TParticleEffectManager::StopEffect(const SParticleEffectDef* effect_def, TNode* owner)
 {
-    const int32_t owner_node_id = owner ? owner->NodeId() : -1;
+    if (!owner)
+        return;
+    const TSafeRef<TNode> key(owner);
     for (size_t i = 0; i < runtimes.size(); ++i)
     {
-        if (runtimes[i].effect_def == effect_def && runtimes[i].owner.Id() == owner_node_id)
+        if (runtimes[i].effect_def == effect_def && runtimes[i].owner == key)
         {
             StopRuntime(i);
             return;
@@ -874,7 +876,7 @@ void TParticleEffectManager::IntegrateBucket(SRuntime& runtime, SBucketRuntime& 
 void TParticleEffectManager::IntegrateEffect(const SParticleEffectDef* effect_def, TNode* owner, float dt_seconds)
 {
     if (!effect_def || !owner) return;
-    SRuntime* runtime = FindRuntime(effect_def, owner->NodeId());
+    SRuntime* runtime = FindRuntime(effect_def, owner);
     if (!runtime) return;
     for (SBucketRuntime& brt : runtime->bucket_runtimes)
         IntegrateBucket(*runtime, brt, owner, dt_seconds, runtime->owner_particle_id);
@@ -884,7 +886,7 @@ void TParticleEffectManager::SubmitEffect(const SParticleEffectDef* effect_def, 
                                           EFxDebugMode debug_mode)
 {
     if (!effect_def || !owner || !Renderer) return;
-    SRuntime* runtime = FindRuntime(effect_def, owner->NodeId());
+    SRuntime* runtime = FindRuntime(effect_def, owner);
     if (!runtime) return;
     for (TParticleBucket* bucket : runtime->buckets)
         if (bucket && bucket->Active())
@@ -894,7 +896,7 @@ void TParticleEffectManager::SubmitEffect(const SParticleEffectDef* effect_def, 
 bool TParticleEffectManager::EffectHasParticles(const SParticleEffectDef* effect_def, TNode* owner)
 {
     if (!effect_def || !owner) return false;
-    SRuntime* runtime = FindRuntime(effect_def, owner->NodeId());
+    SRuntime* runtime = FindRuntime(effect_def, owner);
     if (!runtime) return false;
     for (TParticleBucket* bucket : runtime->buckets)
     {
@@ -16082,7 +16084,7 @@ void TFireFlashEffect_Bespoke::Initialize(bool attach_runtime_component)
     const auto origin = IntPos(*this);
     log_info("[fireflash-runtime] initialized id=%08x map_index=%d origin=(%d,%d,%d) runtime=%d particles=150 objects=2 facing=%.0f target=%d",
              attach_runtime_component ? ObjId() : 0x37780ae2u, GetMapIndex(),
-             origin.x, origin.y, origin.z, int(attach_runtime_component), double(facing_), target_.MapIndex());
+             origin.x, origin.y, origin.z, int(attach_runtime_component), double(facing_), target_.Id());
 }
 
 TFireFlashEffect_Bespoke* TFireFlashEffect_Bespoke::SpawnForTest_BESPOKE(const S3DPoint& origin)

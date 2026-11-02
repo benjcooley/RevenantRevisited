@@ -18,9 +18,8 @@
 
 #pragma once
 
-#include <atomic>
 #include <cstdint>
-#include <unordered_map>
+#include <vector>
 
 class TObjectInstance;  // for the default template arg of TSafeRef<>
 
@@ -46,25 +45,22 @@ class TObjectInstance;  // for the default template arg of TSafeRef<>
 // unique, so even reuse-free workloads pay only an int32 compare per
 // dereference.
 //
-// Implementation note: the registry is currently an unordered_map keyed
-// by monotonically-increasing ids (in TObjectInstance's case the existing
-// MapPane mapindex registry). The traditional AAA-perf shape is a
-// versioned slot pool -- a contiguous std::vector indexed by slot, with
-// per-slot generation counters bumped on free + match-on-lookup. Same
-// observable contract on the SafeRef side; if we ever need it the swap
-// is a registry-internal change with no call-site impact. For now the
-// hash registry is well within budget.
+// The id is a slot in the type's handle table (TSafeObjectBase below: a
+// contiguous array indexed by slot, each slot carrying the generation of
+// its tenant, bumped when the slot is freed), and the generation is that
+// slot's generation when the reference was taken. A slot is reused; the
+// generation says whether the tenant is still the one referenced. It is
+// never a map index: a map index is the retail file's field for an
+// object, only mostly unique, not an identity. A link that must survive
+// a save is a node uid (TNodeRef, TObjectRef<T>), not a TSafeRef.
 //
 // Both options for satisfying the contract are supported:
 //
-//   (a) Inherit TSafeObjectBase<Self> -- provides a per-type registry and
-//       all three contract methods (id, gen, lookup) automatically. Use
-//       for new types that don't already have an identity scheme.
+//   (a) Inherit TSafeObjectBase<Self> -- the handle table and all three
+//       contract methods (id, gen, lookup) come with it.
 //
-//   (b) Implement the methods directly. TObjectInstance does this --
-//       its existing GetMapIndex() + the LookupMapIndex() free function
-//       are wrapped as SafeRefId / SafeRefLookup, plus a fresh
-//       per-instance safe_ref_gen for SafeRefGen.
+//   (b) Forward the methods. TObjectInstance does this through its node:
+//       a reference to an object is a reference to its node.
 //
 // Typical use is unchanged from when this was TObjectInstance-only:
 //   TSafeRef<TObjectInstance> target;     // empty
@@ -105,7 +101,6 @@ class TSafeRef
         return p;
     }
     [[nodiscard]] bool IsValid() const { return Get() != nullptr; }
-    [[nodiscard]] int32_t MapIndex() const { return idx; }
     [[nodiscard]] int32_t Id() const { return idx; }
     [[nodiscard]] uint32_t Gen() const { return gen; }
     void Clear() { idx = -1; gen = 0u; }
@@ -154,17 +149,15 @@ template <class T, class U>
 
 // ---------------------------------------------------------------------------
 // TSafeObjectBase<Self> -- CRTP helper that implements the TSafeRef<T>
-// contract via a per-type unordered registry. New types that don't already
-// have an identity scheme inherit this and get id assignment, generation
-// assignment, registration, and SafeRefLookup automatically.
-//
-// Construction allocates a fresh id (monotonic) and gen (global), inserts
-// into the per-type registry. Destruction removes from the registry --
-// any TSafeRef captured against this instance will resolve to nullptr.
+// contract with a per-type handle table: a contiguous array of slots,
+// each holding its tenant and a generation. Construction takes a slot
+// (a freed one first, else a new one); destruction frees it and bumps its
+// generation, so every TSafeRef taken against the old tenant resolves to
+// nullptr, and the slot can serve a new tenant under a new generation.
 //
 // Usage:
 //   class TGameMap : public TSafeObjectBase<TGameMap> { ... };
-//   TSafeRef<TGameMap> ref = ptr;            // captures (id, gen)
+//   TSafeRef<TGameMap> ref = ptr;            // captures (slot, gen)
 //   if (TGameMap* live = ref.Get()) { ... }  // null if destroyed
 // ---------------------------------------------------------------------------
 
@@ -173,15 +166,14 @@ class TSafeObjectBase
 {
   public:
     TSafeObjectBase()
-        : safe_id_(NextId())
-        , safe_gen_(NextGen())
     {
-        Registry()[safe_id_] = static_cast<Self*>(this);
+        safe_id_  = Table().Acquire(static_cast<Self*>(this));
+        safe_gen_ = Table().Generation(safe_id_);
     }
 
     ~TSafeObjectBase()
     {
-        Registry().erase(safe_id_);
+        Table().Release(safe_id_);
     }
 
     TSafeObjectBase(const TSafeObjectBase&)            = delete;
@@ -192,39 +184,62 @@ class TSafeObjectBase
     [[nodiscard]] int32_t  SafeRefId()  const { return safe_id_; }
     [[nodiscard]] uint32_t SafeRefGen() const { return safe_gen_; }
 
-    static Self* SafeRefLookup(int32_t id)
-    {
-        if (id < 0) return nullptr;
-        auto& m  = Registry();
-        auto  it = m.find(id);
-        return (it != m.end()) ? it->second : nullptr;
-    }
+    // The slot's tenant, whoever it is now: TSafeRef::Get compares the
+    // generation to tell the one it referenced from a successor.
+    static Self* SafeRefLookup(int32_t id) { return Table().At(id); }
 
   private:
-    static std::unordered_map<int32_t, Self*>& Registry()
+    // The handle table: slots in a vector, freed slots on a free list.
+    // Process-lifetime, leaked on purpose: global teardown destroys
+    // referenced objects after a function-local static's destructor would
+    // have run, especially on the FatalError and exit paths.
+    class THandleTable
     {
-        // Safe-ref registries are process-lifetime tables. Do not make this
-        // a destructed function-local static: global teardown can delete
-        // SafeRefable assets/objects after the registry's destructor has
-        // already run, especially after FatalError/exit paths. Leaking this
-        // tiny table is intentional and keeps late destructors safe.
-        static auto* m = new std::unordered_map<int32_t, Self*>();
-        return *m;
-    }
-    static int32_t NextId()
+      public:
+        int32_t Acquire(Self* tenant)
+        {
+            int32_t slot;
+            if (!free_.empty())
+            {
+                slot = free_.back();
+                free_.pop_back();
+            }
+            else
+            {
+                slot = int32_t(slots_.size());
+                slots_.push_back({});
+            }
+            slots_[size_t(slot)].tenant = tenant;
+            return slot;
+        }
+        void Release(int32_t slot)
+        {
+            SSlot& s = slots_[size_t(slot)];
+            s.tenant = nullptr;
+            ++s.generation;             // every reference taken so far is stale
+            free_.push_back(slot);
+        }
+        [[nodiscard]] Self* At(int32_t slot) const
+        {
+            return slot >= 0 && size_t(slot) < slots_.size() ? slots_[size_t(slot)].tenant : nullptr;
+        }
+        [[nodiscard]] uint32_t Generation(int32_t slot) const { return slots_[size_t(slot)].generation; }
+
+      private:
+        struct SSlot
+        {
+            Self*    tenant     = nullptr;
+            uint32_t generation = 1u;   // 0 is no generation: a default TSafeRef never matches
+        };
+        std::vector<SSlot>   slots_;
+        std::vector<int32_t> free_;
+    };
+    static THandleTable& Table()
     {
-        // Monotonic per-type, never reused. Same shape MapPane.MakeIndex
-        // uses for TObjectInstance ids -- collisions are statistically
-        // impossible inside a process lifetime.
-        static std::atomic<int32_t> s_next{1};
-        return s_next.fetch_add(1, std::memory_order_relaxed);
-    }
-    static uint32_t NextGen()
-    {
-        static std::atomic<uint32_t> s_next{1u};
-        return s_next.fetch_add(1u, std::memory_order_relaxed);
+        static auto* table = new THandleTable();
+        return *table;
     }
 
-    int32_t  safe_id_;
-    uint32_t safe_gen_;
+    int32_t  safe_id_  = -1;
+    uint32_t safe_gen_ = 0u;
 };

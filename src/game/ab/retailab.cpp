@@ -910,8 +910,12 @@ class TriggerProbe
         int32_t guard = -1;
     };
 
+    // `guard_id` is the case's id for the guard, what retail's field holds
+    // whether or not the object still exists; the port's reference knows
+    // only whether a guard is set.
     static SResult Run(SScriptTrigger& st, int32_t priority, TObjectInstance* owner, int32_t type,
-                       const std::string& str, const std::string& str2, const TSafeRef<TObjectInstance>& guard)
+                       const std::string& str, const std::string& str2, const TSafeRef<TObjectInstance>& guard,
+                       int32_t guard_id)
     {
         TScript script(nullptr);
         script.newtrigger = type;
@@ -922,7 +926,7 @@ class TriggerProbe
         r.fires = script.Triggered(&st, priority, owner);
         r.user = script.triggerer.Get();
         r.alias = script.useralias;
-        r.guard = script.triggerguard.Id();
+        r.guard = script.triggerguard.Id() != -1 ? guard_id : -1;
         return r;
     }
 };
@@ -985,11 +989,14 @@ std::string TriggerTest(const Case& c, std::string& error)
         guard = guardobject.get();
     }
     else if (r[3] == "gone")
-        guard = TSafeRef<TObjectInstance>(50, 1);
+    {   // a guard that was there and went: the reference outlives its object
+        TObjectPtr<TObjectInstance> gone(new TFixtureObject<TObjectInstance>("Guard", 12, 0, S3DPoint{0, 0, 0}, 50));
+        guard = gone.get();
+    }
 
     TScript::SetTriggerWorld(&world);
     const TriggerProbe::SResult result = TriggerProbe::Run(st, std::stoi(c.Field(2)), owner, std::stoi(r[0]),
-                                                           FromHex(r[1]), FromHex(r[2]), guard);
+                                                           FromHex(r[1]), FromHex(r[2]), guard, 50);
     TScript::SetTriggerWorld(nullptr);
 
     JsonOut j;

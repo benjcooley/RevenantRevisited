@@ -17,11 +17,12 @@
 // MapPane. Sectors are not nodes: the world is a streaming grid of sectors
 // holding root nodes, with no scene graph above a root.
 //
-// Identity: TSafeObjectBase<TNode> gives every node an id + generation
-// in the node registry, so TSafeRef<TNode> and TSafeComponentRef<T>
-// resolve through it. A map object also carries its map index, the id the
-// sector and save streams use and TSafeRef<TObjectInstance> captures; the
-// two id spaces coexist until the registries are unified.
+// Identity: TSafeObjectBase<TNode> gives every node a slot in the node
+// handle table with a generation, so TSafeRef<TNode>, TSafeRef<TObjectInstance>
+// (an object's reference is its node's) and TSafeComponentRef<T> resolve
+// through it; the uid below is the persistent identity a serialized link
+// names. A map object's map index is the sector and save streams' field,
+// not an identity.
 //
 // Hierarchy lives on the embedded TTransform (parent / children links are
 // non-owning). TTransform carries a back-pointer to its node so traversal
@@ -81,8 +82,9 @@ class TNode final : public TSafeObjectBase<TNode>
     [[nodiscard]] const char* GetName() const;
     void SetNodeName(std::string name) { node_name_ = std::move(name); }
 
-    // The node-registry id (what TSafeRef<TNode> captures). Distinct
-    // from a map object's map index; the particle runtime keys owners by it.
+    // The node's slot in the handle table (what TSafeRef<TNode> captures
+    // with its generation). Reused after the node goes; a key that must
+    // outlive it takes the generation too, or the uid.
     [[nodiscard]] int32_t NodeId() const { return TSafeObjectBase<TNode>::SafeRefId(); }
 
     // The persistent identity (engine/core/uid.h): random at construction,

@@ -296,7 +296,7 @@ class TParticleEffectManager
         std::vector<SBucketRuntime> bucket_runtimes;
     };
 
-    SRuntime* FindRuntime(const SParticleEffectDef* effect_def, int32_t owner_node_id);
+    SRuntime* FindRuntime(const SParticleEffectDef* effect_def, const TNode* owner);
     void StartRuntime(SRuntime& runtime, TNode* owner);
     void StopRuntime(size_t runtime_index);
     void IntegrateBucket(SRuntime& runtime, SBucketRuntime& brt, TNode* owner,

@@ -265,6 +265,24 @@ burn, the voice, the corpse clock. An exit has no component: its state
 is one flags word in `SExitState`, and its destination is the exit list's
 entry by name.
 
+### Links
+
+A link from one object to another is a property like any other:
+`TObjectRef<T>` (object.h) holds the other node's 64-bit uid, reflects as
+a `Ref` property that the DEF text and the packed codec write as the
+uid, and `Get()` resolves through the node registry to the object as
+`T`, null when it is gone or is not a `T`. A load stores only the uid;
+nothing resolves until a use, by which time every object exists. The AI
+component's look-at, waypoint and Goto item, its has-seen entries and
+the character's burn effect are links of this kind.
+
+`TSafeRef<T>` (engine/core/saferef.h) is the runtime-only weak handle: a
+slot in the type's handle table and that slot's generation, taken from
+the live object and never serialized. An object's handle is its node's.
+The map index is the retail file's field for an object, only mostly
+unique (retail sector files hold duplicates): it names objects in the
+sector and save streams and nowhere else.
+
 ### The Gate
 
 `--test=state-roundtrip --level=L` (tools/state_gate.sh over every
