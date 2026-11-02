@@ -187,32 +187,37 @@ bool g_panning = false;       // active drag-to-pan in the game view
 // Editor selection. Mapindex-keyed (the universal id every TSafeRef<>
 // resolves through). Only TObjectInstance-derived objects are
 // selectable; sectors are tree headers, not selectable items.
-std::vector<int32_t> g_selection;
+using TObjectRefList = std::vector<TSafeRef<TObjectInstance>>;
+TObjectRefList g_selection;                 // by handle: a deleted object drops out by itself
 
 // One-shot reveal request. Set when the selection primary changes from
 // a non-tree source (pixel pick, Frame command). The tree expands
 // ancestors + scrolls to the row, then clears it.
 bool    g_selection_reveal      = false;
-int32_t g_last_revealed_primary = -1;
+TSafeRef<TObjectInstance> g_last_revealed_primary;
 
 // Anchor for shift-range select: the last "primary" pick. Range is
 // anchor..clicked in the order rows appear in the tree.
-int32_t g_selection_anchor = -1;
+TSafeRef<TObjectInstance> g_selection_anchor;
 
 // Flat record of which instance rows were drawn this frame, in display
 // order. Rebuilt each frame; used by shift-range selection to walk
 // from anchor to clicked row.
-std::vector<int32_t> g_tree_order_this_frame;
+TObjectRefList g_tree_order_this_frame;
 
 TObjectInstance* SelectionPrimary()
 {
-    return g_selection.empty() ? nullptr
-                               : LookupMapIndex(g_selection.back());
+    return g_selection.empty() ? nullptr : g_selection.back().Get();
 }
-bool IsSelected(int32_t mapindex)
+bool IsSelected(const TObjectInstance* oi)
 {
-    for (int32_t s : g_selection) if (s == mapindex) return true;
+    const TSafeRef<TObjectInstance> ref(oi);
+    for (const TSafeRef<TObjectInstance>& s : g_selection) if (s == ref) return true;
     return false;
+}
+bool Contains(const TObjectRefList& list, const TSafeRef<TObjectInstance>& ref)
+{
+    return std::find(list.begin(), list.end(), ref) != list.end();
 }
 
 void PushPresentPixelRect(int32_t x, int32_t y, int32_t w, int32_t h)
@@ -450,12 +455,13 @@ void DrawInstanceRow(TObjectInstance* oi)
                                ImGuiTreeNodeFlags_SpanAvailWidth |
                                ImGuiTreeNodeFlags_Leaf |
                                ImGuiTreeNodeFlags_NoTreePushOnOpen;
-    if (IsSelected(mi)) flags |= ImGuiTreeNodeFlags_Selected;
+    const TSafeRef<TObjectInstance> ref(oi);
+    if (IsSelected(oi)) flags |= ImGuiTreeNodeFlags_Selected;
 
     const TTextureHandle icon = IconForInstance(oi);
     const float    sz   = ImGui::GetTextLineHeight();
     ImGui::TreeNodeEx((void*)(uintptr_t)mi, flags, "");
-    if (g_selection_reveal && IsSelected(mi)) {
+    if (g_selection_reveal && IsSelected(oi)) {
         // Manual visibility check vs the scrollable child's clip rect --
         // ImGui::IsItemVisible() lies the frame an ancestor expanded.
         const ImVec2 row_min = ImGui::GetItemRectMin();
@@ -466,15 +472,15 @@ void DrawInstanceRow(TObjectInstance* oi)
         const bool fully_visible = row_min.y >= win_min.y && row_max.y <= win_max.y;
         if (!fully_visible) ImGui::SetScrollHereY(0.5f);
     }
-    g_tree_order_this_frame.push_back(mi);
+    g_tree_order_this_frame.push_back(ref);
     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
         const ImGuiIO& io = ImGui::GetIO();
-        if (io.KeyShift && g_selection_anchor >= 0) {
+        if (io.KeyShift && g_selection_anchor) {
             const auto& flat = g_tree_order_this_frame;
             int from = -1, to = -1;
             for (size_t i = 0; i < flat.size(); ++i) {
                 if (flat[i] == g_selection_anchor) from = int(i);
-                if (flat[i] == mi)                  to   = int(i);
+                if (flat[i] == ref)                to   = int(i);
             }
             if (from >= 0 && to >= 0) {
                 if (from > to) std::swap(from, to);
@@ -482,16 +488,16 @@ void DrawInstanceRow(TObjectInstance* oi)
                 for (int i = from; i <= to; ++i)
                     g_selection.push_back(flat[i]);
             } else {
-                g_selection = { mi };
+                g_selection = { ref };
             }
         } else if (io.KeyCtrl) {
-            auto it = std::find(g_selection.begin(), g_selection.end(), mi);
+            auto it = std::find(g_selection.begin(), g_selection.end(), ref);
             if (it != g_selection.end()) g_selection.erase(it);
-            else                          g_selection.push_back(mi);
-            g_selection_anchor = mi;
+            else                          g_selection.push_back(ref);
+            g_selection_anchor = ref;
         } else {
-            g_selection        = { mi };
-            g_selection_anchor = mi;
+            g_selection        = { ref };
+            g_selection_anchor = ref;
         }
     }
     ImGui::SameLine(0.0f, 0.0f);
@@ -749,7 +755,7 @@ void DrawScenePanel()
                     if (g_selection_reveal) {
                         for (int32_t i = 0; i < n; ++i) {
                             TObjectInstance* oi = s->GetInstance(i);
-                            if (oi && IsSelected(oi->GetMapIndex())) {
+                            if (oi && IsSelected(oi)) {
                                 ImGui::SetNextItemOpen(true);
                                 break;
                             }
@@ -1214,8 +1220,8 @@ void DrawPropertiesPanel()
                     ImGui::PushID(child);
                     if (ImGui::Selectable(label && *label ? label : "(unnamed)") && co)
                     {
-                        g_selection        = { co->GetMapIndex() };
-                        g_selection_anchor = co->GetMapIndex();
+                        g_selection        = { TSafeRef<TObjectInstance>(co) };
+                        g_selection_anchor = TSafeRef<TObjectInstance>(co);
                         g_selection_reveal = true;
                     }
                     if (co && ImGui::IsItemHovered())
@@ -1423,7 +1429,7 @@ void DrawGameViewPanel()
                                     (!is_tile && (g_tool == EEditorTool::Rotate ||
                                                   g_tool == EEditorTool::Scale));
             if (oi && gizmo_tool) {
-                struct SDragEntry { int32_t mapindex; S3DPoint from; };
+                struct SDragEntry { TSafeRef<TObjectInstance> ref; S3DPoint from; };
                 static TObjectInstance*        s_drag_primary = nullptr;
                 static S3DPoint                s_drag_start   = {0,0,0};
                 static std::vector<SDragEntry> s_drag_others;
@@ -1452,12 +1458,12 @@ void DrawGameViewPanel()
                                 g_tool == EEditorTool::Move   ? "move"   :
                                 g_tool == EEditorTool::Rotate ? "rotate" :
                                 g_tool == EEditorTool::Scale  ? "scale"  : "transform");
-                            for (int32_t mi : g_selection) {
-                                TObjectInstance* sel = LookupMapIndex(mi);
+                            for (const TSafeRef<TObjectInstance>& ref : g_selection) {
+                                TObjectInstance* sel = ref.Get();
                                 if (!sel) continue;
                                 EditorUndo::MarkDirty(sel->Node());
                                 if (sel != oi)
-                                    s_drag_others.push_back({ mi, IntPos(sel) });
+                                    s_drag_others.push_back({ ref, IntPos(sel) });
                             }
                         }
                         const S3DPoint np{ int32_t(model[12]),
@@ -1468,7 +1474,7 @@ void DrawGameViewPanel()
                         const int32_t dz = np.z - s_drag_start.z;
                         oi->SetPos(np, -1, true);
                         for (const auto& e : s_drag_others) {
-                            if (auto* other = LookupMapIndex(e.mapindex))
+                            if (auto* other = e.ref.Get())
                                 other->SetPos({ e.from.x + dx, e.from.y + dy,
                                                 e.from.z + dz }, -1, true);
                         }
@@ -1519,25 +1525,25 @@ void DrawGameViewPanel()
                                              | (uint32_t(rgba[3]) << 24);
                         if (obj_id != 0) hit = mr->InstanceFromDrawId(obj_id);
                     }
-                    const int32_t hit_mi = hit ? hit->GetMapIndex() : -1;
+                    const TSafeRef<TObjectInstance> hit_ref(hit);
                     if (ctrl_add) {
-                        if (hit_mi >= 0) {
-                            auto it = std::find(g_selection.begin(), g_selection.end(), hit_mi);
+                        if (hit) {
+                            auto it = std::find(g_selection.begin(), g_selection.end(), hit_ref);
                             if (it != g_selection.end()) g_selection.erase(it);
-                            else                          g_selection.push_back(hit_mi);
-                            g_selection_anchor = hit_mi;
+                            else                          g_selection.push_back(hit_ref);
+                            g_selection_anchor = hit_ref;
                         }
                     } else if (shift_add) {
-                        if (hit_mi >= 0 && std::find(g_selection.begin(), g_selection.end(), hit_mi) == g_selection.end())
-                            g_selection.push_back(hit_mi);
+                        if (hit && !Contains(g_selection, hit_ref))
+                            g_selection.push_back(hit_ref);
                         // Don't move anchor; keeps tree shift-range
                         // working across game-view picks too.
                     } else {
-                        if (hit_mi >= 0) { g_selection = { hit_mi }; g_selection_anchor = hit_mi; }
-                        else             { g_selection.clear(); }
+                        if (hit) { g_selection = { hit_ref }; g_selection_anchor = hit_ref; }
+                        else     { g_selection.clear(); }
                     }
-                    const int32_t new_primary = g_selection.empty() ? -1 : g_selection.back();
-                    if (new_primary >= 0 && new_primary != g_last_revealed_primary) {
+                    const TSafeRef<TObjectInstance> new_primary = g_selection.empty() ? TSafeRef<TObjectInstance>() : g_selection.back();
+                    if (new_primary && new_primary != g_last_revealed_primary) {
                         g_selection_reveal      = true;
                         g_last_revealed_primary = new_primary;
                     }
@@ -1719,21 +1725,21 @@ void ApplyEditorStyle()
 
 // Delete-with-undo: capture serialized state (with @refid) for the
 // selection up front, then delete on Redo and re-instantiate on Undo.
-// Restoring with the original mapindices implicitly heals every TSafeRef
-// elsewhere in the world that pointed at the deleted objects (see
+// Restoring with the original uids heals every serialized reference
+// elsewhere in the world that named the deleted objects (see
 // memory/project_object_ref.md). Name is parameterised so Cut shows up
 // as "Cut" in the undo menu while still using this command body.
 class TDeleteSelectionCommand : public IEditorCommand
 {
 public:
-    TDeleteSelectionCommand(std::vector<int32_t> mapindices, const char* name)
-        : mapindices_(std::move(mapindices)), name_(name ? name : "Delete")
+    TDeleteSelectionCommand(TObjectRefList refs, const char* name)
+        : refs_(std::move(refs)), name_(name ? name : "Delete")
     {
         std::vector<TObjectInstance*> live;
-        live.reserve(mapindices_.size());
-        for (int32_t mi : mapindices_)
-            if (auto* oi = LookupMapIndex(mi)) live.push_back(oi);
-        text_ = EditorSerialize::ToText(live, /*include_refid=*/true);
+        live.reserve(refs_.size());
+        for (const TSafeRef<TObjectInstance>& ref : refs_)
+            if (auto* oi = ref.Get()) live.push_back(oi);
+        text_ = EditorSerialize::ToText(live);
     }
 
     void Redo() override
@@ -1744,40 +1750,45 @@ public:
         // sector pointer so we don't depend on MapPane paging state.
         // See memory/project_editor_object_model.md for the longer
         // story on the MapPane/renderer ownership split.
-        for (int32_t mi : mapindices_) {
-            TObjectInstance* oi = LookupMapIndex(mi);
+        int32_t deleted = 0;
+        for (const TSafeRef<TObjectInstance>& ref : refs_) {
+            TObjectInstance* oi = ref.Get();
             if (!oi) continue;
             TSector* sec = oi->GetSector();
             if (!sec) continue;
             const int32_t idx = sec->GetObjIndex(oi);
             if (idx < 0) continue;
             sec->RemoveObject(idx);
-            DeleteObject(oi);            // ~TObjectInstance unregisters from saferef registry
+            DeleteObject(oi);            // the handle's slot is freed; refs_ read null now
+            ++deleted;
         }
+        log_info("[editor] %s: %d of %zu objects deleted", name_.c_str(), deleted, refs_.size());
         EditorMarkDirty();
     }
 
     void Undo() override
     {
-        EditorSerialize::FromText(text_, /*preserve_refid=*/true);
+        // The objects again, under their uids; they are new handles, so
+        // the next Redo deletes what this restored.
+        refs_ = EditorSerialize::FromText(text_, /*preserve_identity=*/true);
+        log_info("[editor] undo %s: %zu objects restored from %zu bytes", name_.c_str(), refs_.size(), text_.size());
         EditorMarkDirty();
     }
 
     const char* Name() const override { return name_.c_str(); }
 
 private:
-    std::vector<int32_t> mapindices_;
-    std::string          text_;
-    std::string          name_;
+    TObjectRefList refs_;
+    std::string    text_;
+    std::string    name_;
 };
 
 // Inverse of TDeleteSelectionCommand: instantiates objects from
 // serialized text on Redo (used by Paste, Duplicate, future Spawn).
-// First Redo allocates fresh mapindices and snapshots the resulting
-// state with @refid so subsequent redo cycles bring the SAME instances
-// back -- this keeps any external mapindex references (selection,
-// inventory pointers, undo stack entries below this one) consistent
-// across undo/redo flips.
+// First Redo gives the objects fresh uids and snapshots the resulting
+// state, so subsequent redo cycles bring the SAME objects back under the
+// same uids -- every serialized reference to them (undo stack entries
+// above this one included) keeps naming them across undo/redo flips.
 class TCreateInstancesCommand : public IEditorCommand
 {
 public:
@@ -1787,16 +1798,16 @@ public:
     void Redo() override
     {
         if (created_text_.empty()) {
-            // First execution: fresh ids, then re-serialize with @refid
-            // so future redos pin to the same instances.
-            created_indices_ = EditorSerialize::FromText(initial_text_, /*preserve_refid=*/false);
+            // First execution: fresh uids, then re-serialize so future
+            // redos bring the same objects back.
+            created_ = EditorSerialize::FromText(initial_text_, /*preserve_identity=*/false);
             std::vector<TObjectInstance*> live;
-            live.reserve(created_indices_.size());
-            for (int32_t mi : created_indices_)
-                if (auto* oi = LookupMapIndex(mi)) live.push_back(oi);
-            created_text_ = EditorSerialize::ToText(live, /*include_refid=*/true);
+            live.reserve(created_.size());
+            for (const TSafeRef<TObjectInstance>& ref : created_)
+                if (auto* oi = ref.Get()) live.push_back(oi);
+            created_text_ = EditorSerialize::ToText(live);
         } else {
-            created_indices_ = EditorSerialize::FromText(created_text_, /*preserve_refid=*/true);
+            created_ = EditorSerialize::FromText(created_text_, /*preserve_identity=*/true);
         }
         EditorMarkDirty();
     }
@@ -1806,8 +1817,8 @@ public:
         // Same MapPane bypass as TDeleteSelectionCommand::Redo:
         // MapPane.DeleteObject iterates MapPane.sectors[][] (empty in
         // editor mode) and FATALs. Go through oi->GetSector() directly.
-        for (int32_t mi : created_indices_) {
-            TObjectInstance* oi = LookupMapIndex(mi);
+        for (const TSafeRef<TObjectInstance>& ref : created_) {
+            TObjectInstance* oi = ref.Get();
             if (!oi) continue;
             TSector* sec = oi->GetSector();
             if (!sec) continue;
@@ -1816,22 +1827,21 @@ public:
             sec->RemoveObject(idx);
             DeleteObject(oi);
         }
-        created_indices_.clear();
+        created_.clear();
         EditorMarkDirty();
     }
 
     const char* Name() const override { return name_.c_str(); }
 
-    // Read-only view of mapindices created by the most recent Redo.
-    // Used by the registering command's execute lambda to update
-    // g_selection so the freshly-created objects show as selected.
-    const std::vector<int32_t>& CreatedIndices() const { return created_indices_; }
+    // The objects the most recent Redo created, for the registering
+    // command's execute lambda to select.
+    const TObjectRefList& Created() const { return created_; }
 
 private:
-    std::string          initial_text_;
-    std::string          created_text_;
-    std::vector<int32_t> created_indices_;
-    std::string          name_;
+    std::string    initial_text_;
+    std::string    created_text_;
+    TObjectRefList created_;
+    std::string    name_;
 };
 
 void RegisterBuiltinCommands()
@@ -1854,8 +1864,8 @@ void RegisterBuiltinCommands()
             int64_t sx = 0, sy = 0, sz = 0;
             int32_t count = 0;
             int32_t level = 0;
-            for (int32_t mi : g_selection) {
-                TObjectInstance* sel = LookupMapIndex(mi);
+            for (const TSafeRef<TObjectInstance>& ref : g_selection) {
+                TObjectInstance* sel = ref.Get();
                 if (!sel) continue;
                 if (count == 0) level = sel->GetLevel();
                 const S3DPoint& p = IntPos(sel);
@@ -2058,8 +2068,8 @@ void RegisterBuiltinCommands()
             if (g_selection.empty()) return;
             EditorUndo::Push(std::make_unique<TDeleteSelectionCommand>(g_selection, "Delete"));
             g_selection.clear();
-            g_selection_anchor       = -1;
-            g_last_revealed_primary  = -1;
+            g_selection_anchor       = {};
+            g_last_revealed_primary  = {};
             EditorMarkDirty();
         },
     });
@@ -2078,10 +2088,10 @@ void RegisterBuiltinCommands()
             if (g_selection.empty()) return;
             std::vector<TObjectInstance*> live;
             live.reserve(g_selection.size());
-            for (int32_t mi : g_selection)
-                if (auto* oi = LookupMapIndex(mi)) live.push_back(oi);
+            for (const TSafeRef<TObjectInstance>& ref : g_selection)
+                if (auto* oi = ref.Get()) live.push_back(oi);
             if (live.empty()) return;
-            const std::string text = EditorSerialize::ToText(live, /*include_refid=*/false);
+            const std::string text = EditorSerialize::ToText(live);
             ImGui::SetClipboardText(text.c_str());
         },
     });
@@ -2099,15 +2109,15 @@ void RegisterBuiltinCommands()
             if (g_selection.empty()) return;
             std::vector<TObjectInstance*> live;
             live.reserve(g_selection.size());
-            for (int32_t mi : g_selection)
-                if (auto* oi = LookupMapIndex(mi)) live.push_back(oi);
+            for (const TSafeRef<TObjectInstance>& ref : g_selection)
+                if (auto* oi = ref.Get()) live.push_back(oi);
             if (live.empty()) return;
-            const std::string text = EditorSerialize::ToText(live, /*include_refid=*/false);
+            const std::string text = EditorSerialize::ToText(live);
             ImGui::SetClipboardText(text.c_str());
             EditorUndo::Push(std::make_unique<TDeleteSelectionCommand>(g_selection, "Cut"));
             g_selection.clear();
-            g_selection_anchor       = -1;
-            g_last_revealed_primary  = -1;
+            g_selection_anchor       = {};
+            g_last_revealed_primary  = {};
             EditorMarkDirty();
         },
     });
@@ -2132,11 +2142,11 @@ void RegisterBuiltinCommands()
             auto cmd = std::make_unique<TCreateInstancesCommand>(text, "Paste");
             auto* raw = cmd.get();
             EditorUndo::Push(std::move(cmd));
-            const auto& created = raw->CreatedIndices();
+            const auto& created = raw->Created();
             if (!created.empty()) {
                 g_selection             = created;
                 g_selection_anchor      = created.back();
-                g_last_revealed_primary = -1;        // re-reveal in tree
+                g_last_revealed_primary = {};        // re-reveal in tree
                 g_selection_reveal      = true;
             }
             EditorMarkDirty();
@@ -2158,18 +2168,18 @@ void RegisterBuiltinCommands()
             if (g_selection.empty()) return;
             std::vector<TObjectInstance*> live;
             live.reserve(g_selection.size());
-            for (int32_t mi : g_selection)
-                if (auto* oi = LookupMapIndex(mi)) live.push_back(oi);
+            for (const TSafeRef<TObjectInstance>& ref : g_selection)
+                if (auto* oi = ref.Get()) live.push_back(oi);
             if (live.empty()) return;
-            const std::string text = EditorSerialize::ToText(live, /*include_refid=*/false);
+            const std::string text = EditorSerialize::ToText(live);
             auto cmd = std::make_unique<TCreateInstancesCommand>(text, "Duplicate");
             auto* raw = cmd.get();
             EditorUndo::Push(std::move(cmd));
-            const auto& created = raw->CreatedIndices();
+            const auto& created = raw->Created();
             if (!created.empty()) {
                 g_selection             = created;
                 g_selection_anchor      = created.back();
-                g_last_revealed_primary = -1;
+                g_last_revealed_primary = {};
                 g_selection_reveal      = true;
             }
             EditorMarkDirty();
@@ -2360,12 +2370,11 @@ void EditorDrawChrome()
     }
     ImGuizmo::BeginFrame();
 
-    // Push the current selection (as map indices -- the universal id
-    // backing every TSafeRef<T>) to the map renderer. Submit OR's
+    // Push the current selection (by handle) to the map renderer. Submit OR's
     // kObjFlagSelected into each affected drawable's obj_id so the
     // lit shader can outline; multi-select gets it for free.
     if (TMapRenderer* mr = PlayScreen.MapRenderer()) {
-        mr->SetSelectedMapIndices(g_selection);
+        mr->SetSelected(g_selection);
     }
 
     DrawMenuBar();

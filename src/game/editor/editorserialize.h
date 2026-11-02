@@ -10,7 +10,7 @@
 //   revenant.objects.v1
 //   [obj]
 //   @type=TObjectInstance:TILE:floor_stone_01
-//   @refid=12345                            ; optional -- delete-undo only
+//   uid=0x0123456789abcdef                  ; the node's uid, the identity
 //   pos=128,256,0
 //   state=2
 //   [obj]
@@ -23,8 +23,8 @@
 // same machinery undo uses.
 //
 // Two callers:
-//   1. Clipboard cut/copy/paste -- include_refid=false, preserve_refid=false
-//   2. Delete-undo "before" snapshots -- include_refid=true, preserve_refid=true
+//   1. Clipboard cut/copy/paste -- preserve_identity=false (fresh uids)
+//   2. Delete-undo "before" snapshots -- preserve_identity=true
 // *************************************************************************
 
 #pragma once
@@ -34,6 +34,8 @@
 #include <string_view>
 #include <vector>
 
+#include "engine/core/saferef.h"
+
 class TObjectInstance;
 
 namespace EditorSerialize {
@@ -41,20 +43,17 @@ namespace EditorSerialize {
 // Cheap header sniff. Safe on arbitrary clipboard text.
 [[nodiscard]] bool LooksLikeOurs(std::string_view text);
 
-// Serialize `objs` to canonical text. `include_refid` emits @refid lines
-// (use for delete-undo); omit them for clipboard copy so paste always
-// allocates fresh ids.
-[[nodiscard]] std::string ToText(const std::vector<TObjectInstance*>& objs,
-                                 bool include_refid);
+// Serialize `objs` to canonical text: the node's properties (the uid among
+// them, the object's identity) then the object's.
+[[nodiscard]] std::string ToText(const std::vector<TObjectInstance*>& objs);
 
 // Parse `text` and instantiate fresh live objects in the world. Returns
-// the mapindices of the instantiated objects, in input order. On parse
+// references to the instantiated objects, in input order. On parse
 // failure or empty input, returns an empty vector.
 //
-// `preserve_refid`: when true and a block carries `@refid`, the new
-// instance is re-keyed via SetMapIndex to the original id. Use this for
-// delete-undo (heals every TSafeRef pointing at the deleted object).
-// For clipboard paste, pass false -- always fresh ids.
-std::vector<int32_t> FromText(std::string_view text, bool preserve_refid);
+// `preserve_identity`: when true the new instance takes the uid the text
+// carries, so every serialized reference to the deleted object names it
+// again (delete-undo). For clipboard paste, pass false: a fresh uid.
+std::vector<TSafeRef<TObjectInstance>> FromText(std::string_view text, bool preserve_identity);
 
 } // namespace EditorSerialize

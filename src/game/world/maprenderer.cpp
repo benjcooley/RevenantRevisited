@@ -2046,18 +2046,13 @@ uint32_t TMapRenderer::DrawIdForInstance(TObjectInstance* oi) const
     return 0;
 }
 
-void TMapRenderer::SetSelectedMapIndices(const std::vector<int32_t>& indices)
+void TMapRenderer::SetSelected(const std::vector<TSafeRef<TObjectInstance>>& selected)
 {
     if (!impl) return;
-    impl->selectedMapIndices.clear();
-    impl->selectedMapIndices.reserve(indices.size());
-    for (int32_t i : indices) if (i >= 0) impl->selectedMapIndices.insert(i);
-}
-
-bool TMapRenderer::IsMapIndexSelected(int32_t mapindex) const
-{
-    if (!impl || mapindex < 0) return false;
-    return impl->selectedMapIndices.count(mapindex) != 0;
+    impl->selected.clear();
+    for (const TSafeRef<TObjectInstance>& ref : selected)
+        if (ref.Id() >= 0)
+            impl->selected[ref.Id()] = ref.Gen();
 }
 
 // ---------------------------------------------------------------------------
@@ -3680,8 +3675,9 @@ void TMapRenderer::RenderFrame()
         // game mode even if the editor's selection set is non-empty.
         if (EditorOverlaysEnabled())
         {
-            const TObjectInstance* src = s.sectorDrawInst[idx].src.Get();
-            if (src && s.selectedMapIndices.count(src->GetMapIndex()))
+            const TSafeRef<TObjectInstance>& src = s.sectorDrawInst[idx].src;
+            const auto sel = s.selected.find(src.Id());
+            if (sel != s.selected.end() && sel->second == src.Gen())
                 obj_id |= kObjFlagSelected;
         }
         if (TObjectInstance* oi = s.sectorDrawInst[idx].src.Get())

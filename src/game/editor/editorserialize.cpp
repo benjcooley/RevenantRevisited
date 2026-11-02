@@ -5,6 +5,7 @@
 // *************************************************************************
 
 #include "game/editor/editorserialize.h"
+#include "engine/refl/nodepack.h"
 
 #include "engine/refl/defio.h"
 #include "engine/core/logging.h"
@@ -43,15 +44,13 @@ struct SParsedBlock {
     std::string type_full;                                  // raw @type string
     std::string type_root;                                  // leading segment
     std::string type_payload;                               // rest, opaque
-    int32_t     refid = -1;                                 // -1 if absent
     std::vector<std::pair<std::string, std::string>> props; // ordered
 };
 
 // Handler signature: instantiate a live object from the parsed block,
-// add it to the world, return its mapindex (or -1 on failure). If
-// preserve_refid is true and block.refid >= 0, the handler should
-// re-key the new instance to that mapindex.
-using FInstantiate = std::function<int32_t(const SParsedBlock&, bool preserve_refid)>;
+// add it to the world, return a reference to it (empty on failure). With
+// preserve_identity the instance takes the uid the block carries.
+using FInstantiate = std::function<TSafeRef<TObjectInstance>(const SParsedBlock&, bool preserve_identity)>;
 
 // Handler signature: produce the @type string and emit reflected props
 // for one live object. Returning false skips the object.
@@ -73,6 +72,15 @@ std::unordered_map<std::string, SRootHandler>& Handlers()
 // TObjectInstance handler
 // ---------------------------------------------------------------------------
 
+// The reflected type of an object: its class's when it is annotated, else
+// the base object's (a character, a tile and a container draw and
+// serialize as TObjectInstance).
+const refl::SType* ObjectType(const TObjectInstance& oi)
+{
+    const refl::SType* type = refl::Of(oi);
+    return type ? type : refl::Of<TObjectInstance>();
+}
+
 bool CaptureInstance(TObjectInstance* oi,
                      std::string& type_out,
                      std::vector<std::pair<std::string,std::string>>& props_out)
@@ -88,7 +96,7 @@ bool CaptureInstance(TObjectInstance* oi,
     // ("class" / "type" / "mapindex") are covered by the meta keys; values
     // use the DEF text form so the clipboard reads like a DEF.
     // The node's properties (transform) first, then the object's.
-    const refl::SType* type = refl::Of(*oi);
+    const refl::SType* type = ObjectType(*oi);
     if (!type) return false;
     const std::pair<const refl::SType*, void*> targets[] = {
         { refl::Of(*oi->Node()), static_cast<void*>(oi->Node()) },
@@ -111,14 +119,14 @@ bool CaptureInstance(TObjectInstance* oi,
     return true;
 }
 
-int32_t InstantiateInstance(const SParsedBlock& blk, bool preserve_refid)
+TSafeRef<TObjectInstance> InstantiateInstance(const SParsedBlock& blk, bool preserve_identity)
 {
     // Payload format: "<class_name>:<type_name>"
     const std::string& payload = blk.type_payload;
     const size_t colon = payload.find(':');
     if (colon == std::string::npos) {
         log_warn("[serialize] @type missing class:type payload (%s)", blk.type_full.c_str());
-        return -1;
+        return {};
     }
     std::string class_name = payload.substr(0, colon);
     std::string type_name  = payload.substr(colon + 1);
@@ -126,15 +134,15 @@ int32_t InstantiateInstance(const SParsedBlock& blk, bool preserve_refid)
     const int32_t objclass = TObjectClass::FindClass(class_name.data());
     if (objclass < 0) {
         log_warn("[serialize] unknown class '%s'", class_name.c_str());
-        return -1;
+        return {};
     }
     TObjectClass* cl = TObjectClass::GetClass(objclass);
-    if (!cl) return -1;
+    if (!cl) return {};
     const int32_t objtype = cl->FindObjType(type_name.c_str());
     if (objtype < 0) {
         log_warn("[serialize] unknown type '%s' in class '%s'",
                  type_name.c_str(), class_name.c_str());
-        return -1;
+        return {};
     }
 
     // We bypass MapPane.NewObject entirely. In editor mode
@@ -146,7 +154,7 @@ int32_t InstantiateInstance(const SParsedBlock& blk, bool preserve_refid)
     TMapRenderer* mr = PlayScreen.MapRenderer();
     if (!mr) {
         log_warn("[serialize] no map renderer; cannot instantiate");
-        return -1;
+        return {};
     }
 
     SObjectState def{};
@@ -175,7 +183,7 @@ int32_t InstantiateInstance(const SParsedBlock& blk, bool preserve_refid)
     if (!live) {
         log_warn("[serialize] class factory NewObject failed for %s:%s",
                  class_name.c_str(), type_name.c_str());
-        return -1;
+        return {};
     }
 
     const int32_t sx = def.pos.x >> SECTORWSHIFT;
@@ -185,27 +193,25 @@ int32_t InstantiateInstance(const SParsedBlock& blk, bool preserve_refid)
         log_warn("[serialize] no loaded sector at level=%d sec=%d_%d (pos %d,%d,%d)",
                  def.level, sx, sy, def.pos.x, def.pos.y, def.pos.z);
         delete live;
-        return -1;
+        return {};
     }
     sec->AddObject(live);
 
-    // Register in the saferef registry. Use the requested refid if
-    // we're restoring identity (delete-undo); otherwise allocate
-    // fresh via MakeIndex.
-    if (preserve_refid && blk.refid >= 0)
-        live->SetMapIndex(blk.refid);
-    else
-        live->SetMapIndex(MapPane.MakeIndex());
-    const int32_t final_idx = live->GetMapIndex();
+    // A fresh map index (the stream's field, not an identity); the
+    // identity is the uid, applied with the node's properties below when
+    // the text's is to be kept.
+    live->SetMapIndex(MapPane.MakeIndex());
 
     // Apply the remaining annotated props. Pos already landed via def;
     // re-applying it is a no-op. Unknown keys are ignored (forward-compat).
     // A key is the node's (transform) or the object's; the node's first.
     const std::pair<const refl::SType*, void*> targets[] = {
         { refl::Of(*live->Node()), static_cast<void*>(live->Node()) },
-        { refl::Of(*live),         static_cast<void*>(live) },
+        { ObjectType(*live),       static_cast<void*>(live) },
     };
     for (const auto& kv : blk.props) {
+        if (!preserve_identity && kv.first == "uid")
+            continue;                       // a paste is a new object: its own uid
         for (const auto& [type, obj] : targets) {
             if (!type) continue;
             const refl::SProp* p = refl::FindProp(*type, kv.first);
@@ -220,7 +226,7 @@ int32_t InstantiateInstance(const SParsedBlock& blk, bool preserve_refid)
             break;
         }
     }
-    return final_idx;
+    return TSafeRef<TObjectInstance>(live);
 }
 
 void EnsureHandlersRegistered()
@@ -274,8 +280,7 @@ bool EditorSerialize::LooksLikeOurs(std::string_view text)
     return false;
 }
 
-std::string EditorSerialize::ToText(const std::vector<TObjectInstance*>& objs,
-                                    bool include_refid)
+std::string EditorSerialize::ToText(const std::vector<TObjectInstance*>& objs)
 {
     EnsureHandlersRegistered();
     std::ostringstream out;
@@ -291,19 +296,17 @@ std::string EditorSerialize::ToText(const std::vector<TObjectInstance*>& objs,
 
         out << kBlockMarker << '\n';
         out << "@type=" << type_str << '\n';
-        if (include_refid && oi->GetMapIndex() >= 0)
-            out << "@refid=" << oi->GetMapIndex() << '\n';
         for (const auto& kv : props)
             out << kv.first << '=' << kv.second << '\n';
     }
     return out.str();
 }
 
-std::vector<int32_t> EditorSerialize::FromText(std::string_view text,
-                                               bool preserve_refid)
+std::vector<TSafeRef<TObjectInstance>> EditorSerialize::FromText(std::string_view text,
+                                                                 bool preserve_identity)
 {
     EnsureHandlersRegistered();
-    std::vector<int32_t> result;
+    std::vector<TSafeRef<TObjectInstance>> result;
     if (!LooksLikeOurs(text)) return result;
 
     // Two-pass-style parse: walk lines once, accumulating into
@@ -357,8 +360,6 @@ std::vector<int32_t> EditorSerialize::FromText(std::string_view text,
             auto [root, payload] = SplitTypeRoot(val);
             cur.type_root    = std::move(root);
             cur.type_payload = std::move(payload);
-        } else if (key == "@refid") {
-            cur.refid = (int32_t)std::strtol(val.c_str(), nullptr, 10);
         } else if (!key.empty() && key.front() != '@') {
             cur.props.emplace_back(std::move(key), std::move(val));
         }
@@ -374,8 +375,13 @@ std::vector<int32_t> EditorSerialize::FromText(std::string_view text,
             log_warn("[serialize] no handler for @type root '%s'", blk.type_root.c_str());
             continue;
         }
-        const int32_t mi = it->second.instantiate(blk, preserve_refid);
-        if (mi >= 0) result.push_back(mi);
+        const TSafeRef<TObjectInstance> made = it->second.instantiate(blk, preserve_identity);
+        if (made) result.push_back(made);
     }
+    // The link step: the references the text carried name objects that
+    // exist now (the ones restored with it, or ones already in the world).
+    for (const TSafeRef<TObjectInstance>& made : result)
+        if (TObjectInstance* oi = made.Get())
+            nodepack::ResolveRefs(*oi->Node());
     return result;
 }

@@ -392,7 +392,7 @@ struct TMapRenderer::Impl
     // Editor-driven selection set, stored as map indices so any
     // TSafeRef<T> (instance, light, sector entry, ...) can be marked
     // without committing to a single concrete type at this layer.
-    std::unordered_set<int32_t> selectedMapIndices;
+    std::unordered_map<int32_t, uint32_t> selected;   // the editor's selection: handle slot -> generation
     // Retail default is orthographic; perspective camera is an opt-in
     // modern mode. Defaults below ([sun_shadow], [ao_enable],
     // [lighting_mode]) follow the same "retail by default, modern via

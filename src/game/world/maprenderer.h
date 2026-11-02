@@ -11,6 +11,7 @@
 #include <memory>
 #include <vector>
 
+#include "engine/core/saferef.h"
 #include "game/app/debugui.h"
 
 struct S3DPoint;
@@ -159,14 +160,11 @@ class TMapRenderer
     // isn't currently drawn.
     [[nodiscard]] uint32_t DrawIdForInstance(class TObjectInstance* oi) const;
 
-    // Editor-driven set of selected map indices (the universal id-space
-    // backing every TSafeRef<T>). Submit OR's kObjFlagSelected into
-    // obj_id for any drawable whose underlying ref is in the set, so
-    // multi-select highlights all of them naturally and dangling refs
-    // (deleted instances) are dropped automatically -- only currently-
-    // valid map indices ever get matched.
-    void SetSelectedMapIndices(const std::vector<int32_t>& indices);
-    [[nodiscard]] bool IsMapIndexSelected(int32_t mapindex) const;
+    // The editor's selection, by handle. Submit OR's kObjFlagSelected into
+    // obj_id for any drawable whose reference is in the set, so a
+    // multi-select highlights all of them and a deleted one drops out by
+    // itself (its handle no longer matches).
+    void SetSelected(const std::vector<TSafeRef<TObjectInstance>>& selected);
 
     // Iso view + orthographic projection matrices that match the rendered
     // image pixel-for-pixel: the clip space spans the map viewport
