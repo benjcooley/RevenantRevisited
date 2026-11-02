@@ -438,7 +438,7 @@ record, codec and gate):
 | `TCombatComponent` (character, landed, annotated) | the attack last started and whether it hit, the chain, the last button, the bow, the combat flash, the snap time, the invoke delay, magic resistance; `Combat()`. The action blocks stay on the complex object (the action's), auto-combat is the AI's | `TCharacter` combat fields; none in the record, as in retail |
 | `TEquipmentComponent` (player, landed) | the equip slots (rebuilt from the inventory on load; not a record field) | `equipment[]` |
 | `TSpellbookComponent` (player, landed) | known talisman codes, the quick spells, the change count | `knownspells`, `quickspells` |
-| `TAutomapComponent` (player, landed) | the explored automap record | `automap` |
+| `TAutomapComponent` (player, landed, annotated) | the explored automap record, the one reflected `SAutoMapRecord` the player record carries too, masks as byte blobs | `automap` |
 | `TStatEffectsComponent` (player, landed, annotated) | stat effects in force, their expiry, the modified stats | `stateffects`, `modstats` |
 | `TFadeComponent` (character, landed, annotated) | the fade 0-100, its step, limit and direction, the invisibility spell, MakeInvisible's flag; `Fader()` | `TCharacter` +0x194..+0x1a4; none in the record, as in retail |
 | `TExitComponent` (exit) | not made: an exit's own state is the one flags word `SExitState` carries, and its destination is the exit list's entry by name (exit.def, session data), which a node ref can't be since the target is on another level and not loaded | |
@@ -497,6 +497,11 @@ post-load link step all at once; no lazy resolution, so a reference read
 before the step is a load-order bug that shows. The map index is only
 mostly unique and is never an identity. The AI component's links, its
 has-seen list and the burn effect landed this way.
+
+**Overlap (2026-11-01, user).** A record and a component may carry the
+same property (the vitals clocks, the automap, the light, the object's
+own accessor properties). The record is the master: `Apply` writes it
+over the components after they exist, so nothing is kept disjoint.
 
 **Decisions.** The animation `state` stays on the object: it is the
 object's state (a door open, a chest shut), not the playhead, and the
