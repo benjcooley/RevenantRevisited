@@ -835,7 +835,7 @@ class TFixtureChar : public Base, public IFixtureChar
         this->Brain().runticks = (int32_t)a["runticks"].Int(0);
     }
 
-    TObjectInstance* AILookAt() const override { return this->Brain().ai_lookat; }
+    TObjectInstance* AILookAt() const override { return this->Brain().ai_lookat.Get(); }
     TObjectInstance* LastWaypoint() const override { return this->Brain().lastwaypoint.Get(); }
 
     void WriteAIState(JsonOut& j) const override
@@ -1076,8 +1076,8 @@ class TFixtureWorld
         for (int32_t e = 0; e < MAXHASSEEN; ++e)
         {
             j.Begin('[');
-            if (memory[e].chr)
-                j.String(NameOf(memory[e].chr));
+            if (TCharacter* seen = memory[e].chr.Get())
+                j.String(NameOf(seen));
             else
                 j.Null();
             j.Value(memory[e].time).Value(memory[e].noautocombat ? 1 : 0).End(']');

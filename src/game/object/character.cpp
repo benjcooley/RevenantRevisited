@@ -391,7 +391,7 @@ void TCharacter::ClearChar()
     savedmaterials.clear();
 
   // Reset hasseen list
-    Brain().hasseen.fill({});
+    Brain().hasseen.assign(MAXHASSEEN, SHasSeen{});
 
   // Clear Fade (retail ClearChar 0x004c18a0): fully visible. The step of 5
   // toward a limit of 100 settles to still on the first pulse.
@@ -962,17 +962,10 @@ void TCharacter::Notify(int32_t notify, void *ptr)
   // spell's Timer).
     SpellManager.ObjectRemoved(notify, ptr);
 
-  // Check hasseen list for deleted objects
-    for (int32_t c = 0; c < MAXHASSEEN; c++)
-    {
-        
-        if (Brain().hasseen[c].chr && NOTIFY_DELETED(ptr, Brain().hasseen[c].chr))
-        {
-            Brain().hasseen[c].chr = nullptr;
-            Brain().hasseen[c].time = 0;
-            Brain().hasseen[c].noautocombat = false;
-        }
-    }
+  // Drop the has-seen entries whose character is gone (the weak ref knows)
+    for (SHasSeen& seen : Brain().hasseen)
+        if (seen.time && !seen.chr)
+            seen = {};
 }
 
 namespace
@@ -1763,10 +1756,10 @@ bool TCharacter::GetFieldText(const char *field, char *buf, int32_t buflen)
 // within kMaxSeenTime (FindCharacters inlines it).
 bool TCharacter::HasSeenMe(TCharacter* me)
 {
-    for (int32_t c = 0; c < MAXHASSEEN; c++)
+    for (const SHasSeen& seen : Brain().hasseen)
     {
-        if (Brain().hasseen[c].chr == me &&
-            PlayScreen.GameFrame() - Brain().hasseen[c].time < kMaxSeenTime)
+        if (seen.chr.Get() == me &&
+            PlayScreen.GameFrame() - seen.time < kMaxSeenTime)
                 return true;
     }
 
@@ -1781,7 +1774,7 @@ void TCharacter::SetHasSeen(TCharacter* me)
 
     for (int32_t c = 0; c < MAXHASSEEN; c++)
     {
-        if (Brain().hasseen[c].chr == me)
+        if (Brain().hasseen[c].chr.Get() == me)
         {
             Brain().hasseen[c].time = PlayScreen.GameFrame();
             return;
@@ -1803,7 +1796,7 @@ bool TCharacter::HasSeenAutoCombat(TCharacter* me)
 {
     for (int32_t c = 0; c < MAXHASSEEN; c++)
     {
-        if (Brain().hasseen[c].chr == me)
+        if (Brain().hasseen[c].chr.Get() == me)
             return !Brain().hasseen[c].noautocombat;
     }
 
@@ -2716,7 +2709,7 @@ int32_t TCharacter::ResolveCombat(TActionBlock* ab, int32_t bits)
             look = obj;
     }
     if (!look)
-        look = Brain().ai_lookat;
+        look = Brain().ai_lookat.Get();
     if (look)
         angle = angle8 = ConvertToFacing(IntPos(*this), IntPos(look));
 
@@ -3312,7 +3305,8 @@ void TCharacter::AIMove(TCharacter* target)
                 Brain().waypointticks--;
         }
         Brain().target_last_position = IntPos(target);
-        doing->angle = AngleTo(Brain().ai_lookat && Brain().waypointticks ? Brain().ai_lookat : target);
+        TObjectInstance* const waypoint = Brain().waypointticks ? Brain().ai_lookat.Get() : nullptr;
+        doing->angle = AngleTo(waypoint ? waypoint : target);
         return;
     }
 
@@ -3327,20 +3321,22 @@ void TCharacter::AIMove(TCharacter* target)
         SideStep(side);
         other->SideStep(side == 'l' ? 'r' : 'l');
     }
-    if (!Brain().ai_lookat || Distance(Brain().ai_lookat) < 5)
+    TObjectInstance* lookat = Brain().ai_lookat.Get();
+    if (!lookat || Distance(lookat) < 5)
     {
-        if (Brain().ai_lookat)
+        if (lookat)
             centre = IntPos(target);
         TObjectInstance* waypoint = NearestWaypoint(centre);
-        if (Brain().ai_lookat == waypoint)
-            Brain().ai_lookat = nullptr;
+        if (lookat == waypoint)
+            lookat = nullptr;
         else
         {
             Brain().waypointticks = 6;
-            Brain().ai_lookat = waypoint;
+            lookat = waypoint;
         }
+        Brain().ai_lookat = lookat;
     }
-    doing->angle = Brain().ai_lookat ? AngleTo(Brain().ai_lookat) : ConvertToFacing(IntPos(*this), centre);
+    doing->angle = lookat ? AngleTo(lookat) : ConvertToFacing(IntPos(*this), centre);
 }
 
 // AI's waypoint search (0x004c9158-0x004c9272): of the first ten helpers
@@ -3527,22 +3523,23 @@ void TCharacter::WanderRunning()
 // reached becoming the previous.
 void TCharacter::WanderPatrol()
 {
-    if (!Brain().ai_lookat)
+    TObjectInstance* lookat = Brain().ai_lookat.Get();
+    if (!lookat)
     {
-        Brain().ai_lookat = PickWanderWaypoint();
-        if (Brain().ai_lookat)
-            Goto(IntPos(Brain().ai_lookat).x, IntPos(Brain().ai_lookat).y);
+        lookat = PickWanderWaypoint();
+        Brain().ai_lookat = lookat;
+        if (lookat)
+            Goto(IntPos(lookat).x, IntPos(lookat).y);
         else
             Brain().wanderidle = 1000;
         return;
     }
-    Goto(IntPos(Brain().ai_lookat).x, IntPos(Brain().ai_lookat).y);
-    const S3DPoint at = IntPos(Brain().ai_lookat);
+    Goto(IntPos(lookat).x, IntPos(lookat).y);
+    const S3DPoint at = IntPos(lookat);
     if (dist(IntPos(*this).x, IntPos(*this).y, IntPos(*this).z, at.x, at.y, at.z) < 25)
     {
-        TObjectInstance* reached = Brain().ai_lookat;
         Brain().ai_lookat = PickWanderWaypoint();       // passes over the one reached and the one before it
-        Brain().lastwaypoint = reached;
+        Brain().lastwaypoint = lookat;
     }
 }
 
@@ -3558,12 +3555,13 @@ TObjectInstance* TCharacter::PickWanderWaypoint()
     const int32_t n = (std::min)(MapPane.FindObjectsInRange(IntPos(*this), GetLevel(), index, 2000, 0, OBJCLASS_HELPER,
                                                             kMaxFound, OBJSET_ALL), kMaxFound);
     TObjectInstance* const previous = Brain().lastwaypoint.Get();
+    TObjectInstance* const current  = Brain().ai_lookat.Get();
     TObjectInstance* kept[kMaxFound];
     int32_t count = 0;
     for (int32_t i = 0; i < n; ++i)
     {
         TObjectInstance* o = MapPane.GetInstance(index[i]);
-        if (o && !stricmp(o->GetTypeName(), "waypoint") && o != previous && o != Brain().ai_lookat &&
+        if (o && !stricmp(o->GetTypeName(), "waypoint") && o != previous && o != current &&
             WaypointReachable(o, this) && ProbeLedge(IntPos(o)))
             kept[count++] = o;
     }
@@ -5686,7 +5684,9 @@ bool TCharacter::Burn()
         return false;
 
     burnticks = 50;
-    if (!burning)
+    if (TBurnEffect* burn = static_cast<TBurnEffect*>(burning.Get()))
+        burn->ResetFrameCount();
+    else
     {
         SObjectState def;
         def.objclass = OBJCLASS_EFFECT;
@@ -5695,7 +5695,7 @@ bool TCharacter::Burn()
         def.facing = IntFacing(*this);
         def.objtype = EffectClass.FindObjType("BURN");
 
-        TBurnEffect* burn = (TBurnEffect*)MapPane.GetInstance(MapPane.NewObject(&def));
+        burn = static_cast<TBurnEffect*>(MapPane.GetInstance(MapPane.NewObject(&def)));
         if (!burn)
             return false;
         burning = burn;
@@ -5708,10 +5708,6 @@ bool TCharacter::Burn()
         TActionBlock* ab = new TActionBlock("onfire", ACTION_BURN);
         ab->priority = true;
         ForceCommand(ab);
-    }
-    else
-    {
-        ((TBurnEffect*)burning)->ResetFrameCount();
     }
 
     return true;

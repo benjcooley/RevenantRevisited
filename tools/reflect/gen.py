@@ -75,6 +75,7 @@ TYPE_MAP = {
     "TUid":        ("Uid",    "u",   "{m} = TUid(v.u);",                             "out = SPropValue::Uid({m}.value);"),
     "TNodeRef":    ("Ref",    "u",   "{m} = TNodeRef(TUid(v.u));",                   "out = SPropValue::Ref({m}.Uid().value);"),
     "TAssetRef":   ("Ref",    "u",   "{m} = {t}(TUid(v.u));",                        "out = SPropValue::Ref({m}.Uid().value);"),
+    "TObjectRef":  ("Ref",    "u",   "{m} = {t}(TUid(v.u));",                        "out = SPropValue::Ref({m}.Uid().value);"),
     # Retail's integer world point rides the Vec3 lanes.
     "S3DPoint":    ("Vec3",   "v3",  "{m} = S3DPoint(int32_t(std::lround(v.v3[0])), int32_t(std::lround(v.v3[1])), int32_t(std::lround(v.v3[2])));",
                                      "out = SPropValue::Vec3(float({m}.x), float({m}.y), float({m}.z));"),
@@ -100,14 +101,17 @@ def snake(name: str) -> str:
     return s.lower()
 
 
-REF_KIND = {"TNodeRef": "Node", "TAssetRef": "Asset"}
+REF_KIND = {"TNodeRef": "Node", "TAssetRef": "Asset", "TObjectRef": "Node"}
 # Lists of scalars: the List machinery with a scalar element.
 SCALAR_LISTS = {"std::vector<int32_t>": "Int", "std::vector<std::string>": "String"}
 
 
 def base_ctype(ctype):
-    """`TAssetRef<TObjectImagery>` -> `TAssetRef`; anything else unchanged."""
-    return "TAssetRef" if ctype.startswith("TAssetRef<") else ctype
+    """`TAssetRef<TObjectImagery>` -> `TAssetRef`, `TObjectRef<TCharacter>` -> `TObjectRef`; anything else unchanged."""
+    for ref in ("TAssetRef", "TObjectRef"):
+        if ctype.startswith(ref + "<"):
+            return ref
+    return ctype
 
 
 class Member:
