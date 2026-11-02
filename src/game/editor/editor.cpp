@@ -58,6 +58,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <unordered_map>
@@ -794,12 +795,159 @@ void DrawScenePanel()
 // record's rows apply the record to the object through its archetype.
 // `locked` shows the row but refuses edits, for what is the object's
 // identity rather than its state.
+using FLocked = std::function<bool(const refl::SProp&)>;
+
 void DrawPropertyRow(TNode* node, void* obj, const refl::SType& type, const refl::SProp& p,
-                     const std::function<void()>& after_commit = {}, bool locked = false)
+                     const std::function<void()>& after_commit = {}, bool locked = false,
+                     const FLocked& locked_in = {});
+
+// The rows of a record: every property of `type` and its bases, base first,
+// inside the two-column table the caller began. `locked` says which rows
+// show but refuse edits.
+void DrawRecordRows(TNode* node, void* obj, const refl::SType& type,
+                    const std::function<void()>& after_commit = {}, const FLocked& locked = {})
+{
+    std::vector<const refl::SType*> chain;
+    for (const refl::SType* t = &type; t; t = t->base) chain.push_back(t);
+    for (auto it = chain.rbegin(); it != chain.rend(); ++it)
+        for (int32_t i = 0; i < (*it)->prop_count; ++i)
+            DrawPropertyRow(node, obj, type, (*it)->props[i], after_commit,
+                            locked && locked((*it)->props[i]), locked);
+}
+
+// The OF_* bits, for the flags row's picker.
+struct SFlagName { const char* name; uint32_t bit; };
+constexpr SFlagName kObjectFlagNames[] = {
+    { "IMMOBILE", OF_IMMOBILE }, { "EDITORLOCK", OF_EDITORLOCK }, { "LIGHT", OF_LIGHT },
+    { "MOVING", OF_MOVING }, { "ANIMATING", OF_ANIMATING }, { "AI", OF_AI },
+    { "DISABLED", OF_DISABLED }, { "INVISIBLE", OF_INVISIBLE }, { "EDITOR", OF_EDITOR },
+    { "DRAWFLIP", OF_DRAWFLIP }, { "SELDRAW", OF_SELDRAW }, { "REVEAL", OF_REVEAL },
+    { "KILL", OF_KILL }, { "GENERATED", OF_GENERATED }, { "ANIMATE", OF_ANIMATE },
+    { "PULSE", OF_PULSE }, { "WEIGHTLESS", OF_WEIGHTLESS }, { "COMPLEX", OF_COMPLEX },
+    { "NOTIFY", OF_NOTIFY }, { "NONMAP", OF_NONMAP }, { "ONEXIT", OF_ONEXIT },
+    { "PAUSE", OF_PAUSE }, { "NOWALK", OF_NOWALK }, { "PARALIZE", OF_PARALIZE },
+    { "NOCOLLISION", OF_NOCOLLISION }, { "ICED", OF_ICED },
+};
+
+// A record's or an object's `flags`: the OF_* bits
+bool IsObjectFlags(const refl::SType& type, const refl::SProp& p)
+{
+    if (std::strcmp(p.name, "flags") != 0 || p.type != EPropType::Int) return false;
+    for (const refl::SType* t = &type; t; t = t->base)
+        if (std::strcmp(t->name, "TObjectInstance") == 0 || std::strcmp(t->name, "SObjectState") == 0)
+            return true;
+    return false;
+}
+
+// What a reference names, for the row beside its uid: the node's name, and
+// its object's type when it has one.
+std::string RefereeLabel(uint64_t uid)
+{
+    if (!uid) return "(none)";
+    TNode* n = TNode::FindByUid(TUid(uid));
+    if (!n) return "(not loaded)";
+    std::string s = n->GetName() ? n->GetName() : "";
+    if (const TObjectInstance* o = n->Object())
+    {
+        if (s.empty()) s = o->GetName() ? o->GetName() : "";
+        s += std::string(" [") + o->GetTypeName() + "]";
+    }
+    return s.empty() ? "(unnamed)" : s;
+}
+
+void DrawPropertyRow(TNode* node, void* obj, const refl::SType& type, const refl::SProp& p,
+                     const std::function<void()>& after_commit, bool locked, const FLocked& locked_in)
 {
     if (!p.visible_in_editor) return;
 
     const bool read_only = p.read_only || locked;
+
+    // A nested record, or a list: a tree under the name, its rows below.
+    if (p.type == EPropType::Struct || p.type == EPropType::List)
+    {
+        const refl::SType* et = refl::ElemType(p);
+        ImGui::PushID(int(p.id));
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::AlignTextToFramePadding();
+        char label[96];
+        if (p.type == EPropType::List)
+            std::snprintf(label, sizeof(label), "%s (%d)", p.name, refl::ListCount(type, obj, p.id));
+        else
+            std::snprintf(label, sizeof(label), "%s", p.name);
+        const bool open = ImGui::TreeNodeEx(label, ImGuiTreeNodeFlags_SpanAllColumns);
+        if (p.desc && *p.desc && ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", p.desc);
+        if (open)
+        {
+            if (p.type == EPropType::Struct)
+            {
+                if (void* nested = refl::Nested(type, obj, p.id); nested && et)
+                    DrawRecordRows(node, nested, *et, after_commit, locked_in);
+            }
+            else
+            {
+                const int32_t count = refl::ListCount(type, obj, p.id);
+                for (int32_t k = 0; k < count; ++k)
+                {
+                    void* e = refl::ListAt(type, obj, p.id, k);
+                    if (!e) continue;
+                    ImGui::PushID(k);
+                    char idx[16];
+                    std::snprintf(idx, sizeof(idx), "[%d]", k);
+                    if (p.elem_scalar == EPropType::Struct)
+                    {
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::AlignTextToFramePadding();
+                        if (ImGui::TreeNodeEx(idx, ImGuiTreeNodeFlags_SpanAllColumns))
+                        {
+                            if (et) DrawRecordRows(node, e, *et, after_commit, locked_in);
+                            ImGui::TreePop();
+                        }
+                    }
+                    else
+                    {
+                        // A scalar element: edited in place
+                        ImGui::TableNextRow();
+                        ImGui::TableSetColumnIndex(0);
+                        ImGui::AlignTextToFramePadding();
+                        ImGui::TextUnformatted(idx);
+                        ImGui::TableSetColumnIndex(1);
+                        ImGui::SetNextItemWidth(-FLT_MIN);
+                        if (read_only) ImGui::BeginDisabled();
+                        bool changed = false;
+                        if (p.elem_scalar == EPropType::Int)
+                            changed = ImGui::InputInt("##e", static_cast<int32_t*>(e), 0, 0, ImGuiInputTextFlags_EnterReturnsTrue);
+                        else if (p.elem_scalar == EPropType::String)
+                        {
+                            auto* str = static_cast<std::string*>(e);
+                            char buf[256];
+                            std::snprintf(buf, sizeof(buf), "%s", str->c_str());
+                            if (ImGui::InputText("##e", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue))
+                            {
+                                *str = buf;
+                                changed = true;
+                            }
+                        }
+                        if (read_only) ImGui::EndDisabled();
+                        if (changed && !read_only)
+                        {
+                            EditorUndo::MarkDirty(node);
+                            EditorUndo::SetOperationName(p.name);
+                            if (after_commit) after_commit();
+                            EditorMarkDirty();
+                        }
+                    }
+                    ImGui::PopID();
+                }
+            }
+            ImGui::TreePop();
+        }
+        ImGui::PopID();
+        return;
+    }
+
     const ImGuiInputTextFlags kNumberFlags = ImGuiInputTextFlags_EnterReturnsTrue |
                                              (read_only ? ImGuiInputTextFlags_ReadOnly : 0);
     SPropValue v;
@@ -839,25 +987,65 @@ void DrawPropertyRow(TNode* node, void* obj, const refl::SType& type, const refl
         // typed in lands once, not per keystroke.
         case EPropType::Int: {
             int n = v.i;
+            if (IsObjectFlags(type, p))
+            {
+                // The OF_* bits: the number, and a picker of the bits by name
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::GetFrameHeight() - ImGui::GetStyle().ItemSpacing.x);
+                if (ImGui::InputInt("##v", &n, 0, 0, kNumberFlags)) commit(SPropValue::Int(n));
+                ImGui::SameLine();
+                if (ImGui::Button("..."))
+                    ImGui::OpenPopup("flags");
+                if (ImGui::BeginPopup("flags"))
+                {
+                    uint32_t bits = uint32_t(v.i);
+                    for (const SFlagName& f : kObjectFlagNames)
+                    {
+                        bool on = (bits & f.bit) != 0;
+                        if (ImGui::Checkbox(f.name, &on))
+                        {
+                            bits = on ? (bits | f.bit) : (bits & ~f.bit);
+                            commit(SPropValue::Int(int32_t(bits)));
+                        }
+                    }
+                    ImGui::EndPopup();
+                }
+                break;
+            }
             if (ImGui::InputInt("##v", &n, 0, 0, kNumberFlags)) commit(SPropValue::Int(n));
             break;
         }
         case EPropType::Bytes: {
-            ImGui::TextDisabled("%zu bytes", v.str.size());
+            // The size and the first bytes in hex
+            char head[64] = "";
+            size_t at = 0;
+            for (size_t i = 0; i < v.str.size() && i < 12 && at + 3 < sizeof(head); ++i)
+                at += size_t(std::snprintf(head + at, sizeof(head) - at, "%02x ", uint8_t(v.str[i])));
+            ImGui::TextDisabled("%zu bytes%s%s%s", v.str.size(), v.str.empty() ? "" : "  ", head,
+                                v.str.size() > 12 ? "..." : "");
             break;
         }
         case EPropType::Uid:
         case EPropType::Ref: {
-            // Hex, as the DEF text writes it. A picker for node and asset
-            // refs comes with the packed sector editor.
+            // Hex, as the DEF text writes it, and for a reference the name
+            // of what it points at. A picker (a drag from the tree) is to
+            // come.
             char buf[32];
             std::snprintf(buf, sizeof(buf), "%016llx", (unsigned long long)v.u);
+            if (p.type == EPropType::Ref)
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.5f);
             if (ImGui::InputText("##v", buf, sizeof(buf),
                                  ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CharsHexadecimal |
                                  (read_only ? ImGuiInputTextFlags_ReadOnly : 0)))
             {
                 const uint64_t u = std::strtoull(buf, nullptr, 16);
                 commit(p.type == EPropType::Uid ? SPropValue::Uid(u) : SPropValue::Ref(u));
+            }
+            if (p.type == EPropType::Ref)
+            {
+                ImGui::SameLine();
+                const std::string who = RefereeLabel(v.u);
+                ImGui::TextDisabled("%s", who.c_str());
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", who.c_str());
             }
             break;
         }
@@ -991,10 +1179,7 @@ void DrawPropertiesPanel()
                 {
                     ImGui::TableSetupColumn("Name",  ImGuiTableColumnFlags_WidthStretch, 0.40f);
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.60f);
-                    for (auto it = chain.rbegin(); it != chain.rend(); ++it)
-                        for (int32_t i = 0; i < (*it)->prop_count; ++i)
-                            DrawPropertyRow(node, obj, *t_obj, (*it)->props[i], after_commit,
-                                            locked && locked((*it)->props[i]));
+                    DrawRecordRows(node, obj, *t_obj, after_commit, locked);
                     ImGui::EndTable();
                 }
                 ImGui::PopID();
