@@ -56,6 +56,3 @@ class TPlayerDef final : public TCharacterDef
 
 // The automap record as the game holds it <-> as the record stores it
 // (words as little-endian bytes). The legacy codec and the def share them.
-struct SAutoMapRecord;
-[[nodiscard]] SAutoMapRecordState AutoMapToState(const SAutoMapRecord& record);
-[[nodiscard]] SAutoMapRecord AutoMapFromState(const SAutoMapRecordState& state);

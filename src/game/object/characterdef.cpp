@@ -148,39 +148,6 @@ void TCharacterDef::Capture(const TObjectInstance& inst, SObjectState& state) co
 
 // ---- TPlayer ----------------------------------------------------------------
 
-SAutoMapRecordState AutoMapToState(const SAutoMapRecord& record)
-{
-    SAutoMapRecordState state;
-    state.module = record.module;
-    for (const SAutoMapLevel& level : record.levels)
-    {
-        SAutoMapLevelState& ls = state.levels.emplace_back();
-        ls.level = level.level;
-        ls.mask.reserve(level.mask.size() * 2);
-        for (const int16_t w : level.mask)
-        {
-            ls.mask.push_back(uint8_t(uint16_t(w) & 0xFF));
-            ls.mask.push_back(uint8_t(uint16_t(w) >> 8));
-        }
-    }
-    return state;
-}
-
-SAutoMapRecord AutoMapFromState(const SAutoMapRecordState& state)
-{
-    SAutoMapRecord record;
-    record.module = state.module;
-    for (const SAutoMapLevelState& ls : state.levels)
-    {
-        SAutoMapLevel& level = record.levels.emplace_back();
-        level.level = ls.level;
-        level.mask.resize(ls.mask.size() / 2);
-        for (size_t i = 0; i < level.mask.size(); i++)
-            level.mask[i] = int16_t(uint16_t(ls.mask[i * 2]) | (uint16_t(ls.mask[i * 2 + 1]) << 8));
-    }
-    return record;
-}
-
 TObjectInstance* TPlayerDef::Create(SObjectState& state, TObjectImagery* img) const
 {
     return new TPlayer(&state, img);
@@ -248,7 +215,7 @@ void TPlayerDef::Apply(const SObjectState& state, TObjectInstance& inst) const
     for (size_t i = 0; i < o.frags.size() && i < ps->frags.size(); i++)
         o.frags[i] = ps->frags[i];
 
-    o.Automap().record = AutoMapFromState(ps->automap);
+    o.Automap().record = ps->automap;
     o.RefreshStats();
 }
 
@@ -282,7 +249,7 @@ void TPlayerDef::Capture(const TObjectInstance& inst, SObjectState& state) const
     ps->statetime   = o.statetime;
     ps->profile.assign(o.profile.begin(), o.profile.end());
     ps->frags.assign(o.frags.begin(), o.frags.end());
-    ps->automap     = AutoMapToState(o.Automap().record);
+    ps->automap     = o.Automap().record;
 }
 
 // ---- Registration -----------------------------------------------------------

@@ -657,8 +657,7 @@ void TLegacyDeserialize::ReadPlayer(TPlayer& o, TInputStream& is, int32_t versio
     if (objversion >= 14)
     {
         SAutoMapRecord record;
-        ReadAutoMapRecord(record, is);
-        st.automap = AutoMapToState(record);
+        ReadAutoMapRecord(st.automap, is);
     }
     ApplyLoaded(o, st);
     FinishObjectInstance(o, version, derived);
@@ -878,9 +877,14 @@ void TLegacyDeserialize::ReadAutoMapRecord(SAutoMapRecord& record, TInputStream&
             record.levels.pop_back();
             break;
         }
-        entry.mask.resize(words);
-        for (int16_t& w : entry.mask)
-            is >> w;
+        entry.mask.resize(size_t(words) * 2);
+        for (int32_t w = 0; w < words; w++)
+        {
+            int16_t word = 0;
+            is >> word;
+            entry.mask[size_t(w) * 2]     = uint8_t(uint16_t(word) & 0xFF);
+            entry.mask[size_t(w) * 2 + 1] = uint8_t(uint16_t(word) >> 8);
+        }
     }
 }
 
@@ -1098,7 +1102,7 @@ void TLegacySerialize::WritePlayer(TPlayer& o, TOutputStream& os)
         os << (size_t(i) < st.profile.size() ? st.profile[size_t(i)].c_str() : "");
     for (int32_t i = 0; i < 4; i++)
         os << (size_t(i) < st.frags.size() ? st.frags[size_t(i)] : 0);
-    WriteAutoMapRecord(AutoMapFromState(st.automap), os);
+    WriteAutoMapRecord(st.automap, os);
 }
 
 void TLegacySerialize::WriteContainer(TContainer& o, TOutputStream& os)
@@ -1200,8 +1204,9 @@ void TLegacySerialize::WriteAutoMapRecord(const SAutoMapRecord& record, TOutputS
     os << (int32_t)record.levels.size();
     for (const SAutoMapLevel& entry : record.levels)
     {
-        os << entry.level << (int32_t)entry.mask.size();
-        for (int16_t w : entry.mask)
-            os << w;
+        const int32_t words = int32_t(entry.mask.size() / 2);
+        os << entry.level << words;
+        for (int32_t w = 0; w < words; w++)
+            os << int16_t(uint16_t(entry.mask[size_t(w) * 2]) | (uint16_t(entry.mask[size_t(w) * 2 + 1]) << 8));
     }
 }

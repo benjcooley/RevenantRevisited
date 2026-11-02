@@ -42,10 +42,10 @@ class TAutoMapGrid
     // The grid as a save record holds it (0x005295e0): (0x8000 | count - 1,
     // value) for a run, (0, value) for a single word. Retail's decoder
     // (0x00529150) reads any such stream.
-    [[nodiscard]] std::vector<int16_t> Encode() const;
+    [[nodiscard]] std::vector<uint8_t> Encode() const;
     // From a record's stream; false unless it makes exactly kWords words
     // (retail "error decompressing level visgrid", 0x00529220).
-    bool Decode(const std::vector<int16_t>& stream);
+    bool Decode(const std::vector<uint8_t>& stream);
 
   private:
     static bool Address(int32_t x, int32_t y, int32_t& word, int32_t& bit);

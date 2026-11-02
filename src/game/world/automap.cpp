@@ -240,16 +240,20 @@ void TAutoMapGrid::Explore(int32_t x, int32_t y)
         words[word] = static_cast<uint16_t>(words[word] | (1u << bit));
 }
 
-std::vector<int16_t> TAutoMapGrid::Encode() const
+std::vector<uint8_t> TAutoMapGrid::Encode() const
 {
-    std::vector<int16_t> stream;
+    std::vector<uint8_t> stream;
+    auto put = [&](uint16_t word) {
+        stream.push_back(uint8_t(word & 0xFF));
+        stream.push_back(uint8_t(word >> 8));
+    };
     for (size_t i = 0; i < words.size();)
     {
         size_t run = 1;
         while (i + run < words.size() && words[i + run] == words[i] && run < 0x8000)
             ++run;
-        stream.push_back(static_cast<int16_t>(run > 1 ? 0x8000 | (run - 1) : 0));
-        stream.push_back(static_cast<int16_t>(words[i]));
+        put(uint16_t(run > 1 ? 0x8000 | (run - 1) : 0));
+        put(uint16_t(words[i]));
         i += run;
     }
     return stream;
@@ -257,16 +261,18 @@ std::vector<int16_t> TAutoMapGrid::Encode() const
 
 // REVSYNC: 0x00529150 -- (control, value) pairs: with 0x8000 set the value
 // repeats control & 0x7fff more times.
-bool TAutoMapGrid::Decode(const std::vector<int16_t>& stream)
+bool TAutoMapGrid::Decode(const std::vector<uint8_t>& stream)
 {
+    auto word = [&](size_t i) { return uint16_t(stream[i * 2]) | uint16_t(uint16_t(stream[i * 2 + 1]) << 8); };
+    const size_t nwords = stream.size() / 2;
     size_t n = 0;
-    for (size_t i = 0; i + 1 < stream.size(); i += 2)
+    for (size_t i = 0; i + 1 < nwords; i += 2)
     {
-        const uint16_t control = static_cast<uint16_t>(stream[i]);
+        const uint16_t control = word(i);
         const size_t count = control & 0x8000 ? (control & 0x7fffu) + 1 : 1;
         if (n + count > words.size())
             return false;
-        std::fill_n(words.begin() + n, count, static_cast<uint16_t>(stream[i + 1]));
+        std::fill_n(words.begin() + n, count, word(i + 1));
         n += count;
     }
     return n == words.size();
