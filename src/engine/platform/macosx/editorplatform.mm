@@ -86,6 +86,10 @@ void SetWindowSizeCenteredOnCurrent(int32_t w, int32_t h)
     NSRect new_frame   = [nsw frame];
     new_frame.origin.x = old_cx - new_frame.size.width  * 0.5f;
     new_frame.origin.y = old_cy - new_frame.size.height * 0.5f;
+    // Kept on the screen the window is on: a window centred near an edge
+    // would otherwise land partly off it, menu bar included.
+    if (NSScreen* screen = [nsw screen] ?: [NSScreen mainScreen])
+        new_frame = [nsw constrainFrameRect:new_frame toScreen:screen];
     [nsw setFrameOrigin:new_frame.origin];
 #else
     (void)w; (void)h;

@@ -59,5 +59,12 @@ SEditorRect EditorGameViewRect();
 // re-renders once even while paused.
 bool EditorRunning();
 void EditorSetRunning(bool running);
+// One gameplay tick while paused (the Step button, "."): the editor mode's
+// tick takes it with EditorTakeStep and runs the game for that tick.
+void EditorStepOnce();
+bool EditorTakeStep();
+// Stop: the base sectors again, the play-through so far discarded (a new
+// game); the editor's camera stays where it is.
+void EditorStop();
 void EditorMarkDirty();
 bool EditorShouldRenderWorld();   // consumes one dirty tick when paused

@@ -39,6 +39,9 @@ namespace EditorPrefs {
 // Load editor.def from disk. Best-effort -- missing or malformed file is
 // fine, all callers fall back to their defaults. Returns true on
 // successful read.
+// Where Load and Save go when given no path: "editor.def" in the working
+// directory until the application says otherwise.
+void SetDefaultPath(const char* path);
 bool Load(const char* path = nullptr);
 
 // Write the current in-memory store back to disk. Returns true on

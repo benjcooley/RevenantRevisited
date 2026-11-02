@@ -28,6 +28,9 @@
 #include "game/editor/editor.h"
 
 #include "game/app/debugui.h"
+#include "game/app/revenant.h"
+#include "game/app/gameflow.h"
+#include "game/app/gamesession.h"
 #include "game/editor/editorcommands.h"
 #include "engine/editor/editorfonts.h"
 #include "game/editor/editoricons.h"
@@ -83,15 +86,17 @@ constexpr int32_t kGameViewH = 480;
 // actually lands. Zero rect = panel not laid out yet this frame.
 SEditorRect g_cached_game_view_rect = { 0, 0, 0, 0 };
 constexpr const char* kDockSpaceName = "##editor_dockspace";
-constexpr const char* kPrefBuiltLayout    = "layout.imgui.built";
+constexpr const char* kPrefLayoutLeft     = "layout.left";       // the tree's share of the width
+constexpr const char* kPrefLayoutRight    = "layout.right";      // the properties' share of the width
+constexpr const char* kPrefLayoutBottom   = "layout.bottom";     // the console's share of the height
 constexpr const char* kPrefSceneShowEmpty = "scene.show_empty_sectors";
 constexpr const char* kPrefEditorWindowW  = "window.editor.w";
 constexpr const char* kPrefEditorWindowH  = "window.editor.h";
 constexpr const char* kPrefGameWindowW    = "window.game.w";
 constexpr const char* kPrefGameWindowH    = "window.game.h";
 
-constexpr int32_t kDefaultEditorWindowW = 1280;
-constexpr int32_t kDefaultEditorWindowH = 800;
+constexpr int32_t kDefaultEditorWindowW = 1440;
+constexpr int32_t kDefaultEditorWindowH = 900;
 
 bool g_first_chrome_frame = true;
 bool g_commands_registered = false;
@@ -101,6 +106,41 @@ bool g_commands_registered = false;
 // don't freeze. Pause means "don't advance gameplay state", not "stop
 // rendering".
 bool g_running = false;
+bool g_step    = false;     // one tick asked for while paused
+// Stop: the editor camera to put back once the reload is done.
+bool     g_stop_cam_pending = false;
+S3DPoint g_stop_cam_world   = {0, 0, 0};
+int32_t  g_stop_cam_level   = 0;
+
+// The dock layout is built on every entry, from the splits the user left
+// (saved as shares of the window in the prefs; the ImGui ini bakes pixel
+// rects from whatever size the window had at exit, which leaves panels
+// undocked or cramped), and only once the viewport has settled at the
+// editor window's size.
+bool    g_layout_pending = false;
+int32_t g_layout_stable  = 0;      // frames the viewport size has held
+ImVec2  g_layout_seen    = ImVec2(0, 0);
+float   g_layout_left    = 0.21f;
+float   g_layout_right   = 0.32f;
+float   g_layout_bottom  = 0.25f;
+
+// The share of the viewport a docked window's node takes, or `fallback`
+// when it isn't docked.
+float DockShare(const char* window, bool horizontal, float fallback)
+{
+    ImGuiWindow* w = ImGui::FindWindowByName(window);
+    if (!w || !w->DockNode) return fallback;
+    const ImVec2 vp = ImGui::GetMainViewport()->Size;
+    const float share = horizontal ? w->DockNode->Size.x / vp.x : w->DockNode->Size.y / vp.y;
+    return (share > 0.05f && share < 0.9f) ? share : fallback;
+}
+
+void SaveLayoutShares()
+{
+    EditorPrefs::SetFloat(kPrefLayoutLeft,   DockShare("Scene",      true,  g_layout_left));
+    EditorPrefs::SetFloat(kPrefLayoutRight,  DockShare("Properties", true,  g_layout_right));
+    EditorPrefs::SetFloat(kPrefLayoutBottom, DockShare("Console",    false, g_layout_bottom));
+}
 
 // Whether shadows were on before we entered editor mode. We turn them
 // off in editor mode by default and restore on exit.
@@ -198,10 +238,18 @@ void BuildDefaultDockLayout(ImGuiID root_id)
     ImGui::DockBuilderRemoveNodeChildNodes(root_id);
     ImGui::DockBuilderSetNodeSize(root_id, ImGui::GetMainViewport()->Size);
 
+    // The splits the user left, else the defaults: the tree wide enough
+    // for a type name with its icon, the properties for a label and three
+    // number fields, the game view the rest, the 640 of the image and a
+    // margin (at 1440 wide: 302 / 461 / 677).
+    // The right split is taken out of what the left one leaves.
+    const float left_share  = std::clamp(EditorPrefs::GetFloat(kPrefLayoutLeft,   g_layout_left),  0.05f, 0.6f);
+    const float right_share = std::clamp(EditorPrefs::GetFloat(kPrefLayoutRight,  g_layout_right), 0.05f, 0.7f);
+    const float bottom_share= std::clamp(EditorPrefs::GetFloat(kPrefLayoutBottom, g_layout_bottom),0.05f, 0.7f);
     ImGuiID center = root_id;
-    ImGuiID left   = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left,  0.20f, nullptr, &center);
-    ImGuiID right  = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.25f, nullptr, &center);
-    ImGuiID bottom = ImGui::DockBuilderSplitNode(center, ImGuiDir_Down,  0.30f, nullptr, &center);
+    ImGuiID left   = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left,  left_share, nullptr, &center);
+    ImGuiID right  = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, right_share / (1.0f - left_share), nullptr, &center);
+    ImGuiID bottom = ImGui::DockBuilderSplitNode(center, ImGuiDir_Down,  bottom_share, nullptr, &center);
 
     ImGui::DockBuilderDockWindow("Scene",       left);
     ImGui::DockBuilderDockWindow("Properties",  right);
@@ -903,25 +951,31 @@ void DrawPropertiesPanel()
             ImGui::EndGroup();
             ImGui::Separator();
 
-            // A root object's record first (docs/OBJECT_SYSTEM.md, "Object
-            // State and Serialization": the record is the state; an edit
-            // goes through the archetype's Apply), then the node, then each
-            // component but the object itself, whose state the record shows,
-            // then its child nodes. A component's base chain draws base first.
+            // A root object's record first, captured from the live object
+            // each frame: the editor shows the game as it is, paused on
+            // entry, ticking while Play is on, and Stop reloads the base
+            // sectors so what it shows is the authored data again. An edit
+            // lands on the record and goes through the archetype's Apply
+            // onto the object (docs/OBJECT_SYSTEM.md, "Object State and
+            // Serialization"). Then the node, each component but the object
+            // itself, whose state the record shows, then its child nodes. A
+            // component's base chain draws base first.
             TNode* node = primary->Node();
-            std::unique_ptr<SObjectState> record;
+            std::unique_ptr<SObjectState> captured;
             if (node->IsRoot() && primary->Archetype())
             {
-                record = primary->Archetype()->DefaultState().Clone();
-                primary->CaptureState(*record);
+                captured = primary->Archetype()->DefaultState().Clone();
+                primary->CaptureState(*captured);
                 // The runtime map index, as the node shows it (the record
                 // captures the file's, which a retail duplicate may differ
                 // from), so applying the record leaves the index alone.
-                record->mapindex = primary->GetMapIndex();
+                captured->mapindex = primary->GetMapIndex();
             }
+            SObjectState* record = captured.get();
             auto draw_target = [&](const char* title, void* obj, const refl::SType* t_obj,
                                    const std::function<void()>& after_commit = {},
-                                   const std::function<bool(const refl::SProp&)>& locked = {}) {
+                                   const std::function<bool(const refl::SProp&)>& locked = {},
+                                   bool open = true) {
                 if (!t_obj) return;
                 std::vector<const refl::SType*> chain;
                 for (const refl::SType* t = t_obj; t; t = t->base) chain.push_back(t);
@@ -929,7 +983,7 @@ void DrawPropertiesPanel()
                 for (const refl::SType* t : chain) total += t->prop_count;
                 if (total <= 0) return;
                 ImGui::PushID(obj);
-                if (ImGui::CollapsingHeader(title, ImGuiTreeNodeFlags_DefaultOpen) &&
+                if (ImGui::CollapsingHeader(title, open ? ImGuiTreeNodeFlags_DefaultOpen : 0) &&
                     ImGui::BeginTable("##props", 2,
                                       ImGuiTableFlags_BordersInnerV |
                                       ImGuiTableFlags_Resizable |
@@ -951,9 +1005,9 @@ void DrawPropertiesPanel()
                 std::string title = std::string("Object [") + (t_rec ? t_rec->name : "?") + "]";
                 // The class, the type, the uid and the map index are the
                 // object's identity, not state to edit here.
-                draw_target(title.c_str(), record.get(), t_rec,
-                            [&] { primary->Archetype()->Apply(*record, *primary); },
-                            [](const refl::SProp& p) { return p.id == 1 || p.id == 2 || p.id == 13 || p.id == 18; });
+                const auto identity = [](const refl::SProp& p) { return p.id == 1 || p.id == 2 || p.id == 13 || p.id == 18; };
+                draw_target(title.c_str(), record, t_rec,
+                            [&] { primary->Archetype()->Apply(*record, *primary); }, identity);
             }
             draw_target("Node", node, refl::Of(*node));
             for (int32_t slot = 0; slot < node->NumComponents(); ++slot)
@@ -1024,6 +1078,7 @@ void DrawGameViewToolbar()
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,   ImVec2(6, 6));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,  ImVec2(6, 6));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, kBtnRound);
+    ImFont* const text_font = ImGui::GetFont();       // the tooltips: the icon font has no letters
     if (ImFont* icon = EditorFonts::GetIconFont()) ImGui::PushFont(icon);
 
     auto IconButton = [&](const char* glyph, const char* tip, bool active) -> bool {
@@ -1034,7 +1089,11 @@ void DrawGameViewToolbar()
         }
         const bool clicked = ImGui::Button(glyph, ImVec2(kBtnSize, kBtnSize));
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort))
+        {
+            ImGui::PushFont(text_font);
             ImGui::SetTooltip("%s", tip);
+            ImGui::PopFont();
+        }
         if (active) ImGui::PopStyleColor(3);
         return clicked;
     };
@@ -1058,6 +1117,12 @@ void DrawGameViewToolbar()
     if (IconButton(EditorRunning() ? ICON_MS_PAUSE : ICON_MS_PLAY_ARROW,
                    "Play / Pause (Space)", EditorRunning()))
         EditorSetRunning(!EditorRunning());
+    ImGui::SameLine();
+    if (IconButton(ICON_MS_SKIP_NEXT, "Step one tick (.)", false))
+        EditorStepOnce();
+    ImGui::SameLine();
+    if (IconButton(ICON_MS_STOP, "Stop: discard the game, reload the base sectors", false))
+        EditorStop();
 
     ImGui::SameLine();
     if (IconButton(ICON_MS_FIT_SCREEN, "Frame Selection (F)", false)) {
@@ -1721,6 +1786,48 @@ void RegisterBuiltinCommands()
         .execute   = []{ EditorSetRunning(!g_running); },
     });
 
+    // -- View.ResetLayout -- the default dock layout again.
+    EditorCommands::Register({
+        .id        = "View.ResetLayout",
+        .label     = "Reset Layout",
+        .menu_path = "View",
+        .chord     = ImGuiKey_None,
+        .shortcut  = "",
+        .is_enabled = nullptr,
+        .is_checked = nullptr,
+        .execute   = []{
+            EditorPrefs::SetFloat(kPrefLayoutLeft, g_layout_left);
+            EditorPrefs::SetFloat(kPrefLayoutRight, g_layout_right);
+            EditorPrefs::SetFloat(kPrefLayoutBottom, g_layout_bottom);
+            g_layout_pending = true; g_layout_stable = 0;
+        },
+    });
+
+    // -- View.Stop -- the base sectors again: a new game at the level and
+    // sector the camera is on, the play-through so far discarded.
+    EditorCommands::Register({
+        .id        = "View.Stop",
+        .label     = "Stop (Reload Base Sectors)",
+        .menu_path = "View",
+        .chord     = ImGuiKey_None,
+        .shortcut  = "",
+        .is_enabled = nullptr,
+        .is_checked = nullptr,
+        .execute   = []{ EditorStop(); },
+    });
+
+    // -- View.Step -- one gameplay tick while paused.
+    EditorCommands::Register({
+        .id        = "View.Step",
+        .label     = "Step One Tick",
+        .menu_path = "View",
+        .chord     = ImGuiKey_Period,
+        .shortcut  = ".",
+        .is_enabled = []{ return !g_running; },
+        .is_checked = nullptr,
+        .execute   = []{ EditorStepOnce(); },
+    });
+
     // -- Edit.Undo / Edit.Redo -------------------------------------------
     // ImGuiMod_Ctrl is the cross-platform "primary shortcut" modifier.
     // With ConfigMacOSXBehaviors=true AND trickle enabled, ImGui auto-
@@ -1891,8 +1998,20 @@ void RegisterBuiltinCommands()
 // * State + lifecycle                                                     *
 // *************************************************************************
 
+// The editor's own files live in the user data directory next to the
+// saves, not the working directory: the layout and the prefs then
+// survive a launch from anywhere.
 void EditorLoadState() {
+    static std::string prefs_path, ini_path;
+    std::string dir = SavePath;
+    if (!dir.empty() && dir.back() != '/' && dir.back() != '\\')
+        dir += '/';
+    prefs_path = dir + "editor.def";
+    ini_path   = dir + "imgui.ini";
+    EditorPrefs::SetDefaultPath(prefs_path.c_str());
     EditorPrefs::Load();
+    ImGui::GetIO().IniFilename = ini_path.c_str();
+    ImGui::LoadIniSettingsFromDisk(ini_path.c_str());
     EditorLogInstall();
 }
 void EditorSaveState() { EditorPrefs::Save(); }
@@ -1900,6 +2019,8 @@ void EditorSaveState() { EditorPrefs::Save(); }
 void EditorEnter()
 {
     g_first_chrome_frame = true;
+    g_layout_pending = true;
+    g_layout_stable = 0;
     g_running = false;        // editor opens paused; user hits Play to run
     if (Renderer) Renderer->SuppressPresent(true);
     if (TMapRenderer* mr = PlayScreen.MapRenderer()) {
@@ -1931,6 +2052,7 @@ void EditorEnter()
 
 void EditorExit()
 {
+    SaveLayoutShares();        // the splits the user left, for the next entry
     g_running = true;          // game runs unconditionally outside editor
     if (Renderer) {
         Renderer->ResetPresentNDCRect();
@@ -1961,6 +2083,35 @@ void EditorExit()
 
 bool EditorRunning() { return g_running; }
 void EditorSetRunning(bool running) { g_running = running; }
+void EditorStepOnce() { g_step = true; }
+void EditorStop()
+{
+    // The unsaved game: the module's base sectors with the new game's
+    // start, the play-through so far discarded, so what the inspector
+    // shows is the authored data again. The session loads a step a tick,
+    // the play screen holding the world meanwhile; the editor's camera
+    // goes back where it was once the load is done (the load centres it
+    // on the player).
+    g_running = false;
+    g_step = false;
+    g_selection.clear();
+    if (TMapRenderer* mr = PlayScreen.MapRenderer())
+    {
+        g_stop_cam_world = mr->CameraWorld();
+        g_stop_cam_level = mr->CameraLevel();
+        g_stop_cam_pending = true;
+    }
+    SSessionStart start;
+    start.kind = SSessionStart::EKind::NewGame;
+    GameFlow.Session().Start(start);
+    log_info("[editor] stop: the base sectors, a new game");
+}
+bool EditorTakeStep()
+{
+    const bool step = g_step;
+    g_step = false;
+    return step;
+}
 void EditorMarkDirty() {}                        // no-op: we always render
 
 // Render every frame -- ImGui-animated widgets need it. Game state
@@ -2044,20 +2195,26 @@ void EditorDrawChrome()
                                      ImGui::GetMainViewport(),
                                      ImGuiDockNodeFlags_PassthruCentralNode);
 
-    // On every EditorEnter, force-rebuild the default layout into the
-    // current viewport. ImGui's persisted .ini contains pixel positions
-    // baked when the window may have been a different size, which leaves
-    // panels pinned in a sub-rect of the new (larger) window. Rebuilding
-    // pins them to a sensible split for the *current* viewport. The
-    // user can still drag splitters during the session; that scales with
-    // the live dockspace as they go.
-    if (g_first_chrome_frame) {
-        BuildDefaultDockLayout(dock_id);
-        EditorPrefs::SetBool(kPrefBuiltLayout, true);
-        EditorPrefs::Save();
+    // The layout, once the viewport has settled at the editor window's
+    // size (built on the first frame it would be split against the game
+    // window's size).
+    if (g_layout_pending) {
+        const ImVec2 vp = ImGui::GetMainViewport()->Size;
+        g_layout_stable = (vp.x == g_layout_seen.x && vp.y == g_layout_seen.y) ? g_layout_stable + 1 : 0;
+        g_layout_seen = vp;
+        if (g_layout_stable >= 3) {
+            BuildDefaultDockLayout(dock_id);
+            g_layout_pending = false;
+        }
     }
     g_first_chrome_frame = false;
 
+    if (g_stop_cam_pending && !GameFlow.Session().Loading())
+    {
+        if (TMapRenderer* mr = PlayScreen.MapRenderer())
+            mr->SetCameraWorld(g_stop_cam_level, g_stop_cam_world.x, g_stop_cam_world.y, g_stop_cam_world.z);
+        g_stop_cam_pending = false;
+    }
     DrawScenePanel();
     DrawPropertiesPanel();
     DrawConsolePanel();

@@ -67,6 +67,12 @@ defdoc::Node* WalkTo(const char* path, bool create)
 
 defdoc::Document& Doc() { return g_doc; }
 
+void SetDefaultPath(const char* path)
+{
+    if (path && *path)
+        g_default_path = path;
+}
+
 bool Load(const char* path)
 {
     const char* p = PathOrDefault(path);

@@ -19,6 +19,7 @@
 #include "game/object/player.h"
 #include "game/ui/playscreen.h"
 #include "game/playtest/playerbot.h"
+#include "game/editor/editor.h"
 #include "engine/render/renderer.h"
 #include "game/app/revenant.h"
 #include "engine/core/revtypes.h"
@@ -240,8 +241,16 @@ class TEditorModeImpl final : public IRuntimeMode
 
     void Tick() override
     {
-        // Editor owns its own pulse / camera (Play button + viewport
-        // controls). Nothing to drive from the screen layer.
+        // The game runs inside the editor while Play is on, or for the one
+        // tick Step asks for: the same gameplay tick as game mode, so the
+        // inspector shows the live objects changing. Paused, the world is
+        // still drawn but nothing advances.
+        if (!EditorRunning() && !EditorTakeStep())
+            return;
+        PlayerBot.Tick();
+        if (PlayScreen.IsControlOn() && !PlayScreen.IsDemoMode())
+            PlayScreen.UpdateMove();
+        MapPane.Pulse();
     }
 
     bool HandleMouseClick(int32_t button, int32_t x, int32_t y) override
