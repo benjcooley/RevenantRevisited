@@ -502,6 +502,10 @@ has-seen list and the burn effect landed this way.
 same property (the vitals clocks, the automap, the light, the object's
 own accessor properties). The record is the master: `Apply` writes it
 over the components after they exist, so nothing is kept disjoint.
+Unity carries the same duplicate serialization; if it ever becomes a
+cost, the fix is a flag on a component that turns its serialization
+off, with the object (its archetype's `Apply`) responsible for
+initializing it entirely. Not planned.
 
 **Decisions.** The animation `state` stays on the object: it is the
 object's state (a door open, a chest shut), not the playhead, and the
