@@ -29,25 +29,37 @@ struct vs_in  { float2 pos : POSITION; float2 uv : TEXCOORD0; };
 struct vs_out { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
 vs_out main_vs(vs_in i) {
     vs_out o;
-    float sx = i.uv.x * tile_sprite.z - tile_sprite.x;
-    float sy = i.uv.y * tile_sprite.w - tile_sprite.y;
-    float lz = (-2.0 * sy * 0.867) / 2.003378;
-    float su = 2.0 * (sy + lz * 0.867);
-    float wx = tile_root.x + 0.5 * (su + sx);
-    float wy = tile_root.y + 0.5 * (su - sx);
-    float wz = tile_root.z + lz;
-    float relx = wx - camera.x;
-    float rely = wy - camera.y;
-    float sum = relx + rely;
-    float S = relx - rely;
-    float T = 0.5 * sum - wz * 0.867;
-    float scene_z_wu = camera.z - 0.867 * sum - 0.5 * wz;
-    float zoom = max(zparams.w, 0.0001);
-    float persp_scale = ((camera.w > 0.5) ? (camera.z / max(scene_z_wu, 1.0)) : 1.0) * zoom;
-    float spx = rect.x + S * persp_scale;
-    float spy = rect.y + T * persp_scale;
-    o.pos = float4(2.0 * spx / max(rect.z, 1.0) - 1.0,
-                   1.0 - 2.0 * spy / max(rect.w, 1.0),
+    // Perspective (modern, opt-in) camera: project the tile's world-space
+    // corner. Mirrors tile.metal.h main_vs.
+    if (camera.w > 0.5 && raycast.w <= 0.5) {
+        float sx = i.uv.x * tile_sprite.z - tile_sprite.x;
+        float sy = i.uv.y * tile_sprite.w - tile_sprite.y;
+        float lz = (-2.0 * sy * 0.867) / 2.003378;
+        float su = 2.0 * (sy + lz * 0.867);
+        float wx = tile_root.x + 0.5 * (su + sx);
+        float wy = tile_root.y + 0.5 * (su - sx);
+        float wz = tile_root.z + lz;
+        float relx = wx - camera.x;
+        float rely = wy - camera.y;
+        float sum = relx + rely;
+        float S = relx - rely;
+        float T = 0.5 * sum - wz * 0.867;
+        float scene_z_wu = camera.z - 0.867 * sum - 0.5 * wz;
+        float zoom = max(zparams.w, 0.0001);
+        float persp_scale = camera.z * zoom / max(scene_z_wu, 1.0);
+        float spx = proj.x + S * persp_scale;
+        float spy = proj.y + T * persp_scale;
+        o.pos = float4(2.0 * spx / max(proj.z, 1.0) - 1.0,
+                       1.0 - 2.0 * spy / max(proj.w, 1.0),
+                       0.0, 1.0);
+        o.uv  = i.uv;
+        return o;
+    }
+    // Retail (orthographic) path: the CPU already computed the tile's
+    // on-screen rect in NDC, so the unit quad lands directly on it. The FS's
+    // SV_Depth carries the tile depth. (Same path as tile.metal.h.)
+    o.pos = float4(rect.x + i.pos.x * rect.z,
+                   rect.y + i.pos.y * rect.w,
                    0.0, 1.0);
     o.uv  = i.uv;
     return o;
