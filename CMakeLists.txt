@@ -433,6 +433,16 @@ add_executable(test_shadowplan
   src/shadow/shadowplan.cpp)
 target_link_libraries(test_shadowplan PRIVATE GTest::gtest_main)
 
+# The production keyboard and mouse paths share exit-use reach.
+add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/use_reach_fixture.cpp
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/use_reach_fixture.py
+          --output ${CMAKE_CURRENT_BINARY_DIR}/use_reach_fixture.cpp
+  DEPENDS tools/use_reach_fixture.py tools/test_use_reach.cpp
+          src/character.cpp src/character.h src/mappane.cpp
+  VERBATIM)
+add_executable(test_use_reach ${CMAKE_CURRENT_BINARY_DIR}/use_reach_fixture.cpp)
+target_link_libraries(test_use_reach PRIVATE GTest::gtest_main)
+
 # Sound file decoding and lengths (audio_backend's decoders; no playback
 # device). miniz reads the shipped voices when REVENANT_DATA_PATH is set.
 add_executable(test_audio_decode
@@ -453,6 +463,13 @@ target_include_directories(test_audio_decode PRIVATE
 )
 target_compile_definitions(test_audio_decode PRIVATE SOKOL_${SOKOL_BACKEND})
 target_link_libraries(test_audio_decode PRIVATE GTest::gtest_main)
+
+if(WIN32 AND SOKOL_BACKEND STREQUAL "D3D11")
+  add_executable(test_d3d11_readback tools/test_d3d11_readback.cpp src/platform/windows/renderer_readback.cpp)
+  target_include_directories(test_d3d11_readback PRIVATE ${SOKOL_DIR})
+  target_compile_definitions(test_d3d11_readback PRIVATE SOKOL_D3D11)
+  target_link_libraries(test_d3d11_readback PRIVATE GTest::gtest_main d3d11 d3dcompiler)
+endif()
 
 # ----------------------------------------------------------------------------
 # revsmk — clean-room Smacker (SMK2) decoder. Self-contained (C++ stdlib only),
@@ -536,9 +553,15 @@ foreach(test IN ITEMS
     test_props
     test_savefile
     test_sectorstore
-    test_shadowplan)
+    test_shadowplan
+    test_use_reach)
   gtest_discover_tests(${test} TEST_PREFIX "${test}." DISCOVERY_MODE PRE_TEST)
 endforeach()
+
+
+if(TARGET test_d3d11_readback)
+  gtest_discover_tests(test_d3d11_readback TEST_PREFIX "test_d3d11_readback." DISCOVERY_MODE PRE_TEST)
+endif()
 
 # Source-slice tests: each compiles a function cut from src/ into a small
 # fixture with clang++ and runs it. POSIX hosts only.

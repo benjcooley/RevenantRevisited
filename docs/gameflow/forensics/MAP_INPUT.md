@@ -1,5 +1,12 @@
 # Map input — forensics
 
+
+Port behavior note: clicking an exit (including use with a carried key)
+uses `TCharacter::FindUseTarget`, the same forward-reach search as the U
+control. This deliberately replaces the snapshot's generic 96-unit mouse
+reach for exits. Hover feedback remains independent of reach and lock state.
+The other mouse pickup and character-interaction rules below are unchanged.
+
 How retail Revenant turns the mouse over the map into a cursor and an
 action: which object is under the pointer, the cursor shown for it, and
 what a click on it (or on the floor) does. Written for the doors and lift
@@ -350,6 +357,14 @@ What the port had before this work (2026-10-07):
   one-pixel readback.
 
 The port's design and state: §7.
+
+Windows picking (2026-11-09): the D3D11 mesh shader preserves the
+instance ID in both projection paths. Blended map meshes also submit their
+geometry and texture to an ID-only pass after lighting. That pass tests
+scene depth and rejects transparent texels, without writing scene depth,
+albedo, normals, or lighting. It draws back to front so nearer blended
+meshes replace farther IDs. Effects and helper objects retain zero IDs;
+probes are requested only after the picking pass has finished.
 
 ### 7.1 Verified (2026-10-08, headless, input simulator)
 
